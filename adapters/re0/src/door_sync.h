@@ -27,6 +27,12 @@ static_assert(sizeof(DoorChange) == 24);
 // Net thread: queues a peer's door for the game thread.
 void onFrame(const GameFrame& frame);
 
+// The door that brought this machine into its current room (run locally or from the peer), if any since load.
+bool lastDoor(DoorChange& out);
+
+// Queues `change` to run on the game thread as if the peer had sent it (join teleport).
+void queue(const DoorChange& change);
+
 // Hooks sDoorLoad::start and the act-on-trigger check and registers the per-frame apply. False when a hook cannot be installed.
 bool enable(NetClient& net);
 

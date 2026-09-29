@@ -231,6 +231,8 @@ bool install(WriteListener onCloudWrite) {
                           reinterpret_cast<void**>(&g_originalIsSaveOwner));
 }
 
+bool servingSession() { return g_servingSession; }
+
 void uninstall() {
     if (g_original) writeImport(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_original)));
     if (g_originalIsSaveOwner) hooks::remove(game::kSaveOwnerCheckFunction);

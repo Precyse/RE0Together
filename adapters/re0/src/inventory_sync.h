@@ -13,6 +13,13 @@ namespace inventory_sync {
 // Net thread: queues a peer's block for the game thread.
 void onFrame(const GameFrame& frame);
 
+// Game thread: overwrites a character's inventory with the host's live block (join snapshot); for this machine's own
+// character the block also becomes the last sent state.
+void applySnapshot(uint8_t characterId, const uint8_t (&block)[0x40]);
+
+// Game thread: the live block of a character, false when unreadable.
+bool readBlock(uint8_t characterId, uint8_t (&block)[0x40]);
+
 // Game thread, as a submenu opens: remembers the blocks so an exchange made in the menu is found when it closes.
 void onMenuOpen();
 

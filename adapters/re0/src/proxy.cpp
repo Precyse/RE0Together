@@ -6,6 +6,7 @@
 #include <string>
 
 #include "init.h"
+#include "virtual_keys.h"
 
 namespace {
 
@@ -34,7 +35,9 @@ extern "C" HRESULT WINAPI DirectInput8Create(HINSTANCE instance, DWORD version, 
                                              LPUNKNOWN outer) {
     std::call_once(g_loadOnce, loadReal);
     if (!g_real) return E_FAIL;
-    return g_real(instance, version, iid, out, outer);
+    const HRESULT result = g_real(instance, version, iid, out, outer);
+    if (SUCCEEDED(result) && out) virtual_keys::onDirectInput(*out);
+    return result;
 }
 
 BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {

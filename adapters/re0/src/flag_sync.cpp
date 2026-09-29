@@ -97,6 +97,18 @@ void onFrame(const GameFrame& frame) {
     g_incoming.insert(g_incoming.end(), changes.begin(), changes.end());
 }
 
+bool read(Words& out) {
+    const uintptr_t address = flagsAddress();
+    return address && game::readMemory(address, out);
+}
+
+void applySnapshot(const Words& words) {
+    const uintptr_t address = flagsAddress();
+    if (!address || !game::writeMemory(address, words)) return;
+    g_known = words;
+    g_hasKnown = true;
+}
+
 void enable(NetClient& net) {
     g_net = &net;
     game_tick::addCallback("flag_sync", onTick);

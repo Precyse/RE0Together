@@ -18,6 +18,7 @@
 #include "game.h"
 #include "game_tick.h"
 #include "inventory_sync.h"
+#include "join_sync.h"
 #include "input_record.h"
 #include "input_redirect.h"
 #include "log.h"
@@ -30,6 +31,7 @@
 #include "player_damage.h"
 #include "protocol.h"
 #include "save_redirect.h"
+#include "session_slot.h"
 #include "state_correction.h"
 #include "state_sync.h"
 #include "vtable_tracer.h"
@@ -60,6 +62,8 @@ void enableCoop() {
     door_travel::enable(g_net);
     if (!door_sync::enable(g_net)) logger::write("adapter: door sync unavailable");
     flag_sync::enable(g_net);
+    join_sync::enable(g_net);
+    if (!session_slot::enable()) logger::write("adapter: session slot unavailable");
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
     command_input::enable();
@@ -120,6 +124,7 @@ void shutdownAdapter() {
     menu_mirror::uninstall();
     floor_items_sync::uninstall();
     door_sync::uninstall();
+    session_slot::uninstall();
     pickup_guard::uninstall();
     game_tick::uninstall();
     vtable_tracer::uninstall();

@@ -43,6 +43,10 @@ add_library(re0_adapter SHARED
     src/door_travel.cpp
     src/door_sync.cpp
     src/flag_sync.cpp
+    src/join_sync.cpp
+    src/session_slot.cpp
+    src/auto_join.cpp
+    src/virtual_keys.cpp
     src/phase_watch.cpp
     src/menu_mirror.cpp
     src/camera_parity.cpp

@@ -10,6 +10,7 @@
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
+#include "join_sync.h"
 #include "protocol.h"
 #include "settled_copy.h"
 
@@ -78,7 +79,7 @@ void syncLocal(Character character) {
         g_lastLocalChangeFrame = g_frame;
         g_localChanged = true;
     }
-    if (block.due(g_frame, monotonicMs(), kResendMs)) send(character, block);
+    if (join_sync::caughtUp() && block.due(g_frame, monotonicMs(), kResendMs)) send(character, block);
 }
 
 void applyRemote(Character character) {
@@ -121,6 +122,23 @@ void onFrame(const GameFrame& frame) {
     std::memcpy(bytes.data(), frame.payload.data() + kHeaderSize, bytes.size());
     std::lock_guard lock(g_mutex);
     g_pending[frame.payload[0]] = bytes;
+}
+
+void applySnapshot(uint8_t characterId, const uint8_t (&block)[0x40]) {
+    if (characterId >= kCharacterCount) return;
+    const auto character = static_cast<Character>(characterId);
+    Block::Bytes bytes;
+    std::memcpy(bytes.data(), block, bytes.size());
+    if (!game::writeMemory(blockAddress(character), bytes)) return;
+    if (character_owner::isLocalOwned(character)) g_blocks[characterId].adopt(bytes, monotonicMs());
+}
+
+bool readBlock(uint8_t characterId, uint8_t (&block)[0x40]) {
+    if (characterId >= kCharacterCount) return false;
+    Block::Bytes bytes;
+    if (!game::readMemory(blockAddress(static_cast<Character>(characterId)), bytes)) return false;
+    std::memcpy(block, bytes.data(), bytes.size());
+    return true;
 }
 
 void onMenuOpen() {

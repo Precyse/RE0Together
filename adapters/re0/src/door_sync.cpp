@@ -32,6 +32,7 @@ bool g_applying = false;  // game thread only: a peer's door is being run, so th
 
 std::mutex g_mutex;
 std::optional<DoorChange> g_pending;  // guarded by g_mutex: the newest peer door not yet run
+std::optional<DoorChange> g_lastDoor;  // guarded by g_mutex: the door into the current room
 
 bool focusedIsLocal() {
     return character_owner::isLocalOwned(character_owner::identify(game::controlled()));
@@ -65,8 +66,15 @@ void send(const DoorChange& change) {
     debug_stats::count(debug_stats::Counter::DoorsSent);
 }
 
+void remember(const DoorChange& change) {
+    std::lock_guard lock(g_mutex);
+    g_lastDoor = change;
+}
+
 void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t arg3, uint32_t arg4,
                                 uint32_t flag) {
+    const auto focused = static_cast<uint8_t>(character_owner::identify(game::controlled()));
+    remember({room, entry, arg3, arg4, flag, focused, {}});
     if (g_applying || !net_pad::active()) {
         g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
         return;
@@ -77,7 +85,7 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
         return;
     }
     g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
-    send({room, entry, arg3, arg4, flag, static_cast<uint8_t>(character_owner::identify(game::controlled())), {}});
+    send({room, entry, arg3, arg4, flag, focused, {}});
     logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);
 }
 
@@ -111,6 +119,17 @@ void onFrame(const GameFrame& frame) {
     }
     DoorChange change;
     std::memcpy(&change, frame.payload.data(), sizeof(change));
+    queue(change);
+}
+
+bool lastDoor(DoorChange& out) {
+    std::lock_guard lock(g_mutex);
+    if (!g_lastDoor) return false;
+    out = *g_lastDoor;
+    return true;
+}
+
+void queue(const DoorChange& change) {
     std::lock_guard lock(g_mutex);
     g_pending = change;
 }

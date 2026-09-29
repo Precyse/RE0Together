@@ -11,6 +11,9 @@ using WriteListener = void (*)(const char* name);
 // cannot be patched.
 bool install(WriteListener onCloudWrite);
 
+// True when the files of <game dir>\coop\session are being served (this machine is a guest playing the host's save).
+bool servingSession();
+
 // Restores the original import.
 void uninstall();
 

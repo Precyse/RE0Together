@@ -109,6 +109,12 @@ constexpr uintptr_t kDoorStartFunction = 0x552b50;
 // pressed and the player may act. Doors and other in-room interactions go through it.
 constexpr uintptr_t kActOnTriggerFunction = 0x564070;
 constexpr uintptr_t kSubMenuStateOffset = 0x2c;
+// Save manager (singleton 0xdcc018, +0x20 = request object, dispatch 0x6133d0 on op +4): requests are thiscall
+// on the request object and return false while another request runs. Load (slot, 0) ret 8 is op 3 (0x6134c0) or op 4
+// (0x613500); save (slot) ret 4 is op 5 (0x613390). The load menu passes its cursor index as the slot.
+constexpr uintptr_t kSaveLoadRequestFunction = 0x6134c0;
+constexpr uintptr_t kSaveLoadAltRequestFunction = 0x613500;
+constexpr uintptr_t kSaveRequestFunction = 0x613390;
 constexpr uintptr_t kSubMenuOpenFunction = 0x5d9030;  // thiscall, no args: opens the inventory for the focused character
 constexpr uint8_t kSubMenuClosed = 0x0d;
 // cPlayerThink vtable slot 28, reached from the lethal hit: kills the player (setHP 0) and enters the dead state.

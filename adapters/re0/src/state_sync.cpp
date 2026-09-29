@@ -15,7 +15,10 @@
 #include "enemy_state.h"
 #include "door_sync.h"
 #include "flag_sync.h"
+#include "join_sync.h"
+#include "auto_join.h"
 #include "phase_watch.h"
+#include "session_slot.h"
 #include "door_travel.h"
 #include "game.h"
 #include "game_state.h"
@@ -60,7 +63,10 @@ void sendLocalState(NetClient& net) {
     state_sync::PlayerState state{};
     const character_owner::Character owned = character_owner::localCharacter();
     const uintptr_t player = character_owner::find(owned);
-    if (owned == character_owner::Character::Unknown || !game::readTransform(player, state.pos, state.quat)) return;
+    if (owned == character_owner::Character::Unknown || !join_sync::caughtUp() ||
+        !game::readTransform(player, state.pos, state.quat)) {
+        return;
+    }
     state.characterId = static_cast<uint8_t>(owned);
     state.focusedCharacterId = static_cast<uint8_t>(character_owner::identify(game::controlled()));
     if (!game::readMemory(player + game::kPlayerHpOffset, state.hp)) return;
@@ -109,6 +115,14 @@ void onFrame(const GameFrame& frame) {
         enemy_state::onFrame(frame);
         return;
     }
+    if (frame.type == proto::kMsgSaveSlot) {
+        session_slot::onFrame(frame);
+        return;
+    }
+    if (frame.type == proto::kMsgSnapshotRequest || frame.type == proto::kMsgJoinSnapshot) {
+        join_sync::onFrame(frame);
+        return;
+    }
     if (frame.type == proto::kMsgFlagDiff) {
         flag_sync::onFrame(frame);
         return;
@@ -149,6 +163,8 @@ void tick(NetClient& net) {
     command_input::onNetTick();
     door_travel::onNetTick();
     phase_watch::onNetTick();
+    session_slot::onNetTick(net);
+    auto_join::onNetTick();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;
