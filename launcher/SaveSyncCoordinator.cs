@@ -35,6 +35,10 @@ public sealed class SaveSyncCoordinator : IDisposable
             if (source == null) throw new ArgumentException("Local transport needs --save-source to host a save sync");
             var sender = new SaveSender(config, source, transport);
             session.PeerJoined += sender.SendTo;
+            session.SaveChanged += () =>
+            {
+                foreach (var peer in session.PeerIds) sender.SendTo(peer);
+            };
             session.FileFrameReceived += (peer, frame) =>
             {
                 if (frame.Type == Msg.FileAck) sender.OnAck(peer, frame);

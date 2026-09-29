@@ -3,6 +3,8 @@
 #include <cstdarg>
 #include <cstdio>
 
+#include "room_phase.h"
+
 namespace {
 
 using debug_stats::Counter;
@@ -73,6 +75,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"rebecca owner", owner(gauge(s, Gauge::RebeccaOwner)), false});
     lines.push_back({L"door phase", format(L"%d", gauge(s, Gauge::DoorPhase)), false});
     lines.push_back({L"room", format(L"0x%04x", gauge(s, Gauge::Room)), false});
+    lines.push_back({L"room phase", widen(room_phase::name(gauge(s, Gauge::RoomPhase))), false});
     lines.push_back({L"party mode", partyMode(gauge(s, Gauge::PartyMode)), false});
     lines.push_back({L"focused", focused(gauge(s, Gauge::FocusedCharacter)), false});
     lines.push_back({L"commands sent", format(L"%u", total(s, Counter::CommandsSent)), false});

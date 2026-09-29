@@ -15,6 +15,7 @@
 #include "enemy_state.h"
 #include "door_sync.h"
 #include "flag_sync.h"
+#include "phase_watch.h"
 #include "door_travel.h"
 #include "game.h"
 #include "game_state.h"
@@ -147,6 +148,7 @@ void tick(NetClient& net) {
     menu_mirror::onNetTick(net);
     command_input::onNetTick();
     door_travel::onNetTick();
+    phase_watch::onNetTick();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

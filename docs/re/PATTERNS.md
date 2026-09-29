@@ -57,3 +57,15 @@ Shape: a character's brain object reads a pad. Swapping the brain type (player v
 Find it: the think or brain pointer on the character and the pad getter slot in its vtable.
 Replicate: give the remote character a player brain; while it moves, redirect the pad getter to a network pad. Restore the AI brain when the peer leaves.
 Seen in: RE0: cPlayerThink / cPlayerSubThink, getPad 0x600630.
+
+## Screens are a phase machine  [presentation, ui-perspective]
+Shape: one manager holds an array of phase objects (main, map, menu, message, save, cutscene, movie, dead) and a current index; a request call queues the next phase.
+Find it: class names of the phase objects (cRoomPhase*), then the manager that owns them; read the index table from the live array.
+Replicate: log every change by name (cheap diagnostics); decide per phase: pause-mirror (menus/messages/map/save), run-on-both (cutscenes from shared scripts), or authority (dead/game over).
+Seen in: RE0: sRoomControl +0xb8, request 0x60a340, 24 phases (RE0_NOTES "Room phases").
+
+## Saves live behind a storage API the mod can proxy  [persistence]
+Shape: the game reads and writes saves through a platform storage interface (Steam Remote Storage), reached through one import.
+Find it: the import slot of the storage accessor; the interface vtable slots for write/read/exists/size.
+Replicate: guest reads the host's save from a session folder; host cloud writes are reported so the launcher re-sends the file (full-file transfer with hash check, not through the game link).
+Seen in: RE0: import 0xcb1458, ISteamRemoteStorage v012 slots 0/1/3/10/12; owner check 0x612600 bypassed.

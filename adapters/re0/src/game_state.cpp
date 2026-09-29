@@ -1,6 +1,7 @@
 #include "game_state.h"
 
 #include "door_phase.h"
+#include "room_phase.h"
 #include "game.h"
 
 namespace {
@@ -27,6 +28,14 @@ int32_t doorPhase() {
 bool doorActive() { return door_phase::running(doorPhase()); }
 
 bool menuOpen() { return singletonByte(game::kSubMenuGlobal, game::kSubMenuStateOffset, game::kSubMenuClosed) != game::kSubMenuClosed; }
+
+int32_t roomPhase() {
+    const uintptr_t control = game::readPointer(game::kRoomControlGlobal);
+    int32_t phase = room_phase::kUnreadable;
+    return control && game::readMemory(control + game::kRoomPhaseCurrentOffset, phase) ? phase : room_phase::kUnreadable;
+}
+
+bool uiPausesWorld() { return menuOpen() || room_phase::pausesWorld(roomPhase()); }
 
 uint16_t currentRoom() {
     const uint8_t stage = singletonByte(game::kGameInfoGlobal, game::kGameInfoStageOffset, 0);

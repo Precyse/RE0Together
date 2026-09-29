@@ -8,7 +8,8 @@ namespace menu_mirror {
 // Net thread: remembers which peers have a menu open (an entry expires if the peer stops refreshing it).
 void onFrame(const GameFrame& frame);
 
-// Net thread, every tick: sends MENU_STATE when the local menu opens or closes and every 2 s while it is open.
+// Net thread, every tick: sends MENU_STATE when a local menu, map, message or save screen opens or closes, and every
+// 2 s while it is open.
 void onNetTick(NetClient& net);
 
 // Hooks the per-frame unit update so the local world stands still while a peer's menu is open and ours is closed,

@@ -31,6 +31,9 @@ public sealed class LoopbackBridge : IDisposable
     /// <summary>Game frame (type >= 0x0100) from the adapter, opaque.</summary>
     public event Action<Frame>? GameFrame;
 
+    /// <summary>The adapter reports that the game wrote a save file (SAVE_CHANGED).</summary>
+    public event Action? SaveChanged;
+
     public bool IsReady => _current is { Handshaken: true };
 
     public void Send(Frame frame)
@@ -80,6 +83,7 @@ public sealed class LoopbackBridge : IDisposable
         conn.LastRx = Environment.TickCount64;
         if (frame.Type == Msg.Hello && !conn.Handshaken) ValidateHello(conn, frame);
         else if (frame.Type >= Msg.FirstGameType && conn.Handshaken) GameFrame?.Invoke(frame);
+        else if (frame.Type == Msg.SaveChanged && conn.Handshaken) SaveChanged?.Invoke();
     }
 
     private void ValidateHello(Connection conn, Frame hello)

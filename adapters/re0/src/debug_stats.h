@@ -53,7 +53,7 @@ enum class Counter : size_t {
 };
 
 // Latest-value gauges.
-enum class Gauge : size_t { PadDepth, BillyOwner, RebeccaOwner, SaveRedirect, WorldFrozen, FloorPending, PartyMode, FocusedCharacter, DoorPhase, Room, Count };
+enum class Gauge : size_t { PadDepth, BillyOwner, RebeccaOwner, SaveRedirect, WorldFrozen, FloorPending, PartyMode, FocusedCharacter, DoorPhase, Room, RoomPhase, Count };
 
 constexpr size_t kCounterCount = static_cast<size_t>(Counter::Count);
 constexpr size_t kGaugeCount = static_cast<size_t>(Gauge::Count);

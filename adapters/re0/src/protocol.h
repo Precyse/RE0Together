@@ -22,6 +22,7 @@ constexpr uint16_t kPeerDown = 0x0004;
 constexpr uint16_t kReject = 0x0005;
 constexpr uint16_t kPeerStats = 0x0012;
 constexpr uint16_t kHeartbeat = 0x0020;
+constexpr uint16_t kSaveChanged = 0x0060;  // adapter to its own launcher, reliable: ascii name of a save the game wrote
 constexpr uint16_t kFirstGameType = 0x0100;
 constexpr uint16_t kMsgRoomState = kFirstGameType + 4;  // 0x0104
 constexpr uint16_t kMsgMenuState = kFirstGameType + 5;  // 0x0105

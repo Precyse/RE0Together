@@ -1,5 +1,8 @@
 #include "init.h"
 
+#include <cstring>
+#include <span>
+
 #include "camera_parity.h"
 #include "character_owner.h"
 #include "command_input.h"
@@ -25,6 +28,7 @@
 #include "party_mode.h"
 #include "pickup_guard.h"
 #include "player_damage.h"
+#include "protocol.h"
 #include "save_redirect.h"
 #include "state_correction.h"
 #include "state_sync.h"
@@ -70,6 +74,14 @@ void enableCoop() {
     menu_mirror::enable();
 }
 
+// The host's new save goes to the guests (its launcher re-sends the profile's save files), so a continue after a
+// game over loads the same state on every machine.
+void reportCloudWrite(const char* name) {
+    if (!character_owner::isHost() || !net_pad::active()) return;
+    const std::span<const uint8_t> bytes(reinterpret_cast<const uint8_t*>(name), std::strlen(name));
+    if (g_net.send(proto::kSaveChanged, true, proto::kSlotAll, bytes)) logger::write("adapter: save %s written, sharing it", name);
+}
+
 void startSubsystems() {
     logger::write("adapter: starting");
     const Config config = loadConfig();
@@ -79,7 +91,7 @@ void startSubsystems() {
         logger::write("adapter: game code not decrypted after %lu ms, staying inert", kDecryptTimeoutMs);
         return;
     }
-    if (config.coop) save_redirect::install();
+    if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop();
     if (config.trace) vtable_tracer::install(config.traceVtables);
     game_tick::install();

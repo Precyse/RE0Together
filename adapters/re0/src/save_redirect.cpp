@@ -43,6 +43,8 @@ using NameSizeFn = int32_t(__fastcall*)(void*, void*, const char*);
 
 using GetStorageFn = void*(__cdecl*)();
 GetStorageFn g_original = nullptr;
+save_redirect::WriteListener g_onCloudWrite = nullptr;
+bool g_servingSession = false;
 std::atomic<bool> g_activated{false};
 std::atomic<ULONGLONG> g_lastLog[static_cast<size_t>(Op::Count)];
 
@@ -100,7 +102,11 @@ bool writeFileAtomically(const std::wstring& path, const void* data, int32_t siz
 
 bool __fastcall proxyFileWrite(Proxy* self, void*, const char* name, const void* data, int32_t size) {
     const std::wstring path = sessionFile(name);
-    if (path.empty()) return realSlot<WriteFn>(self, kFileWriteSlot)(self->real, nullptr, name, data, size);
+    if (path.empty()) {
+        const bool written = realSlot<WriteFn>(self, kFileWriteSlot)(self->real, nullptr, name, data, size);
+        if (written && g_onCloudWrite) g_onCloudWrite(name);
+        return written;
+    }
     debug_stats::count(debug_stats::Counter::SaveWrites);
     logCall(name, Op::Write, size);
     return writeFileAtomically(path, data, size);
@@ -158,8 +164,9 @@ void* __cdecl hookedSteamRemoteStorage() {
     void* real = g_original();
     if (!real) return nullptr;
     if (!g_activated.exchange(true)) {
-        debug_stats::set(debug_stats::Gauge::SaveRedirect, 1);
-        logger::write("save_redirect: active, serving %ls", sessionDirectory().c_str());
+        debug_stats::set(debug_stats::Gauge::SaveRedirect, g_servingSession ? 1 : 0);
+        if (g_servingSession) logger::write("save_redirect: active, serving %ls", sessionDirectory().c_str());
+        else logger::write("save_redirect: active, Steam cloud with write reports");
     }
     return remote_storage_proxy::get(real, overrides());
 }
@@ -204,11 +211,9 @@ bool __fastcall isSaveOwnerDetour(void*, void*) { return true; }
 
 namespace save_redirect {
 
-bool install() {
-    if (!sessionHasFiles()) {
-        logger::write("save_redirect: no files in %ls, inactive", sessionDirectory().c_str());
-        return false;
-    }
+bool install(WriteListener onCloudWrite) {
+    g_onCloudWrite = onCloudWrite;
+    g_servingSession = sessionHasFiles();
     const uintptr_t original = game::readPointer(kImportSlot);
     if (!importPointsIntoSteamApi(original)) {
         logger::write("save_redirect: import 0x%x does not point into steam_api, inactive",
@@ -221,6 +226,7 @@ bool install() {
         return false;
     }
     logger::write("save_redirect: import patched");
+    if (!g_servingSession) return true;
     return hooks::install("save owner check", game::kSaveOwnerCheckFunction, reinterpret_cast<void*>(&isSaveOwnerDetour),
                           reinterpret_cast<void**>(&g_originalIsSaveOwner));
 }

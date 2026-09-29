@@ -60,7 +60,7 @@ void setFrozen(bool frozen) {
 
 // Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze.
 void __fastcall updateAllDetour(void* self, void* edx) {
-    const bool freeze = anyPeerMenuOpen() && !game_state::menuOpen();
+    const bool freeze = anyPeerMenuOpen() && !game_state::uiPausesWorld();
     if (freeze != g_frozen) setFrozen(freeze);
     if (freeze) return;
     g_originalUpdateAll(self, edx);
@@ -98,7 +98,7 @@ void onFrame(const GameFrame& frame) {
 }
 
 void onNetTick(NetClient& net) {
-    const bool open = game_state::menuOpen();
+    const bool open = game_state::uiPausesWorld();
     const auto now = Clock::now();
     if (open == g_lastSentOpen && !(open && now - g_lastSend >= kResendInterval)) return;
     const uint8_t payload = open;

@@ -13,6 +13,12 @@ bool doorActive();
 // True while an inventory, map or pause submenu is open.
 bool menuOpen();
 
+// Current room phase (room_phase.h), or room_phase::kUnreadable.
+int32_t roomPhase();
+
+// True while a local menu, map, message or save screen stops this machine's world.
+bool uiPausesWorld();
+
 // Loaded room as stage << 8 | room.
 uint16_t currentRoom();
 

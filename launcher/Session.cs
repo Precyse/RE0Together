@@ -25,6 +25,7 @@ public sealed class Session : IDisposable
         _transport.FrameReceived += OnPeerFrame;
         _bridge.GameFrame += OnAdapterFrame;
         _bridge.AdapterReady += OnAdapterReady;
+        _bridge.SaveChanged += () => SaveChanged?.Invoke();
     }
 
     public bool Ended { get; private set; }
@@ -38,6 +39,12 @@ public sealed class Session : IDisposable
 
     /// <summary>Launcher-owned file transfer frames (FILE_*), with the sender's transport id. Never relayed to the adapter.</summary>
     public event Action<ulong, Frame>? FileFrameReceived;
+
+    /// <summary>The local adapter reports that the game wrote a save file (SAVE_CHANGED).</summary>
+    public event Action? SaveChanged;
+
+    /// <summary>Transport ids of the other members in the slot map.</summary>
+    public IReadOnlyList<ulong> PeerIds => _slots.Keys.Where(id => id != _transport.LocalId).ToList();
 
     /// <summary>A guest's adapter log lines (LOG_APPEND), with the sender's transport id. Never relayed to the adapter.</summary>
     public event Action<ulong, Frame>? LogFrameReceived;

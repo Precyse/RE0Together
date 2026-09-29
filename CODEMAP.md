@@ -16,7 +16,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/StatusText.cs | status line text | `Format` |
 | Session.cs | slots, epochs, membership diffs, frame routing | `ApplyMembership`, `OnPeerFrame`, `OnAdapterFrame`, `End` |
 | SlotAssigner.cs | owner = 0, rest sorted by id | `Assign` |
-| LoopbackBridge.cs | adapter TCP link: HELLO check, heartbeat, timeout, relay | `Pump`, `Send`, `AdapterReady`, `GameFrame` |
+| LoopbackBridge.cs | adapter TCP link: HELLO check, heartbeat, timeout, relay; `SaveChanged` event for SAVE_CHANGED 0x0060 | `Pump`, `Send`, `AdapterReady`, `GameFrame` |
 | Framing.cs | frame record, wire/loopback codec, message type constants | `Frame`, `Msg`, `Framing` |
 | ControlMessages.cs | control payload builders/parsers | `Welcome`, `PeerUp`, `TryParseHello` |
 | PeerStats.cs | ping schedule, EWMA RTT, stats report | `Tick`, `OnPong` |
@@ -28,7 +28,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | LocalLobby.cs | fake lobby for local testing | |
 | SteamBootstrap.cs | SteamAPI init/callbacks, overlay invites | `PendingInviteLobby` |
 | GameProfile.cs | `games/<id>.json` loader, optional `saveSync` block | `Load`, `ListIds` |
-| SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate, 60 s timeout | `Create`, `Ready`, `TimedOut`, `EnableAdapter` |
+| SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate, 60 s timeout; host re-sends the save to every peer on SAVE_CHANGED | `Create`, `Ready`, `TimedOut`, `EnableAdapter` |
 | LogForwarder.cs | guest streams new adapter-log bytes to the host every 2 s (LOG_APPEND 0x0050); host appends them to `peer_<steamid>.log` beside its adapter log | `Create`, `Pump` |
 | SaveSender.cs | host: paced FILE_BEGIN/CHUNK/END per new peer, resend until ACK ok | `SendTo`, `OnAck`, `Pump` |
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir, FILE_ACK | `OnFrame`, `Complete` |
@@ -53,12 +53,14 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/game.h | RE0 addresses/offsets (players, enemies, `HitInfo`), SEH-safe reads and writes | `game::controlled`, `partner`, `readTransform`, `callThiscall`, `setThink` |
 | src/game_tick.cpp | MinHook on `uPlayerBase::move`; runs registered callbacks once per frame before the controlled player moves, SEH-guarded; per-player move scope hook and a guarded post-move hook (`setPostMove`) | `game_tick::addCallback`, `setMoveScope`, `install` |
 | src/hooks.cpp | shared MinHook wrapper: one init, retried install (game settling after SteamStub), status logging | `hooks::install`, `remove` |
-| src/game_state.cpp | read-only SEH-guarded views: door transition active, menu open, current room (stage << 8 | room), character in the loaded room | `game_state::doorActive`, `menuOpen`, `currentRoom`, `inCurrentRoom` |
+| src/game_state.cpp | read-only SEH-guarded views: door transition active, menu open, current room (stage << 8; `roomPhase`, `uiPausesWorld` (menu, map, message, save screens) | room), character in the loaded room | `game_state::doorActive`, `menuOpen`, `currentRoom`, `inCurrentRoom` |
 | src/door_phase.h | pure door phase predicate (`door_phase::running`) | `door_phase::running` |
 | src/door_travel.cpp | door edge: the start is latched level-triggered from the game tick and the net thread (`onNetTick`) (the partner itself travels by the game's follow logic, see party_mode); arrival sends ROOM_STATE (0x0104), forces a position check and calls `floor_items_sync::onArrival`; ROOM_STATE every 2 s; "Room desync" toast after 3 s of mismatch | `door_travel::enable`, `onFrame`, `onNetTick` |
 | src/door_sync.cpp | doors on both machines: hooks sDoorLoad::start (0x552b50, door animation then room change); the focused character's owner runs it and sends DOOR_CHANGE 0x010B, the other machine suppresses its own call, focuses the character that went through and runs the peer's on the game tick; a local player whose character is the partner acts on doors/triggers through the act-on-trigger check (0x564070) and takes the camera; F8 doors sent/run/blocked | `door_sync::enable`, `onFrame`, `uninstall`; `camera_parity::holdLocalFocus` |
 | src/flag_sync.cpp | story flags (sFlagManager 0xdcc014 +0x20, 0x11c bytes) kept equal: every 6 frames each machine sends changed words as set/clear masks (FLAG_DIFF 0x010C); received changes are written and adopted as known (no echo); F8 flag words sent/applied | `flag_sync::enable`, `onFrame` |
 | src/flag_diff.h | pure word diff/apply for flag_sync (unit tested) | `flag_diff::diff`, `apply` |
+| src/room_phase.h | room phase ids and names (sRoomControl +0xb8 manager) and which phases pause the world | `room_phase::name`, `pausesWorld` |
+| src/phase_watch.cpp | net thread: logs every room phase change by name (`phase: Main -> EventDemo`), F8 room phase | `phase_watch::onNetTick` |
 | src/menu_mirror.cpp | MENU_STATE (0x0105) sent from the net thread on menu open/close and every 2 s while open; hooks `sUnit::updateAll` 0x727b50 and skips it while a peer's menu is open and ours is closed; hooks sSubMenu::open (0x5d9030): a player whose character is the partner gets the focus moved to it locally while the menu is open (inventory perspective), given back on close; snapshots inventories for exchange detection | `menu_mirror::enable`, `onNetTick`, `onFrame` |
 | src/control_rule.h | pure control rules (no game, unit tested): `Control`, `PartyMode`, ownership control and the leave-behind lock | `control_rule::byOwnership`, `byPartyMode` |
 | src/character_owner.cpp | Billy/Rebecca identification by vptr; fixed ownership (host = Rebecca, first peer = Billy) + OWNERSHIP (0x0102) resent every second; `controlOf` is the one place the control rule (ownership + party mode + focus) is applied; `isRemoteOwned`/`isLocalOwned` are ownership only; `focus(character)` swaps the camera to a character that is the partner | `character_owner::identify`, `find`, `controlOf`, `isRemoteOwned`, `isHost`, `isHostSlot`, `name`, `enable` |
@@ -90,7 +92,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/vtable_tracer.cpp | counting thunks patched into vtables, 2 s report | `vtable_tracer::install`, `uninstall` |
 | src/thunk_emit.h | shared x86 byte writers for generated thunks | `thunk::emit`, `emitAddress` |
 | src/remote_storage_proxy.cpp | 64-slot interface proxy: per-real-pointer forwarding thunks, slot overrides | `remote_storage_proxy::get` |
-| src/save_redirect.cpp | patches the SteamRemoteStorage IAT slot (0xcb1458); FileWrite/Read/Delete/Exists/GetFileSize served from `coop/session` | `save_redirect::install`, `uninstall` |
+| src/save_redirect.cpp | patches the SteamRemoteStorage IAT slot (0xcb1458); FileWrite/Read/Delete/Exists/GetFileSize served from `coop/session`; also installed without session files (host): cloud writes pass through and are reported (init sends SAVE_CHANGED so guests get the new save) | `save_redirect::install`, `uninstall` |
 | src/config.cpp | `coop/adapter.ini` (port, trace, trace_vtables, coop, overlay) | `loadConfig` |
 | src/debug_stats.cpp | thread-safe status registry (atomic counters with per-second rates, gauges, session, disabled callbacks, last error, last command / decision notes); modules write, the overlay reads | `debug_stats::count`, `set`, `setSession`, `setError`, `snapshot` |
 | src/debug_lines.cpp | turns a stats snapshot into the panel lines (label, value, red flag) | `debug_lines::build` |
