@@ -19,7 +19,7 @@
   <ItemGroup>
     <Content Include="steam_appid.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="update.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="native/steam_api64.dll" Link="steam_api64.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="native/steam_api64.dll" Link="steam_api64.dll" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>

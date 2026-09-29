@@ -5,11 +5,16 @@
 
 namespace inventory_sync {
 
-// Wire payload of INVENTORY (0x0106), reliable, to all: u8 character id (0 Billy, 1 Rebecca) followed by that
-// character's 0x40-byte inventory block from sItem. Sent by the character's owner.
+// Wire payload of INVENTORY (0x0106), reliable, to all: u8 character id (0 Billy, 1 Rebecca), u8 origin, then that
+// character's 0x40-byte inventory block from sItem. The owner sends its character's block (origin 0). A menu can
+// also change the other player's character (item exchange); that change is sent once when the menu closes
+// (origin 1) and the owner applies it to its own character.
 
 // Net thread: queues a peer's block for the game thread.
 void onFrame(const GameFrame& frame);
+
+// Game thread, as a submenu opens: remembers the blocks so an exchange made in the menu is found when it closes.
+void onMenuOpen();
 
 // Game frames since a locally owned character's inventory last changed (UINT32_MAX if it never has).
 uint32_t framesSinceLocalChange();

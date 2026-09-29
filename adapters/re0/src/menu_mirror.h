@@ -11,8 +11,9 @@ void onFrame(const GameFrame& frame);
 // Net thread, every tick: sends MENU_STATE when the local menu opens or closes and every 2 s while it is open.
 void onNetTick(NetClient& net);
 
-// Hooks the per-frame unit update so the local world stands still while a peer's menu is open and ours is closed.
-// Call after the game code is decrypted.
+// Hooks the per-frame unit update so the local world stands still while a peer's menu is open and ours is closed,
+// and the submenu open: the inventory shows the focused character, so a player whose own character is the partner
+// gets the focus moved to it (locally) for the time the menu is open. Call after the game code is decrypted.
 bool enable();
 
 void uninstall();

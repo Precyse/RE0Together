@@ -43,6 +43,9 @@ const char* name(Character character);
 // is Locked (see control_rule.h). The one place that rule is applied.
 Control controlOf(Character character);
 
+// Makes `character` the focused character on this machine when it is currently the partner.
+void focus(Character character);
+
 // Ownership only, ignoring the party mode: damage, inventory and state sync follow the owner even while the
 // character waits.
 bool isRemoteOwned(Character character);

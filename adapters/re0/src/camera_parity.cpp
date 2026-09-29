@@ -140,7 +140,7 @@ void hostTick() {
 void guestTick() {
     const auto now = Clock::now();
     const Character wanted = g_hostCharacter;
-    if (wanted == Character::Unknown || now < g_graceUntil.load() || now - g_lastSwap < kMinSwapInterval) return;
+    if (wanted == Character::Unknown || game_state::menuOpen() || now < g_graceUntil.load() || now - g_lastSwap < kMinSwapInterval) return;
     if (switchTo(wanted) != SwitchResult::Done) return;
     g_lastSwap = now;
     logger::write("camera_parity: swapped controlled character to %u to match the host", static_cast<unsigned>(wanted));

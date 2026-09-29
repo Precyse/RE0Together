@@ -36,6 +36,7 @@ enum class Counter : size_t {
     MenuFreezes,
     InventorySent,
     InventoryApplied,
+    InventoryExchanges,
     FloorPutSent,
     FloorPutApplied,
     FloorTakeSent,

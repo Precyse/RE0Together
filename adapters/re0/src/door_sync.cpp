@@ -37,13 +37,6 @@ bool focusedIsLocal() {
     return character_owner::isLocalOwned(character_owner::identify(game::controlled()));
 }
 
-// Makes `character` the focused character when it is the partner.
-void focus(Character character) {
-    const uintptr_t controlled = game::controlled();
-    const uintptr_t partner = game::partner();
-    if (controlled && partner && character_owner::identify(partner) == character) game::swapControlled(partner, controlled);
-}
-
 // Runs the game's check as if `player` were the focused character: the check reads sPlayer +0x2c throughout.
 bool actsAs(uintptr_t player, void* script, void* context) {
     const uintptr_t sPlayer = game::readPointer(game::kPlayerGlobal);
@@ -61,7 +54,7 @@ bool __cdecl actOnTriggerDetour(void* script, void* context) {
     const uintptr_t partner = game::partner();
     const Character own = character_owner::identify(partner);
     if (!partner || !character_owner::isLocalOwned(own) || !actsAs(partner, script, context)) return false;
-    focus(own);
+    character_owner::focus(own);
     camera_parity::holdLocalFocus();
     logger::write("door_sync: %s acted on a trigger as the partner, focus moved to it", character_owner::name(own));
     return true;
@@ -98,7 +91,7 @@ void onTick() {
     const std::optional<DoorChange> change = takePending();
     const uintptr_t doorLoad = game::readPointer(game::kDoorLoadGlobal);
     if (!change || !doorLoad) return;
-    focus(static_cast<Character>(change->characterId));
+    character_owner::focus(static_cast<Character>(change->characterId));
     g_applying = true;
     g_originalDoorStart(reinterpret_cast<void*>(doorLoad), nullptr, change->room, change->entry, change->arg3, change->arg4,
                         change->flag);

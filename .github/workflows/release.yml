@@ -35,7 +35,7 @@ jobs:
       - name: Assemble package
         shell: pwsh
         run: |
-          dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -o pkg/launcher/app
+          dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
           New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0 | Out-Null
           Copy-Item launcher/games/re0.json pkg/launcher/games/
           Copy-Item adapters/re0/dinput8.dll pkg/adapters/re0/

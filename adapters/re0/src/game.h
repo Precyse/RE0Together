@@ -99,6 +99,7 @@ constexpr uintptr_t kDoorStartFunction = 0x552b50;
 // pressed and the player may act. Doors and other in-room interactions go through it.
 constexpr uintptr_t kActOnTriggerFunction = 0x564070;
 constexpr uintptr_t kSubMenuStateOffset = 0x2c;
+constexpr uintptr_t kSubMenuOpenFunction = 0x5d9030;  // thiscall, no args: opens the inventory for the focused character
 constexpr uint8_t kSubMenuClosed = 0x0d;
 // cPlayerThink vtable slot 28, reached from the lethal hit: kills the player (setHP 0) and enters the dead state.
 // Save data owner check: compares the SteamID stamped in the save (+0xa0) with SteamUser()->GetSteamID().

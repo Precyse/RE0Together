@@ -86,6 +86,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"menu freezes", format(L"%u", total(s, Counter::MenuFreezes)), false});
     lines.push_back({L"inventory sent", format(L"%u", total(s, Counter::InventorySent)), false});
     lines.push_back({L"inventory applied", format(L"%u", total(s, Counter::InventoryApplied)), false});
+    lines.push_back({L"inventory exchanges", format(L"%u", total(s, Counter::InventoryExchanges)), false});
     lines.push_back({L"floor put sent/applied", format(L"%u / %u", total(s, Counter::FloorPutSent), total(s, Counter::FloorPutApplied)), false});
     lines.push_back({L"floor take sent/applied", format(L"%u / %u", total(s, Counter::FloorTakeSent), total(s, Counter::FloorTakeApplied)), false});
     lines.push_back({L"floor pending", format(L"%d", gauge(s, Gauge::FloorPending)), false});

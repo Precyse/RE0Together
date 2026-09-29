@@ -5,12 +5,17 @@
 #include <map>
 #include <mutex>
 
+#include "camera_parity.h"
+#include "character_owner.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
 #include "game.h"
 #include "game_state.h"
+#include "game_tick.h"
 #include "hooks.h"
+#include "inventory_sync.h"
 #include "log.h"
+#include "net_pad.h"
 #include "protocol.h"
 
 namespace {
@@ -29,8 +34,12 @@ Clock::time_point g_lastSend;
 
 bool g_frozen = false;  // game thread only
 
+using character_owner::Character;
 using UpdateAllFunction = void(__fastcall*)(void* self, void* edx);
+using OpenFunction = void(__fastcall*)(void* self, void* edx);
 UpdateAllFunction g_originalUpdateAll = nullptr;
+OpenFunction g_originalOpen = nullptr;
+Character g_focusBeforeMenu = Character::Unknown;  // game thread: focus to give back when the menu closes
 
 bool anyPeerMenuOpen() {
     const auto now = Clock::now();
@@ -57,6 +66,26 @@ void __fastcall updateAllDetour(void* self, void* edx) {
     g_originalUpdateAll(self, edx);
 }
 
+void __fastcall openDetour(void* self, void* edx) {
+    const Character focused = character_owner::identify(game::controlled());
+    const Character partner = character_owner::identify(game::partner());
+    if (net_pad::active() && !character_owner::isLocalOwned(focused) && character_owner::isLocalOwned(partner)) {
+        g_focusBeforeMenu = focused;
+        character_owner::focus(partner);
+        camera_parity::holdLocalFocus();
+        logger::write("menu_mirror: menu opened for %s", character_owner::name(partner));
+    }
+    inventory_sync::onMenuOpen();
+    g_originalOpen(self, edx);
+}
+
+void onTick() {
+    if (g_focusBeforeMenu == Character::Unknown || game_state::menuOpen()) return;
+    character_owner::focus(g_focusBeforeMenu);
+    camera_parity::holdLocalFocus();
+    g_focusBeforeMenu = Character::Unknown;
+}
+
 }  // namespace
 
 namespace menu_mirror {
@@ -79,10 +108,16 @@ void onNetTick(NetClient& net) {
 }
 
 bool enable() {
+    game_tick::addCallback("menu_mirror", onTick);
     return hooks::install("sUnit::updateAll", game::kUnitUpdateAllFunction, reinterpret_cast<void*>(&updateAllDetour),
-                          reinterpret_cast<void**>(&g_originalUpdateAll));
+                          reinterpret_cast<void**>(&g_originalUpdateAll)) &&
+           hooks::install("sSubMenu::open", game::kSubMenuOpenFunction, reinterpret_cast<void*>(&openDetour),
+                          reinterpret_cast<void**>(&g_originalOpen));
 }
 
-void uninstall() { hooks::remove(game::kUnitUpdateAllFunction); }
+void uninstall() {
+    hooks::remove(game::kUnitUpdateAllFunction);
+    hooks::remove(game::kSubMenuOpenFunction);
+}
 
 }  // namespace menu_mirror

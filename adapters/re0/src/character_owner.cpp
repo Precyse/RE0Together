@@ -156,4 +156,10 @@ void enable(NetClient& net) {
     game_tick::addCallback("character_owner", onTick);
 }
 
+void focus(Character character) {
+    const uintptr_t controlled = game::controlled();
+    const uintptr_t partner = game::partner();
+    if (controlled && partner && identify(partner) == character) game::swapControlled(partner, controlled);
+}
+
 }  // namespace character_owner
