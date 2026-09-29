@@ -10,6 +10,7 @@
 #include "enemy_damage_hook.h"
 #include "enemy_net.h"
 #include "enemy_state.h"
+#include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
 #include "game_tick.h"
@@ -54,6 +55,7 @@ void enableCoop() {
     pickup_guard::enable();
     door_travel::enable(g_net);
     if (!door_sync::enable(g_net)) logger::write("adapter: door sync unavailable");
+    flag_sync::enable(g_net);
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
     command_input::enable();

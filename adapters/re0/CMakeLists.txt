@@ -42,6 +42,7 @@ add_library(re0_adapter SHARED
     src/game_state.cpp
     src/door_travel.cpp
     src/door_sync.cpp
+    src/flag_sync.cpp
     src/menu_mirror.cpp
     src/camera_parity.cpp
     src/command_input.cpp
@@ -93,6 +94,8 @@ add_executable(door_phase_test tests/door_phase_test.cpp)
 
 add_executable(position_blend_test tests/position_blend_test.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test)
+add_executable(flag_diff_test tests/flag_diff_test.cpp)
+
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test flag_diff_test)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

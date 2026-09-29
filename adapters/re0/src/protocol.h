@@ -31,6 +31,7 @@ constexpr uint16_t kMsgFloorTake = kFirstGameType + 8;  // 0x0108
 constexpr uint16_t kMsgPartyRequest = kFirstGameType + 9;  // 0x0109, guest to host, reliable: empty (toggle the party mode)
 constexpr uint16_t kMsgPartyMode = kFirstGameType + 10;    // 0x010A, host to all, reliable: u8 PartyMode
 constexpr uint16_t kMsgDoorChange = kFirstGameType + 11;   // 0x010B, focused owner to all, reliable: door_sync::DoorChange
+constexpr uint16_t kMsgFlagDiff = kFirstGameType + 12;     // 0x010C, to all, reliable: flag_sync changes
 
 constexpr size_t kWelcomeSize = 7;
 constexpr size_t kPeerUpFixedSize = 10;

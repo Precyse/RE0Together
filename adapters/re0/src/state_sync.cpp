@@ -14,6 +14,7 @@
 #include "enemy_protocol.h"
 #include "enemy_state.h"
 #include "door_sync.h"
+#include "flag_sync.h"
 #include "door_travel.h"
 #include "game.h"
 #include "game_state.h"
@@ -105,6 +106,10 @@ void onFrame(const GameFrame& frame) {
     }
     if (frame.type == enemy_protocol::kMsgEnemyState) {
         enemy_state::onFrame(frame);
+        return;
+    }
+    if (frame.type == proto::kMsgFlagDiff) {
+        flag_sync::onFrame(frame);
         return;
     }
     if (frame.type == proto::kMsgDoorChange) {

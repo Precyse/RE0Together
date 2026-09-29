@@ -16,6 +16,11 @@ constexpr uintptr_t kGameInfoGlobal = 0xdcbe9c;    // sGameInfo*
 constexpr uintptr_t kDoorLoadGlobal = 0xdcbeb8;    // sDoorLoad*
 constexpr uintptr_t kSubMenuGlobal = 0xdcebd0;     // sSubMenu*
 constexpr uintptr_t kItemGlobal = 0xdcbf44;        // sItem*
+constexpr uintptr_t kFlagManagerGlobal = 0xdcc014; // sFlagManager* (size 0x144, vtable 0xcd9184)
+
+// sFlagManager: story flags as a bitset of flag_diff::kWords dwords (0x11c bytes; set(index, count, value) is 0x59c980,
+// the save copy 0x59ba30 copies the same 0x47 dwords)
+constexpr uintptr_t kFlagBitsOffset = 0x20;
 
 // sPlayer
 constexpr uintptr_t kPlayerControlledOffset = 0x2c;

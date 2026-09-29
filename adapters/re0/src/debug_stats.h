@@ -37,6 +37,8 @@ enum class Counter : size_t {
     InventorySent,
     InventoryApplied,
     InventoryExchanges,
+    FlagWordsSent,
+    FlagWordsApplied,
     FloorPutSent,
     FloorPutApplied,
     FloorTakeSent,
