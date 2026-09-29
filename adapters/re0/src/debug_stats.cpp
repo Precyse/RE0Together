@@ -6,6 +6,9 @@
 #include <cstdio>
 #include <mutex>
 
+#include "jitter_target.h"
+#include "room_phase.h"
+
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -18,9 +21,10 @@ constexpr long long kMsPerSecond = 1000;
 
 std::array<std::atomic<uint32_t>, kCounterCount> g_total{};
 // Order of debug_stats::Gauge: PadDepth, BillyOwner, RebeccaOwner, SaveRedirect, WorldFrozen, FloorPending, PartyMode,
-// FocusedCharacter, DoorPhase, Room.
+// FocusedCharacter, DoorPhase, Room, RoomPhase, PadTarget.
 std::array<std::atomic<int>, kGaugeCount> g_gauge{0, debug_stats::kUnknownOwner, debug_stats::kUnknownOwner, 0, 0, 0, 0,
-                                                  debug_stats::kUnknownOwner, 0, 0};
+                                                  debug_stats::kUnknownOwner, 0, 0, room_phase::kUnreadable,
+                                                  static_cast<int>(JitterTarget::kInitial)};
 
 std::atomic<bool> g_linked{false};
 std::atomic<uint8_t> g_localSlot{0};

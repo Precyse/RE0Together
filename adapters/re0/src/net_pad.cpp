@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "debug_stats.h"
+#include "jitter_target.h"
 #include "game.h"
 #include "log.h"
 #include "pad_frame.h"
@@ -16,8 +17,6 @@ namespace {
 
 using pad::PadFrame;
 
-constexpr size_t kTargetBuffered = 3;
-constexpr size_t kMaxBehind = 10;
 constexpr size_t kMaxBuffered = 64;
 constexpr int kNoPeer = -1;
 
@@ -27,6 +26,7 @@ uint32_t g_lastConsumed = 0;            // guarded by g_mutex
 bool g_hasConsumed = false;             // guarded by g_mutex
 bool g_started = false;                 // guarded by g_mutex
 bool g_resetCurrent = false;            // guarded by g_mutex
+JitterTarget g_jitter;                  // guarded by g_mutex
 std::atomic<int> g_peerSlot{kNoPeer};
 
 PadFrame g_current{};  // game thread only; all zeros is the neutral pad
@@ -77,6 +77,7 @@ void clearBufferLocked() {
     g_hasConsumed = false;
     g_started = false;
     g_resetCurrent = true;
+    g_jitter.reset();
 }
 
 }  // namespace
@@ -128,15 +129,18 @@ void advance() {
         g_current = PadFrame{};
         g_resetCurrent = false;
     }
-    if (!g_started && g_buffer.size() >= kTargetBuffered) g_started = true;
+    if (!g_started && g_buffer.size() >= g_jitter.target()) g_started = true;
     if (!g_started) return;
     if (g_buffer.empty()) {
         g_started = false;  // underrun: the last frame repeats while the buffer refills
+        g_jitter.onUnderrun();
         debug_stats::count(debug_stats::Counter::PadUnderruns);
+        debug_stats::set(debug_stats::Gauge::PadTarget, static_cast<int>(g_jitter.target()));
         return;
     }
-    if (g_buffer.size() > kMaxBehind) {
-        for (size_t excess = g_buffer.size() - kTargetBuffered; excess > 0; --excess) {
+    g_jitter.onFrameConsumed();
+    if (g_buffer.size() > g_jitter.maxBehind()) {
+        for (size_t excess = g_buffer.size() - g_jitter.target(); excess > 0; --excess) {
             g_buffer.erase(g_buffer.begin());
             debug_stats::count(debug_stats::Counter::PadSkips);
         }
@@ -147,6 +151,7 @@ void advance() {
     g_hasConsumed = true;
     g_buffer.erase(oldest);
     debug_stats::set(debug_stats::Gauge::PadDepth, static_cast<int>(g_buffer.size()));
+    debug_stats::set(debug_stats::Gauge::PadTarget, static_cast<int>(g_jitter.target()));
 }
 
 void* object(void* realPad) {

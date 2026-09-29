@@ -5,11 +5,13 @@
 #include <cstring>
 
 #include "character_owner.h"
+#include "game_state.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "room_phase.h"
 
 namespace {
 
@@ -28,8 +30,15 @@ LoadRequestFn g_originalLoad = nullptr;
 LoadRequestFn g_originalLoadAlt = nullptr;
 SaveRequestFn g_originalSave = nullptr;
 
+struct Announcement {
+    int32_t slot;
+    int32_t phase;
+};
+static_assert(sizeof(Announcement) == 8);
+
 std::atomic<int32_t> g_slot{kUnknown};
-int32_t g_announced = kUnknown;  // net thread only
+std::atomic<int32_t> g_hostPhase{room_phase::kUnreadable};  // guest: the host's last announced room phase
+Announcement g_announced{kUnknown, room_phase::kUnreadable};  // net thread only
 Clock::time_point g_lastAnnounce;
 
 bool guestInSession() { return net_pad::active() && !character_owner::isHost(); }
@@ -74,26 +83,30 @@ bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
 namespace session_slot {
 
 void onFrame(const GameFrame& frame) {
-    if (frame.type != proto::kMsgSaveSlot || frame.payload.size() != sizeof(int32_t) ||
+    if (frame.type != proto::kMsgSaveSlot || frame.payload.size() != sizeof(Announcement) ||
         !character_owner::isHostSlot(frame.slot) || character_owner::isHost()) {
         return;
     }
-    int32_t slot = kUnknown;
-    std::memcpy(&slot, frame.payload.data(), sizeof(slot));
-    if (g_slot.exchange(slot) != slot) logger::write("session_slot: host plays slot %d", slot);
+    Announcement announcement;
+    std::memcpy(&announcement, frame.payload.data(), sizeof(announcement));
+    g_hostPhase = announcement.phase;
+    if (g_slot.exchange(announcement.slot) != announcement.slot) logger::write("session_slot: host plays slot %d", announcement.slot);
 }
 
 void onNetTick(NetClient& net) {
-    const int32_t slot = g_slot.load();
-    if (!net_pad::active() || !character_owner::isHost() || slot == kUnknown) return;
-    const auto now = Clock::now();
-    if (slot == g_announced && now - g_lastAnnounce < kAnnounceInterval) return;
-    if (!net.send(proto::kMsgSaveSlot, true, proto::kSlotAll, {reinterpret_cast<const uint8_t*>(&slot), sizeof(slot)})) return;
-    g_announced = slot;
-    g_lastAnnounce = now;
+    const Announcement now{g_slot.load(), game_state::roomPhase()};
+    if (!net_pad::active() || !character_owner::isHost() || now.slot == kUnknown) return;
+    const auto time = Clock::now();
+    const bool changed = now.slot != g_announced.slot || now.phase != g_announced.phase;
+    if (!changed && time - g_lastAnnounce < kAnnounceInterval) return;
+    if (!net.send(proto::kMsgSaveSlot, true, proto::kSlotAll, {reinterpret_cast<const uint8_t*>(&now), sizeof(now)})) return;
+    g_announced = now;
+    g_lastAnnounce = time;
 }
 
 int32_t current() { return g_slot.load(); }
+
+bool hostInGame() { return room_phase::isGameplay(g_hostPhase.load()); }
 
 bool enable() {
     return hooks::install("save load request", game::kSaveLoadRequestFunction, reinterpret_cast<void*>(&loadDetour),

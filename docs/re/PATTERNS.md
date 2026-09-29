@@ -75,3 +75,15 @@ Shape: switching to the other character is a phase of the screen machine (not a 
 Find it: the phase requests made from the player's input code (push <phase>; call requestPhase).
 Replicate: in the same area a direct controlled-pointer swap is enough; apart, request the switch phase on both machines.
 Seen in: RE0: Change phase 9 requested from 0x4fed48 / 0x50395e.
+
+## Drive menus with a virtual keyboard, pin the data underneath  [ui-perspective, persistence]
+Shape: menus need a few confirms to reach gameplay (logos, title, load list, continue). Their meaning is simple (Enter on defaults) even when their code is not.
+Find it: the input device the game polls (DirectInput GetDeviceState for RE0) and the data call the menu ends in (the load request with the cursor slot).
+Replicate: tap Enter from the input proxy while outside gameplay and mute the real keys; hook the data call to force the session's value (the host's slot). Wait for the host to be in game first.
+Seen in: RE0: virtual_keys (DirectInput8 proxy), session_slot (0x6134c0 / 0x613500), auto_join.
+
+## Late join = older save + live snapshot  [persistence, world-state]
+Shape: the joiner can only load a saved state; the host's live state has moved on (room, inventories, flags, AI-driven partner).
+Find it: reuse the existing sync modules' read/apply points.
+Replicate: after the joiner loads, request a snapshot; apply flags and inventories, travel through the host's last door (engine transition as teleport), place the partner; hold the joiner's own state broadcasts until caught up.
+Seen in: RE0: join_sync.

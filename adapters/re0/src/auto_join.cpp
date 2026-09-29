@@ -4,8 +4,10 @@
 
 #include "character_owner.h"
 #include "game.h"
+#include "game_state.h"
 #include "log.h"
 #include "net_pad.h"
+#include "room_phase.h"
 #include "save_redirect.h"
 #include "session_slot.h"
 #include "virtual_keys.h"
@@ -17,12 +19,28 @@ using Clock = std::chrono::steady_clock;
 // Long enough for each logo, notice and menu to accept input, short enough that joining feels direct.
 constexpr auto kConfirmInterval = std::chrono::milliseconds(2500);
 
-bool g_driving = false;  // net thread only
+enum class Mode { Idle, Waiting, Confirming };
+
+Mode g_mode = Mode::Idle;  // net thread only
 Clock::time_point g_lastConfirm;
 
-bool shouldDrive() {
-    return net_pad::active() && !character_owner::isHost() && save_redirect::servingSession() &&
-           session_slot::current() != session_slot::kUnknown && game::controlled() == 0;
+// Outside gameplay the guest follows the host into its game; at game over it waits for the host's choice.
+Mode modeNow() {
+    const bool guest = net_pad::active() && !character_owner::isHost() && save_redirect::servingSession() &&
+                       session_slot::current() != session_slot::kUnknown;
+    if (!guest) return Mode::Idle;
+    const bool outside = game_state::roomPhase() == room_phase::Dead || game::controlled() == 0;
+    if (!outside) return Mode::Idle;
+    return session_slot::hostInGame() ? Mode::Confirming : Mode::Waiting;
+}
+
+const char* describe(Mode mode) {
+    switch (mode) {
+        case Mode::Waiting: return "auto_join: waiting for the host to be in game";
+        case Mode::Confirming: return "auto_join: taking the guest into the host's game";
+        case Mode::Idle: break;
+    }
+    return "auto_join: in game";
 }
 
 }  // namespace
@@ -30,13 +48,13 @@ bool shouldDrive() {
 namespace auto_join {
 
 void onNetTick() {
-    const bool drive = shouldDrive();
-    if (drive != g_driving) {
-        g_driving = drive;
-        virtual_keys::setRealKeyboardMuted(drive);
-        logger::write(drive ? "auto_join: taking the guest into the host's game" : "auto_join: in game");
+    const Mode mode = modeNow();
+    if (mode != g_mode) {
+        g_mode = mode;
+        virtual_keys::setRealKeyboardMuted(mode != Mode::Idle);
+        logger::write("%s", describe(mode));
     }
-    if (!drive) return;
+    if (mode != Mode::Confirming) return;
     const auto now = Clock::now();
     if (now - g_lastConfirm < kConfirmInterval) return;
     g_lastConfirm = now;

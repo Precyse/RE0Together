@@ -17,6 +17,9 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 9 | Host saves at a typewriter | the guest's launcher logs `Save sync: received data0.bin` | host log `save data0.bin written, sharing it` |
 | 10 | A character dies, both continue | both reload the host's last save | phase `-> Dead` on both |
 | 11 | Split up (LEAVE_BEHIND, separate rooms), press V | both screens zap to the other character and load its room | `phase: Main -> Change` on both |
-| 12 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
+| 12 | Guest starts the game after the host is already playing (any room) | guest goes through the menus by itself (keys ignored), loads the host's slot, then is teleported into the host's room with the host's inventories | `auto_join:` lines, `session_slot: load of slot N turned into the host's slot`, `join_sync: teleporting`, `join_sync: in the host's room` |
+| 13 | Die, host picks Continue | guest waits muted on game over, then continues by itself into the host's save | `auto_join: waiting for the host to be in game` |
+| 14 | Play with some lag (Wi-Fi) | Billy's input stays smooth; the target settles | pad buffer/target, pad underruns |
+| 15 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
 
 Report any row that fails, together with both logs.

@@ -100,7 +100,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"doors sent/run/blocked", format(L"%u / %u / %u", total(s, Counter::DoorsSent), total(s, Counter::DoorsApplied), total(s, Counter::DoorsSuppressed)), false});
     lines.push_back({L"pad sent/s", format(L"%u", rate(s, Counter::PadSent)), false});
     lines.push_back({L"pad received/s", format(L"%u", rate(s, Counter::PadReceived)), false});
-    lines.push_back({L"pad buffer", format(L"%d", gauge(s, Gauge::PadDepth)), false});
+    lines.push_back({L"pad buffer/target", format(L"%d / %d", gauge(s, Gauge::PadDepth), gauge(s, Gauge::PadTarget)), false});
     lines.push_back({L"pad underruns", format(L"%u", total(s, Counter::PadUnderruns)), false});
     lines.push_back({L"pad skips", format(L"%u", total(s, Counter::PadSkips)), false});
     lines.push_back({L"state sent/s", format(L"%u", rate(s, Counter::PlayerStateSent)), false});

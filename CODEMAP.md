@@ -45,7 +45,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 
 | file | owns | key members |
 |---|---|---|
-| src/proxy.cpp, dinput8.def | DirectInput8Create forwarding, DllMain (spawns init thread, pins module) | `DirectInput8Create`, `DllMain` |
+| src/proxy.cpp, dinput8.def | DirectInput8Create forwarding, DllMain (spawns init thread, pins module); hands the created IDirectInput8 to virtual_keys | `DirectInput8Create`, `DllMain` |
 | src/init.cpp | wait for code decryption, start subsystems, SEH boundary | `initThread`, `shutdownAdapter` |
 | src/protocol.h | loopback frame codec and message constants (ROOM_STATE, MENU_STATE, PARTY_REQUEST, PARTY_MODE) (mirrors Framing.cs) | `proto::encodeFrame` |
 | src/net_client.cpp | launcher link thread: HELLO, heartbeat, reconnect, queues | `NetClient::send`, `poll` |
@@ -56,8 +56,13 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/game_state.cpp | read-only SEH-guarded views: door transition active, menu open, current room (stage << 8; `roomPhase`, `uiPausesWorld` (menu, map, message, save screens) | room), character in the loaded room | `game_state::doorActive`, `menuOpen`, `currentRoom`, `inCurrentRoom` |
 | src/door_phase.h | pure door phase predicate (`door_phase::running`) | `door_phase::running` |
 | src/door_travel.cpp | door edge: the start is latched level-triggered from the game tick and the net thread (`onNetTick`) (the partner itself travels by the game's follow logic, see party_mode); arrival sends ROOM_STATE (0x0104), forces a position check and calls `floor_items_sync::onArrival`; ROOM_STATE every 2 s; "Room desync" toast after 3 s of mismatch | `door_travel::enable`, `onFrame`, `onNetTick` |
-| src/door_sync.cpp | doors on both machines: hooks sDoorLoad::start (0x552b50, door animation then room change); the focused character's owner runs it and sends DOOR_CHANGE 0x010B, the other machine suppresses its own call, focuses the character that went through and runs the peer's on the game tick; a local player whose character is the partner acts on doors/triggers through the act-on-trigger check (0x564070) and takes the camera; F8 doors sent/run/blocked | `door_sync::enable`, `onFrame`, `uninstall`; `camera_parity::holdLocalFocus` |
+| src/door_sync.cpp | doors on both machines: hooks sDoorLoad::start (0x552b50, door animation then room change); the focused character's owner runs it and sends DOOR_CHANGE 0x010B, the other machine suppresses its own call, focuses the character that went through and runs the peer's on the game tick; a local player whose character is the partner acts on doors/triggers through the act-on-trigger check (0x564070) and takes the camera; F8 doors sent/run/blocked; remembers the door into the current room (`lastDoor`) and can `queue` one (join teleport) | `door_sync::enable`, `onFrame`, `uninstall`; `camera_parity::holdLocalFocus` |
 | src/flag_sync.cpp | story flags (sFlagManager 0xdcc014 +0x20, 0x11c bytes) kept equal: every 6 frames each machine sends changed words as set/clear masks (FLAG_DIFF 0x010C); received changes are written and adopted as known (no echo); F8 flag words sent/applied | `flag_sync::enable`, `onFrame` |
+| src/join_sync.cpp | joining a game in progress: the loaded guest sends SNAPSHOT_REQUEST 0x010D (every 3 s until answered); the host answers JOIN_SNAPSHOT 0x010E (room, last door, both inventories, flags, Billy transform); the guest applies flags and inventories, runs the door as a teleport if the rooms differ, places Billy; `caughtUp` holds back the guest's PLAYER_STATE and inventory sends until then | `join_sync::enable`, `onFrame`, `caughtUp` |
+| src/session_slot.cpp | session save slot: hooks the save manager's load (0x6134c0, 0x613500) and save (0x613390) requests; the host remembers its player slot (0..19) and announces {slot, room phase} (SAVE_SLOT 0x010F); on a guest every player-slot load becomes the host's slot | `session_slot::enable`, `onFrame`, `onNetTick`, `current`, `hostInGame` |
+| src/auto_join.cpp | net thread: a guest outside gameplay (boot, title, load list, game over) with the host in game gets virtual Enter every 2.5 s and a muted keyboard until a character is controlled; waits muted while the host is not in game | `auto_join::onNetTick` |
+| src/virtual_keys.cpp | virtual keyboard on DirectInput: the proxy hands over IDirectInput8, CreateDevice is hooked, the keyboard's GetDeviceState gets tapped keys and optional muting | `virtual_keys::onDirectInput`, `tap`, `setRealKeyboardMuted` |
+| src/jitter_target.h | adaptive remote-pad buffer target (2..8 frames: +1 per underrun, -1 after ~10 s calm; skip beyond target + 6), unit tested | `JitterTarget` |
 | src/flag_diff.h | pure word diff/apply for flag_sync (unit tested) | `flag_diff::diff`, `apply` |
 | src/room_phase.h | room phase ids and names (sRoomControl +0xb8 manager) and which phases pause the world | `room_phase::name`, `pausesWorld` |
 | src/phase_watch.cpp | net thread: logs every room phase change by name (`phase: Main -> EventDemo`), F8 room phase | `phase_watch::onNetTick` |
@@ -78,7 +83,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/partner_think.cpp | gives every co-op controlled (not Vanilla) character on a cPlayerSubThink a cPlayerThink (with `coop=1`); skips while a door runs and 30 frames after, re-read every tick | `partner_think::enable` |
 | src/pad_frame.h | PAD_FRAME (0x0101) wire structs and pad vtable slot constants | `pad::PadFrame`, `PadPacket` |
 | src/input_record.cpp | per frame: evaluates the original pad vtable queries, sends last 3 frames | `input_record::captureOriginals`, `enable` |
-| src/net_pad.cpp | jitter buffer of the peer's frames, cloned pad object with thunk vtable, peer slot | `net_pad::onPacket`, `advance`, `object`, `analog` |
+| src/net_pad.cpp | jitter buffer of the peer's frames, cloned pad object with thunk vtable, peer slot; buffer target from JitterTarget (F8 pad buffer/target) | `net_pad::onPacket`, `advance`, `object`, `analog` |
 | src/input_redirect.cpp | MinHook on getPad and the analog getter: inside a character's move, Remote reads the NetPad, Locked reads the game's blocked pad, else the real pad | `input_redirect::install`, `realPad`, `realAnalog`, `replayingRemoteInput` |
 | src/state_correction.cpp | remote-owned character position: after its move (game_tick post-move hook) it is pulled toward the owner's newest PLAYER_STATE extrapolated by velocity (dead zone 3, blend 0.5 per tick up to 60, snap beyond; same room only); applies its HP (setHP); `requestForcedCheck` snaps once regardless of distance | `state_correction::onFrame`, `enable`, `requestForcedCheck` |
 | src/position_blend.h | pure blend/extrapolation/classify math (no game, unit tested) | `position_blend::classify`, `blendPosition`, `blendRotation`, `extrapolate` |
@@ -105,6 +110,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/command_rules_test.cpp | x86 exe: config.ini key parsing (including the real `[JOYPAD]` KC_change=KB_V / KC_trace=KB_E text) and the control truth table (no game) | |
 | tests/door_phase_test.cpp | x86 exe: door phase predicate (0..4 running; 5 and -1 idle) | |
 | tests/flag_diff_test.cpp | x86 exe: flag word diff set/clear masks, apply round trip, out-of-range word | |
+| tests/jitter_target_test.cpp | x86 exe: jitter target growth, cap, calm shrink, floor | |
 | tests/position_blend_test.cpp | x86 exe: classify thresholds, blend convergence, extrapolation cap, quaternion shorter arc (no game) | |
 | tests/settled_copy_test.cpp | x86 exe: settle delay, resend, adopt and reset of `SettledCopy` (no game) | |
 | tests/floor_pending_test.cpp | x86 exe: put/take coalescing, per-room cap and drop, ordering, room isolation of `floor_pending::Queue` (no game) | |

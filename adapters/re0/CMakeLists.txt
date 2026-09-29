@@ -101,6 +101,8 @@ add_executable(position_blend_test tests/position_blend_test.cpp)
 
 add_executable(flag_diff_test tests/flag_diff_test.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test flag_diff_test)
+add_executable(jitter_target_test tests/jitter_target_test.cpp)
+
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test flag_diff_test jitter_target_test)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()
