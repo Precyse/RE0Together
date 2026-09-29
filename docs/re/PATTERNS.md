@@ -69,3 +69,9 @@ Shape: the game reads and writes saves through a platform storage interface (Ste
 Find it: the import slot of the storage accessor; the interface vtable slots for write/read/exists/size.
 Replicate: guest reads the host's save from a session folder; host cloud writes are reported so the launcher re-sends the file (full-file transfer with hash check, not through the game link).
 Seen in: RE0: import 0xcb1458, ISteamRemoteStorage v012 slots 0/1/3/10/12; owner check 0x612600 bypassed.
+
+## Character switching is a screen phase  [control, state-transition]
+Shape: switching to the other character is a phase of the screen machine (not a pointer swap), because it may need to load the other character's area.
+Find it: the phase requests made from the player's input code (push <phase>; call requestPhase).
+Replicate: in the same area a direct controlled-pointer swap is enough; apart, request the switch phase on both machines.
+Seen in: RE0: Change phase 9 requested from 0x4fed48 / 0x50395e.

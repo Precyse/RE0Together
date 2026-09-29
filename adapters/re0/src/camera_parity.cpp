@@ -10,6 +10,7 @@
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
+#include "room_phase.h"
 #include "log.h"
 #include "net_pad.h"
 #include "state_sync.h"
@@ -59,7 +60,9 @@ SwitchResult switchTo(Character wanted) {
     if (!controlled || !partner) return SwitchResult::NoPartner;
     if (character_owner::identify(controlled) == wanted) return SwitchResult::AlreadyFocused;
     if (character_owner::identify(partner) != wanted) return SwitchResult::PartnerIsOther;
-    game::swapControlled(partner, controlled);
+    // Apart, the switch is the game's own zap, which also loads the partner's room.
+    if (!game_state::inCurrentRoom(partner)) game::requestRoomPhase(room_phase::Change);
+    else game::swapControlled(partner, controlled);
     return SwitchResult::Done;
 }
 

@@ -97,6 +97,9 @@ constexpr uintptr_t kGameInfoRoomOffset = 0x2a84;
 constexpr uintptr_t kDoorLoadStateOffset = 0x44;
 constexpr uintptr_t kRoomControlGlobal = 0xdcbeb4;         // sRoomControl*
 constexpr uintptr_t kRoomPhaseCurrentOffset = 0xb8 + 0x14;  // phase manager +0x14: room_phase::Phase
+// sRoomControl::requestPhase: thiscall (phase), ret 4. The vanilla V requests Change (9), which zaps to the partner
+// and loads its room when the two are apart (player think 0x4fed48 / 0x50395e).
+constexpr uintptr_t kRequestRoomPhaseFunction = 0x610e00;
 // sDoorLoad::start: thiscall (room, entry, a, b, flag), ret 0x14. Every room change starts here: it plays the door,
 // counts down and then calls sRoomControl::changeRoom (0x610c60), which carries the partner when sPlayer +0x40 is set
 // and partner +0xff4 equals the scene's current room record.
@@ -257,6 +260,12 @@ inline uintptr_t partner() { return playerField(kPlayerPartnerOffset); }
 inline void setPartner(uintptr_t player) {
     void* sPlayer = reinterpret_cast<void*>(readPointer(kPlayerGlobal));
     if (sPlayer) callThiscall<void>(kSetPartnerFunction, sPlayer, reinterpret_cast<void*>(player));
+}
+
+// Queues a room phase (room_phase.h) on sRoomControl.
+inline void requestRoomPhase(int32_t phase) {
+    void* control = reinterpret_cast<void*>(readPointer(kRoomControlGlobal));
+    if (control) callThiscall<void>(kRequestRoomPhaseFunction, control, phase);
 }
 
 // Swaps the camera character: `next` becomes the controlled player and `previous` the partner.
