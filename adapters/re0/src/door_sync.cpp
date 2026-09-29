@@ -21,11 +21,12 @@ namespace {
 using door_sync::DoorChange;
 
 using character_owner::Character;
-using ChangeRoomFunction = void(__fastcall*)(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t flags);
+using DoorStartFunction = void(__fastcall*)(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t arg3,
+                                           uint32_t arg4, uint32_t flag);
 using ActOnTriggerFunction = bool(__cdecl*)(void* script, void* context);
 
 NetClient* g_net = nullptr;
-ChangeRoomFunction g_originalChangeRoom = nullptr;
+DoorStartFunction g_originalDoorStart = nullptr;
 ActOnTriggerFunction g_originalActOnTrigger = nullptr;
 bool g_applying = false;  // game thread only: a peer's door is being run, so the hook passes it through
 
@@ -71,9 +72,10 @@ void send(const DoorChange& change) {
     debug_stats::count(debug_stats::Counter::DoorsSent);
 }
 
-void __fastcall changeRoomDetour(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t flags) {
+void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t arg3, uint32_t arg4,
+                                uint32_t flag) {
     if (g_applying || !net_pad::active()) {
-        g_originalChangeRoom(self, edx, room, entry, flags);
+        g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
         return;
     }
     if (!focusedIsLocal()) {
@@ -81,9 +83,9 @@ void __fastcall changeRoomDetour(void* self, void* edx, uint32_t room, uint32_t 
         logger::write("door_sync: suppressed a local door to room 0x%x, the peer owns the focused character", room);
         return;
     }
-    g_originalChangeRoom(self, edx, room, entry, flags);
-    send({room, entry, flags, static_cast<uint8_t>(character_owner::identify(game::controlled())), {}});
-    logger::write("door_sync: door to room 0x%x entry 0x%x flags 0x%x sent", room, entry, flags);
+    g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
+    send({room, entry, arg3, arg4, flag, static_cast<uint8_t>(character_owner::identify(game::controlled())), {}});
+    logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);
 }
 
 std::optional<DoorChange> takePending() {
@@ -94,11 +96,12 @@ std::optional<DoorChange> takePending() {
 void onTick() {
     if (game_state::doorActive()) return;
     const std::optional<DoorChange> change = takePending();
-    const uintptr_t roomControl = game::readPointer(game::kRoomControlGlobal);
-    if (!change || !roomControl) return;
+    const uintptr_t doorLoad = game::readPointer(game::kDoorLoadGlobal);
+    if (!change || !doorLoad) return;
     focus(static_cast<Character>(change->characterId));
     g_applying = true;
-    g_originalChangeRoom(reinterpret_cast<void*>(roomControl), nullptr, change->room, change->entry, change->flags);
+    g_originalDoorStart(reinterpret_cast<void*>(doorLoad), nullptr, change->room, change->entry, change->arg3, change->arg4,
+                        change->flag);
     g_applying = false;
     debug_stats::count(debug_stats::Counter::DoorsApplied);
     logger::write("door_sync: ran the peer's door to room 0x%x entry 0x%x", change->room, change->entry);
@@ -122,14 +125,14 @@ void onFrame(const GameFrame& frame) {
 bool enable(NetClient& net) {
     g_net = &net;
     game_tick::addCallback("door_sync", onTick);
-    return hooks::install("sRoomControl::changeRoom", game::kChangeRoomFunction,
-                          reinterpret_cast<void*>(&changeRoomDetour), reinterpret_cast<void**>(&g_originalChangeRoom)) &&
+    return hooks::install("sDoorLoad::start", game::kDoorStartFunction, reinterpret_cast<void*>(&doorStartDetour),
+                          reinterpret_cast<void**>(&g_originalDoorStart)) &&
            hooks::install("script::actOnTrigger", game::kActOnTriggerFunction,
                           reinterpret_cast<void*>(&actOnTriggerDetour), reinterpret_cast<void**>(&g_originalActOnTrigger));
 }
 
 void uninstall() {
-    hooks::remove(game::kChangeRoomFunction);
+    hooks::remove(game::kDoorStartFunction);
     hooks::remove(game::kActOnTriggerFunction);
 }
 

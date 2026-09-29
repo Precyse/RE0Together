@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <string>
 #include <vector>
@@ -19,6 +20,9 @@
 namespace {
 
 constexpr int kToggleKey = VK_F8;
+constexpr int kScrollUpKey = VK_PRIOR;   // Page Up
+constexpr int kScrollDownKey = VK_NEXT;  // Page Down
+constexpr float kScrollPerFrame = 12.0f;
 constexpr float kMargin = 8.0f;
 constexpr float kToastGap = 4.0f;
 constexpr float kFrameSeconds = 1.0f / 60.0f;
@@ -38,13 +42,23 @@ std::atomic<uint32_t> g_drawn{0};
 std::atomic<bool> g_disabled{false};
 std::atomic<bool> g_visible{false};
 bool g_keyWasDown = false;  // render thread only, like everything below
+float g_scroll = 0.0f;      // status panel scroll offset, clamped to the panel while drawing
 
 IDirect3DDevice9* g_device = nullptr;  // the device the ImGui backend is bound to; null until first shown
 
+bool keyDown(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
+
 void pollToggle() {
-    const bool down = (GetAsyncKeyState(kToggleKey) & 0x8000) != 0;
+    const bool down = keyDown(kToggleKey);
     if (down && !g_keyWasDown && gameIsForeground()) g_visible = !g_visible;
     g_keyWasDown = down;
+}
+
+// The game owns the mouse, so the panel scrolls with Page Up / Page Down while it is shown.
+void pollScroll() {
+    if (!g_visible || !gameIsForeground()) return;
+    if (keyDown(kScrollUpKey)) g_scroll -= kScrollPerFrame;
+    if (keyDown(kScrollDownKey)) g_scroll += kScrollPerFrame;
 }
 
 // Only the backbuffer pass gets the panel; EndScene also ends offscreen passes.
@@ -156,7 +170,12 @@ void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>
     ImGui::NewFrame();
     if (g_visible) {
         ImGui::SetNextWindowPos(ImVec2(kMargin, kMargin));
-        if (ImGui::Begin("status", nullptr, kPanelFlags)) drawLines();
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(size.x - 2.0f * kMargin, size.y - 2.0f * kMargin));
+        if (ImGui::Begin("status", nullptr, kPanelFlags)) {
+            drawLines();
+            g_scroll = std::clamp(g_scroll, 0.0f, ImGui::GetScrollMaxY());
+            ImGui::SetScrollY(g_scroll);
+        }
         ImGui::End();
     }
     if (showTitle) drawTitleMark(size);
@@ -168,6 +187,7 @@ void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>
 
 void frame(IDirect3DDevice9* device) {
     pollToggle();
+    pollScroll();
     const auto toasts = toast_queue::visible();
     const bool showTitle = game::controlled() == 0;
     if (g_visible || showTitle || !toasts.empty()) drawFrame(device, toasts, showTitle);

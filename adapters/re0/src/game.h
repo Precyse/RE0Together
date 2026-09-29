@@ -90,10 +90,10 @@ static_assert(sizeof(ItemPutRecord) == 0x24);
 constexpr uintptr_t kGameInfoStageOffset = 0x2a80;
 constexpr uintptr_t kGameInfoRoomOffset = 0x2a84;
 constexpr uintptr_t kDoorLoadStateOffset = 0x44;
-constexpr uintptr_t kRoomControlGlobal = 0xdcbeb4;    // sRoomControl*
-// sRoomControl::changeRoom: thiscall (u32 room, u32 entry, u32 flags), ret 0xC; every door calls it (via 0x552720).
-// It also decides the partner carry: sPlayer +0x40 set and partner +0xff4 == the scene's current room record.
-constexpr uintptr_t kChangeRoomFunction = 0x610c60;
+// sDoorLoad::start: thiscall (room, entry, a, b, flag), ret 0x14. Every room change starts here: it plays the door,
+// counts down and then calls sRoomControl::changeRoom (0x610c60), which carries the partner when sPlayer +0x40 is set
+// and partner +0xff4 equals the scene's current room record.
+constexpr uintptr_t kDoorStartFunction = 0x552b50;
 // Event-script condition "the controlled player acts on this trigger": cdecl bool(void*, context*), true when the
 // controlled player's trigger zone (player +0x16e4, also kept for the partner) equals context +8, pad 0 action is
 // pressed and the player may act. Doors and other in-room interactions go through it.
