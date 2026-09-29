@@ -1,0 +1,8 @@
+launcher/bin/
+launcher/obj/
+adapters/re0/build/
+adapters/re0/dinput8.dll
+tools/re0/image.bin
+tools/re0/*.png
+tools/re0/watch_write.stop
+__pycache__/
