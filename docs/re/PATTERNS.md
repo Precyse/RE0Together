@@ -61,7 +61,7 @@ Seen in: RE0: cPlayerThink / cPlayerSubThink, getPad 0x600630.
 ## Screens are a phase machine  [presentation, ui-perspective]
 Shape: one manager holds an array of phase objects (main, map, menu, message, save, cutscene, movie, dead) and a current index; a request call queues the next phase.
 Find it: class names of the phase objects (cRoomPhase*), then the manager that owns them; read the index table from the live array.
-Replicate: log every change by name (cheap diagnostics); decide per phase: pause-mirror (menus/messages/map/save), run-on-both (cutscenes from shared scripts), or authority (dead/game over).
+Replicate: log every change by name (cheap diagnostics); hold the other world while a player is in a menu, message, map, save screen or cutscene (a player who skips waits); death is authority-replicated.
 Seen in: RE0: sRoomControl +0xb8, request 0x60a340, 24 phases (RE0_NOTES "Room phases").
 
 ## Saves live behind a storage API the mod can proxy  [persistence]

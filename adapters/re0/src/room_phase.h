@@ -44,10 +44,11 @@ constexpr const char* name(int32_t phase) {
     return phase >= 0 && phase < static_cast<int32_t>(kNames.size()) ? kNames[phase] : "?";
 }
 
-// Screens that stop the local world for a player's own reading or menu: the other player's world waits too.
+// Screens that hold the other player's world until this one leaves them: menus, reading, saving, the map and
+// cutscenes (a player who skips a cutscene waits for the other to finish it).
 constexpr bool pausesWorld(int32_t phase) {
     return phase == Message || phase == MessageImm || phase == SubScreen || phase == Save || phase == Option ||
-           phase == Map;
+           phase == Map || phase == EventDemo || phase == Movie;
 }
 
 }  // namespace room_phase

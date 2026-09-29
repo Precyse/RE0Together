@@ -85,7 +85,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"save redirect", gauge(s, Gauge::SaveRedirect) ? L"active" : L"off", false});
     lines.push_back({L"save reads", format(L"%u", total(s, Counter::SaveReads)), false});
     lines.push_back({L"save writes", format(L"%u", total(s, Counter::SaveWrites)), false});
-    lines.push_back({L"world frozen", gauge(s, Gauge::WorldFrozen) ? L"yes (partner menu)" : L"no", false});
+    lines.push_back({L"world frozen", gauge(s, Gauge::WorldFrozen) ? L"yes (waiting for partner)" : L"no", false});
     lines.push_back({L"menu freezes", format(L"%u", total(s, Counter::MenuFreezes)), false});
     lines.push_back({L"inventory sent", format(L"%u", total(s, Counter::InventorySent)), false});
     lines.push_back({L"inventory applied", format(L"%u", total(s, Counter::InventoryApplied)), false});

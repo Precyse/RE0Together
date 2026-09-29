@@ -16,7 +16,7 @@ bool menuOpen();
 // Current room phase (room_phase.h), or room_phase::kUnreadable.
 int32_t roomPhase();
 
-// True while a local menu, map, message or save screen stops this machine's world.
+// True while a local menu, map, message, save screen or cutscene holds the other player's world (room_phase.h).
 bool uiPausesWorld();
 
 // Loaded room as stage << 8 | room.

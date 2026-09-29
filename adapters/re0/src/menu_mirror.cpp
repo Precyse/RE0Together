@@ -54,7 +54,7 @@ void setFrozen(bool frozen) {
     g_frozen = frozen;
     debug_stats::set(debug_stats::Gauge::WorldFrozen, frozen);
     if (frozen) debug_stats::count(debug_stats::Counter::MenuFreezes);
-    debug_overlay::toast(frozen ? "Partner is in a menu" : "Resumed", kToastSeconds);
+    debug_overlay::toast(frozen ? "Waiting for partner" : "Resumed", kToastSeconds);
     logger::write("menu_mirror: world %s", frozen ? "frozen" : "resumed");
 }
 
