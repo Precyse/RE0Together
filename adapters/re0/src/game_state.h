@@ -19,7 +19,8 @@ int32_t roomPhase();
 // True while a local menu, map, message, save screen or cutscene holds the other player's world (room_phase.h).
 bool uiPausesWorld();
 
-// Loaded room as stage << 8 | room.
+// Loaded room as stage << 8 | room; kRoomLoading while a room is still being loaded.
+constexpr uint16_t kRoomLoading = 0xffff;
 uint16_t currentRoom();
 
 // True when the character is in the loaded room (false for a partner left in another room).

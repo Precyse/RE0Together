@@ -74,6 +74,7 @@ bool peerReport(door_travel::RoomState& out) {
 void checkDesync(Clock::time_point now) {
     door_travel::RoomState peer;
     const bool mismatch = peerReport(peer) && peer.partnerInRoom && partnerInRoom() && !game_state::doorActive() &&
+                          peer.room != game_state::kRoomLoading && game_state::currentRoom() != game_state::kRoomLoading &&
                           peer.room != game_state::currentRoom();
     if (!mismatch) {
         g_mismatching = false;
@@ -100,7 +101,11 @@ void onTick() {
         return;
     }
     pollDoorStart();
-    if (!game_state::doorActive() && g_doorWasActive.exchange(false)) onArrival();
+    // The door phase goes idle before the new room's number is written; arrival waits for the room.
+    if (!game_state::doorActive() && game_state::currentRoom() != game_state::kRoomLoading &&
+        g_doorWasActive.exchange(false)) {
+        onArrival();
+    }
     const auto now = Clock::now();
     if (now - g_lastSend >= kRoomStateInterval) sendRoomState();
     checkDesync(now);
