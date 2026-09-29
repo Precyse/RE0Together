@@ -16,6 +16,7 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 8 | Trigger a cutscene; one player skips | the skipper waits until the other finishes | phase lines in the log (`phase: Main -> EventDemo`) |
 | 9 | Host saves at a typewriter | the guest's launcher logs `Save sync: received data0.bin` | host log `save data0.bin written, sharing it` |
 | 10 | A character dies, both continue | both reload the host's last save | phase `-> Dead` on both |
-| 11 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
+| 11 | Split up (LEAVE_BEHIND, separate rooms), press V | both screens zap to the other character and load its room | `phase: Main -> Change` on both |
+| 12 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
 
 Report any row that fails, together with both logs.
