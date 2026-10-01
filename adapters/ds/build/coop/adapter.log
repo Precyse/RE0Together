@@ -1,9 +1,0 @@
-2026-10-01 02:14:45.447 adapter: start (DEATH STRANDING 2)
-2026-10-01 02:14:45.447 crash_dump: installed
-2026-10-01 02:15:07.315 hooks: IDXGIFactory::CreateSwapChain hooked at 00007FFEBFA4CA20 (attempt 1)
-2026-10-01 02:15:07.349 hooks: IDXGIFactory2::CreateSwapChainForHwnd hooked at 00007FFEBFA4DE40 (attempt 1)
-2026-10-01 02:15:07.384 hooks: ID3D12CommandQueue::ExecuteCommandLists hooked at 00007FFD49EE1280 (attempt 1)
-2026-10-01 02:15:07.420 hooks: IDXGISwapChain::Present hooked at 00007FFEBFA39530 (attempt 1)
-2026-10-01 02:15:07.456 hooks: IDXGISwapChain1::Present1 hooked at 00007FFEBFA399D0 (attempt 1)
-2026-10-01 02:15:07.630 dx12: swap chain created on queue 000002286CE1DC40
-2026-10-01 02:15:07.633 dx12: overlay ready (format 24, 3 buffers)
