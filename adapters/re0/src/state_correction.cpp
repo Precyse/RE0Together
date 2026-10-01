@@ -84,8 +84,7 @@ void onTick() {
 }
 
 void snap(uintptr_t target, const state_sync::PlayerState& remote, float drift) {
-    game::writeMemory(target + game::kPlayerPositionOffset, remote.pos);
-    game::writeMemory(target + game::kPlayerRotationOffset, remote.quat);
+    game::writeTransform(target, remote.pos, remote.quat);
     debug_stats::count(debug_stats::Counter::Snaps);
     const auto now = Clock::now();
     if (now - g_lastLog < kLogInterval) return;
@@ -99,8 +98,7 @@ void blend(uintptr_t target, const float (&pos)[3], const float (&quat)[4], cons
     float blendedQuat[4];
     position_blend::blendPosition(pos, goalPos, blendedPos);
     position_blend::blendRotation(quat, remote.quat, blendedQuat);
-    game::writeMemory(target + game::kPlayerPositionOffset, blendedPos);
-    game::writeMemory(target + game::kPlayerRotationOffset, blendedQuat);
+    game::writeTransform(target, blendedPos, blendedQuat);
     debug_stats::count(debug_stats::Counter::Blends);
 }
 

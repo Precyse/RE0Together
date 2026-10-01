@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 
 #include "control_rule.h"
@@ -10,6 +11,14 @@ namespace character_owner {
 constexpr uint16_t kMsgOwnership = proto::kFirstGameType + 2;
 
 enum class Character : uint8_t { Billy = 0, Rebecca = 1, Unknown = 0xFF };
+
+constexpr size_t kCharacterCount = 2;
+constexpr std::array<Character, kCharacterCount> kCharacters = {Character::Billy, Character::Rebecca};
+
+// The other character of the pair.
+constexpr Character other(Character character) {
+    return character == Character::Billy ? Character::Rebecca : Character::Billy;
+}
 
 // Wire payload of OWNERSHIP (0x0102), host to all: the slot that drives each character. Fixed: the host owns
 // Rebecca and the first peer owns Billy, whoever is focused.
@@ -43,8 +52,17 @@ const char* name(Character character);
 // is Locked (see control_rule.h). The one place that rule is applied.
 Control controlOf(Character character);
 
-// Makes `character` the focused character on this machine when it is currently the partner.
+// Makes `character` the focused character on this machine when it is currently the partner (a pointer swap only).
 void focus(Character character);
+
+enum class SwitchResult { Done, AlreadyFocused, NoPartner, PartnerIsOther };
+
+// Makes `character` the focused character the way the game's own switch does: a swap when it shares the loaded room,
+// otherwise the Change phase (the vanilla zap, which loads its room and completes over the next frames).
+SwitchResult switchTo(Character character);
+
+// Log text of a result other than Done.
+const char* reason(SwitchResult result);
 
 // Ownership only, ignoring the party mode: damage, inventory and state sync follow the owner even while the
 // character waits.

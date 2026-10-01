@@ -2,7 +2,6 @@
 
 #include <cstring>
 #include <mutex>
-#include <span>
 #include <vector>
 
 #include "debug_stats.h"
@@ -45,11 +44,6 @@ std::mutex g_mutex;
 std::vector<Incoming> g_incoming;  // guarded by g_mutex
 floor_pending::Queue g_pending;    // game thread only: events for rooms that are not loaded and settled
 uint32_t g_settleFrames = 0;       // game thread only: frames left before the arrived room takes events
-
-template <class T>
-std::span<const uint8_t> asBytes(const T& value) {
-    return {reinterpret_cast<const uint8_t*>(&value), sizeof(T)};
-}
 
 bool readRecords(Records& out) {
     const uintptr_t table = game::readPointer(game::kItemPutGlobal);
@@ -100,14 +94,14 @@ bool itemIdOf(uint32_t item, uint32_t& itemId) {
 
 void sendPut(const game::ItemDesc& desc, const Vec3& pos, const Vec3& rot) {
     const FloorPut message{game_state::currentRoom(), 0, desc.itemId, desc.count, pos, rot};
-    if (g_net->send(proto::kMsgFloorPut, true, proto::kSlotAll, asBytes(message))) {
+    if (g_net->send(proto::kMsgFloorPut, true, proto::kSlotAll, proto::bytesOf(message))) {
         debug_stats::count(Counter::FloorPutSent);
     }
 }
 
 void sendTake(uint32_t itemId, const Vec3& pos) {
     const FloorTake message{game_state::currentRoom(), 0, itemId, pos};
-    if (g_net->send(proto::kMsgFloorTake, true, proto::kSlotAll, asBytes(message))) {
+    if (g_net->send(proto::kMsgFloorTake, true, proto::kSlotAll, proto::bytesOf(message))) {
         debug_stats::count(Counter::FloorTakeSent);
     }
 }

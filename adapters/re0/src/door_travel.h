@@ -22,9 +22,8 @@ bool peerRoom(uint16_t& out);
 // Net thread: notes a door start even when the game stops ticking.
 void onNetTick();
 
-// Registers the per-frame door watcher: a partner that was in the focused character's room is carried into the new
-// room on arrival (Team mode), arrival broadcasts ROOM_STATE and forces a position check, and a lasting room
-// mismatch is reported.
+// Registers the per-frame door watcher: arrival broadcasts ROOM_STATE and forces a position check, ROOM_STATE repeats
+// every 2 s, and a lasting room mismatch is reported. The partner itself travels by the game's follow logic.
 void enable(NetClient& net);
 
 }  // namespace door_travel

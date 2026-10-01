@@ -62,7 +62,7 @@ Seen in: RE0: cPlayerThink / cPlayerSubThink, getPad 0x600630.
 Shape: one manager holds an array of phase objects (main, map, menu, message, save, cutscene, movie, dead) and a current index; a request call queues the next phase.
 Find it: class names of the phase objects (cRoomPhase*), then the manager that owns them; read the index table from the live array.
 Replicate: log every change by name (cheap diagnostics); hold the other world while a player is in a menu, message, map, save screen or cutscene (a player who skips waits); death is authority-replicated.
-Seen in: RE0: sRoomControl +0xb8, request 0x60a340, 24 phases (RE0_NOTES "Room phases").
+Seen in: RE0: sRoomControl +0xb8, request 0x60a340 (reached through sRoomControl::requestPhase 0x610e00), 24 phases (RE0_NOTES "Room phases").
 
 ## Saves live behind a storage API the mod can proxy  [persistence]
 Shape: the game reads and writes saves through a platform storage interface (Steam Remote Storage), reached through one import.
@@ -91,5 +91,5 @@ Seen in: RE0: join_sync.
 ## Mirror the other player's travel with the engine's own transitions  [state-transition, world-state]
 Shape: the engine tracks where every party member is, but the record is hidden; writing positions or rooms by hand gets overwritten or crashes.
 Find it: the transitions that move a character between areas (door start, character-switch phase) and the flag that makes others follow.
-Replicate: replay the remote player's transition locally: make their character current (swap or switch phase), run the transition with follow off, switch back. The engine keeps its own bookkeeping consistent.
+Replicate: replay the remote player's transition locally: make their character current (swap or switch phase), run the transition with follow off, switch back. The engine keeps its own bookkeeping consistent. While the replay runs the loaded area is the other player's: do not report it as this player's area (room/state broadcasts, "last door" memory), or the peer believes the two are together.
 Seen in: RE0: split_rooms (sDoorLoad::start 0x552b50, Change phase, follow flag sPlayer +0x40).

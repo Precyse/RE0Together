@@ -15,8 +15,8 @@
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
-#include "split_rooms.h"
 #include "player_damage.h"
+#include "split_rooms.h"
 
 namespace {
 

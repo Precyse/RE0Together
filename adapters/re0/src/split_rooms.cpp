@@ -1,5 +1,6 @@
 #include "split_rooms.h"
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 
@@ -27,8 +28,8 @@ enum class Step { Idle, FocusDoorCharacter, RunDoor, WaitDoor, FocusOwn };
 bool g_enabled = false;
 std::deque<DoorChange> g_queue;  // game thread only
 DoorChange g_current{};
-Step g_step = Step::Idle;
-bool g_requested = false;   // the swap or zap for this step was issued
+std::atomic<Step> g_step{Step::Idle};  // written on the game thread, read by the net thread too
+bool g_requested = false;  // the swap or zap for this step was issued
 bool g_sawDoor = false;
 Clock::time_point g_stepStart;
 
@@ -60,14 +61,10 @@ bool settled() {
            game_state::currentRoom() != game_state::kRoomLoading;
 }
 
-// Makes `character` the camera character: a swap when it shares the room, otherwise the game's zap. True once done.
+// Makes `character` the camera character (character_owner::switchTo, issued once per step). True once done.
 bool focusStep(Character character) {
-    const uintptr_t object = character_owner::find(character);
-    if (object && game::controlled() == object) return true;
-    if (g_requested || !object) return false;
-    if (game_state::inCurrentRoom(object)) character_owner::focus(character);
-    else game::requestRoomPhase(room_phase::Change);
-    g_requested = true;
+    if (character_owner::identify(game::controlled()) == character) return true;
+    if (!g_requested) g_requested = character_owner::switchTo(character) == character_owner::SwitchResult::Done;
     return false;
 }
 
@@ -130,7 +127,7 @@ bool takeOver(const DoorChange& change) {
     return true;
 }
 
-bool apart() { return g_enabled && net_pad::active() && !together(); }
+bool apart() { return g_enabled && net_pad::active() && (replaying() || !together()); }
 
 bool replaying() { return g_step != Step::Idle; }
 

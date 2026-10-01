@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 namespace proto {
@@ -40,6 +41,13 @@ constexpr uint16_t kMsgSaveSlot = kFirstGameType + 15;         // 0x010F, host t
 constexpr size_t kWelcomeSize = 7;
 constexpr size_t kPeerUpFixedSize = 10;
 constexpr size_t kPeerStatsSize = 3;
+
+// The bytes of a fixed-layout wire struct, as NetClient::send takes them.
+template <class T>
+std::span<const uint8_t> bytesOf(const T& value) {
+    static_assert(std::is_trivially_copyable_v<T>);
+    return {reinterpret_cast<const uint8_t*>(&value), sizeof(T)};
+}
 
 template <class T>
 T readLe(const uint8_t* p) {

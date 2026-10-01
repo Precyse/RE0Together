@@ -21,10 +21,12 @@ void configure(bool enabled);
 // Game thread, from door_sync: a peer's door. True when split_rooms replays it (the caller must not run it).
 bool takeOver(const door_sync::DoorChange& change);
 
-// The local and peer rooms differ (and the feature is on): the camera stays on the local player's character.
+// The local and peer rooms differ, or a door replay runs (and the feature is on): the camera stays on the local
+// player's character and each machine runs its own enemies.
 bool apart();
 
-// A door replay is in progress: the follow flag must stay off and camera parity must wait.
+// A door replay is in progress: the follow flag stays off and the loaded room is not this player's, so room and
+// player state are not reported.
 bool replaying();
 
 // Enemies here are simulated by this machine: the host when together, either machine when apart.

@@ -64,7 +64,7 @@ bool __cdecl actOnTriggerDetour(void* script, void* context) {
 }
 
 void send(const DoorChange& change) {
-    g_net->send(proto::kMsgDoorChange, true, proto::kSlotAll, {reinterpret_cast<const uint8_t*>(&change), sizeof(change)});
+    g_net->send(proto::kMsgDoorChange, true, proto::kSlotAll, proto::bytesOf(change));
     debug_stats::count(debug_stats::Counter::DoorsSent);
 }
 
@@ -76,7 +76,8 @@ void remember(const DoorChange& change) {
 void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t arg3, uint32_t arg4,
                                 uint32_t flag) {
     const auto focused = static_cast<uint8_t>(character_owner::identify(game::controlled()));
-    remember({room, entry, arg3, arg4, flag, focused, {}});
+    // A split_rooms replay is the peer's door, not the door into this player's room (join snapshots send this one).
+    if (!split_rooms::replaying()) remember({room, entry, arg3, arg4, flag, focused, {}});
     if (g_applying || !net_pad::active()) {
         g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
         return;

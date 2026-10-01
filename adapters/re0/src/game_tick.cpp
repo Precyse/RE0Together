@@ -2,7 +2,7 @@
 
 #include <windows.h>
 
-#include <array>
+#include <vector>
 
 #include "debug_stats.h"
 #include "game.h"
@@ -11,16 +11,13 @@
 
 namespace {
 
-constexpr size_t kMaxCallbacks = 16;
-
 struct Registered {
     const char* name;
     game_tick::Callback callback;
     bool disabled;
 };
 
-std::array<Registered, kMaxCallbacks> g_callbacks;
-size_t g_callbackCount = 0;
+std::vector<Registered> g_callbacks;  // filled before install(), then only read on the game thread
 
 using MoveFunction = void(__fastcall*)(void* self, void* edx);
 MoveFunction g_originalMove = nullptr;
@@ -51,8 +48,7 @@ void runPostMove(uintptr_t player) {
 }
 
 void tick() {
-    for (size_t i = 0; i < g_callbackCount; ++i) {
-        Registered& entry = g_callbacks[i];
+    for (Registered& entry : g_callbacks) {
         if (entry.disabled || runGuarded(entry.callback)) continue;
         entry.disabled = true;
         debug_stats::noteCallbackDisabled(entry.name);
@@ -74,14 +70,7 @@ void __fastcall moveDetour(void* self, void* edx) {
 
 namespace game_tick {
 
-bool addCallback(const char* name, Callback callback) {
-    if (g_callbackCount == kMaxCallbacks) {
-        logger::write("game_tick: callback '%s' rejected, all %zu slots are in use", name, kMaxCallbacks);
-        return false;
-    }
-    g_callbacks[g_callbackCount++] = {name, callback, false};
-    return true;
-}
+void addCallback(const char* name, Callback callback) { g_callbacks.push_back({name, callback, false}); }
 
 void setMoveScope(MoveScope scope) { g_moveScope = scope; }
 
@@ -92,7 +81,7 @@ bool install() {
                         reinterpret_cast<void**>(&g_originalMove))) {
         return false;
     }
-    logger::write("game_tick: %zu callbacks", g_callbackCount);
+    logger::write("game_tick: %zu callbacks", g_callbacks.size());
     return true;
 }
 

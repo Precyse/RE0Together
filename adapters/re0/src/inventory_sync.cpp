@@ -17,10 +17,11 @@
 namespace {
 
 using character_owner::Character;
+using character_owner::kCharacterCount;
+using character_owner::kCharacters;
 using Block = SettledCopy<game::kInventoryBlockSize>;
 
 constexpr uint64_t kResendMs = 5000;
-constexpr size_t kCharacterCount = 2;
 constexpr size_t kHeaderSize = 2;
 constexpr size_t kPayloadSize = kHeaderSize + game::kInventoryBlockSize;
 
@@ -60,7 +61,7 @@ void send(Character character, Block& block) {
 // First tick after the local menu closed: the other player's character changed only through an exchange.
 void sendMenuExchanges() {
     g_menuWatch = false;
-    for (const Character character : {Character::Billy, Character::Rebecca}) {
+    for (const Character character : kCharacters) {
         Block::Bytes bytes;
         const size_t index = static_cast<size_t>(character);
         if (!character_owner::isRemoteOwned(character) || !game::readMemory(blockAddress(character), bytes) ||
@@ -97,7 +98,7 @@ void applyRemote(Character character) {
 void onTick() {
     ++g_frame;
     if (g_menuWatch && !game_state::menuOpen()) sendMenuExchanges();
-    for (const Character character : {Character::Billy, Character::Rebecca}) {
+    for (const Character character : kCharacters) {
         if (character_owner::isLocalOwned(character)) {
             applyRemote(character);
             syncLocal(character);
@@ -124,7 +125,7 @@ void onFrame(const GameFrame& frame) {
     g_pending[frame.payload[0]] = bytes;
 }
 
-void applySnapshot(uint8_t characterId, const uint8_t (&block)[0x40]) {
+void applySnapshot(uint8_t characterId, const InventoryBlock& block) {
     if (characterId >= kCharacterCount) return;
     const auto character = static_cast<Character>(characterId);
     Block::Bytes bytes;
@@ -133,7 +134,7 @@ void applySnapshot(uint8_t characterId, const uint8_t (&block)[0x40]) {
     if (character_owner::isLocalOwned(character)) g_blocks[characterId].adopt(bytes, monotonicMs());
 }
 
-bool readBlock(uint8_t characterId, uint8_t (&block)[0x40]) {
+bool readBlock(uint8_t characterId, InventoryBlock& block) {
     if (characterId >= kCharacterCount) return false;
     Block::Bytes bytes;
     if (!game::readMemory(blockAddress(static_cast<Character>(characterId)), bytes)) return false;
@@ -142,7 +143,7 @@ bool readBlock(uint8_t characterId, uint8_t (&block)[0x40]) {
 }
 
 void onMenuOpen() {
-    for (const Character character : {Character::Billy, Character::Rebecca}) {
+    for (const Character character : kCharacters) {
         game::readMemory(blockAddress(character), g_menuSnapshot[static_cast<size_t>(character)]);
     }
     g_menuWatch = true;

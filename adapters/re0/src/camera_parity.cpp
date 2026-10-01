@@ -10,15 +10,16 @@
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
-#include "room_phase.h"
-#include "split_rooms.h"
 #include "log.h"
 #include "net_pad.h"
+#include "split_rooms.h"
 #include "state_sync.h"
 
 namespace {
 
 using character_owner::Character;
+using character_owner::SwitchResult;
+using character_owner::switchTo;
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kMinSwapInterval = std::chrono::seconds(1);
@@ -38,39 +39,10 @@ uintptr_t g_seenHigh = 0;
 Character g_focus = Character::Unknown;     // host: focused character after our last switch or accepted change
 Clock::time_point g_lastAdapterSwitch;
 
-Character otherThan(Character character) {
-    return character == Character::Billy ? Character::Rebecca : Character::Billy;
-}
-
-enum class SwitchResult { Done, AlreadyFocused, NoPartner, PartnerIsOther };
-
-const char* reasonOf(SwitchResult result) {
-    switch (result) {
-        case SwitchResult::AlreadyFocused: return "focus already set";
-        case SwitchResult::NoPartner: return "no partner object";
-        case SwitchResult::PartnerIsOther: return "partner is not the target";
-        case SwitchResult::Done: break;
-    }
-    return "done";
-}
-
-// Makes `wanted` the controlled character when it is currently the partner.
-SwitchResult switchTo(Character wanted) {
-    const uintptr_t controlled = game::controlled();
-    const uintptr_t partner = game::partner();
-    if (!controlled || !partner) return SwitchResult::NoPartner;
-    if (character_owner::identify(controlled) == wanted) return SwitchResult::AlreadyFocused;
-    if (character_owner::identify(partner) != wanted) return SwitchResult::PartnerIsOther;
-    // Apart, the switch is the game's own zap, which also loads the partner's room.
-    if (!game_state::inCurrentRoom(partner)) game::requestRoomPhase(room_phase::Change);
-    else game::swapControlled(partner, controlled);
-    return SwitchResult::Done;
-}
-
 void hostSwitchTo(Character wanted, Clock::time_point now) {
     const SwitchResult result = switchTo(wanted);
     if (result != SwitchResult::Done) {
-        command_log::decide("switch to %s ignored: %s", character_owner::name(wanted), reasonOf(result));
+        command_log::decide("switch to %s ignored: %s", character_owner::name(wanted), character_owner::reason(result));
         return;
     }
     g_focus = wanted;
@@ -151,8 +123,8 @@ void guestTick() {
 }
 
 void onTick() {
-    // Apart, or while a door replay moves the camera, each machine keeps its own player's character.
-    if (split_rooms::apart() || split_rooms::replaying()) return;
+    // Apart (including a door replay) each machine keeps its own player's character.
+    if (split_rooms::apart()) return;
     if (!character_owner::isHost()) {
         if (g_net) guestTick();
         return;
@@ -185,7 +157,7 @@ void onFrame(const GameFrame& frame) {
 void onLocalSwitchKey() {
     const Character focused = character_owner::identify(game::controlled());
     if (focused == Character::Unknown) return;
-    const Character target = otherThan(focused);
+    const Character target = character_owner::other(focused);
     if (character_owner::isHost()) {
         queueSwitch(target, "host");
         return;

@@ -54,6 +54,7 @@ void onTick() {
             continue;
         }
         void* think = game::allocThink();
+        if (!think) return;
         game::constructPlayerThink(think);
         game::setThink(reinterpret_cast<void*>(player), think);
         g_applied = true;

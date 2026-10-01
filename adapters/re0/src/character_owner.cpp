@@ -5,10 +5,12 @@
 
 #include "debug_stats.h"
 #include "game.h"
+#include "game_state.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
 #include "party_mode.h"
+#include "room_phase.h"
 
 namespace {
 
@@ -16,7 +18,6 @@ using character_owner::Character;
 using character_owner::Ownership;
 
 constexpr int kNoSlot = control_rule::kNoOwner;
-constexpr size_t kCharacterCount = 2;
 // The host repeats OWNERSHIP so a guest whose game starts after joining (the usual order) still receives it.
 constexpr uint32_t kResendFrames = 60;
 
@@ -28,7 +29,7 @@ std::atomic<uint8_t> g_hostSlot{0};
 std::atomic<uint32_t> g_epoch{0};
 std::atomic<bool> g_peerPresent{false};
 std::atomic<bool> g_recompute{true};  // host: decide (and announce) the fixed owners again
-std::atomic<int> g_owner[kCharacterCount] = {kNoSlot, kNoSlot};
+std::atomic<int> g_owner[character_owner::kCharacterCount] = {kNoSlot, kNoSlot};
 uint32_t g_framesSinceSend = 0;
 
 void setOwners(Ownership owners) {
@@ -47,8 +48,7 @@ void clearOwners() {
 void sendOwnership() {
     const Ownership owners{static_cast<uint8_t>(g_owner[static_cast<size_t>(Character::Billy)].load()),
                            static_cast<uint8_t>(g_owner[static_cast<size_t>(Character::Rebecca)].load())};
-    g_net->send(character_owner::kMsgOwnership, true, proto::kSlotAll,
-                {reinterpret_cast<const uint8_t*>(&owners), sizeof(owners)});
+    g_net->send(character_owner::kMsgOwnership, true, proto::kSlotAll, proto::bytesOf(owners));
     g_framesSinceSend = 0;
 }
 
@@ -91,7 +91,7 @@ uintptr_t find(Character character) {
 bool isHost() { return g_linked && g_localSlot == g_hostSlot; }
 
 Character localCharacter() {
-    for (const Character character : {Character::Billy, Character::Rebecca}) {
+    for (const Character character : kCharacters) {
         if (isLocalOwned(character)) return character;
     }
     return Character::Unknown;
@@ -160,6 +160,27 @@ void focus(Character character) {
     const uintptr_t controlled = game::controlled();
     const uintptr_t partner = game::partner();
     if (controlled && partner && identify(partner) == character) game::swapControlled(partner, controlled);
+}
+
+SwitchResult switchTo(Character character) {
+    const uintptr_t controlled = game::controlled();
+    const uintptr_t partner = game::partner();
+    if (!controlled || !partner) return SwitchResult::NoPartner;
+    if (identify(controlled) == character) return SwitchResult::AlreadyFocused;
+    if (identify(partner) != character) return SwitchResult::PartnerIsOther;
+    if (game_state::inCurrentRoom(partner)) game::swapControlled(partner, controlled);
+    else game::requestRoomPhase(room_phase::Change);
+    return SwitchResult::Done;
+}
+
+const char* reason(SwitchResult result) {
+    switch (result) {
+        case SwitchResult::AlreadyFocused: return "focus already set";
+        case SwitchResult::NoPartner: return "no partner object";
+        case SwitchResult::PartnerIsOther: return "partner is not the target";
+        case SwitchResult::Done: break;
+    }
+    return "done";
 }
 
 }  // namespace character_owner

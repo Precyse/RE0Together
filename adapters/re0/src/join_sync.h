@@ -1,8 +1,10 @@
 #pragma once
 #include <cstdint>
 
+#include "character_owner.h"
 #include "door_sync.h"
 #include "flag_diff.h"
+#include "inventory_sync.h"
 #include "net_client.h"
 
 // Joining a game in progress: the guest loads the host's last save, which can be older than the host's live game.
@@ -19,7 +21,7 @@ struct JoinSnapshot {
     door_sync::DoorChange door;
     float billyPos[3];
     float billyQuat[4];
-    uint8_t inventories[2][0x40];
+    inventory_sync::InventoryBlock inventories[character_owner::kCharacterCount];
     flag_diff::Words flags;
 };
 static_assert(sizeof(JoinSnapshot) == 4 + 24 + 28 + 128 + flag_diff::kWords * 4);

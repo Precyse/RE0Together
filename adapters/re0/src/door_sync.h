@@ -5,10 +5,10 @@
 
 // Doors run on both machines together. Every door goes through sDoorLoad::start (door animation, then the room change);
 // the machine that owns the focused character runs it and sends DOOR_CHANGE, the other machine runs the same call on
-// receipt. A door the other
-// machine would start from replayed input is suppressed, so the two games cannot pick different rooms. The game only
-// lets the focused character act on doors, so a local player whose character is the partner acts through it: the
-// trigger check is also run for that character, and when it acts the camera moves to it first.
+// receipt (or hands it to split_rooms). A door the other machine would start from replayed input is suppressed, so the
+// two games cannot pick different rooms. The game only lets the focused character act on doors, so a local player whose
+// character is the partner acts through it: the trigger check is also run for that character, and when it acts the
+// camera moves to it first.
 namespace door_sync {
 
 // Wire payload of DOOR_CHANGE (0x010B), reliable, to all: the arguments of sDoorLoad::start and the character that

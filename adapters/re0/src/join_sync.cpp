@@ -24,7 +24,6 @@ using character_owner::Character;
 using join_sync::JoinSnapshot;
 
 constexpr auto kRequestInterval = std::chrono::seconds(3);
-constexpr size_t kCharacterCount = 2;
 
 NetClient* g_net = nullptr;
 
@@ -46,7 +45,7 @@ bool inGame() {
 
 template <class T>
 bool sendValue(uint16_t type, const T& value) {
-    return g_net->send(type, true, proto::kSlotAll, {reinterpret_cast<const uint8_t*>(&value), sizeof(value)});
+    return g_net->send(type, true, proto::kSlotAll, proto::bytesOf(value));
 }
 
 void answer() {
@@ -55,7 +54,7 @@ void answer() {
     snapshot.hasDoor = door_sync::lastDoor(snapshot.door);
     const uintptr_t billy = character_owner::find(Character::Billy);
     snapshot.billyInRoom = game_state::inCurrentRoom(billy) && game::readTransform(billy, snapshot.billyPos, snapshot.billyQuat);
-    for (uint8_t id = 0; id < kCharacterCount; ++id) inventory_sync::readBlock(id, snapshot.inventories[id]);
+    for (uint8_t id = 0; id < character_owner::kCharacterCount; ++id) inventory_sync::readBlock(id, snapshot.inventories[id]);
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;
     logger::write("join_sync: snapshot sent (room 0x%04x, door %s)", snapshot.hostRoom, snapshot.hasDoor ? "known" : "none");
 }
@@ -68,7 +67,7 @@ void placeBilly(const JoinSnapshot& snapshot) {
 
 void apply(const JoinSnapshot& snapshot) {
     flag_sync::applySnapshot(snapshot.flags);
-    for (uint8_t id = 0; id < kCharacterCount; ++id) inventory_sync::applySnapshot(id, snapshot.inventories[id]);
+    for (uint8_t id = 0; id < character_owner::kCharacterCount; ++id) inventory_sync::applySnapshot(id, snapshot.inventories[id]);
     g_applied = true;
     if (snapshot.hostRoom == game_state::currentRoom()) {
         placeBilly(snapshot);

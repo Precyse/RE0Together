@@ -48,9 +48,7 @@ void toastMode() {
         debug_overlay::toast("Team", kToastSeconds);
         return;
     }
-    const auto focused = character_owner::identify(game::controlled());
-    const auto waiting = focused == character_owner::Character::Billy ? character_owner::Character::Rebecca
-                                                                      : character_owner::Character::Billy;
+    const auto waiting = character_owner::other(character_owner::identify(game::controlled()));
     debug_overlay::toast((std::string("Leave behind: ") + character_owner::name(waiting) + " waits").c_str(),
                          kToastSeconds);
 }

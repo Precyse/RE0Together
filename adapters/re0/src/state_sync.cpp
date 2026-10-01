@@ -5,33 +5,34 @@
 #include <map>
 #include <string>
 
+#include "auto_join.h"
 #include "camera_parity.h"
-#include "command_input.h"
 #include "character_owner.h"
+#include "command_input.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
+#include "door_sync.h"
+#include "door_travel.h"
 #include "enemy_net.h"
 #include "enemy_protocol.h"
 #include "enemy_state.h"
-#include "door_sync.h"
 #include "flag_sync.h"
-#include "join_sync.h"
-#include "auto_join.h"
-#include "phase_watch.h"
-#include "session_slot.h"
-#include "door_travel.h"
+#include "floor_items_sync.h"
 #include "game.h"
 #include "game_state.h"
-#include "log.h"
-#include "floor_items_sync.h"
 #include "inventory_sync.h"
+#include "join_sync.h"
+#include "log.h"
 #include "menu_mirror.h"
 #include "net_pad.h"
 #include "net_trace.h"
 #include "pad_frame.h"
 #include "party_mode.h"
-#include "state_correction.h"
+#include "phase_watch.h"
 #include "player_damage.h"
+#include "session_slot.h"
+#include "split_rooms.h"
+#include "state_correction.h"
 
 namespace {
 
@@ -64,7 +65,8 @@ void sendLocalState(NetClient& net) {
     state_sync::PlayerState state{};
     const character_owner::Character owned = character_owner::localCharacter();
     const uintptr_t player = character_owner::find(owned);
-    if (owned == character_owner::Character::Unknown || !join_sync::caughtUp() ||
+    // During a door replay the loaded room is the other player's, so this player's state would be reported wrongly.
+    if (owned == character_owner::Character::Unknown || !join_sync::caughtUp() || split_rooms::replaying() ||
         !game::readTransform(player, state.pos, state.quat)) {
         return;
     }
@@ -74,8 +76,7 @@ void sendLocalState(NetClient& net) {
     state.senderIsHost = character_owner::isHost();
     state.room = game_state::currentRoom();
     state.seq = ++g_seq;
-    if (net.send(state_sync::kMsgPlayerState, false, proto::kSlotAll,
-                 {reinterpret_cast<const uint8_t*>(&state), sizeof(state)})) {
+    if (net.send(state_sync::kMsgPlayerState, false, proto::kSlotAll, proto::bytesOf(state))) {
         debug_stats::count(debug_stats::Counter::PlayerStateSent);
     }
 }

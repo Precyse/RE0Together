@@ -5,8 +5,8 @@
 #include <cstring>
 
 #include "character_owner.h"
-#include "game_state.h"
 #include "game.h"
+#include "game_state.h"
 #include "hooks.h"
 #include "log.h"
 #include "net_pad.h"
@@ -103,7 +103,7 @@ void onNetTick(NetClient& net) {
     const auto time = Clock::now();
     const bool changed = now.slot != g_announced.slot || now.phase != g_announced.phase;
     if (!changed && time - g_lastAnnounce < kAnnounceInterval) return;
-    if (!net.send(proto::kMsgSaveSlot, true, proto::kSlotAll, {reinterpret_cast<const uint8_t*>(&now), sizeof(now)})) return;
+    if (!net.send(proto::kMsgSaveSlot, true, proto::kSlotAll, proto::bytesOf(now))) return;
     g_announced = now;
     g_lastAnnounce = time;
 }

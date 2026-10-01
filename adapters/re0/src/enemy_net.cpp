@@ -35,7 +35,7 @@ bool send(uint16_t type, uint8_t destSlot, uintptr_t enemy, Character attacker, 
     if (slot == enemy_registry::kNoSlot) return false;
     const HitPayload hit{static_cast<uint8_t>(slot), static_cast<uint8_t>(attacker), info.flag, 0, distance,
                          info.rangeTier, info.attackType, info.a, info.b};
-    const bool sent = g_net->send(type, true, destSlot, {reinterpret_cast<const uint8_t*>(&hit), sizeof(hit)});
+    const bool sent = g_net->send(type, true, destSlot, proto::bytesOf(hit));
     if (sent) debug_stats::count(type == enemy_protocol::kMsgHitRequest ? Counter::HitRequestSent : Counter::HitAppliedSent);
     return sent;
 }
@@ -50,8 +50,7 @@ void apply(const Pending& pending) {
     game::HitInfo info{hit.rangeTier, hit.attackType, hit.a, hit.b, reinterpret_cast<void*>(attacker), hit.flag, {}};
     if (!enemy_damage_hook::applyNetworkHit(enemy, attacker, hit.distance, info)) return;
     if (pending.type != enemy_protocol::kMsgHitRequest) return;
-    if (g_net->send(enemy_protocol::kMsgHitApplied, true, proto::kSlotAll,
-                    {reinterpret_cast<const uint8_t*>(&hit), sizeof(hit)})) {
+    if (g_net->send(enemy_protocol::kMsgHitApplied, true, proto::kSlotAll, proto::bytesOf(hit))) {
         debug_stats::count(Counter::HitAppliedSent);
     }
 }

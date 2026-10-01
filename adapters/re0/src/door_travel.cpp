@@ -14,6 +14,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "split_rooms.h"
 #include "state_correction.h"
 
 namespace {
@@ -38,10 +39,13 @@ bool g_desyncReported = false;
 
 bool partnerInRoom() { return game_state::inCurrentRoom(game::partner()); }
 
+// Skipped during a door replay: the loaded room is then the other player's, not this player's. The next tick after
+// the replay sends the real room.
 void sendRoomState() {
+    if (split_rooms::replaying()) return;
     const door_travel::RoomState state{game_state::currentRoom(), partnerInRoom(), 0};
     g_lastSend = Clock::now();
-    g_net->send(proto::kMsgRoomState, true, proto::kSlotAll, {reinterpret_cast<const uint8_t*>(&state), sizeof(state)});
+    g_net->send(proto::kMsgRoomState, true, proto::kSlotAll, proto::bytesOf(state));
 }
 
 // Level-triggered from the game tick and the net thread, so the start is seen even when the game stops ticking.
@@ -108,7 +112,7 @@ void onTick() {
     }
     const auto now = Clock::now();
     if (now - g_lastSend >= kRoomStateInterval) sendRoomState();
-    checkDesync(now);
+    if (!split_rooms::replaying()) checkDesync(now);
 }
 
 }  // namespace
