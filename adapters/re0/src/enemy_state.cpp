@@ -2,12 +2,10 @@
 
 #include <array>
 #include <chrono>
-#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <vector>
 
-#include "character_owner.h"
 #include "debug_stats.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
@@ -16,6 +14,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "player_damage.h"
+#include "position_blend.h"
 #include "split_rooms.h"
 
 namespace {
@@ -46,10 +45,6 @@ bool logDue() {
     if (now - g_lastLog < kLogInterval) return false;
     g_lastLog = now;
     return true;
-}
-
-float distance(const float (&a)[3], const float (&b)[3]) {
-    return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
 }
 
 void sendState() {
@@ -95,7 +90,7 @@ void applyEntry(const EnemyEntry& entry) {
     float pos[3];
     float quat[4];
     if (!game::readTransform(enemy, pos, quat)) return;
-    const float drift = distance(pos, entry.pos);
+    const float drift = position_blend::distance(pos, entry.pos);
     if (drift <= kEnemySnapDistance) return;
     game::writeTransform(enemy, entry.pos, entry.quat);
     debug_stats::count(debug_stats::Counter::Snaps);
@@ -115,7 +110,7 @@ void applyLatest() {
 
 void onTick() {
     if (!net_pad::active() || split_rooms::apart()) return;  // apart, each machine runs its own room's enemies
-    if (!character_owner::isHost()) return applyLatest();
+    if (!split_rooms::localEnemyAuthority()) return applyLatest();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;
@@ -127,7 +122,7 @@ void onTick() {
 namespace enemy_state {
 
 void onFrame(const GameFrame& frame) {
-    if (frame.type != enemy_protocol::kMsgEnemyState || character_owner::isHost() ||
+    if (frame.type != enemy_protocol::kMsgEnemyState || split_rooms::localEnemyAuthority() ||
         frame.slot != net_pad::peerSlot() || frame.payload.size() < enemy_protocol::kStateHeaderSize) {
         return;
     }

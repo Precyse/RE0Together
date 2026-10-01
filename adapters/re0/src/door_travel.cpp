@@ -5,6 +5,7 @@
 #include <cstring>
 #include <mutex>
 
+#include "character_owner.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
 #include "floor_items_sync.h"
@@ -14,12 +15,13 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
-#include "split_rooms.h"
+#include "scene.h"
 #include "state_correction.h"
 
 namespace {
 
 using Clock = std::chrono::steady_clock;
+using door_travel::PeerPlace;
 
 constexpr auto kRoomStateInterval = std::chrono::seconds(2);
 constexpr auto kDesyncAfter = std::chrono::seconds(3);
@@ -32,6 +34,7 @@ door_travel::RoomState g_peer{};  // guarded by g_mutex
 bool g_hasPeer = false;           // guarded by g_mutex
 
 std::atomic<bool> g_doorWasActive{false};  // set by whichever thread first sees the door running
+std::atomic<bool> g_enemyClaim{false};     // this machine was in its loaded room before the peer
 Clock::time_point g_lastSend;
 bool g_mismatching = false;
 Clock::time_point g_mismatchSince;
@@ -39,11 +42,8 @@ bool g_desyncReported = false;
 
 bool partnerInRoom() { return game_state::inCurrentRoom(game::partner()); }
 
-// Skipped during a door replay: the loaded room is then the other player's, not this player's. The next tick after
-// the replay sends the real room.
 void sendRoomState() {
-    if (split_rooms::replaying()) return;
-    const door_travel::RoomState state{game_state::currentRoom(), partnerInRoom(), 0};
+    const door_travel::RoomState state{scene::current(), partnerInRoom(), g_enemyClaim};
     g_lastSend = Clock::now();
     g_net->send(proto::kMsgRoomState, true, proto::kSlotAll, proto::bytesOf(state));
 }
@@ -57,10 +57,11 @@ void pollDoorStart() {
 }
 
 void onArrival() {
+    g_enemyClaim = door_travel::peerPlace() != PeerPlace::Here;
     sendRoomState();
     state_correction::requestForcedCheck();
     floor_items_sync::onArrival();
-    logger::write("door_travel: arrived in room 0x%04x", game_state::currentRoom());
+    logger::write("door_travel: arrived in scene 0x%02x%s", scene::current(), g_enemyClaim ? ", first here" : "");
 }
 
 void forgetPeer() {
@@ -78,8 +79,7 @@ bool peerReport(door_travel::RoomState& out) {
 void checkDesync(Clock::time_point now) {
     door_travel::RoomState peer;
     const bool mismatch = peerReport(peer) && peer.partnerInRoom && partnerInRoom() && !game_state::doorActive() &&
-                          peer.room != game_state::kRoomLoading && game_state::currentRoom() != game_state::kRoomLoading &&
-                          peer.room != game_state::currentRoom();
+                          door_travel::peerPlace() == PeerPlace::Elsewhere;
     if (!mismatch) {
         g_mismatching = false;
         g_desyncReported = false;
@@ -94,25 +94,26 @@ void checkDesync(Clock::time_point now) {
     g_desyncReported = true;
     debug_stats::count(debug_stats::Counter::RoomDesyncs);
     debug_overlay::toast("Room desync", kDesyncToastSeconds);
-    logger::write("door_travel: room desync, local 0x%04x peer 0x%04x", game_state::currentRoom(), peer.room);
+    logger::write("door_travel: room desync, local scene 0x%02x peer 0x%02x", scene::current(), peer.scene);
 }
 
 void onTick() {
     debug_stats::set(debug_stats::Gauge::DoorPhase, game_state::doorPhase());
-    debug_stats::set(debug_stats::Gauge::Room, game_state::currentRoom());
+    debug_stats::set(debug_stats::Gauge::Room, scene::current());
     if (!net_pad::active()) {
         forgetPeer();
+        g_enemyClaim = false;
         return;
     }
     pollDoorStart();
-    // The door phase goes idle before the new room's number is written; arrival waits for the room.
+    // The door phase goes idle before the new room is in place; arrival waits for the room.
     if (!game_state::doorActive() && game_state::currentRoom() != game_state::kRoomLoading &&
         g_doorWasActive.exchange(false)) {
         onArrival();
     }
     const auto now = Clock::now();
     if (now - g_lastSend >= kRoomStateInterval) sendRoomState();
-    if (!split_rooms::replaying()) checkDesync(now);
+    checkDesync(now);
 }
 
 }  // namespace
@@ -129,15 +130,27 @@ void onFrame(const GameFrame& frame) {
     g_hasPeer = true;
 }
 
-void onNetTick() {
-    if (net_pad::active()) pollDoorStart();
+PeerPlace peerPlace() {
+    RoomState peer;
+    const uint16_t here = scene::current();
+    if (!peerReport(peer) || peer.scene == scene::kNone || here == scene::kNone) return PeerPlace::Unknown;
+    return peer.scene == here ? PeerPlace::Here : PeerPlace::Elsewhere;
 }
 
-bool peerRoom(uint16_t& out) {
-    door_travel::RoomState peer;
-    if (!peerReport(peer)) return false;
-    out = peer.room;
-    return true;
+bool enemyAuthority() {
+    RoomState peer;
+    switch (peerPlace()) {
+        case PeerPlace::Elsewhere: return true;
+        case PeerPlace::Unknown: return character_owner::isHost();
+        case PeerPlace::Here: break;
+    }
+    peerReport(peer);
+    const bool mine = g_enemyClaim;
+    return mine == static_cast<bool>(peer.enemyClaim) ? character_owner::isHost() : mine;
+}
+
+void onNetTick() {
+    if (net_pad::active()) pollDoorStart();
 }
 
 void enable(NetClient& net) {

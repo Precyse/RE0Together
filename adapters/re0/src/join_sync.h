@@ -8,26 +8,34 @@
 #include "net_client.h"
 
 // Joining a game in progress: the guest loads the host's last save, which can be older than the host's live game.
-// Once the guest's game is loaded it asks for a snapshot; the host answers with its room (and the door into it, which
-// the guest runs as a teleport), both inventories (the host's AI Billy may have picked things up since the save),
-// the story flags and Billy's position.
+// Once the guest's game is loaded it asks for a snapshot; the host answers with where each character is (room, the
+// last door it took, position), both inventories and the story flags. The guest takes its own character through that
+// door if it is elsewhere (a normal door on its screen), moves the host's character into its room without touching
+// the screen (scene::move), and places its own character where the host last saw it.
 namespace join_sync {
 
-// Wire payload of JOIN_SNAPSHOT (0x010E), reliable, host to all. SNAPSHOT_REQUEST (0x010D) is u16 guest room.
-struct JoinSnapshot {
-    uint16_t hostRoom;
+// Where one character is on the host.
+struct CharacterPlace {
     uint8_t hasDoor;
-    uint8_t billyInRoom;
-    door_sync::DoorChange door;
-    float billyPos[3];
-    float billyQuat[4];
+    uint8_t reserved;
+    uint16_t scene;            // its room's scene id
+    door_sync::DoorChange door;  // the last door it went through
+    float pos[3];
+    float quat[4];
+};
+static_assert(sizeof(CharacterPlace) == 4 + 24 + 28);
+
+// Wire payload of JOIN_SNAPSHOT (0x010E), reliable, host to all. SNAPSHOT_REQUEST (0x010D) is u16 guest scene.
+struct JoinSnapshot {
+    CharacterPlace places[character_owner::kCharacterCount];
     inventory_sync::InventoryBlock inventories[character_owner::kCharacterCount];
     flag_diff::Words flags;
 };
-static_assert(sizeof(JoinSnapshot) == 4 + 24 + 28 + 128 + flag_diff::kWords * 4);
+static_assert(sizeof(JoinSnapshot) == 2 * 56 + 128 + flag_diff::kWords * 4);
 
-// True on the host, and on a guest once the host's snapshot is applied and it stands in the host's room. Until then
-// the guest keeps its own character's state (inventory, position) to itself: it comes from an older save.
+// True on the host, and on a guest once the host's snapshot is applied and its character stands where the host last
+// saw it. Until then the guest keeps its own character's state (inventory, position) to itself: it comes from an
+// older save.
 bool caughtUp();
 
 // Net thread: SNAPSHOT_REQUEST on the host, JOIN_SNAPSHOT on the guest.

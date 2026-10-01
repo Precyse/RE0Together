@@ -16,7 +16,7 @@ struct PlayerState {
     float quat[4];
     uint8_t characterId;         // the sender's OWNED character (host Rebecca, guest Billy): 0 Billy, 1 Rebecca
     uint8_t senderIsHost;
-    uint16_t room;               // sender's current room: stage << 8 | room
+    uint16_t room;               // sender's loaded scene id (scene.h)
     int32_t hp;                  // HP of the owned character
     uint8_t focusedCharacterId;  // the sender's camera character (sPlayer+0x2c), 0xFF when unknown
     uint8_t reserved[3];

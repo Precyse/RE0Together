@@ -6,3 +6,4 @@ tools/re0/image.bin
 tools/re0/*.png
 tools/re0/watch_write.stop
 __pycache__/
+tools/re0/fake_commands.txt

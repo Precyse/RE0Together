@@ -88,8 +88,14 @@ Find it: reuse the existing sync modules' read/apply points.
 Replicate: after the joiner loads, request a snapshot; apply flags and inventories, travel through the host's last door (engine transition as teleport), place the partner; hold the joiner's own state broadcasts until caught up.
 Seen in: RE0: join_sync.
 
-## Mirror the other player's travel with the engine's own transitions  [state-transition, world-state]
-Shape: the engine tracks where every party member is, but the record is hidden; writing positions or rooms by hand gets overwritten or crashes.
-Find it: the transitions that move a character between areas (door start, character-switch phase) and the flag that makes others follow.
-Replicate: replay the remote player's transition locally: make their character current (swap or switch phase), run the transition with follow off, switch back. The engine keeps its own bookkeeping consistent. While the replay runs the loaded area is the other player's: do not report it as this player's area (room/state broadcasts, "last door" memory), or the peer believes the two are together.
-Seen in: RE0: split_rooms (sDoorLoad::start 0x552b50, Change phase, follow flag sPlayer +0x40).
+## Areas are records; move a member with the engine's own record calls  [state-transition, world-state]
+Shape: the engine keeps a small pool of area records (the loaded area plus dormant ones a party member was left in); each character points at its record. Writing the pointer or position by hand leaves callbacks and registries half-updated.
+Find it: the transition that carries a partner (door into a new area): it finds or loads the target record, places the character on the entry spot, assigns it (leave/enter callbacks) and updates per-area registries. Those calls are the toolkit.
+Replicate: when the remote player changes area, run that same sequence for their character alone on this machine: into the loaded area it appears at the door, out of it it leaves, between other areas its dormant record follows. No screen change, and the save and later doors see consistent engine state. Compare areas by the record's id, not by display fields that read "loading" mid-transition.
+Seen in: RE0: scene records in sSceneInfo 0xdcbf40 (0x61e0f0 find/load, 0x61ed50 place, 0x619e30 assign, 0x61dde0 release), `scene::move`, split_rooms. Replaced an earlier replay (focus their character, run their door, focus back) that worked but took over the screen.
+
+## A player action with several exits is cut at its input  [control]
+Shape: one button starts an action that ends in different engine paths depending on state (a direct swap here, a phase request there).
+Find it: hook the obvious exit, test every state; when an exit is missed, follow the action back to the input it reads.
+Replicate: hide the input from the game during co-op (input proxy), keep a cheap corrective rule for inputs the proxy cannot see (gamepads).
+Seen in: RE0: character switch V (think 0x4fec64 states; requestPhase(Change) is only the apart exit), hidden through the DirectInput keyboard proxy.

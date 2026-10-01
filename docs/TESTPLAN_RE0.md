@@ -24,8 +24,10 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 16 | Guest pulls their network cable for ~20 s, then reconnects | guest launcher rejoins by itself, guest snaps back into the host's room | `Rejoining lobby`, `Rejoined the session`, `join_sync:` lines |
 | 17 | Guest on an older build joins | guest launcher refuses with the build numbers | `Build mismatch:` |
 | 18 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
-| 19 | E (LEAVE_BEHIND), host takes a door alone | host's screen follows Rebecca; the guest's screen stays on Billy in the old room after a short zap there and back | `split_rooms: replaying`, `split_rooms: door replayed` in the guest log |
-| 20 | Apart (row 19), each player walks around and fights | each camera stays on its own character; enemies react in both rooms | no `Room desync` toast |
-| 21 | Apart, the guest walks Billy through a door into Rebecca's room | both characters in the same room on both screens, back to normal co-op | `split_rooms: door replayed` in the host log |
+| 19 | E (LEAVE_BEHIND), host takes a door alone | the host's screen follows Rebecca; on the guest's screen nothing changes except Rebecca leaving the room | `scene: ... now in scene` in the guest log |
+| 20 | Apart (row 19), each player walks around, picks up items and fights | each camera stays on its own character; enemies react in both rooms | no `Room desync` toast |
+| 21 | Apart, the guest walks Billy through a door into Rebecca's room | Billy appears at that door on the host's screen; both in the same room on both screens; the host keeps the room's enemies | `door_travel: arrived ..., first here` on the host earlier |
+| 22 | Apart, the guest disconnects and rejoins | the guest's Billy comes back in his own room, not the host's | `join_sync: travelling to scene`, `join_sync: caught up` |
+| 23 | A cutscene on one machine moves the other player's character | that character stands where the cutscene left it on both screens | `event_place:` lines in both logs |
 
 Report any row that fails, together with both logs.

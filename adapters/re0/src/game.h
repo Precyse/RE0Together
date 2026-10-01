@@ -122,6 +122,32 @@ constexpr uint8_t kSubMenuClosed = 0x0d;
 constexpr uintptr_t kSaveOwnerCheckFunction = 0x612600;  // thiscall, no args, returns bool
 constexpr uintptr_t kPlayerOnDeathFunction = 0x4fcea0;  // thiscall on the think, 1 stack arg (player), ret 4
 
+// Scenes (static analysis of the door carry 0x61e2c0, 2026-09-30). sSceneInfo keeps up to 4 room records ("scenes",
+// pointers at +0x2dc70); the loaded room is the current record (+0x20), a room a character was left in stays as a
+// dormant record. A character belongs to the record at +0xff4. Record +8 = scene id, the room argument doors pass
+// (0x24, 0x2f...); +0x9aa4 = entry positions, 0x18 bytes per (entry * 3 + mode).
+constexpr uintptr_t kSceneInfoGlobal = 0xdcbf40;           // sSceneInfo*
+constexpr uintptr_t kSceneCurrentRecordOffset = 0x20;
+constexpr uintptr_t kSceneRecordIdOffset = 8;
+constexpr uintptr_t kPlayerSceneRecordOffset = 0xff4;
+constexpr uintptr_t kPlayerUnitHandleOffset = 0xff0;       // handle in the per-room unit registry
+// thiscall (scene id, flags) ret 8: the record of a room, loading a dormant one when no record holds it.
+constexpr uintptr_t kSceneRecordFunction = 0x61e0f0;
+constexpr uintptr_t kSceneDefaultFlagsGlobal = 0xdd1d44;   // u32 flags a door passes, plus kSceneDoorFlag
+constexpr uint32_t kSceneDoorFlag = 4;
+// thiscall on a record (player, entry, mode) ret 0xC: puts the player on the entry's spot (mode 0 the one coming
+// through the door, 2 a following partner) and commits its transform.
+constexpr uintptr_t kScenePlaceFunction = 0x61ed50;
+constexpr uint32_t kScenePlaceDoorMode = 0;
+// thiscall on sSceneInfo (record, player) ret 8: moves the player into the record (leave/enter callbacks included).
+constexpr uintptr_t kSceneAssignFunction = 0x619e30;
+// thiscall on sSceneInfo (record) ret 4: unloads a record nobody is in.
+constexpr uintptr_t kSceneReleaseFunction = 0x61dde0;
+// thiscall on [0xdcc010] (scene id or -1, unit handle) ret 8: the per-room unit registry the carry updates.
+constexpr uintptr_t kUnitRoomRegistryGlobal = 0xdcc010;
+constexpr uintptr_t kUnitRoomRegistryFunction = 0x411570;
+constexpr int32_t kNoScene = -1;
+
 // Enemies: sEnemy holds a 37-entry pool; the pool slot index is the enemy's network id.
 constexpr uintptr_t kEnemyGlobal = 0xdcdc78;  // sEnemy*
 constexpr uintptr_t kEnemyPoolOffset = 0x4b0;

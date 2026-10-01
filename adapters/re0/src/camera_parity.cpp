@@ -26,9 +26,8 @@ using Clock = std::chrono::steady_clock;
 constexpr auto kMinSwapInterval = std::chrono::seconds(1);
 // After a guest's own switch, parity waits this long for the host to apply the request before reverting it.
 constexpr auto kRequestGrace = std::chrono::milliseconds(1500);
-// The game's own V may fire as well as the adapter's; a game switch this soon after ours would undo it.
-constexpr auto kSwitchDedupe = std::chrono::milliseconds(500);
 constexpr Character kHostCharacter = Character::Rebecca;
+
 
 NetClient* g_net = nullptr;
 std::atomic<Character> g_hostCharacter{Character::Unknown};  // guest: the host's controlled character
@@ -37,19 +36,16 @@ Clock::time_point g_lastSwap;
 std::atomic<Clock::time_point> g_graceUntil{};  // written by the net thread (local press), read on the game thread
 uintptr_t g_seenLow = 0;                    // host: the two player objects at the last check, ordered
 uintptr_t g_seenHigh = 0;
-Character g_focus = Character::Unknown;     // host: focused character after our last switch or accepted change
-Clock::time_point g_lastAdapterSwitch;
 
-void hostSwitchTo(Character wanted, Clock::time_point now) {
+void hostSwitchTo(Character wanted) {
     const SwitchResult result = switchTo(wanted);
     if (result != SwitchResult::Done) {
         command_log::decide("switch to %s ignored: %s", character_owner::name(wanted), character_owner::reason(result));
         return;
     }
-    g_focus = wanted;
-    g_lastAdapterSwitch = now;
     command_log::decide("switch to %s applied", character_owner::name(wanted));
 }
+
 
 // The one place a switch request enters the host, from its own key and from a guest's SWITCH_REQUEST.
 void queueSwitch(Character target, const char* origin) {
@@ -61,35 +57,19 @@ void queueSwitch(Character target, const char* origin) {
     g_requested = target;
 }
 
-// The game's own V changes the focus too. Right after an adapter switch it is a duplicate that would toggle
-// back, so it is undone; otherwise it is accepted.
-void watchGameSwitch(Character current, Clock::time_point now) {
-    const bool duplicate = g_focus != Character::Unknown && current != g_focus && current != Character::Unknown &&
-                           now - g_lastAdapterSwitch < kSwitchDedupe;
-    if (duplicate) {
-        switchTo(g_focus);
-        command_log::note("undid a duplicate game switch");
-        return;
-    }
-    g_focus = current;
-}
-
 // Fixed ownership: the host's character is Rebecca. Whenever the player objects change (session start, save
 // load), focus goes to her once; the guest's camera then mirrors it.
-bool focusHostCharacterOnNewObjects(uintptr_t controlled, uintptr_t partner, Character current, Clock::time_point now) {
+void focusHostCharacterOnNewObjects(uintptr_t controlled, uintptr_t partner) {
     const uintptr_t low = std::min(controlled, partner);
     const uintptr_t high = std::max(controlled, partner);
-    if (low == g_seenLow && high == g_seenHigh) return false;
+    if (low == g_seenLow && high == g_seenHigh) return;
     g_seenLow = low;
     g_seenHigh = high;
-    g_focus = current;
-    if (current != kHostCharacter) hostSwitchTo(kHostCharacter, now);
-    return true;
+    if (character_owner::identify(controlled) != kHostCharacter) hostSwitchTo(kHostCharacter);
 }
 
 void forgetHostState() {
     g_seenLow = g_seenHigh = 0;
-    g_focus = Character::Unknown;
     g_requested = Character::Unknown;
 }
 
@@ -112,10 +92,8 @@ void hostTick() {
         }
         return;
     }
-    const auto now = Clock::now();
-    const Character current = character_owner::identify(controlled);
-    if (!focusHostCharacterOnNewObjects(controlled, partner, current, now)) watchGameSwitch(current, now);
-    if (requested != Character::Unknown) hostSwitchTo(requested, now);
+    focusHostCharacterOnNewObjects(controlled, partner);
+    if (requested != Character::Unknown) hostSwitchTo(requested);
 }
 
 void guestTick() {
@@ -127,13 +105,13 @@ void guestTick() {
     logger::write("camera_parity: swapped controlled character to %u to match the host", static_cast<unsigned>(wanted));
 }
 
-// Independent play: the camera stays on this machine's own character. Undoes a switch the game made by itself (a
-// pad's switch button; the keyboard key is kept from the game) once the screen is settled; a door replay owns the
-// focus while it runs.
+// Independent play: the camera stays on this machine's own character (after a mode change, a save load, a script's
+// switch or a gamepad's switch button, which the keyboard hiding in command_input does not cover), once the screen
+// is settled.
 void keepOwnFocus() {
     const auto now = Clock::now();
     const Character own = character_owner::localCharacter();
-    if (own == Character::Unknown || split_rooms::replaying() || game_state::menuOpen() || game_state::doorActive() ||
+    if (own == Character::Unknown || game_state::menuOpen() || game_state::doorActive() ||
         game_state::roomPhase() != room_phase::Main || now - g_lastSwap < kMinSwapInterval) {
         return;
     }
@@ -196,12 +174,7 @@ void onLocalSwitchKey() {
 }
 
 void holdLocalFocus() {
-    if (character_owner::isHost()) {
-        g_focus = character_owner::identify(game::controlled());
-        g_lastAdapterSwitch = Clock::now();
-        return;
-    }
-    g_graceUntil = Clock::now() + kRequestGrace;
+    if (!character_owner::isHost()) g_graceUntil = Clock::now() + kRequestGrace;
 }
 
 void enable(NetClient& net) {

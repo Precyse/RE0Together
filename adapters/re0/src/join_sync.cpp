@@ -7,20 +7,21 @@
 #include <optional>
 #include <utility>
 
-#include "character_owner.h"
 #include "flag_sync.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
-#include "inventory_sync.h"
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "room_phase.h"
+#include "scene.h"
 
 namespace {
 
 using Clock = std::chrono::steady_clock;
 using character_owner::Character;
+using join_sync::CharacterPlace;
 using join_sync::JoinSnapshot;
 
 constexpr auto kRequestInterval = std::chrono::seconds(3);
@@ -34,13 +35,18 @@ std::optional<JoinSnapshot> g_received;    // guarded by g_mutex: guest's unappl
 // Game thread, guest only.
 uintptr_t g_loadedPair = 0;          // controlled ^ partner of the load the snapshot belongs to
 bool g_applied = false;              // the snapshot for g_loadedPair has been applied
-std::atomic<bool> g_caughtUp{false};  // guest: applied and in the host's room (read on the net thread)
+std::atomic<bool> g_caughtUp{false};  // guest: applied and placed (read on the net thread)
 Clock::time_point g_lastRequest;
-std::optional<JoinSnapshot> g_waitingForRoom;  // applied except Billy's position, which waits for the host's room
+std::optional<JoinSnapshot> g_snapshot;    // received, not yet applied
+std::optional<JoinSnapshot> g_travelling;  // applied; waiting for the own character's door to arrive
 
 bool inGame() {
     return game::controlled() && game::partner() && !game_state::doorActive() &&
-           game_state::currentRoom() != game_state::kRoomLoading;
+           game_state::roomPhase() == room_phase::Main;
+}
+
+const CharacterPlace& placeOf(const JoinSnapshot& snapshot, Character character) {
+    return snapshot.places[static_cast<size_t>(character)];
 }
 
 template <class T>
@@ -50,38 +56,60 @@ bool sendValue(uint16_t type, const T& value) {
 
 void answer() {
     JoinSnapshot snapshot{};
-    snapshot.hostRoom = game_state::currentRoom();
-    snapshot.hasDoor = door_sync::lastDoor(snapshot.door);
-    const uintptr_t billy = character_owner::find(Character::Billy);
-    snapshot.billyInRoom = game_state::inCurrentRoom(billy) && game::readTransform(billy, snapshot.billyPos, snapshot.billyQuat);
-    for (uint8_t id = 0; id < character_owner::kCharacterCount; ++id) inventory_sync::readBlock(id, snapshot.inventories[id]);
+    for (const Character character : character_owner::kCharacters) {
+        CharacterPlace& place = snapshot.places[static_cast<size_t>(character)];
+        const uintptr_t player = character_owner::find(character);
+        place.scene = scene::of(player);
+        place.hasDoor = door_sync::lastDoor(static_cast<uint8_t>(character), place.door);
+        game::readTransform(player, place.pos, place.quat);
+        inventory_sync::readBlock(static_cast<uint8_t>(character), snapshot.inventories[static_cast<size_t>(character)]);
+    }
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;
-    logger::write("join_sync: snapshot sent (room 0x%04x, door %s)", snapshot.hostRoom, snapshot.hasDoor ? "known" : "none");
+    logger::write("join_sync: snapshot sent (Billy scene 0x%02x, Rebecca scene 0x%02x)",
+                  placeOf(snapshot, Character::Billy).scene, placeOf(snapshot, Character::Rebecca).scene);
 }
 
-void placeBilly(const JoinSnapshot& snapshot) {
+// The own character stands in its room: the host's character joins its room, the own one takes the host's position.
+void finish(const JoinSnapshot& snapshot) {
+    const Character own = character_owner::localCharacter();
+    const Character other = character_owner::other(own);
+    const CharacterPlace& otherPlace = placeOf(snapshot, other);
+    const uintptr_t otherPlayer = character_owner::find(other);
+    if (otherPlace.hasDoor && scene::of(otherPlayer) != otherPlace.scene) {
+        scene::move(otherPlayer, static_cast<uint16_t>(otherPlace.door.room), otherPlace.door.entry);
+    }
+    const CharacterPlace& ownPlace = placeOf(snapshot, own);
+    game::writeTransform(character_owner::find(own), ownPlace.pos, ownPlace.quat);
     g_caughtUp = true;
-    if (snapshot.billyInRoom) game::writeTransform(character_owner::find(Character::Billy), snapshot.billyPos, snapshot.billyQuat);
-    logger::write("join_sync: in the host's room 0x%04x", snapshot.hostRoom);
+    logger::write("join_sync: caught up in scene 0x%02x", scene::current());
 }
 
 void apply(const JoinSnapshot& snapshot) {
     flag_sync::applySnapshot(snapshot.flags);
-    for (uint8_t id = 0; id < character_owner::kCharacterCount; ++id) inventory_sync::applySnapshot(id, snapshot.inventories[id]);
+    for (const Character character : character_owner::kCharacters) {
+        inventory_sync::applySnapshot(static_cast<uint8_t>(character), snapshot.inventories[static_cast<size_t>(character)]);
+    }
     g_applied = true;
-    if (snapshot.hostRoom == game_state::currentRoom()) {
-        placeBilly(snapshot);
+    const CharacterPlace& own = placeOf(snapshot, character_owner::localCharacter());
+    if (own.scene == scene::of(character_owner::find(character_owner::localCharacter())) || !own.hasDoor) {
+        if (own.scene != scene::current()) logger::write("join_sync: own room 0x%02x unknown door, staying", own.scene);
+        finish(snapshot);
         return;
     }
-    if (snapshot.hasDoor) {
-        door_sync::queue(snapshot.door, true);
-        logger::write("join_sync: teleporting to room 0x%04x", snapshot.hostRoom);
-        g_waitingForRoom = snapshot;
-        return;
-    }
-    // Without a known door the guest cannot follow; it plays on from the save's room.
-    g_caughtUp = true;
-    logger::write("join_sync: host room 0x%04x differs and no door is known", snapshot.hostRoom);
+    door_sync::queue(own.door, true);
+    g_travelling = snapshot;
+    logger::write("join_sync: travelling to scene 0x%02x", own.scene);
+}
+
+// The save may have left the own character in another room than the loaded one: the game's own switch brings the
+// camera and the room to it first (it lands over the next frames).
+bool ownCharacterLoaded() {
+    const Character own = character_owner::localCharacter();
+    if (own == Character::Unknown) return false;
+    const uintptr_t player = character_owner::find(own);
+    if (game_state::inCurrentRoom(player)) return true;
+    character_owner::switchTo(own);
+    return false;
 }
 
 void guestTick() {
@@ -91,22 +119,25 @@ void guestTick() {
         g_loadedPair = pair;
         g_applied = false;
         g_caughtUp = false;
-        g_waitingForRoom.reset();
+        g_snapshot.reset();
+        g_travelling.reset();
         g_lastRequest = {};
     }
-    if (g_waitingForRoom && g_waitingForRoom->hostRoom == game_state::currentRoom()) {
-        placeBilly(*g_waitingForRoom);
-        g_waitingForRoom.reset();
+    if (g_travelling &&
+        placeOf(*g_travelling, character_owner::localCharacter()).scene == scene::current()) {
+        finish(*g_travelling);
+        g_travelling.reset();
     }
-    std::optional<JoinSnapshot> received;
     {
         std::lock_guard lock(g_mutex);
-        received.swap(g_received);
+        if (g_received) g_snapshot = std::exchange(g_received, std::nullopt);
     }
-    if (received && !g_applied) apply(*received);
-    if (g_applied || Clock::now() - g_lastRequest < kRequestInterval) return;
-    const uint16_t room = game_state::currentRoom();
-    if (sendValue(proto::kMsgSnapshotRequest, room)) g_lastRequest = Clock::now();
+    if (g_snapshot && !g_applied && ownCharacterLoaded()) {
+        apply(*g_snapshot);
+        g_snapshot.reset();
+    }
+    if (g_applied || g_snapshot || Clock::now() - g_lastRequest < kRequestInterval) return;
+    if (sendValue(proto::kMsgSnapshotRequest, scene::current())) g_lastRequest = Clock::now();
 }
 
 void hostTick() {

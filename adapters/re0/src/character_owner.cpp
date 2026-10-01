@@ -117,8 +117,7 @@ Control ownerControl(Character character) {
 }  // namespace
 
 Control controlOf(Character character) {
-    uint16_t peerRoom = 0;
-    const bool peerHere = !door_travel::peerRoom(peerRoom) || peerRoom == game_state::currentRoom();
+    const bool peerHere = door_travel::peerPlace() != door_travel::PeerPlace::Elsewhere;
     return control_rule::byPresence(ownerControl(character), peerHere);
 }
 

@@ -1,5 +1,6 @@
 #include "door_sync.h"
 
+#include <array>
 #include <cstring>
 #include <mutex>
 #include <optional>
@@ -34,7 +35,22 @@ bool g_applying = false;  // game thread only: a peer's door is being run, so th
 std::mutex g_mutex;
 std::optional<DoorChange> g_pending;  // guarded by g_mutex: the newest peer door not yet run
 bool g_pendingBothTravel = false;     // guarded by g_mutex
-std::optional<DoorChange> g_lastDoor;  // guarded by g_mutex: the door into the current room
+std::array<std::optional<DoorChange>, character_owner::kCharacterCount> g_lastDoor;  // guarded by g_mutex
+
+// A door started here also takes the partner when the game's follow flag is set and the partner is in the room.
+void rememberWithCarried(const DoorChange& change) {
+    door_sync::remember(change);
+    const Character partner = character_owner::identify(game::partner());
+    uint8_t follow = 0;
+    const uintptr_t sPlayer = game::readPointer(game::kPlayerGlobal);
+    if (partner == Character::Unknown || !sPlayer || !game::readMemory(sPlayer + game::kPlayerFollowOffset, follow) ||
+        !follow || !game_state::inCurrentRoom(game::partner())) {
+        return;
+    }
+    DoorChange carried = change;
+    carried.characterId = static_cast<uint8_t>(partner);
+    door_sync::remember(carried);
+}
 
 bool focusedIsLocal() {
     return character_owner::isLocalOwned(character_owner::identify(game::controlled()));
@@ -68,16 +84,10 @@ void send(const DoorChange& change) {
     debug_stats::count(debug_stats::Counter::DoorsSent);
 }
 
-void remember(const DoorChange& change) {
-    std::lock_guard lock(g_mutex);
-    g_lastDoor = change;
-}
-
 void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t arg3, uint32_t arg4,
                                 uint32_t flag) {
     const auto focused = static_cast<uint8_t>(character_owner::identify(game::controlled()));
-    // A split_rooms replay is the peer's door, not the door into this player's room (join snapshots send this one).
-    if (!split_rooms::replaying()) remember({room, entry, arg3, arg4, flag, focused, {}});
+    rememberWithCarried({room, entry, arg3, arg4, flag, focused, {}});
     if (g_applying || !net_pad::active()) {
         g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
         return;
@@ -121,11 +131,17 @@ void onFrame(const GameFrame& frame) {
     queue(change);
 }
 
-bool lastDoor(DoorChange& out) {
+bool lastDoor(uint8_t characterId, DoorChange& out) {
     std::lock_guard lock(g_mutex);
-    if (!g_lastDoor) return false;
-    out = *g_lastDoor;
+    if (characterId >= g_lastDoor.size() || !g_lastDoor[characterId]) return false;
+    out = *g_lastDoor[characterId];
     return true;
+}
+
+void remember(const DoorChange& change) {
+    if (change.characterId >= g_lastDoor.size()) return;
+    std::lock_guard lock(g_mutex);
+    g_lastDoor[change.characterId] = change;
 }
 
 void queue(const DoorChange& change, bool bothTravel) {

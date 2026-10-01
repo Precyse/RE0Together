@@ -14,6 +14,7 @@
 #include "enemy_damage_hook.h"
 #include "enemy_net.h"
 #include "enemy_state.h"
+#include "event_place.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
@@ -67,6 +68,7 @@ void enableCoop() {
     split_rooms::enable();
     flag_sync::enable(g_net);
     join_sync::enable(g_net);
+    event_place::enable(g_net);
     if (!session_slot::enable()) logger::write("adapter: session slot unavailable");
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);

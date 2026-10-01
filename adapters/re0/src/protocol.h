@@ -37,6 +37,7 @@ constexpr uint16_t kMsgFlagDiff = kFirstGameType + 12;     // 0x010C, to all, re
 constexpr uint16_t kMsgSnapshotRequest = kFirstGameType + 13;  // 0x010D, guest to host, reliable: u16 guest room
 constexpr uint16_t kMsgJoinSnapshot = kFirstGameType + 14;     // 0x010E, host to all, reliable: join_sync::JoinSnapshot
 constexpr uint16_t kMsgSaveSlot = kFirstGameType + 15;         // 0x010F, host to all, reliable: i32 session save slot
+constexpr uint16_t kMsgCharacterPlace = kFirstGameType + 0x13;  // 0x0113, to the owner, reliable: event_place::CharacterPlace
 
 constexpr size_t kWelcomeSize = 7;
 constexpr size_t kPeerUpFixedSize = 10;

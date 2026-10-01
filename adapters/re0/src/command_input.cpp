@@ -73,7 +73,7 @@ void enable() {
 
 void onNetTick() {
     publishFocus();
-    // With a peer the adapter owns switching: the game's own switch would zap to the other player's character.
+    // With a peer the adapter owns switching: the game's own switch would take this machine's camera.
     virtual_keys::setMutedKey(net_pad::active() ? g_changeScancode : 0);
     const bool foreground = gameIsForeground();
     const bool change = pressedEdge(g_keys.change, g_changeWasDown);

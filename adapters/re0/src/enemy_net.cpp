@@ -79,8 +79,8 @@ void announceHit(uintptr_t enemy, Character attacker, float distance, const game
 
 void onFrame(const GameFrame& frame) {
     if (split_rooms::apart()) return;  // the peer's enemies are in another room
-    const bool host = character_owner::isHost();
-    const bool expected = frame.type == (host ? enemy_protocol::kMsgHitRequest : enemy_protocol::kMsgHitApplied);
+    const bool authority = split_rooms::localEnemyAuthority();
+    const bool expected = frame.type == (authority ? enemy_protocol::kMsgHitRequest : enemy_protocol::kMsgHitApplied);
     if (!expected || frame.payload.size() != sizeof(HitPayload) || frame.slot != net_pad::peerSlot()) return;
     debug_stats::count(frame.type == enemy_protocol::kMsgHitRequest ? Counter::HitRequestReceived
                                                                     : Counter::HitAppliedReceived);

@@ -155,13 +155,33 @@ What separate rooms needs, in order:
 3. door_sync only between players in the same room (already the TEAM rule) and no door forcing while apart.
 4. Enemy authority per room: whoever is in a room simulates its enemies; host authority only when together.
 
-Implemented without step 1 (split_rooms.cpp, always on): instead of writing the partner record, every
-peer door is replayed here with the engine's own transitions, so the game keeps the record itself:
-focus the door's character (swap in the same room, Change-phase zap otherwise), run sDoorLoad::start with the
-follow flag (sPlayer +0x40) off, then focus the local character back. Camera parity, enemy_net and enemy_state stop
-while the rooms differ; enemy damage runs locally. Join teleports bypass the replay. Only the newest pending peer
-door is replayed (targets are absolute). LEAVE_BEHIND is independent play even in the same room: own camera on each
-machine, V does nothing, the game never sees the keyboard switch key during co-op (virtual_keys), and a game-made
-switch (pad) is undone. Untested with two players.
-Known gap: each replay is visible on the machine that runs it (zap to the other character, its door, zap back). The
-fix is the partner's room/position record (step 1), which would let a peer door be applied without loading rooms.
+**Scene records (static analysis of the door carry 0x61e2c0, confirmed in game 2026-09-30).** sSceneInfo (0xdcbf40)
+keeps up to 4 room records (pointers at +0x2dc70); +0x20 is the loaded one. A character belongs to the record at its
++0xff4; a room a character was left in stays as a dormant record (that is the "hidden" partner room: record +8 = scene
+id, the same id doors pass, e.g. 0x59, 0x61, 0x24; +0x9aa4 = entry spots, 0x18 bytes per (entry * 3 + mode)). The carry
+moves a character with: [0xdcc010]->0x411570(-1, player +0xff0) (unit registry, detach); 0x61e0f0(scene, flags)
+on sSceneInfo (find the room's record, or load it dormant; flags = [0xdd1d44] | 4); 0x61ed50(player, entry, mode) on
+the record (entry spot, mode 0 = through the door, 2 = following partner); 0x619e30(record, player) on sSceneInfo (leave
+and enter callbacks, +0xff4); 0x411570(scene, handle) again; 0x61dde0(record) releases an empty dormant record.
+`scene::move` runs exactly that for one character. Tested with the fake session: Billy sent from the loaded 0x59 to
+0x24 vanished with no screen change; sent back he stood at the door's spot (241, 600, 2852, where the game itself puts
+him); moved away (0x59 released) and back (0x59 loaded fresh, same slot reused), then Rebecca walked into 0x59 through
+its door and found him there. A rejoining guest took Billy through his door into 0x61 and Rebecca was moved into
+dormant 0x24; the fake host's Rebecca then walked into 0x61 and appeared at the door. The in-room flag (+0xc 0x4000)
+of a character moved into a dormant record can stay set (it only updates while the character's room runs), so "in the
+loaded room" also compares +0xff4 with the loaded record.
+
+So split rooms needs no replay: a peer's door moves the peer's character in place (split_rooms.cpp, always on), the
+save and later doors see the engine's own state. LEAVE_BEHIND is independent play (own camera on each machine, V does
+nothing). Enemies: the machine that was in a room first keeps simulating it when the other walks in (ROOM_STATE carries
+the claim; host on a tie). Cutscenes that move the peer's character hand the result to its owner (event_place).
+
+**The game's own switch (V)** is a multi-step action in the player think (0x4fec64..: states 3/4/5): in the same room it
+swaps directly (no room phase), apart it requests Change from 0x4fed48 / 0x50395e. Refusing requestPhase(Change) misses
+the first path, so the switch is cut at its input: the DirectInput keyboard never reports the KC_change key during co-op
+(virtual_keys), which also keeps it out of the pad frames the peer replays. A gamepad's switch button is undone by
+camera_parity's keepOwnFocus in independent play.
+
+**Boot-time save:** on the boot notice screen the game issues its own save request for slot 0 (no room phase). Redirecting
+it into the co-op slot made the next load assert in the scene id check (crash at 0x401f78 via 0x610d8a); session_slot now
+redirects only saves made from the Save room phase.

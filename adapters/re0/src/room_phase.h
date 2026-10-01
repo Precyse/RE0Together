@@ -51,6 +51,9 @@ constexpr bool pausesWorld(int32_t phase) {
            phase == Map || phase == EventDemo || phase == Movie;
 }
 
+// Cutscenes and scripted events: scripts may move characters while one runs.
+constexpr bool isEvent(int32_t phase) { return phase == EventDemo || phase == Event || phase == Movie; }
+
 // The player is in the game world (not the boot, title, game over, ending or extras screens).
 constexpr bool isGameplay(int32_t phase) {
     return phase != kUnreadable && phase != Init && phase != Dead && phase != Opening && phase != StaffRoll &&

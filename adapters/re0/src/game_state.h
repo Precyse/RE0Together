@@ -23,7 +23,8 @@ bool uiPausesWorld();
 constexpr uint16_t kRoomLoading = 0xffff;
 uint16_t currentRoom();
 
-// True when the character is in the loaded room (false for a partner left in another room).
+// True when the character is in the loaded room: its room record is the loaded one and the game shows it there. The
+// in-room flag alone stays stale on a character moved into a dormant room (it does not update there).
 bool inCurrentRoom(uintptr_t player);
 
 }  // namespace game_state

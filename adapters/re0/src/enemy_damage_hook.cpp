@@ -32,7 +32,7 @@ uintptr_t originalFor(uintptr_t vtable) {
     return 0;
 }
 
-// Hit by a player character: the owning machine reports it and the host applies it.
+// Hit by a player character: the owning machine reports it and the room's enemy authority applies it.
 void onPlayerHit(Character shooter, void* enemy, void* attacker, float distance, game::HitInfo* info,
                  uintptr_t original) {
     const uintptr_t enemyAddress = reinterpret_cast<uintptr_t>(enemy);

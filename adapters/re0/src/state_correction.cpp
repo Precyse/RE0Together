@@ -13,6 +13,8 @@
 #include "net_pad.h"
 #include "player_damage.h"
 #include "position_blend.h"
+#include "room_phase.h"
+#include "scene.h"
 #include "state_sync.h"
 
 namespace {
@@ -110,8 +112,8 @@ void afterMove(uintptr_t player) {
     const state_sync::PlayerState& remote = report.last.state;
     const auto character = static_cast<character_owner::Character>(remote.characterId);
     if (character_owner::identify(player) != character || !character_owner::isRemoteOwned(character)) return;
-    // Positions from another room are in unrelated coordinates.
-    if (remote.room != game_state::currentRoom() || !game_state::inCurrentRoom(player) || game_state::doorActive()) {
+    // Positions from another room are in unrelated coordinates; during a local event the script places it.
+    if (room_phase::isEvent(game_state::roomPhase()) || remote.room != scene::current() || !game_state::inCurrentRoom(player) || game_state::doorActive()) {
         return;
     }
     float pos[3];

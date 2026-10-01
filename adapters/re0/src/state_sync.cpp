@@ -16,6 +16,7 @@
 #include "enemy_net.h"
 #include "enemy_protocol.h"
 #include "enemy_state.h"
+#include "event_place.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
@@ -31,7 +32,7 @@
 #include "phase_watch.h"
 #include "player_damage.h"
 #include "session_slot.h"
-#include "split_rooms.h"
+#include "scene.h"
 #include "state_correction.h"
 
 namespace {
@@ -65,8 +66,7 @@ void sendLocalState(NetClient& net) {
     state_sync::PlayerState state{};
     const character_owner::Character owned = character_owner::localCharacter();
     const uintptr_t player = character_owner::find(owned);
-    // During a door replay the loaded room is the other player's, so this player's state would be reported wrongly.
-    if (owned == character_owner::Character::Unknown || !join_sync::caughtUp() || split_rooms::replaying() ||
+    if (owned == character_owner::Character::Unknown || !join_sync::caughtUp() ||
         !game::readTransform(player, state.pos, state.quat)) {
         return;
     }
@@ -74,7 +74,7 @@ void sendLocalState(NetClient& net) {
     state.focusedCharacterId = static_cast<uint8_t>(character_owner::identify(game::controlled()));
     if (!game::readMemory(player + game::kPlayerHpOffset, state.hp)) return;
     state.senderIsHost = character_owner::isHost();
-    state.room = game_state::currentRoom();
+    state.room = scene::current();
     state.seq = ++g_seq;
     if (net.send(state_sync::kMsgPlayerState, false, proto::kSlotAll, proto::bytesOf(state))) {
         debug_stats::count(debug_stats::Counter::PlayerStateSent);
@@ -124,6 +124,10 @@ void onFrame(const GameFrame& frame) {
     }
     if (frame.type == proto::kMsgSnapshotRequest || frame.type == proto::kMsgJoinSnapshot) {
         join_sync::onFrame(frame);
+        return;
+    }
+    if (frame.type == proto::kMsgCharacterPlace) {
+        event_place::onFrame(frame);
         return;
     }
     if (frame.type == proto::kMsgFlagDiff) {

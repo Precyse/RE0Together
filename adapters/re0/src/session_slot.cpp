@@ -73,8 +73,9 @@ bool __fastcall loadAltDetour(void* self, void* edx, int32_t slot, int32_t arg) 
     return accepted;
 }
 
+// Only the in-game save screen is a player's save; the game also saves on its own at boot.
 bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
-    const bool coop = net_pad::active() && isPlayerSlot(slot);
+    const bool coop = net_pad::active() && isPlayerSlot(slot) && game_state::roomPhase() == room_phase::Save;
     const int32_t target = coop ? kCoopSlot : slot;
     if (coop && slot != target) logger::write("session_slot: save to slot %d kept in the co-op slot %d", slot, target);
     const bool accepted = g_originalSave(self, edx, target);

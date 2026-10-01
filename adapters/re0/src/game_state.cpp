@@ -45,8 +45,10 @@ uint16_t currentRoom() {
 
 bool inCurrentRoom(uintptr_t player) {
     uint32_t flags = 0;
-    return player && game::readMemory(player + game::kPlayerFlagsOffset, flags) &&
-           (flags & game::kPlayerInCurrentRoomFlag) != 0;
+    const uintptr_t sceneInfo = game::readPointer(game::kSceneInfoGlobal);
+    const uintptr_t loaded = sceneInfo ? game::readPointer(sceneInfo + game::kSceneCurrentRecordOffset) : 0;
+    return player && loaded && game::readPointer(player + game::kPlayerSceneRecordOffset) == loaded &&
+           game::readMemory(player + game::kPlayerFlagsOffset, flags) && (flags & game::kPlayerInCurrentRoomFlag) != 0;
 }
 
 }  // namespace game_state

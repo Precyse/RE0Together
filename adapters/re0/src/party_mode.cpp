@@ -11,7 +11,6 @@
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
-#include "split_rooms.h"
 
 namespace {
 
@@ -48,8 +47,7 @@ void toastMode() { debug_overlay::toast(g_mode == PartyMode::Team ? "Team" : "Sp
 // mode: following in TEAM, staying in LEAVE_BEHIND. Written only when it differs.
 void applyFollowFlag() {
     const uintptr_t player = game::readPointer(game::kPlayerGlobal);
-    // A door replay must not carry the local character along.
-    const uint8_t wanted = g_mode == PartyMode::Team && !split_rooms::replaying() ? 1 : 0;
+    const uint8_t wanted = g_mode == PartyMode::Team ? 1 : 0;
     uint8_t current = 0;
     if (!player || !game::readMemory(player + game::kPlayerFollowOffset, current) || current == wanted) return;
     game::writeMemory(player + game::kPlayerFollowOffset, wanted);
