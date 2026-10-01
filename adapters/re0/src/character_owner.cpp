@@ -1,6 +1,7 @@
 #include "character_owner.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstring>
 
 #include "debug_stats.h"
@@ -20,6 +21,7 @@ using character_owner::Ownership;
 constexpr int kNoSlot = control_rule::kNoOwner;
 // The host repeats OWNERSHIP so a guest whose game starts after joining (the usual order) still receives it.
 constexpr uint32_t kResendFrames = 60;
+constexpr auto kZapSettle = std::chrono::seconds(2);
 
 NetClient* g_net = nullptr;
 
@@ -31,6 +33,8 @@ std::atomic<bool> g_peerPresent{false};
 std::atomic<bool> g_recompute{true};  // host: decide (and announce) the fixed owners again
 std::atomic<int> g_owner[character_owner::kCharacterCount] = {kNoSlot, kNoSlot};
 uint32_t g_framesSinceSend = 0;
+std::chrono::steady_clock::time_point g_playingSince;  // game thread: start of the current stretch of plain gameplay
+bool g_wasPlaying = false;
 
 void setOwners(Ownership owners) {
     g_owner[static_cast<size_t>(Character::Billy)] = owners.billyOwnerSlot;
@@ -60,7 +64,16 @@ void decide() {
     sendOwnership();
 }
 
+void trackGameplay() {
+    const bool playing = game_state::playing();
+    if (playing && !g_wasPlaying) g_playingSince = std::chrono::steady_clock::now();
+    g_wasPlaying = playing;
+}
+
+bool zapSettled() { return g_wasPlaying && std::chrono::steady_clock::now() - g_playingSince >= kZapSettle; }
+
 void onTick() {
+    trackGameplay();
     if (!character_owner::isHost() || !g_peerPresent) return;
     if (g_recompute) {
         decide();
@@ -168,8 +181,12 @@ SwitchResult switchTo(Character character) {
     if (!controlled || !partner) return SwitchResult::NoPartner;
     if (identify(controlled) == character) return SwitchResult::AlreadyFocused;
     if (identify(partner) != character) return SwitchResult::PartnerIsOther;
-    if (game_state::inCurrentRoom(partner)) game::swapControlled(partner, controlled);
-    else game::requestRoomPhase(room_phase::Change);
+    if (game_state::inCurrentRoom(partner)) {
+        game::swapControlled(partner, controlled);
+        return SwitchResult::Done;
+    }
+    if (!zapSettled()) return SwitchResult::NotSettled;
+    game::requestRoomPhase(room_phase::Change);
     return SwitchResult::Done;
 }
 
@@ -178,6 +195,7 @@ const char* reason(SwitchResult result) {
         case SwitchResult::AlreadyFocused: return "focus already set";
         case SwitchResult::NoPartner: return "no partner object";
         case SwitchResult::PartnerIsOther: return "partner is not the target";
+        case SwitchResult::NotSettled: return "rooms still settling";
         case SwitchResult::Done: break;
     }
     return "done";

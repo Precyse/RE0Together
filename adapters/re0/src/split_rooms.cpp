@@ -52,7 +52,14 @@ bool takeOver(const DoorChange& change) {
     return true;
 }
 
-bool apart() { return net_pad::active() && door_travel::peerPlace() == door_travel::PeerPlace::Elsewhere; }
+bool apart() {
+    if (!net_pad::active()) return false;
+    if (door_travel::peerPlace() == door_travel::PeerPlace::Elsewhere) return true;
+    // A save that split the two, or a script's switch, can leave this player's own character outside the loaded room
+    // while the peer is in it: that is apart too, so the camera goes to the own character and its room loads.
+    const uintptr_t own = character_owner::find(character_owner::localCharacter());
+    return own && game_state::playing() && !game_state::inCurrentRoom(own);
+}
 
 bool independent() { return apart() || party_mode::current() == control_rule::PartyMode::LeaveBehind; }
 

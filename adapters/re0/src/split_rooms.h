@@ -17,7 +17,7 @@ namespace split_rooms {
 // Game thread, from door_sync: a peer's door. True when split_rooms applies it (the caller must not run it).
 bool takeOver(const door_sync::DoorChange& change);
 
-// The peer reports another room than the one loaded here.
+// The peer reports another room than the one loaded here, or this player's own character is outside the loaded room.
 bool apart();
 
 // LEAVE_BEHIND, or apart: each machine keeps its own player's character in focus (no shared camera).

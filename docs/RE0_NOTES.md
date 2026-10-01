@@ -182,6 +182,20 @@ the first path, so the switch is cut at its input: the DirectInput keyboard neve
 (virtual_keys), which also keeps it out of the pad frames the peer replays. A gamepad's switch button is undone by
 camera_parity's keepOwnFocus in independent play.
 
+**Zap right after a load asserts (2026-10-01).** Requesting the Change phase 0.1 s after a save reached Main (the
+own character dormant in another room) crashed in the engine's room-record assert (strings 0xcb57ac/0xcb57d0, via
+0x618c99); the same zap 2 s or more later works. `character_owner::switchTo` refuses the zap (NotSettled) until the game
+has been in plain gameplay for 2 s; swaps in the room stay immediate.
+
+**Apart includes the own character.** A save can split the two (slot 2: Rebecca in scene 0x04, Billy dormant in 0x0a).
+A guest loading it sees the host's room while its own Billy is elsewhere, so "apart" is also true when this player's own
+character is outside the loaded room: the camera goes to it (zap, after the settle) and its room loads. Verified with
+the fake host: the guest landed on Billy in 0x0a 2.1 s after the load; the join flow with that save also caught up there.
+
+**Peer doors wait for plain gameplay.** door_sync ran a peer door during a local status screen: the door's character
+took the camera and the door itself never started (lost). Doors, placements and the party commands now all wait for
+`game_state::playing` (Main, no door, no menu). In the status screen the command keys are the game's again.
+
 **Boot-time save:** on the boot notice screen the game issues its own save request for slot 0 (no room phase). Redirecting
 it into the co-op slot made the next load assert in the scene id check (crash at 0x401f78 via 0x610d8a); session_slot now
 redirects only saves made from the Save room phase.

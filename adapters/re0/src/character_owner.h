@@ -55,10 +55,12 @@ Control controlOf(Character character);
 // Makes `character` the focused character on this machine when it is currently the partner (a pointer swap only).
 void focus(Character character);
 
-enum class SwitchResult { Done, AlreadyFocused, NoPartner, PartnerIsOther };
+enum class SwitchResult { Done, AlreadyFocused, NoPartner, PartnerIsOther, NotSettled };
 
 // Makes `character` the focused character the way the game's own switch does: a swap when it shares the loaded room,
-// otherwise the Change phase (the vanilla zap, which loads its room and completes over the next frames).
+// otherwise the Change phase (the vanilla zap, which loads its room and completes over the next frames). The zap waits
+// until the game has been in plain gameplay for a moment (NotSettled before): right after a load the engine asserts in
+// its room records (seen in game 0.1 s after a load).
 SwitchResult switchTo(Character character);
 
 // Log text of a result other than Done.

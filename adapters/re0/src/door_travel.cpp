@@ -39,6 +39,7 @@ Clock::time_point g_lastSend;
 bool g_mismatching = false;
 Clock::time_point g_mismatchSince;
 bool g_desyncReported = false;
+bool g_ranEnemies = false;  // game thread: the last logged enemy authority
 
 bool partnerInRoom() { return game_state::inCurrentRoom(game::partner()); }
 
@@ -99,6 +100,13 @@ void checkDesync(Clock::time_point now) {
     logger::write("door_travel: room desync, local scene 0x%02x peer 0x%02x", scene::current(), peer.scene);
 }
 
+void logEnemyAuthority() {
+    const bool runs = door_travel::enemyAuthority();
+    if (runs == g_ranEnemies) return;
+    g_ranEnemies = runs;
+    logger::write("door_travel: enemies of scene 0x%02x run %s", scene::current(), runs ? "here" : "on the peer");
+}
+
 void onTick() {
     debug_stats::set(debug_stats::Gauge::DoorPhase, game_state::doorPhase());
     debug_stats::set(debug_stats::Gauge::Room, scene::current());
@@ -116,6 +124,7 @@ void onTick() {
     const auto now = Clock::now();
     if (now - g_lastSend >= kRoomStateInterval) sendRoomState();
     checkDesync(now);
+    logEnemyAuthority();
 }
 
 }  // namespace

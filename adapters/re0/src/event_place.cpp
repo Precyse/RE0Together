@@ -82,7 +82,7 @@ void applyIncoming() {
             return;
         }
         scene::move(player, place->scene, kSceneEntry);
-        game::requestRoomPhase(room_phase::Change);
+        character_owner::switchTo(character_owner::identify(game::partner()));
     }
     game::writeTransform(player, place->pos, place->quat);
     logger::write("event_place: placed %s by the peer's event (scene 0x%02x)", character_owner::name(own), place->scene);
