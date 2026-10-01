@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 
 // A virtual keyboard layered on the game's DirectInput keyboard: the adapter can tap keys, and can mute the real
@@ -16,7 +17,8 @@ void tap(uint8_t scancode);
 // While muted the game reads only virtual keys.
 void setRealKeyboardMuted(bool muted);
 
-// The game never sees this key (DIK scan code; 0 = none) while it is set.
-void setMutedKey(uint8_t scancode);
+// The game never sees these keys (DIK scan codes; 0 = none) while they are set.
+using HiddenKeys = std::array<uint8_t, 2>;
+void setHiddenKeys(const HiddenKeys& scancodes);
 
 }  // namespace virtual_keys

@@ -29,5 +29,6 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 21 | Apart, the guest walks Billy through a door into Rebecca's room | Billy appears at that door on the host's screen; both in the same room on both screens; the host keeps the room's enemies | `door_travel: arrived ..., first here` on the host earlier |
 | 22 | Apart, the guest disconnects and rejoins | the guest's Billy comes back in his own room, not the host's | `join_sync: travelling to scene`, `join_sync: caught up` |
 | 23 | A cutscene on one machine moves the other player's character | that character stands where the cutscene left it on both screens | `event_place:` lines in both logs |
-
+| 24 | On a controller: Y in TEAM, LT anywhere | Y switches through the host like V; LT toggles Team / Split up like E; the game never switches or orders the partner by itself | `command: switch pressed`, `command: party pressed` |
+| 25 | Split up, save at a typewriter while the other player is in another room, then load that save | both characters are where they were when saved | `party_state.py` |
 Report any row that fails, together with both logs.

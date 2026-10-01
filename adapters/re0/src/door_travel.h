@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 
+#include "control_rule.h"
 #include "net_client.h"
 
 // Where each player is: ROOM_STATE carries this machine's loaded scene (scene.h) on every arrival and every 2 s, and
@@ -16,7 +17,7 @@ struct RoomState {
 };
 static_assert(sizeof(RoomState) == 4);
 
-enum class PeerPlace { Unknown, Here, Elsewhere };
+using control_rule::PeerPlace;
 
 // Net thread: remembers the driving peer's latest ROOM_STATE.
 void onFrame(const GameFrame& frame);
@@ -25,7 +26,7 @@ void onFrame(const GameFrame& frame);
 // side is loading).
 PeerPlace peerPlace();
 
-// This machine runs the enemies of its loaded room: alone in it, or first in it (the host breaks a tie).
+// This machine runs the enemies of its loaded room (control_rule::runsEnemies).
 bool enemyAuthority();
 
 // Net thread: notes a door start even when the game stops ticking.

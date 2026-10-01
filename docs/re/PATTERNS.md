@@ -98,4 +98,4 @@ Seen in: RE0: scene records in sSceneInfo 0xdcbf40 (0x61e0f0 find/load, 0x61ed50
 Shape: one button starts an action that ends in different engine paths depending on state (a direct swap here, a phase request there).
 Find it: hook the obvious exit, test every state; when an exit is missed, follow the action back to the input it reads.
 Replicate: hide the input from the game during co-op (input proxy), keep a cheap corrective rule for inputs the proxy cannot see (gamepads).
-Seen in: RE0: character switch V (think 0x4fec64 states; requestPhase(Change) is only the apart exit), hidden through the DirectInput keyboard proxy.
+Seen in: RE0: character switch V and Solo/Team E (think 0x4fec64 states; requestPhase(Change) is only the apart exit), hidden through the DirectInput keyboard proxy; on controllers Y and LT (the same in every controller type) through a filter on the XInputGetState import (0xcb13b0, imported by ordinal 2). The options screen's controller diagram is the fastest way to learn fixed pad bindings.

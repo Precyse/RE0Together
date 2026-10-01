@@ -16,6 +16,18 @@ enum class PartyMode : uint8_t { Team, LeaveBehind };
 
 constexpr int kNoOwner = -1;
 
+// Where the other player is, compared with the room loaded here.
+enum class PeerPlace : uint8_t { Unknown, Here, Elsewhere };
+
+// Whether this machine runs the enemies of its loaded room: alone in it always; in a shared room the one that was there
+// first (its claim), the host when both or neither claim; the host while the peer's room is not known yet. Both
+// machines evaluating this with swapped arguments never both answer true (or both false) in a shared room.
+constexpr bool runsEnemies(PeerPlace peer, bool isHost, bool ownClaim, bool peerClaim) {
+    if (peer == PeerPlace::Elsewhere) return true;
+    if (peer == PeerPlace::Unknown) return isHost;
+    return ownClaim == peerClaim ? isHost : ownClaim;
+}
+
 // Control by ownership only. A host with an undecided owner keeps vanilla control; a guest waits (Locked).
 constexpr Control byOwnership(bool peerPresent, bool isHost, int ownerSlot, int localSlot) {
     if (!peerPresent) return Control::Vanilla;

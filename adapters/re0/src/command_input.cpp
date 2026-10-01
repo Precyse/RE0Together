@@ -9,6 +9,7 @@
 #include "game.h"
 #include "key_config.h"
 #include "net_pad.h"
+#include "pad_commands.h"
 #include "party_mode.h"
 #include "virtual_keys.h"
 #include "window_focus.h"
@@ -21,9 +22,9 @@ constexpr uint8_t kDikExtendedBit = 0x80;
 constexpr UINT kScanCodeMask = 0xFF;
 
 key_config::CommandKeys g_keys{};
-bool g_changeWasDown = false;  // net thread only
+bool g_changeWasDown = false;  // net thread only: keyboard or controller held at the last poll
 bool g_traceWasDown = false;
-uint8_t g_changeScancode = 0;
+virtual_keys::HiddenKeys g_commandScancodes{};  // the switch and partner keys as DirectInput codes
 
 // DirectInput key code of a virtual key: its scan code, with the high bit for extended keys (arrows).
 uint8_t dikOf(int virtualKey) {
@@ -32,9 +33,11 @@ uint8_t dikOf(int virtualKey) {
     return static_cast<uint8_t>((scan & kScanCodeMask) | (extended ? kDikExtendedBit : 0));
 }
 
-// True on the poll where the key goes down. The edge state follows the raw key on every poll, so it cannot stick.
-bool pressedEdge(int virtualKey, bool& wasDown) {
-    const bool down = (GetAsyncKeyState(virtualKey) & kKeyDownMask) != 0;
+bool keyDown(int virtualKey) { return (GetAsyncKeyState(virtualKey) & kKeyDownMask) != 0; }
+
+// True on the poll where the command goes down (key or controller button). The edge state follows the raw input on
+// every poll, so it cannot stick.
+bool pressedEdge(bool down, bool& wasDown) {
     const bool edge = down && !wasDown;
     wasDown = down;
     return edge;
@@ -68,16 +71,19 @@ namespace command_input {
 
 void enable() {
     g_keys = key_config::load();
-    g_changeScancode = dikOf(g_keys.change);
+    g_commandScancodes = {dikOf(g_keys.change), dikOf(g_keys.trace)};
 }
 
 void onNetTick() {
     publishFocus();
-    // With a peer the adapter owns switching: the game's own switch would take this machine's camera.
-    virtual_keys::setMutedKey(net_pad::active() ? g_changeScancode : 0);
+    // With a peer the adapter owns both commands: the game's own switch would take this machine's camera, and its
+    // partner command would act on the other player's character.
+    virtual_keys::setHiddenKeys(net_pad::active() ? g_commandScancodes : virtual_keys::HiddenKeys{});
+    pad_commands::setHidden(net_pad::active());
     const bool foreground = gameIsForeground();
-    const bool change = pressedEdge(g_keys.change, g_changeWasDown);
-    const bool trace = pressedEdge(g_keys.trace, g_traceWasDown);
+    const pad_commands::Buttons pad = pad_commands::pressed();
+    const bool change = pressedEdge(keyDown(g_keys.change) || pad.change, g_changeWasDown);
+    const bool trace = pressedEdge(keyDown(g_keys.trace) || pad.trace, g_traceWasDown);
     if (change && accept("switch", g_keys.change, foreground)) camera_parity::onLocalSwitchKey();
     if (trace && accept("party", g_keys.trace, foreground)) party_mode::onLocalToggleKey();
 }

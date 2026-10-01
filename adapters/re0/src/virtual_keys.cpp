@@ -15,6 +15,7 @@ constexpr size_t kCreateDeviceSlot = 3;
 constexpr size_t kGetDeviceStateSlot = 9;
 constexpr DWORD kKeyboardStateSize = 256;
 constexpr uint8_t kKeyDown = 0x80;
+constexpr unsigned kByteBits = 8;
 constexpr int kTapReads = 6;  // keyboard reads a tap stays down (the game reads once or twice per frame)
 
 // GUID_SysKeyboard {6F1D2B61-D5A0-11CF-BFC7-444553540000}
@@ -31,7 +32,7 @@ std::atomic<bool> g_stateHooked{false};
 std::atomic<uint8_t> g_tapKey{0};
 std::atomic<int> g_tapReadsLeft{0};
 std::atomic<bool> g_muted{false};
-std::atomic<uint8_t> g_mutedKey{0};
+std::atomic<uint16_t> g_hiddenKeys{0};  // two DIK scan codes, low byte first
 
 uintptr_t vtableSlot(void* object, size_t slot) { return reinterpret_cast<uintptr_t>((*static_cast<void***>(object))[slot]); }
 
@@ -40,7 +41,9 @@ HRESULT __stdcall getDeviceStateDetour(void* self, DWORD size, void* data) {
     if (FAILED(result) || size != kKeyboardStateSize || !data) return result;
     auto* keys = static_cast<uint8_t*>(data);
     if (g_muted) std::memset(keys, 0, kKeyboardStateSize);
-    if (const uint8_t key = g_mutedKey; key != 0) keys[key] = 0;
+    for (uint16_t hidden = g_hiddenKeys; hidden != 0; hidden >>= kByteBits) {
+        keys[hidden & 0xFF] = 0;
+    }
     if (g_tapReadsLeft > 0) {
         keys[g_tapKey.load()] = kKeyDown;
         --g_tapReadsLeft;
@@ -72,8 +75,11 @@ void tap(uint8_t scancode) {
     g_tapReadsLeft = kTapReads;
 }
 
-void setMutedKey(uint8_t scancode) {
-    if (g_mutedKey.exchange(scancode) != scancode) logger::write("virtual_keys: key 0x%02x hidden from the game", scancode);
+void setHiddenKeys(const HiddenKeys& scancodes) {
+    const auto packed = static_cast<uint16_t>(scancodes[0] | scancodes[1] << kByteBits);
+    if (g_hiddenKeys.exchange(packed) != packed) {
+        logger::write("virtual_keys: keys 0x%02x 0x%02x hidden from the game", scancodes[0], scancodes[1]);
+    }
 }
 
 void setRealKeyboardMuted(bool muted) {

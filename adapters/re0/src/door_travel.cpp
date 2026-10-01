@@ -52,8 +52,10 @@ void sendRoomState() {
 // Whether the partner comes along is the game's own follow logic (party_mode keeps its follow flag).
 void pollDoorStart() {
     if (!game_state::doorActive() || g_doorWasActive.exchange(true)) return;
-    logger::write("door_travel: door started, partner %s the focused character",
-                  partnerInRoom() ? "with" : "not with");
+    uint8_t follow = 0;
+    const uintptr_t sPlayer = game::readPointer(game::kPlayerGlobal);
+    const bool follows = sPlayer && game::readMemory(sPlayer + game::kPlayerFollowOffset, follow) && follow;
+    logger::write("door_travel: door started, partner %s", partnerInRoom() && follows ? "follows" : "stays");
 }
 
 void onArrival() {
@@ -138,15 +140,9 @@ PeerPlace peerPlace() {
 }
 
 bool enemyAuthority() {
-    RoomState peer;
-    switch (peerPlace()) {
-        case PeerPlace::Elsewhere: return true;
-        case PeerPlace::Unknown: return character_owner::isHost();
-        case PeerPlace::Here: break;
-    }
+    RoomState peer{};
     peerReport(peer);
-    const bool mine = g_enemyClaim;
-    return mine == static_cast<bool>(peer.enemyClaim) ? character_owner::isHost() : mine;
+    return control_rule::runsEnemies(peerPlace(), character_owner::isHost(), g_enemyClaim, peer.enemyClaim != 0);
 }
 
 void onNetTick() {

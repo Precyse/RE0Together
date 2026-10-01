@@ -10,6 +10,8 @@ namespace {
 
 using control_rule::byOwnership;
 using control_rule::byPresence;
+using control_rule::PeerPlace;
+using control_rule::runsEnemies;
 using control_rule::Control;
 using control_rule::kNoOwner;
 
@@ -76,6 +78,22 @@ void testPresence() {
     }
 }
 
+void testEnemyAuthority() {
+    for (const bool host : {true, false}) {
+        check(runsEnemies(PeerPlace::Elsewhere, host, false, false), "alone in the room: runs its enemies");
+        check(runsEnemies(PeerPlace::Unknown, host, true, false) == host, "peer room unknown: the host runs them");
+    }
+    check(runsEnemies(PeerPlace::Here, false, true, false), "guest first in the room keeps them");
+    check(!runsEnemies(PeerPlace::Here, true, false, true), "host arriving second hands them over");
+    for (const bool hostClaim : {true, false}) {
+        for (const bool guestClaim : {true, false}) {
+            const bool hostRuns = runsEnemies(PeerPlace::Here, true, hostClaim, guestClaim);
+            const bool guestRuns = runsEnemies(PeerPlace::Here, false, guestClaim, hostClaim);
+            check(hostRuns != guestRuns, "shared room: exactly one machine runs the enemies");
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -84,6 +102,7 @@ int main() {
     testRealConfigFormat();
     testOwnership();
     testPresence();
+    testEnemyAuthority();
     if (g_failures == 0) std::printf("command_rules_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

@@ -28,6 +28,7 @@
 #include "net_client.h"
 #include "net_pad.h"
 #include "net_trace.h"
+#include "pad_commands.h"
 #include "partner_think.h"
 #include "party_mode.h"
 #include "pickup_guard.h"
@@ -73,6 +74,7 @@ void enableCoop() {
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
     command_input::enable();
+    pad_commands::install();
     party_mode::enable(g_net);
     camera_parity::enable(g_net);
     partner_think::enable();
@@ -129,6 +131,7 @@ void shutdownAdapter() {
     debug_overlay::uninstall();
     save_redirect::uninstall();
     input_redirect::uninstall();
+    pad_commands::uninstall();
     player_damage::uninstall();
     menu_mirror::uninstall();
     floor_items_sync::uninstall();

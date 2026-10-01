@@ -43,6 +43,7 @@ add_library(re0_adapter SHARED
     src/door_travel.cpp
     src/door_sync.cpp
     src/event_place.cpp
+    src/pad_commands.cpp
     src/scene.cpp
     src/split_rooms.cpp
     src/crash_dump.cpp
