@@ -99,3 +99,21 @@ Shape: one button starts an action that ends in different engine paths depending
 Find it: hook the obvious exit, test every state; when an exit is missed, follow the action back to the input it reads.
 Replicate: hide the input from the game during co-op (input proxy), keep a cheap corrective rule for inputs the proxy cannot see (gamepads).
 Seen in: RE0: character switch V and Solo/Team E (think 0x4fec64 states; requestPhase(Change) is only the apart exit), hidden through the DirectInput keyboard proxy; on controllers Y and LT (the same in every controller type) through a filter on the XInputGetState import (0xcb13b0, imported by ordinal 2). The options screen's controller diagram is the fastest way to learn fixed pad bindings.
+
+## The engine's reflection lists fields by name  [world-state, presentation]
+Shape: the engine keeps its own type records (class name, base classes, fields with names and offsets) for serialisation and tools. They sit in static data, so a scan of the executable file finds them without running the game.
+Find it: strings of familiar class names (Entity, Player, Camera) referenced from data that also points at small arrays of {type, offset, name} records; check a type whose size you can predict (a transform with a position and a rotation).
+Replicate: read field offsets from the records instead of guessing from memory diffs; a struct offset that the reflection gives also survives most patches.
+Seen in: RE0: MT Framework DTI (class names only, `probe.py classes`). DS2: Decima RTTI compound records with attribute offsets, `tools/ds2/rtti_scan.py` (Entity.Orientation +0xE8, CameraEntity.FOV +0x3D4; DS2_NOTES "Decima reflection").
+
+## Script-exported functions name the entry points  [control, presentation]
+Shape: the engine registers functions for its scripting or graph language by name ("GetLocalPlayer", "GetEntity", "GetLastActivatedCamera"). Each registration pairs a name string with the function address.
+Find it: the name string, its one code reference (the registration), and the function pointer passed beside it. The bodies are tiny accessors that reveal the global and the field offsets.
+Replicate: use these accessors' globals and offsets (found by byte pattern at run time) as the adapter's view of "the local player", "its body" and "the active camera".
+Seen in: DS2: Player symbol group registered at 0x1402534a0; GetLocalPlayer 0x140256070 (PlayerManager global + 0x48), GetEntity `[player+0x48]`, GetLastActivatedCamera 0x140254b00 (camera stack at +0xF0/+0xF8), `tools/ds2/symbols.py`. Same role as RE0's script opcode table (`Story state is one bitset`).
+
+## A remote player is first a projected marker  [presentation]
+Shape: before the peer has a body in the world, the cheapest visible proof is a marker drawn over the frame at the peer's reported position.
+Find it: the active camera object (position, rotation basis, field of view); the present call of the graphics API for drawing.
+Replicate: hook Present (learn the command queue from swap chain creation on DX12), draw with Dear ImGui, project with the camera's own transform and field of view; keep the projection pure and unit tested. A local self-marker checks the projection against the game's own image (it caught DS2's field of view being horizontal, not vertical). A proxy DLL in the game folder is also loaded by helper processes there (crash reporters); run the adapter only in the game's exe.
+Seen in: DS2: `adapters/ds2/src/dx12_hook.cpp`, `marker_overlay.cpp`, `world_to_screen.h`.

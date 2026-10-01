@@ -20,6 +20,14 @@ Sources studied (study-only; DD2gether license forbids derivatives, CrimsonDeser
 - Broken/stub: client never reaches CONNECTED; remote player only on host; companion hijack picks arbitrary slot + nulls +0x48 (crash risk); animation sync is dead code poking evaluator fields; enemy sync reads wrong container with pointer-derived IDs; quest/cutscene/world/fast-travel log-only; inline hooks at mid-function sites; ticks on render thread; target game version unspecified.
 - Blocking unknowns: play-action-by-id function, actor enumerator, stable entity IDs, quest/cutscene/world managers, fast-travel apply, game-thread tick.
 
+## MULTIPLAYER RE4R (studied 2026-10-01)
+Source: `Downloads\MULTIPLAYER RE4R 6539 4 2026-06-28T21-23Z 4ISrXzIIP.rar` (author ClayBTV, "BETA"). No licence file; a paid tier ("Multiplayer Plus", licence key) and obfuscated Lua, so treat it as all rights reserved: behaviour only, no code.
+- **Shape:** an REFramework native plugin (`reframework/plugins/Re4-Co-op.dll`, exports `reframework_plugin_initialize`) that carries its own Lua runtime, plus obfuscated autorun scripts and one plain script (`shared.lua`).
+- **Transport:** its own sockets (WS2_32) to a host IP over LAN or a VPN (Radmin, Hamachi, ZeroTier), plus a WinHTTP matchmaking service with rooms, quickmatch and lobby chat. Both players ready up before the link opens. There is no Steam networking. The player picks the send rate (Hz), and ping and loss are shown.
+- **Second player body:** a scene game object named "Player 2", built from a playable character (a character picker; Ashley and others, some marked broken). Its own behaviour is switched off by clearing the resources of `via.motion.MotionFsm2` layers 0, 1, 4 and 5, re-checked every 2.5 s, so the engine's state machine stops choosing its animations. The network then drives it with position and animation layers ("send_anim_layers" / "get_anim_layers", "MirrorBlob" packets). The UI shows "Partner Spawned In" / "Partner Despawned".
+- **Enemies:** an enemy spawner that "appears for both players". Players can also play as an enemy.
+- **Takeaways for the framework:** this is the same puppet idea as DD2gether. Take a real character of the game, stop its own brain at the animation-state-machine level (not by blocking calls), then feed transform plus animation layer state from the owner. The motion state machine is the switch to look for in other engines too (DS2: the Decima entity's animation/AI components). Its weak points are a direct-IP transport and a periodic re-apply of the brain switch instead of a hook.
+
 ## Cross-game framework plan
 1. **Shared launcher** (Steam lobby/P2P, loopback bridge, identity/epochs, payload integrity, save redirection) — game-agnostic.
 2. **Binary envelope** (1-byte type, length, reliable flag), fragmentation in launcher, `register(type, {reliable, rate, priority, authority, on_receive})` registry, RTT/clock-offset ping.

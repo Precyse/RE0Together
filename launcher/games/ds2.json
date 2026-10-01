@@ -1,0 +1,4 @@
+{ "id": "ds2", "name": "DEATH STRANDING 2: ON THE BEACH", "steamAppId": 3280350, "exe": "DS2.exe",
+  "maxPlayers": 2, "port": 27980,
+  "adapterFiles": [ { "src": "adapters/ds2/version.dll", "dst": "version.dll" } ],
+  "adapterLog": "coop/adapter.log" }
