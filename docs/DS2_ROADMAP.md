@@ -21,28 +21,28 @@ Each item lists what players get and its exit tests. Fake-peer tests first, then
 
 ### 1. Reliable vehicle seating (now)
 - **Players get:** the partner visibly sits in the driver's or passenger's seat with the game's own seated / driving pose, follows the vehicle exactly, and gets in and out with the game's own enter and exit; no hidden or floating body.
-- **Learn:** how the game seats Sam: the player-in-vehicle states (DSPlayerVehicleRideOnState, DSPlayerVehicleDriveState, DSPlayerVehicleRideOffState, passenger states), the seat attach on the vehicle entity, the animation states used. Whether a borrowed NPC can take them; if not, build the proper remote body (item 3) here.
+- **Learn:** how the game seats Sam: the player-in-vehicle states (DSPlayerVehicleRideOnState, DSPlayerVehicleDriveState, DSPlayerVehicleRideOffState, passenger states), the seat attach on the vehicle entity, the animation states used. Whether a borrowed NPC can take them; if not, build the proper remote body (item 5) here.
 - **Exit:** fake peer: enter, drive, exit and re-enter five times without a body left behind, misplaced or stuck; the body stays in the seat at speed and on slopes; screenshots of the partner seated. Two PCs: both players in one vehicle, driver and passenger, in both directions.
 
-### 2. Riding with the host
-- **Players get:** both seats work in either direction; the passenger's view rides along with the vehicle the partner drives; the driver owns the vehicle, its physics and its load, the passenger rides it.
-- **Learn:** the passenger state for the local player in a vehicle moved by the partner's reports (the local vehicle copy must stay kinematic under the passenger), the passenger camera.
-- **Exit:** fake driver drives a loop with the local player as passenger: the local Sam stays seated, the camera follows smoothly, getting out puts him beside the vehicle; then the roles swap.
-
-### 3. The partner's body as a real second player
-- **Players get:** a Sam-like body (Sam's model, or a Sam-like porter) instead of whichever NPC is nearest, present everywhere, not only where NPCs are loaded.
-- **Learn:** a body that runs the player's own animation graph and vehicle states: the player entity resource, or a porter NPC resource with the player's animation set; the spawn setup that faulted before (`DS2_NOTES.md`, "In-world remote body").
-- **Exit:** the body appears at the partner in an empty area (no NPC nearby), looks like Sam / a porter, and survives area changes and the partner leaving and rejoining.
-
-### 4. The guest's terminals: everything but orders
+### 2. The guest's terminals: everything but orders
 - **Players get:** the guest uses terminals for everything (private room, lockers, fabrication, Cargo Management at terminals, upgrades, mail, ...) except accepting and turning in orders; refusing those shows a toast.
 - **Learn:** the order transactions behind the terminal menu (accept, deliver / turn in) and the point to refuse them; the narrowed gate replaces the sequence-network refusal.
 - **Exit:** fake host session: the guest opens a terminal, uses the private room, a locker and fabrication; accepting an order and delivering are refused with a toast and nothing changes in either world; the host still does both.
 
-### 5. Shared world through the host (Stage C, reordered)
+### 3. Shared world through the host (Stage C, reordered)
 - **Players get:** the guest builds structures and roads, repairs, places items, and its combat results count, all as host-confirmed world changes; the host's structures, roads, orders, facilities and Chiral network show in the guest's world.
 - **Learn:** the world-state managers (`DS2_NOTES.md`, "Stage C map": FactDatabase, DSConstructionManager, DSRoadManager, DSNetRoadSyncManager, DSMissionSystem); which progress is facts and which is objects; structure create / destroy / damage.
 - **Exit:** fake host builds and destroys a structure and completes an order, and the guest shows it; a fake guest builds a structure and the host creates it (and refuses one it cannot place); a road repair by the guest appears in both worlds.
+
+### 4. Riding with the host
+- **Players get:** both seats work in either direction; the passenger's view rides along with the vehicle the partner drives; the driver owns the vehicle, its physics and its load, the passenger rides it.
+- **Learn:** the passenger state for the local player in a vehicle moved by the partner's reports (the local vehicle copy must stay kinematic under the passenger), the passenger camera.
+- **Exit:** fake driver drives a loop with the local player as passenger: the local Sam stays seated, the camera follows smoothly, getting out puts him beside the vehicle; then the roles swap.
+
+### 5. The partner's body as a real second player
+- **Players get:** a Sam-like body (Sam's model, or a Sam-like porter) instead of whichever NPC is nearest, present everywhere, not only where NPCs are loaded.
+- **Learn:** a body that runs the player's own animation graph and vehicle states: the player entity resource, or a porter NPC resource with the player's animation set; the spawn setup that faulted before (`DS2_NOTES.md`, "In-world remote body").
+- **Exit:** the body appears at the partner in an empty area (no NPC nearby), looks like Sam / a porter, and survives area changes and the partner leaving and rejoining.
 
 ### 6. Animation mirroring
 - **Players get:** the partner's body plays the owner's real animation state, not walk / idle from velocity: run, balance and stumble, fall, climb, ladder, rope, crouch, aim, throw, combat moves, cargo pickup and drop motions, carrying poses.
@@ -74,7 +74,7 @@ Setup, on both PCs:
 Run:
 1. Host: start the launcher, pick DEATH STRANDING 2, click Host, send the lobby code. Guest: paste the code, click Join. The guest receives the host's saves (`coop\session\Documents\...`), and its game plays that copy.
 2. Both: start the game and load (Continue). Each sees the other's name marker above their position; with `remote_body=1`, a borrowed NPC walks there.
-3. Guest: walk to a terminal. The "Activate Terminal" prompt must not appear, and F must do nothing. Vehicles, cargo pickup and Cargo Management still work. (Changes with item 4.)
+3. Guest: walk to a terminal. The "Activate Terminal" prompt must not appear, and F must do nothing. Vehicles, cargo pickup and Cargo Management still work. (Changes with item 2.)
 4. Host: F7 opens the give/take menu. Give one piece (arrow keys, Enter); it must leave the host's backpack and appear in the guest's (check the guest's Cargo Management). Take one piece back the same way.
 5. Guest: pick up loose cargo that both worlds have (e.g. lost cargo near the start). The piece stays, and the same piece must vanish from the host's world. Then the host picks up another loose piece; it must vanish from the guest's world.
 6. Guest: offload a piece in Cargo Management (Ring Menu, Cargo Management, the piece, Offload); the same piece must appear at that spot in the host's world. The host then offloads one; it must appear in the guest's world. Either player picks one of them up; it must vanish from the other world.
