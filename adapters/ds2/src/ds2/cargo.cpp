@@ -28,9 +28,10 @@ constexpr uintptr_t kPoolCount = 0x30, kPoolData = 0x38;
 constexpr uintptr_t kOwnerCount = 0x24278, kOwnerData = 0x24280;
 // A pool entry (DSBaggage).
 constexpr size_t kBaggageSize = 0x160;
-constexpr uintptr_t kBaggageHandle = 0x18;  // ~0 while the entry is free
-constexpr uintptr_t kBaggageItem = 0x38;    // DSGameBaggageListItem: the cargo kind
-constexpr uintptr_t kBaggageSlot = 0x98;    // the owner slot holding it, 0 when on the ground
+constexpr uintptr_t kBaggageHandle = 0x18;    // ~0 while the entry is free
+constexpr uintptr_t kBaggageItem = 0x38;      // DSGameBaggageListItem: the cargo kind
+constexpr uintptr_t kBaggagePosition = 0x40;  // world position, 3 doubles
+constexpr uintptr_t kBaggageSlot = 0x98;      // the owner slot holding it, 0 when on the ground
 constexpr uint64_t kFreeHandle = ~0ull;
 // A baggage owner.
 constexpr uintptr_t kOwnerKey = 0x18;  // 0 = the local player
@@ -125,6 +126,32 @@ bool inSlots(const std::vector<SlotRange>& slots, uintptr_t slot) {
     return false;
 }
 
+struct PoolEntry {
+    uint64_t handle;
+    uintptr_t item;
+    uintptr_t slot;
+    world_to_screen::Vec3 position;
+};
+
+// Every piece in the pool, from one copy of it (the game may change entries while we read).
+std::vector<PoolEntry> livePool(uintptr_t manager) {
+    std::vector<PoolEntry> out;
+    const int32_t count = readCount(manager + kPoolCount, kMaxPool);
+    const uintptr_t pool = decima::readPointer(manager + kPoolData);
+    std::vector<uint8_t> entries(count * kBaggageSize);
+    if (!pool || !count || !decima::safeCopy(entries.data(), pool, entries.size())) return out;
+    for (int32_t i = 0; i < count; ++i) {
+        const uint8_t* raw = entries.data() + i * kBaggageSize;
+        PoolEntry entry;
+        std::memcpy(&entry.handle, raw + kBaggageHandle, sizeof(entry.handle));
+        std::memcpy(&entry.item, raw + kBaggageItem, sizeof(entry.item));
+        std::memcpy(&entry.slot, raw + kBaggageSlot, sizeof(entry.slot));
+        std::memcpy(&entry.position, raw + kBaggagePosition, sizeof(entry.position));
+        if (entry.handle != kFreeHandle && entry.item) out.push_back(entry);
+    }
+    return out;
+}
+
 std::string itemName(uintptr_t item) {
     const uintptr_t text = decima::readPointer(item + kItemName);
     const uintptr_t chars = text ? decima::readPointer(text + kTextChars) : 0;
@@ -142,23 +169,28 @@ namespace game {
 std::vector<Cargo> carriedCargo() {
     std::vector<Cargo> out;
     const uintptr_t baggage = manager();
-    if (!baggage) return out;
-    const std::vector<SlotRange> slots = backpackSlots(baggage);
-    const int32_t count = readCount(baggage + kPoolCount, kMaxPool);
-    const uintptr_t pool = decima::readPointer(baggage + kPoolData);
-    if (slots.empty() || !pool || !count) return out;
-    std::vector<uint8_t> entries(count * kBaggageSize);
-    if (!decima::safeCopy(entries.data(), pool, entries.size())) return out;
-    for (int32_t i = 0; i < count; ++i) {
-        const uint8_t* entry = entries.data() + i * kBaggageSize;
-        uint64_t handle;
-        uintptr_t item, slot;
-        std::memcpy(&handle, entry + kBaggageHandle, sizeof(handle));
-        std::memcpy(&item, entry + kBaggageItem, sizeof(item));
-        std::memcpy(&slot, entry + kBaggageSlot, sizeof(slot));
+    const std::vector<SlotRange> slots = baggage ? backpackSlots(baggage) : std::vector<SlotRange>{};
+    if (slots.empty()) return out;
+    for (const PoolEntry& entry : livePool(baggage)) {
         uint32_t type = 0;
-        if (handle == kFreeHandle || !item || !inSlots(slots, slot) || !decima::safeRead(item + kItemType, type)) continue;
-        out.push_back({handle, type, itemName(item)});
+        if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
+            out.push_back({entry.handle, type, itemName(entry.item)});
+        }
+    }
+    return out;
+}
+
+std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius) {
+    std::vector<LooseCargo> out;
+    const uintptr_t baggage = manager();
+    if (!baggage) return out;
+    for (const PoolEntry& entry : livePool(baggage)) {
+        uint32_t type = 0;
+        const world_to_screen::Vec3 offset = entry.position - around;
+        if (entry.slot || dot(offset, offset) > radius * radius || !decima::safeRead(entry.item + kItemType, type)) {
+            continue;
+        }
+        out.push_back({entry.handle, type, entry.position});
     }
     return out;
 }

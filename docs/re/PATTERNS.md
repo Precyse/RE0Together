@@ -150,3 +150,9 @@ Find it: the game's imports (GetRawInputData, RegisterRawInputDevices).
 Replicate: redirect the game's own GetRawInputData import (not a global hook) and, while the menu is open, turn its key presses into an unknown key (make code and virtual key 0xFF); let releases through so no game key stays held. Read the menu's own keys with GetAsyncKeyState while the game window is in front.
 Seen in: DS2: `input_filter.cpp`, `cargo_menu.cpp`, `import_patch.cpp` (shared with the save redirect).
 
+## When there is no veto point, watch the owner field and undo  [authority, world-state]
+Shape: some player actions (DS2 cargo pickup) send no "is it allowed?" query the adapter can refuse, but the object they act on keeps its identity and only changes an owner field.
+Find it: snapshot the objects around the player (handle, owner, position) twice and diff; check the handle survives the move.
+Replicate: let the action run, report it to the authority with what it needs to find its own copy (kind and position), and undo it locally with the engine's own delete when refused. Remember the objects the player released itself so taking them back needs no confirmation.
+Seen in: DS2: `cargo_pickup.cpp` (pool handle, slot +0x98, position +0x40). Prefer a veto (`Permissions are "is it allowed?" queries with a veto flag`) wherever one exists: the undo is visible for a moment.
+

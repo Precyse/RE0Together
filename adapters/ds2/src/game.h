@@ -58,6 +58,16 @@ struct Cargo {
 // Any thread.
 std::vector<Cargo> carriedCargo();
 
+// A piece lying loose in the world (on no one's rack, in no locker or vehicle).
+struct LooseCargo {
+    uint64_t handle = 0;
+    uint32_t type = 0;
+    world_to_screen::Vec3 position;
+};
+
+// Loose pieces within `radius` metres of `around`. Any thread.
+std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius);
+
 // Asks the game to create a piece of cargo of `type` on the local player's backpack (the game's own request queue,
 // served on its next update). False when the request could not be queued. Any thread.
 bool addCargo(uint32_t type);

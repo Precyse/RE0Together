@@ -2,13 +2,16 @@
 around the local player, sending PLAYER_STATE (0x0100) at 60 Hz, so the remote body can be watched walking while the
 local Sam stands still.
 
-usage: python fake_peer.py --port 27990 [--radius 3] [--speed 1.4] [--offset-x 0] [--cargo TYPE:NAME,...]
-                           [--host-give TYPE]
+usage: python fake_peer.py --port 27990 [--radius 3] [--speed 1.4] [--offset-x 0]
+                           [--cargo TYPE:NAME,... [--pickup TYPE:X,Y,Z]]
+                           [--host [--host-give TYPE] [--pickup-answers accept,refuse]]
 The circle is centred on the first PLAYER_STATE received from the local player (plus --offset-x along world X).
 With --cargo it also acts as a guest's rack for the host's give/take menu (adapters/ds2/src/cargo_transfer.h):
 reports the pieces in CARGO_LIST, gives one up with CARGO_ADD when the host sends CARGO_TAKE, and adds the kinds
-the host gives. With --host-give TYPE it plays the host instead (connect it to the host launcher's bridge and the
-game to the guest's): it takes the guest's first reported piece and gives one piece of TYPE.
+the host gives. With --host it plays the host instead (connect it to the host launcher's bridge and the game to the
+guest's): --host-give TYPE takes the guest's first reported piece and gives one piece of TYPE, and the guest's
+pickup requests are answered in turn from --pickup-answers. As the guest, --pickup TYPE:X,Y,Z asks the host to
+confirm a pickup there.
 """
 import argparse
 import math
@@ -28,6 +31,8 @@ HEARTBEAT_S = 1.0
 STATE = struct.Struct("<I3ffI")  # seq, pos[3], yaw, reserved (adapters/ds2/src/player_sync.h)
 CARGO_LIST, CARGO_TAKE, CARGO_ADD = 0x0101, 0x0102, 0x0103
 CARGO_ENTRY = struct.Struct("<QI44s")  # handle, type, name (adapters/ds2/src/cargo_transfer.h)
+CARGO_PICKUP, CARGO_PICKUP_RESULT = 0x0104, 0x0105
+CARGO_PICKUP_REQUEST = struct.Struct("<II3f")  # request, type, position (adapters/ds2/src/cargo_pickup.h)
 CARGO_REPORT_S = 5.0
 FIRST_FAKE_HANDLE = 0xF000
 
@@ -88,16 +93,21 @@ class Rack:
             type_id = struct.unpack("<I", payload)[0]
             self.add(type_id)
             print(f"fake_peer: host gave {type_id}", flush=True)
+        elif msg_type == CARGO_PICKUP_RESULT and len(payload) == 8:
+            request, accepted = struct.unpack("<II", payload)
+            print(f"fake_peer: pickup {request} {'accepted' if accepted else 'refused'} by the host", flush=True)
 
 
 class HostScript:
-    """The fake host's side of the menu: on the guest's first CARGO_LIST it takes the first listed piece and gives
-    one piece of `give_type`."""
+    """The fake host: with `give_type`, on the guest's first CARGO_LIST it takes the first listed piece and gives one
+    piece of that kind; it answers the guest's CARGO_PICKUP requests in turn from `pickup_answers` (accept/refuse)."""
 
-    def __init__(self, give_type, outbox):
+    def __init__(self, give_type, pickup_answers, outbox):
         self.give_type = give_type
+        self.pickup_answers = pickup_answers
+        self.pickups = 0
         self.outbox = outbox
-        self.done = False
+        self.done = give_type is None
 
     def handle(self, msg_type, slot, payload):
         if msg_type == CARGO_LIST and not self.done:
@@ -111,6 +121,13 @@ class HostScript:
             self.done = True
         elif msg_type == CARGO_ADD and len(payload) == 4:
             print(f"fake_peer: guest gave {struct.unpack('<I', payload)[0]}", flush=True)
+        elif msg_type == CARGO_PICKUP and len(payload) == CARGO_PICKUP_REQUEST.size:
+            request, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack(payload)
+            answer = self.pickup_answers[self.pickups % len(self.pickup_answers)]
+            self.pickups += 1
+            self.outbox.put(encode(CARGO_PICKUP_RESULT, FLAG_RELIABLE, slot,
+                                   struct.pack("<II", request, 1 if answer == "accept" else 0)))
+            print(f"fake_peer: guest picked up {type_id} at ({x:.1f}, {y:.1f}, {z:.1f}): {answer}", flush=True)
 
 
 def encode(msg_type, flags, slot, payload=b""):
@@ -157,11 +174,20 @@ def main():
     parser.add_argument("--speed", type=float, default=1.4)
     parser.add_argument("--offset-x", type=float, default=0.0)
     parser.add_argument("--cargo", help="TYPE:NAME,... pieces the fake guest starts with")
-    parser.add_argument("--host-give", type=int, help="as the host: take the guest's first piece, give one TYPE")
+    parser.add_argument("--pickup", action="append", default=[],
+                        help="with --cargo: TYPE:X,Y,Z, ask the host once to confirm picking up that piece")
+    parser.add_argument("--host", action="store_true", help="play the host (answers the guest's cargo messages)")
+    parser.add_argument("--host-give", type=int, help="with --host: take the guest's first piece, give one TYPE")
+    parser.add_argument("--pickup-answers", default="accept", help="with --host: accept/refuse, used in turn")
     args = parser.parse_args()
     outbox = Outbox()
     rack = Rack(args.cargo, outbox) if args.cargo is not None else None
-    cargo = HostScript(args.host_give, outbox) if args.host_give is not None else rack
+    for number, spec in enumerate(args.pickup, 1):
+        type_id, position = spec.split(":")
+        x, y, z = map(float, position.split(","))
+        outbox.put(encode(CARGO_PICKUP, FLAG_RELIABLE, SLOT_ALL, CARGO_PICKUP_REQUEST.pack(number, int(type_id), x, y, z)))
+    answers = args.pickup_answers.split(",")
+    cargo = HostScript(args.host_give, answers, outbox) if args.host else rack
 
     sock = socket.create_connection(("127.0.0.1", args.port))
     sock.sendall(encode(HELLO, FLAG_RELIABLE, 0, struct.pack("<HB", PROTO, 3) + b"ds2"))
