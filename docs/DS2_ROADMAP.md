@@ -43,6 +43,7 @@ To play vanilla afterwards: delete `version.dll` and `coop\` from the game folde
 - **Risks:** item ids that are per-machine (need a host-issued id like RE0's floor items); physics-simulated cargo drifting apart.
 
 ## Stage C: one shared world (wishlist 4)
+- **Done so far:** static map of the world-state managers (FactDatabase, DSConstructionManager, DSRoadManager, DSNetRoadSyncManager, DSMissionSystem) and a replication idea per kind; `DS2_NOTES.md`, "Stage C map".
 - **Players get:** structures, roads, orders and deliveries (credit to the deliverer), facility connections, the Chiral network and a shared locker, all following the host.
 - **Learn:** the world-state managers and which state is a flag set versus objects; structure build and damage events.
 - **Exit:** fake host builds and destroys a structure and completes an order, and the guest shows it; two-PC delivery by the guest credited to the guest.
