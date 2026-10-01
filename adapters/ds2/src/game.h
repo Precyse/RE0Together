@@ -51,6 +51,21 @@ std::optional<Pose> bodyPose(Body body);
 // animation can follow. False when it faults; the caller then forgets the body.
 bool placeBody(Body body, const Pose& pose, const world_to_screen::Vec3& velocity);
 
+// A vehicle and where it is. The id is the game's own, saved with the world, so the host's and the guest's copies of
+// one vehicle share it.
+struct VehiclePose {
+    uint64_t id = 0;
+    world_to_screen::Vec3 position;
+    float rotation[3][3] = {};  // rows: right, forward, up
+};
+
+// The vehicle the local player is driving now, where it is. Any thread.
+std::optional<VehiclePose> drivenVehicle();
+
+// Moves this world's copy of the vehicle `pose.id` there, with the velocity it moves at so its physics can follow.
+// False when no such vehicle is loaded or the move faulted. Simulation thread only.
+bool placeVehicle(const VehiclePose& pose, const world_to_screen::Vec3& velocity);
+
 // One piece of cargo the local player carries.
 struct Cargo {
     uint64_t handle = 0;  // this machine's id of the piece (what removeCargo takes)

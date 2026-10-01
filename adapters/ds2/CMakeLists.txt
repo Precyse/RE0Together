@@ -51,6 +51,7 @@ add_library(ds2_adapter SHARED
     src/cargo_transfer.cpp
     src/cargo_ground.cpp
     src/cargo_menu.cpp
+    src/vehicle_sync.cpp
     src/remote_body.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
@@ -61,6 +62,8 @@ add_library(ds2_adapter SHARED
     src/decima/localized_text.cpp
     src/ds2/game.cpp
     src/ds2/body.cpp
+    src/ds2/place.cpp
+    src/ds2/vehicle.cpp
     src/ds2/use_gate.cpp
     src/ds2/cargo.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})

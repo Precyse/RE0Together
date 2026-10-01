@@ -12,6 +12,7 @@
 #include "log.h"
 #include "position_blend.h"
 #include "toast_queue.h"
+#include "vehicle_sync.h"
 
 namespace {
 
@@ -94,12 +95,14 @@ void tick(NetClient& net) {
         onFrame(frame);
         cargo_transfer::onFrame(net, frame);
         cargo_ground::onFrame(net, frame);
+        vehicle_sync::onFrame(frame);
     });
     debug_stats::setSession(session);
     rememberNames(session);
     game::blockScriptedInteractions(session.linked && session.localSlot != session.hostSlot);
     cargo_transfer::tick(net, session);
     cargo_ground::tick(net, session);
+    vehicle_sync::tick(net, session);
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

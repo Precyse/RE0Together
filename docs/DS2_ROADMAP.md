@@ -36,7 +36,7 @@ Collect from both PCs: `<game>\coop\adapter.log`, the launcher's console output,
 To play vanilla afterwards: delete `version.dll` and `coop\` from the game folder.
 
 ## Stage B: cargo you can see and share (wishlist 2, 3)
-- **Done so far:** loose world cargo is the same in both worlds: pickups (the guest's confirmed by the host, the host's mirrored to the guests) and drops (placed at the same spot in the other world once its player is near); fake peers both ways. The partner's load is drawn on their body (one box per piece in their backpack, two wide up the back, updated within 0.5 s of a change); an overlay, so it shows through walls.
+- **Done so far:** loose world cargo is the same in both worlds: pickups (the guest's confirmed by the host, the host's mirrored to the guests) and drops (placed at the same spot in the other world once its player is near); fake peers both ways. The partner's load is drawn on their body (one box per piece in their backpack, two wide up the back, updated within 0.5 s of a change); an overlay, so it shows through walls. Vehicles: the driver's vehicle moves in the other world (VEHICLE_STATE, 30 Hz), stays where it is left, and a player's own vehicle is never moved by the partner; the vehicle's load is next.
 - **Players get:** the partner's load shown on their body; ground cargo drop/pickup/handoff in sync; vehicles driven by their owner with their load.
 - **Learn:** cargo item identities across machines, the drop/pickup entry points, vehicle ownership and seats.
 - **Exit:** fake peer replays a drop and a pickup to the same item on the ground; mirror updates within one second of a rack change; two-PC handoff of one crate.
