@@ -29,14 +29,14 @@ Run:
 3. Guest: walk to a terminal. The "Activate Terminal" prompt must not appear, and F must do nothing. Vehicles, cargo pickup and Cargo Management still work.
 4. Host: F7 opens the give/take menu. Give one piece (arrow keys, Enter); it must leave the host's backpack and appear in the guest's (check the guest's Cargo Management). Take one piece back the same way.
 5. Guest: pick up loose cargo that both worlds have (e.g. lost cargo near the start). The piece stays, and the same piece must vanish from the host's world. Then the host picks up another loose piece; it must vanish from the guest's world.
-6. Guest: offload a piece in Cargo Management and pick it up again; it stays (own drops are not asked for).
+6. Guest: offload a piece in Cargo Management (Ring Menu, Cargo Management, the piece, Offload); the same piece must appear at that spot in the host's world. The host then offloads one; it must appear in the guest's world. Either player picks one of them up; it must vanish from the other world.
 
 Collect from both PCs: `<game>\coop\adapter.log`, the launcher's console output, and any `<game>\coop\crash-*.dmp`. The host also receives the guest's log and dumps as `<game>\coop\peer_*`. Note what you saw at each step, with screenshots of anything off.
 
 To play vanilla afterwards: delete `version.dll` and `coop\` from the game folder.
 
 ## Stage B: cargo you can see and share (wishlist 2, 3)
-- **Done so far:** pickups of loose world cargo are the same in both worlds (the guest's confirmed by the host, the host's mirrored to the guests; fake peers both ways). Drops are not mirrored yet.
+- **Done so far:** loose world cargo is the same in both worlds: pickups (the guest's confirmed by the host, the host's mirrored to the guests) and drops (placed at the same spot in the other world once its player is near); fake peers both ways.
 - **Players get:** the partner's load shown on their body; ground cargo drop/pickup/handoff in sync; vehicles driven by their owner with their load.
 - **Learn:** cargo item identities across machines, the drop/pickup entry points, vehicle ownership and seats.
 - **Exit:** fake peer replays a drop and a pickup to the same item on the ground; mirror updates within one second of a rack change; two-PC handoff of one crate.

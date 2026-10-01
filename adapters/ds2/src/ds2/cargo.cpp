@@ -3,7 +3,10 @@
 // the owner whose key is 0: its own slots hold the equipped gear (boots, skeleton, the backpack itself, weapons in
 // hand), its child owner the backpack's contents, which is what is listed and moved. Adding and deleting go through the
 // manager's own request queue (the script exports CreateAndAddBaggageToPlayer and DeleteBaggage), which takes the
-// manager's lock and is served by the game on its next update, so any thread may ask (docs/DS2_NOTES.md, "Cargo").
+// manager's lock and is served by the game on its next update, so any thread may ask. A piece on the ground is made
+// the same way the game spawns world cargo: a create info (kind, world position, no owner) handed to the manager's
+// create, which reserves the piece under the manager's lock and builds it on its update (docs/DS2_NOTES.md, "Cargo").
+#include <array>
 #include <cstring>
 #include <vector>
 
@@ -22,6 +25,16 @@ constexpr int kManagerDisp = 18, kManagerEnd = 22;
 // DSBaggageManager::DeleteBaggage(u64 handle).
 constexpr const char* kDelete =
     "40 53 48 83 EC 30 48 8B 15 ?? ?? ?? ?? 48 8B D9 48 81 C2 38 67 03 00 48 8D 4C 24 20 E8";
+// DSBaggageManager::Create(manager, u64* handleOut, const CreateInfo*): 0x1411c5c00 in build 23923251.
+constexpr const char* kCreate = "40 56 41 56 41 57 48 83 EC 40 48 83 79 10 00 4D 8B F8 4C 8B F2 48 8B F1";
+// The create info's constructor (defaults: no kind, no owner, identity rotation): 0x140abd190.
+constexpr const char* kInitCreateInfo =
+    "48 83 EC 28 33 D2 48 89 11 48 89 51 08 C7 41 10 FF FF FF FF 89 51 14 C5 F9 57 C0 C5 F8 11 41 18";
+// The create info (0xF0 bytes; the type-2 request builds one on its stack): +0x10 kind, +0x18 world position,
+// +0x30 rotation, +0x60 owner, +0x68 slot kind.
+constexpr size_t kCreateInfoSize = 0xF0;
+constexpr uintptr_t kInfoKind = 0x10, kInfoPosition = 0x18;
+constexpr double kPlaceLiftMetres = 0.5;  // a placed piece starts this far above its spot and falls onto the ground
 
 // DSBaggageManager: the baggage pool and the baggage owners (players, vehicles, lockers, ...).
 constexpr uintptr_t kPoolCount = 0x30, kPoolData = 0x38;
@@ -50,22 +63,30 @@ constexpr int kMaxOwnerDepth = 4;
 
 using CreateAndAddFn = void (*)(uint32_t type, bool backpack);
 using DeleteFn = void (*)(uint64_t handle);
+using CreateFn = uint64_t* (*)(uintptr_t manager, uint64_t* handle, const void* info);
+using InitCreateInfoFn = void* (*)(void* info);
 
 struct Code {
     uintptr_t managerGlobal = 0;
     CreateAndAddFn createAndAdd = nullptr;
     DeleteFn remove = nullptr;
+    CreateFn create = nullptr;
+    InitCreateInfoFn initCreateInfo = nullptr;
 };
 
 Code findCode() {
-    const uintptr_t create = pattern_scan::find(kCreateAndAdd);
+    const uintptr_t createAndAdd = pattern_scan::find(kCreateAndAdd);
     const uintptr_t remove = pattern_scan::find(kDelete);
-    if (!create || !remove) {
-        logger::write("cargo: baggage requests not found (create %d, delete %d)", create != 0, remove != 0);
+    const uintptr_t create = pattern_scan::find(kCreate);
+    const uintptr_t initInfo = pattern_scan::find(kInitCreateInfo);
+    if (!createAndAdd || !remove || !create || !initInfo) {
+        logger::write("cargo: baggage calls not found (add %d, delete %d, create %d, info %d)", createAndAdd != 0,
+                      remove != 0, create != 0, initInfo != 0);
         return {};
     }
-    const Code code{pattern_scan::ripTarget(create, kManagerDisp, kManagerEnd), reinterpret_cast<CreateAndAddFn>(create),
-                    reinterpret_cast<DeleteFn>(remove)};
+    const Code code{pattern_scan::ripTarget(createAndAdd, kManagerDisp, kManagerEnd),
+                    reinterpret_cast<CreateAndAddFn>(createAndAdd), reinterpret_cast<DeleteFn>(remove),
+                    reinterpret_cast<CreateFn>(create), reinterpret_cast<InitCreateInfoFn>(initInfo)};
     logger::write("cargo: baggage manager %p", reinterpret_cast<void*>(code.managerGlobal));
     return code;
 }
@@ -189,6 +210,19 @@ bool addCargo(uint32_t type) {
     if (!code().createAndAdd || !manager()) return false;
     code().createAndAdd(type, kToBackpack);
     return true;
+}
+
+bool placeCargo(uint32_t type, const world_to_screen::Vec3& at) {
+    const uintptr_t baggage = manager();
+    if (!code().create || !baggage) return false;
+    alignas(16) std::array<uint8_t, kCreateInfoSize> info{};
+    code().initCreateInfo(info.data());
+    std::memcpy(info.data() + kInfoKind, &type, sizeof(type));
+    const double position[3] = {at.x, at.y, at.z + kPlaceLiftMetres};
+    std::memcpy(info.data() + kInfoPosition, position, sizeof(position));
+    uint64_t handle = kFreeHandle;
+    code().create(baggage, &handle, info.data());
+    return handle != kFreeHandle;
 }
 
 bool removeCargo(uint64_t handle) {

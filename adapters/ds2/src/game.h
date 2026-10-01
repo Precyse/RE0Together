@@ -76,7 +76,11 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
 // served on its next update). False when the request could not be queued. Any thread.
 bool addCargo(uint32_t type);
 
-// Asks the game to delete a carried piece (taking it off the player first). Any thread.
+// Asks the game to put a piece of `type` on the ground at `at`, as the world's own cargo is spawned: it starts a
+// little above the spot and falls onto the ground. False when the game refused (e.g. its pool is full). Any thread.
+bool placeCargo(uint32_t type, const world_to_screen::Vec3& at);
+
+// Asks the game to delete a piece, carried or on the ground. Any thread.
 bool removeCargo(uint64_t handle);
 
 }  // namespace game

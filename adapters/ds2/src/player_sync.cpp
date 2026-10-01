@@ -5,7 +5,7 @@
 #include <map>
 #include <mutex>
 
-#include "cargo_pickup.h"
+#include "cargo_ground.h"
 #include "cargo_transfer.h"
 #include "debug_stats.h"
 #include "game.h"
@@ -93,13 +93,13 @@ void tick(NetClient& net) {
     const SessionSnapshot session = net.poll([&net](const GameFrame& frame) {
         onFrame(frame);
         cargo_transfer::onFrame(net, frame);
-        cargo_pickup::onFrame(net, frame);
+        cargo_ground::onFrame(net, frame);
     });
     debug_stats::setSession(session);
     rememberNames(session);
     game::blockScriptedInteractions(session.linked && session.localSlot != session.hostSlot);
     cargo_transfer::tick(net, session);
-    cargo_pickup::tick(net, session);
+    cargo_ground::tick(net, session);
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

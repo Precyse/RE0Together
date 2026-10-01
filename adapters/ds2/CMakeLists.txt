@@ -48,7 +48,7 @@ add_library(ds2_adapter SHARED
     src/dx12_hook.cpp
     src/marker_overlay.cpp
     src/cargo_transfer.cpp
-    src/cargo_pickup.cpp
+    src/cargo_ground.cpp
     src/cargo_menu.cpp
     src/remote_body.cpp
     src/main_thread.cpp

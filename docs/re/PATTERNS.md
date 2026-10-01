@@ -144,6 +144,7 @@ Find it: the script export names; their bodies are short (lock guard, array appe
 Replicate: move items between players by kind, not by object: the giver queues a delete of its own piece, the receiver queues a create of the same kind for its own player. Calls are safe from any thread. Items are per-machine objects; only the kind id is shared.
 Seen in: DS2: DSBaggageManager requests at +0x36610 (CreateAndAddBaggageToPlayer 0x1411eb610, DeleteBaggage 0x1411eb6d0, server 0x1411cd530), `ds2/cargo.cpp`, `cargo_transfer.cpp`; docs/DS2_NOTES.md "Cargo". Same "drop the object, recreate it by kind" idea as RE0's floor items (`Late join = older save + live snapshot`).
 Trap: at the title screen the queue is not served; requests wait there until a save is loaded.
+Ground pieces: the same manager usually has a lower-level create that takes an info record (kind, world transform, owner) and is what spawns the world's own items; with no owner it puts the item on the ground. DS2: 0x1411c5c00 with the 0x140abd190 info. Start it a little above the spot, and only where the receiving world has loaded terrain, or it falls through.
 
 ## An adapter menu claims its keys from the game's raw input  [control, ui-perspective]
 Shape: a game reading the keyboard through raw input (WM_INPUT + GetRawInputData) also acts on every key an overlay menu uses.
@@ -155,5 +156,5 @@ Seen in: DS2: `input_filter.cpp`, `cargo_menu.cpp`, `import_patch.cpp` (shared w
 Shape: some player actions (DS2 cargo pickup) send no "is it allowed?" query the adapter can refuse, but the object they act on keeps its identity and only changes an owner field.
 Find it: snapshot the objects around the player (handle, owner, position) twice and diff; check the handle survives the move.
 Replicate: let the action run, report it to the authority with what it needs to find its own copy (kind and position), and undo it locally with the engine's own delete when refused. Remember the objects the player released itself so taking them back needs no confirmation.
-Seen in: DS2: `cargo_pickup.cpp` (pool handle, slot +0x98, position +0x40). Prefer a veto (`Permissions are "is it allowed?" queries with a veto flag`) wherever one exists: the undo is visible for a moment.
+Seen in: DS2: `cargo_ground.cpp` (pool handle, slot +0x98, position +0x40). Prefer a veto (`Permissions are "is it allowed?" queries with a veto flag`) wherever one exists: the undo is visible for a moment.
 
