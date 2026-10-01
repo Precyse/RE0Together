@@ -1,5 +1,15 @@
 # DEATH STRANDING 2: reverse-engineering notes
 
+Roadmap and stages: `DS2_ROADMAP.md`.
+
+## Target design: the host is the world server
+- **Initial world sync:** the guest starts from a full snapshot of the host's world: the host's save transferred to the guest's session folder and loaded there (RE0's launcher save sync and save_redirect). Strand content (other players' structures, signs, items) that is fetched online per account must be captured on the host and sent; the guest must not fetch its own during co-op. Open question: which strand content is in the save.
+- **Dynamic stream:** the host streams structures (built, damaged, destroyed), world cargo, enemies, BTs, weather and timefall, order and quest progress, facility connections. The guest's game never decides these: local authority is suppressed and the host's events are applied (RE0 guest enemies and flags).
+- **The guest is an ally:** runs, carries, fights and picks up; never creates or progresses the world.
+- **Guest restrictions (first):** no terminals, orders or quest triggers on the guest (blocked at the interaction check, as RE0's act-on-trigger detour); guest world pickups are requested from the host, which removes the object from its world and confirms before the guest adds it to its rack.
+- **Guest as a container:** on the host, the guest's body is a cargo container. First version: an adapter-drawn give/take menu that moves items between the host's and the guest's racks with the game's own add/remove item calls on each side; later, the game's native container/transfer UI on the remote body.
+- **Own cargo stays own:** each machine simulates its own Sam's inventory, rack, weight and balance; the partner's load is a visual mirror sent on change.
+
 ## Recon
 - Install: `G:\SteamLibrary\steamapps\common\DEATH STRANDING 2 - ON THE BEACH` (Steam app 3280350, buildid 23923251). DEATH STRANDING DIRECTOR'S CUT is not installed on this PC (only old settings and telemetry folders on D: and F:), so the work targets DS2 directly.
 - Engine: Decima (Kojima Productions fork; PC port by Nixxes). `DS2.exe` x64, image base 0x140000000, **ASLR on** (addresses below are file VAs; the adapter finds code by byte pattern). `LocalCacheWinGame\fullgame.dll` is a 140 MB code library with no imports and exports such as `InitRTTI` and HTN planner tables (compiled game data).

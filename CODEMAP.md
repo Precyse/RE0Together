@@ -166,7 +166,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 - Wire format or control messages: `Framing.cs`, `ControlMessages.cs`
 - Slot / epoch rules: `Session.cs`, `SlotAssigner.cs`
 - Adapter link behaviour: `LoopbackBridge.cs`
-- Add a game: new `launcher/games/<id>.json` (DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`)
+- Add a game: new `launcher/games/<id>.json` (DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`, stages `docs/DS2_ROADMAP.md`)
 - Native `steam_api64.dll` (Valve-signed redistributable from the Steamworks.NET 2024.8.0 standalone release, SDK 1.60): `launcher/native/`
 - Items (inventory blocks): `inventory_sync.cpp`; floor items: `floor_items_sync.cpp`; layouts in `docs/RE0_NOTES.md` Items
 - RE0 game addresses: `adapters/re0/src/game.h` (source: `docs/RE0_NOTES.md`)
