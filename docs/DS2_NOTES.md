@@ -97,3 +97,10 @@ Copy `adapters/ds2/version.dll` into the game folder (there is no `version.dll` 
 - Most component types are reflected only at start-up (their records are filled in `.data` at run time); `probe.py handlers <Type>` reads them live.
 - **Overlay crash fixed:** the game recreates its swap chain when its window loses focus; drawing on the old queue made the driver report DXGI_ERROR_DRIVER_INTERNAL_ERROR (0x887A0020), on which the game deliberately writes to address 0 (DS2.exe+0xd55020) and crashes. The overlay now rebuilds its ImGui backend for the new queue, format and buffer count (`overlay_test` covers it).
 - **gamectl** picks the window owned by DS2.exe: a title match also matched an Explorer folder named after the game, and a key went there once.
+
+## Cargo and inventory entry points (static, 2026-10-01)
+- Script exports: `DSBaggageManager_sExported*` (AddBaggageToPlayer, CreateAndAddBaggageToPlayer, DeleteBaggage, GetAllBaggages, ExtractBaggageInfo, BreakBaggage, AddBaggagesToPrivateBox, SendRequest, ...), `Inventory_sExported*` (AddItemByResource, RemoveItemByResource, ...), `DSPlayerSystem_sExportedAddItem`, `InventoryOverflowComponent_sExportedRemoveItem`.
+- `DeleteBaggage` resolves to 0x1412046b0 -> 0x1411eb6d0 (real code). `Inventory_sExportedAddItemByResource` / `RemoveItemByResource` are registered with the stub 0x1400bd210 (`xor al, al; ret`): compiled out here.
+- Twelve DSBaggageManager names (ExtractBaggageInfo ... SendRequest) are registered together by 0x1412029f0, called once from 0x1411c21df with 0x141204770; the helper loads no function addresses itself, so their real bodies are reached some other way (a table or a dispatcher). Not resolved yet.
+- `tools/ds2/symbols.py` now tries both registration shapes (inline name-then-function, and a per-export helper whose caller passes the function as the fifth argument) and prints a body preview so stubs are visible.
+- Next: watch a cargo pickup live (the rack's inventory component and the DSBaggageManager singleton) to find the add/remove calls the game itself uses.
