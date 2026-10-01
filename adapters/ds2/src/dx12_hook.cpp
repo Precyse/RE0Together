@@ -62,8 +62,10 @@ struct Renderer {
     HANDLE fenceEvent = nullptr;
     UINT rtvStride = 0;
     UINT srvUsed = 0;
-    DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
-    bool ready = false;
+    DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;  // what the ImGui backend was set up for, with `queue` and `buffers`
+    UINT buffers = 0;
+    bool deviceReady = false;   // heaps, allocators, list, fence (live as long as the device)
+    bool backendReady = false;  // the ImGui DX12 backend (redone when the game recreates its swap chain)
     std::chrono::steady_clock::time_point lastFrame;
 };
 Renderer g_renderer;
@@ -82,12 +84,9 @@ void allocateSrv(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* cpu, D3D
 
 void freeSrv(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE) {}
 
-bool buildRenderer(IDXGISwapChain3* swapChain, ID3D12CommandQueue* queue, DXGI_FORMAT format, UINT bufferCount) {
+bool buildDeviceObjects(IDXGISwapChain3* swapChain) {
     Renderer& r = g_renderer;
     if (FAILED(swapChain->GetDevice(IID_PPV_ARGS(&r.device)))) return false;
-    r.queue = queue;
-    r.format = format;
-
     D3D12_DESCRIPTOR_HEAP_DESC rtv{D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kMaxBackBuffers, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0};
     D3D12_DESCRIPTOR_HEAP_DESC srv{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvCapacity,
                                    D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
@@ -105,23 +104,50 @@ bool buildRenderer(IDXGISwapChain3* swapChain, ID3D12CommandQueue* queue, DXGI_F
         return false;
     }
     r.fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
+    r.lastFrame = std::chrono::steady_clock::now();
+    r.deviceReady = true;
+    return true;
+}
+
+// Waits until the GPU has finished everything the overlay submitted.
+void waitForOverlayIdle() {
+    Renderer& r = g_renderer;
+    if (r.fence->GetCompletedValue() >= r.fenceValue) return;
+    r.fence->SetEventOnCompletion(r.fenceValue, r.fenceEvent);
+    WaitForSingleObject(r.fenceEvent, kFenceWaitMs);
+}
+
+// (Re)initialises the ImGui backend for the swap chain's queue, format and buffer count. The game recreates its
+// swap chain (for example when the window loses focus in fullscreen); drawing on the old queue then removes the
+// device, and the game deliberately crashes on DXGI_ERROR_DRIVER_INTERNAL_ERROR.
+bool ensureBackend(ID3D12CommandQueue* queue, DXGI_FORMAT format, UINT buffers) {
+    Renderer& r = g_renderer;
+    if (r.backendReady && r.queue == queue && r.format == format && r.buffers == buffers) return true;
+    if (r.backendReady) {
+        waitForOverlayIdle();
+        ImGui_ImplDX12_Shutdown();
+        r.srvUsed = 0;
+        r.backendReady = false;
+    }
     ImGui_ImplDX12_InitInfo info;
     info.Device = r.device;
     info.CommandQueue = queue;
-    info.NumFramesInFlight = static_cast<int>(bufferCount);
+    info.NumFramesInFlight = static_cast<int>(buffers);
     info.RTVFormat = format;
     info.SrvDescriptorHeap = r.srvHeap;
     info.SrvDescriptorAllocFn = allocateSrv;
     info.SrvDescriptorFreeFn = freeSrv;
     if (!ImGui_ImplDX12_Init(&info)) return false;
-    r.lastFrame = std::chrono::steady_clock::now();
-    r.ready = true;
-    logger::write("dx12: overlay ready (format %d, %u buffers)", static_cast<int>(format), bufferCount);
+    r.queue = queue;
+    r.format = format;
+    r.buffers = buffers;
+    r.backendReady = true;
+    logger::write("dx12: overlay ready (queue %p, format %d, %u buffers)", static_cast<void*>(queue),
+                  static_cast<int>(format), buffers);
     return true;
 }
 
@@ -141,7 +167,8 @@ void renderFrame(IDXGISwapChain* chain) {
     DXGI_SWAP_CHAIN_DESC desc{};
     swapChain->GetDesc(&desc);
     Renderer& r = g_renderer;
-    if (!r.ready && !buildRenderer(swapChain, queue, desc.BufferDesc.Format, desc.BufferCount)) {
+    if ((!r.deviceReady && !buildDeviceObjects(swapChain)) ||
+        !ensureBackend(queue, desc.BufferDesc.Format, desc.BufferCount)) {
         logger::write("dx12: overlay setup failed, drawing disabled");
         g_disabled = true;
         swapChain->Release();
@@ -149,8 +176,7 @@ void renderFrame(IDXGISwapChain* chain) {
     }
     const UINT index = swapChain->GetCurrentBackBufferIndex();
     ID3D12Resource* backBuffer = nullptr;
-    if (index >= kMaxBackBuffers || desc.BufferDesc.Format != r.format ||
-        FAILED(swapChain->GetBuffer(index, IID_PPV_ARGS(&backBuffer)))) {
+    if (index >= kMaxBackBuffers || FAILED(swapChain->GetBuffer(index, IID_PPV_ARGS(&backBuffer)))) {
         swapChain->Release();
         return;
     }

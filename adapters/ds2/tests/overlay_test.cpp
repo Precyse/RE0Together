@@ -1,5 +1,7 @@
 // Real windowed D3D12 swap chain created after dx12_hook::install (like the game's): presents frames and checks
-// the hook learned the swap chain's queue and ran the draw callback every frame without disabling itself.
+// the hook learned the swap chain's queue and ran the draw callback every frame without disabling itself. Then the
+// swap chain is recreated on a new queue in another format (as the game does when it loses focus): drawing must move
+// to the new queue and the device must stay alive.
 #include <windows.h>
 
 #include <d3d12.h>
@@ -57,7 +59,35 @@ int main() {
         return 1;
     }
     for (int i = 0; i < kFrames; ++i) swapChain->Present(1, 0);
-    const bool ok = g_draws == kFrames;
-    std::printf("%s: %d of %d frames drawn\n", ok ? "PASS" : "FAIL", g_draws, kFrames);
+    if (device->GetDeviceRemovedReason() != S_OK) {
+        std::printf("FAIL: device removed after the first swap chain (0x%08lx)\n",
+                    static_cast<unsigned long>(device->GetDeviceRemovedReason()));
+        return 1;
+    }
+
+    // Like a game: let the queue drain (the overlay's work on it included) before releasing the swap chain.
+    ID3D12Fence* flush = nullptr;
+    device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&flush));
+    queue->Signal(flush, 1);
+    flush->SetEventOnCompletion(1, nullptr);
+    flush->Release();
+    swapChain->Release();
+    queue->Release();
+    device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue));
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.BufferCount = kBufferCount + 1;
+    HWND second = CreateWindowExW(0, wc.lpszClassName, L"overlay_test 2", WS_OVERLAPPEDWINDOW, 0, 0, kWidth, kHeight,
+                                  nullptr, nullptr, wc.hInstance, nullptr);
+    const HRESULT recreated = factory->CreateSwapChainForHwnd(queue, second, &desc, nullptr, nullptr, &swapChain);
+    if (FAILED(recreated)) {
+        std::printf("FAIL: second swap chain 0x%08lx (device 0x%08lx)\n", static_cast<unsigned long>(recreated),
+                    static_cast<unsigned long>(device->GetDeviceRemovedReason()));
+        return 1;
+    }
+    for (int i = 0; i < kFrames; ++i) swapChain->Present(1, 0);
+    const bool deviceAlive = device->GetDeviceRemovedReason() == S_OK;
+    const bool ok = g_draws == 2 * kFrames && deviceAlive;
+    std::printf("%s: %d of %d frames drawn across a swap chain recreation, device %s\n", ok ? "PASS" : "FAIL",
+                g_draws, 2 * kFrames, deviceAlive ? "alive" : "removed");
     return ok ? 0 : 1;
 }

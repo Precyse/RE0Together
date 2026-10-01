@@ -8,6 +8,7 @@ usage: python rtti_scan.py <exe> scan                 # write out/<exe>.types.js
        python rtti_scan.py <exe> type <Name>          # one compound with inherited fields at absolute offsets
        python rtti_scan.py <exe> find <regex>         # compound names matching
        python rtti_scan.py <exe> field <regex>        # compounds that have a field whose name matches
+       python rtti_scan.py <exe> handles <regex>      # compounds with a message handler whose message type matches
 """
 import json
 import re
@@ -23,7 +24,8 @@ UNREGISTERED_ID = 0xFFFFFFFF
 
 # RTTICompound layout (x64): counts at +6..+9, size +0x10, name +0x40, bases +0x58, attrs +0x60.
 COMPOUND_NUM_BASES, COMPOUND_NUM_ATTRS, COMPOUND_NUM_HANDLERS = 0x6, 0x7, 0x8
-COMPOUND_SIZE, COMPOUND_NAME, COMPOUND_BASES, COMPOUND_ATTRS = 0x10, 0x40, 0x58, 0x60
+COMPOUND_SIZE, COMPOUND_NAME, COMPOUND_BASES, COMPOUND_ATTRS, COMPOUND_HANDLERS = 0x10, 0x40, 0x58, 0x60, 0x68
+HANDLER_STRIDE = 0x10  # {message type, handler function}
 BASE_STRIDE, BASE_OFFSET = 0x10, 0x8
 ATTR_STRIDE, ATTR_OFFSET, ATTR_FLAGS, ATTR_NAME = 0x38, 0x8, 0xA, 0x10
 # Atom, enum, POD: name at +0x10. Pointer and container: item type +0x8, data +0x10 (data name at +0).
@@ -79,7 +81,13 @@ class Scanner:
                 continue
             attrs.append({"name": attr_name, "offset": img.u16(a + ATTR_OFFSET), "flags": img.u16(a + ATTR_FLAGS),
                           "type": self.type_name(t)})
-        return {"name": name, "va": hex(va), "size": img.u32(va + COMPOUND_SIZE), "bases": bases, "attrs": attrs}
+        handlers = []
+        handlers_va = img.ptr(va + COMPOUND_HANDLERS)
+        for i in range(img.u8(va + COMPOUND_NUM_HANDLERS) if self.data_ptr(handlers_va) else 0):
+            h = handlers_va + i * HANDLER_STRIDE
+            handlers.append({"message": self.type_name(img.ptr(h)), "handler": hex(img.ptr(h + 8))})
+        return {"name": name, "va": hex(va), "size": img.u32(va + COMPOUND_SIZE), "bases": bases, "attrs": attrs,
+                "handlers": handlers}
 
     def scan(self):
         lo, hi = self.img.section(".data")
@@ -114,6 +122,8 @@ def print_type(types, name, base_offset=0, depth=0):
     print(f"{pad}{name} size=0x{t['size']:x} @+0x{base_offset:x}")
     for b in t["bases"]:
         print_type(types, b["type"], base_offset + b["offset"], depth + 1)
+    for h in t.get("handlers", []):
+        print(f"{pad}  on {h['message']} -> {h['handler']}")
     for a in t["attrs"]:
         if "category" in a:
             print(f"{pad}  [{a['category']}]")
@@ -133,6 +143,11 @@ def main():
         for n in sorted(types):
             if re.search(arg, n):
                 print(n, hex(types[n]["size"]))
+    elif cmd == "handles":
+        for n, t in sorted(types.items()):
+            for h in t.get("handlers", []):
+                if re.search(arg, h["message"]):
+                    print(f"{n} on {h['message']} -> {h['handler']}")
     elif cmd == "field":
         for n, t in sorted(types.items()):
             hits = [a for a in t["attrs"] if "name" in a and re.search(arg, a["name"])]

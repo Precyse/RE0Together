@@ -10,6 +10,8 @@ usage: python probe.py base                         # live module base and slide
        python probe.py refs <hex value> [max]       # where that qword is stored (image .data shown as file VA)
        python probe.py dump <hex addr> [size]       # qwords with the class of any object they point to, and doubles
        python probe.py entity <hex addr>            # Decima Entity world transform (position doubles, rotation rows)
+       python probe.py handlers <Type>              # a reflected type's message handlers as registered in the live game
+                                                    # (most handler tables are filled at start-up, not in the file)
        python probe.py snap <hex addr> <size> <file>
        python probe.py diff <file_a> <file_b>       # changed qwords between two snaps (as hex and double)
 """
@@ -173,6 +175,53 @@ def cmd_entity(s, addr):
         print("rotation row", " ".join(f"{v:7.3f}" for v in rot[r * 3:r * 3 + 3]))
 
 
+COMPOUND_NUM_HANDLERS, COMPOUND_HANDLERS, HANDLER_STRIDE = 0x8, 0x68, 0x10
+
+
+COMPOUND_KIND, COMPOUND_NAME = 4, 0x40
+RECORD_ALIGN = 8
+
+
+def find_live_compound(s, type_name):
+    """The reflected compound record for type_name in the live image (.data including the zero-filled part, where
+    records built at start-up live)."""
+    name_needle = type_name.encode() + b"\0"
+    lo, hi = s.img.section(".data")
+    data = s.proc.read(lo + s.slide, hi - lo)
+    names = set()
+    for section in (".rdata", ".data"):  # type names sit in both
+        rlo, rhi = s.img.section(section)
+        blob = s.proc.read(rlo + s.slide, rhi - rlo)
+        i = blob.find(name_needle)
+        while i >= 0:
+            if i == 0 or blob[i - 1] == 0:
+                names.add(rlo + s.slide + i)
+            i = blob.find(name_needle, i + 1)
+    for name_va in names:
+        packed = struct.pack("<Q", name_va)
+        j = data.find(packed)
+        while j >= 0:
+            record = j - COMPOUND_NAME
+            if record >= 0 and record % RECORD_ALIGN == 0 and data[record + 4] == COMPOUND_KIND:
+                return lo + s.slide + record
+            j = data.find(packed, j + 1)
+    return None
+
+
+def cmd_handlers(s, type_name):
+    live = find_live_compound(s, type_name)
+    if not live:
+        sys.exit(f"{type_name}: no reflected record found")
+    count = s.proc.read(live + COMPOUND_NUM_HANDLERS, 1)[0]
+    table = s.proc.ptr(live + COMPOUND_HANDLERS)
+    print(f"{type_name} record {live:#x}: {count} handlers")
+    for i in range(count):
+        message = s.proc.ptr(table + i * HANDLER_STRIDE)
+        handler = s.proc.ptr(table + i * HANDLER_STRIDE + 8)
+        name = s.proc.read(s.proc.ptr(message + COMPOUND_NAME), 96).split(b"\0")[0].decode(errors="replace")
+        print(f"  on {name} -> {handler:#x} (file {s.to_file(handler):#x})")
+
+
 def cmd_diff(path_a, path_b):
     a, b = open(path_a, "rb").read(), open(path_b, "rb").read()
     for off in range(0, min(len(a), len(b)) - 7, 8):
@@ -202,6 +251,8 @@ def main():
         cmd_dump(s, int(sys.argv[2], 16), int(sys.argv[3], 16) if len(sys.argv) > 3 else DEFAULT_DUMP)
     elif cmd == "entity":
         cmd_entity(s, int(sys.argv[2], 16))
+    elif cmd == "handlers":
+        cmd_handlers(s, sys.argv[2])
     elif cmd == "snap":
         open(sys.argv[4], "wb").write(s.proc.read(int(sys.argv[2], 16), int(sys.argv[3], 16)))
     else:

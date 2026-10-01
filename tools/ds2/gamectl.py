@@ -14,6 +14,7 @@ usage: python gamectl.py idle                 # seconds since the user last touc
        python gamectl.py mouse <dx> <dy> [steps]  # relative mouse motion (camera), only while the game is in front
 """
 import ctypes
+import ctypes.wintypes
 import os
 import subprocess
 import time
@@ -32,10 +33,44 @@ MOUSE_STEP_MS = 10
 DEFAULT_MOUSE_STEPS = 20
 MIN_IDLE_S = 90
 STEAM_APP_ID = 3280350
-WINDOW_TITLE_PART = "DEATH STRANDING 2"
 DEFAULT_SHOT = str(Path(__file__).resolve().parent / "out" / "shot.png")
 
-shared.WINDOW_TITLE_PART = WINDOW_TITLE_PART
+GAME_EXE = "DS2.exe"
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+def owner_exe(hwnd):
+    pid = ctypes.wintypes.DWORD()
+    shared.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not handle:
+        return ""
+    buf = ctypes.create_unicode_buffer(260)
+    size = ctypes.wintypes.DWORD(len(buf))
+    kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
+    kernel32.CloseHandle(handle)
+    return os.path.basename(buf.value)
+
+
+def find_game_window():
+    """The visible top-level window of DS2.exe itself; a title match alone also hits Explorer folders named after
+    the game, and keys sent there would act on the user's desktop."""
+    found = []
+
+    @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    def visit(hwnd, _):
+        if shared.user32.IsWindowVisible(hwnd) and owner_exe(hwnd).lower() == GAME_EXE.lower():
+            found.append(hwnd)
+        return True
+
+    shared.user32.EnumWindows(visit, 0)
+    if not found:
+        sys.exit(f"{GAME_EXE} window not found")
+    return found[0]
+
+
+shared.find_window = find_game_window
 shared.DEFAULT_SHOT = DEFAULT_SHOT
 
 
