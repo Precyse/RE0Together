@@ -30,8 +30,12 @@ void onFrame(const GameFrame& frame);
 // The door that brought this machine into its current room (run locally or from the peer), if any since load.
 bool lastDoor(DoorChange& out);
 
-// Queues `change` to run on the game thread as if the peer had sent it (join teleport).
-void queue(const DoorChange& change);
+// Queues `change` to run on the game thread as if the peer had sent it. A join teleport passes `bothTravel` so the
+// local character goes along even when split_rooms would otherwise replay the door alone.
+void queue(const DoorChange& change, bool bothTravel = false);
+
+// Game thread: starts `change` here (the door's character must already be the camera character).
+void run(const DoorChange& change);
 
 // Hooks sDoorLoad::start and the act-on-trigger check and registers the per-frame apply. False when a hook cannot be installed.
 bool enable(NetClient& net);

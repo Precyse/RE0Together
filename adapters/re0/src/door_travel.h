@@ -16,6 +16,9 @@ static_assert(sizeof(RoomState) == 4);
 // Net thread: remembers the driving peer's latest ROOM_STATE.
 void onFrame(const GameFrame& frame);
 
+// The room the peer last reported (ROOM_STATE), false before the first report.
+bool peerRoom(uint16_t& out);
+
 // Net thread: notes a door start even when the game stops ticking.
 void onNetTick();
 

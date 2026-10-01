@@ -75,7 +75,7 @@ void apply(const JoinSnapshot& snapshot) {
         return;
     }
     if (snapshot.hasDoor) {
-        door_sync::queue(snapshot.door);
+        door_sync::queue(snapshot.door, true);
         logger::write("join_sync: teleporting to room 0x%04x", snapshot.hostRoom);
         g_waitingForRoom = snapshot;
         return;

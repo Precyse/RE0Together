@@ -42,6 +42,7 @@ add_library(re0_adapter SHARED
     src/game_state.cpp
     src/door_travel.cpp
     src/door_sync.cpp
+    src/split_rooms.cpp
     src/crash_dump.cpp
     src/net_trace.cpp
     src/flag_sync.cpp

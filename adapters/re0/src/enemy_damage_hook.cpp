@@ -10,6 +10,7 @@
 #include "enemy_registry.h"
 #include "log.h"
 #include "net_pad.h"
+#include "split_rooms.h"
 
 namespace {
 
@@ -38,7 +39,7 @@ void onPlayerHit(Character shooter, void* enemy, void* attacker, float distance,
     if (character_owner::isRemoteOwned(shooter)) return;
     if (!character_owner::isLocalOwned(shooter)) {
         damage_thunk::callOriginal(original, enemy, attacker, distance, info);
-    } else if (character_owner::isHost()) {
+    } else if (split_rooms::localEnemyAuthority()) {
         damage_thunk::callOriginal(original, enemy, attacker, distance, info);
         enemy_net::announceHit(enemyAddress, shooter, distance, *info);
     } else if (!enemy_net::requestHit(enemyAddress, shooter, distance, *info)) {
@@ -57,7 +58,7 @@ void __stdcall onDamage(void* enemy, void* attacker, float distance, game::HitIn
         return;
     }
     const bool hasSlot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy)) != enemy_registry::kNoSlot;
-    if (character_owner::isHost() || !hasSlot) damage_thunk::callOriginal(original, enemy, attacker, distance, info);
+    if (split_rooms::localEnemyAuthority() || !hasSlot) damage_thunk::callOriginal(original, enemy, attacker, distance, info);
 }
 
 }  // namespace

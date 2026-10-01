@@ -34,6 +34,7 @@
 #include "protocol.h"
 #include "save_redirect.h"
 #include "session_slot.h"
+#include "split_rooms.h"
 #include "state_correction.h"
 #include "state_sync.h"
 #include "vtable_tracer.h"
@@ -63,6 +64,7 @@ void enableCoop() {
     pickup_guard::enable();
     door_travel::enable(g_net);
     if (!door_sync::enable(g_net)) logger::write("adapter: door sync unavailable");
+    split_rooms::enable();
     flag_sync::enable(g_net);
     join_sync::enable(g_net);
     if (!session_slot::enable()) logger::write("adapter: session slot unavailable");
@@ -99,6 +101,7 @@ void startSubsystems() {
         return;
     }
     if (config.netTrace) net_trace::enable();
+    split_rooms::configure(config.splitRooms);
     if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop();
     if (config.trace) vtable_tracer::install(config.traceVtables);

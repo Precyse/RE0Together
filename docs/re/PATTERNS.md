@@ -87,3 +87,9 @@ Shape: the joiner can only load a saved state; the host's live state has moved o
 Find it: reuse the existing sync modules' read/apply points.
 Replicate: after the joiner loads, request a snapshot; apply flags and inventories, travel through the host's last door (engine transition as teleport), place the partner; hold the joiner's own state broadcasts until caught up.
 Seen in: RE0: join_sync.
+
+## Mirror the other player's travel with the engine's own transitions  [state-transition, world-state]
+Shape: the engine tracks where every party member is, but the record is hidden; writing positions or rooms by hand gets overwritten or crashes.
+Find it: the transitions that move a character between areas (door start, character-switch phase) and the flag that makes others follow.
+Replicate: replay the remote player's transition locally: make their character current (swap or switch phase), run the transition with follow off, switch back. The engine keeps its own bookkeeping consistent.
+Seen in: RE0: split_rooms (sDoorLoad::start 0x552b50, Change phase, follow flag sPlayer +0x40).

@@ -154,3 +154,9 @@ What separate rooms needs, in order:
 2. Camera parity off while apart: each machine focuses its own player's character.
 3. door_sync only between players in the same room (already the TEAM rule) and no door forcing while apart.
 4. Enemy authority per room: whoever is in a room simulates its enemies; host authority only when together.
+
+Implemented without step 1 (split_rooms.cpp, opt-in `split_rooms=1`): instead of writing the partner record, every
+peer door is replayed here with the engine's own transitions, so the game keeps the record itself:
+focus the door's character (swap in the same room, Change-phase zap otherwise), run sDoorLoad::start with the
+follow flag (sPlayer +0x40) off, then focus the local character back. Camera parity, enemy_net and enemy_state stop
+while the rooms differ; enemy damage runs locally. Join teleports bypass the replay. Untested with two players.

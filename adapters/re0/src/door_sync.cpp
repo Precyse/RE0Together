@@ -15,6 +15,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "split_rooms.h"
 
 namespace {
 
@@ -32,6 +33,7 @@ bool g_applying = false;  // game thread only: a peer's door is being run, so th
 
 std::mutex g_mutex;
 std::optional<DoorChange> g_pending;  // guarded by g_mutex: the newest peer door not yet run
+bool g_pendingBothTravel = false;     // guarded by g_mutex
 std::optional<DoorChange> g_lastDoor;  // guarded by g_mutex: the door into the current room
 
 bool focusedIsLocal() {
@@ -89,23 +91,19 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
     logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);
 }
 
-std::optional<DoorChange> takePending() {
+std::optional<DoorChange> takePending(bool& bothTravel) {
     std::lock_guard lock(g_mutex);
+    bothTravel = std::exchange(g_pendingBothTravel, false);
     return std::exchange(g_pending, std::nullopt);
 }
 
 void onTick() {
     if (game_state::doorActive()) return;
-    const std::optional<DoorChange> change = takePending();
-    const uintptr_t doorLoad = game::readPointer(game::kDoorLoadGlobal);
-    if (!change || !doorLoad) return;
+    bool bothTravel = false;
+    const std::optional<DoorChange> change = takePending(bothTravel);
+    if (!change || (!bothTravel && split_rooms::takeOver(*change))) return;
     character_owner::focus(static_cast<Character>(change->characterId));
-    g_applying = true;
-    g_originalDoorStart(reinterpret_cast<void*>(doorLoad), nullptr, change->room, change->entry, change->arg3, change->arg4,
-                        change->flag);
-    g_applying = false;
-    debug_stats::count(debug_stats::Counter::DoorsApplied);
-    logger::write("door_sync: ran the peer's door to room 0x%x entry 0x%x", change->room, change->entry);
+    door_sync::run(*change);
 }
 
 }  // namespace
@@ -129,9 +127,21 @@ bool lastDoor(DoorChange& out) {
     return true;
 }
 
-void queue(const DoorChange& change) {
+void queue(const DoorChange& change, bool bothTravel) {
     std::lock_guard lock(g_mutex);
     g_pending = change;
+    g_pendingBothTravel = bothTravel;
+}
+
+void run(const DoorChange& change) {
+    const uintptr_t doorLoad = game::readPointer(game::kDoorLoadGlobal);
+    if (!doorLoad) return;
+    g_applying = true;
+    g_originalDoorStart(reinterpret_cast<void*>(doorLoad), nullptr, change.room, change.entry, change.arg3, change.arg4,
+                        change.flag);
+    g_applying = false;
+    debug_stats::count(debug_stats::Counter::DoorsApplied);
+    logger::write("door_sync: ran the peer's door to room 0x%x entry 0x%x", change.room, change.entry);
 }
 
 bool enable(NetClient& net) {

@@ -129,6 +129,13 @@ void onNetTick() {
     if (net_pad::active()) pollDoorStart();
 }
 
+bool peerRoom(uint16_t& out) {
+    door_travel::RoomState peer;
+    if (!peerReport(peer)) return false;
+    out = peer.room;
+    return true;
+}
+
 void enable(NetClient& net) {
     g_net = &net;
     game_tick::addCallback("door_travel", onTick);

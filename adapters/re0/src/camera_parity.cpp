@@ -11,6 +11,7 @@
 #include "game_state.h"
 #include "game_tick.h"
 #include "room_phase.h"
+#include "split_rooms.h"
 #include "log.h"
 #include "net_pad.h"
 #include "state_sync.h"
@@ -150,6 +151,8 @@ void guestTick() {
 }
 
 void onTick() {
+    // Apart, or while a door replay moves the camera, each machine keeps its own player's character.
+    if (split_rooms::apart() || split_rooms::replaying()) return;
     if (!character_owner::isHost()) {
         if (g_net) guestTick();
         return;

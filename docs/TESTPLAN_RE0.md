@@ -24,5 +24,8 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 16 | Guest pulls their network cable for ~20 s, then reconnects | guest launcher rejoins by itself, guest snaps back into the host's room | `Rejoining lobby`, `Rejoined the session`, `join_sync:` lines |
 | 17 | Guest on an older build joins | guest launcher refuses with the build numbers | `Build mismatch:` |
 | 18 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
+| 19 | Both set `split_rooms=1` in `coop\adapter.ini`. E (LEAVE_BEHIND), host takes a door alone | host's screen follows Rebecca; the guest's screen stays on Billy in the old room after a short zap there and back | `split_rooms: replaying`, `split_rooms: door replayed` in the guest log |
+| 20 | Apart (row 19), each player walks around and fights | each camera stays on its own character; enemies react in both rooms | no `Room desync` toast |
+| 21 | Apart, the guest walks Billy through a door into Rebecca's room | both characters in the same room on both screens, back to normal co-op | `split_rooms: door replayed` in the host log |
 
 Report any row that fails, together with both logs.

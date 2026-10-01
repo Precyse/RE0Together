@@ -15,6 +15,7 @@
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
+#include "split_rooms.h"
 #include "player_damage.h"
 
 namespace {
@@ -113,7 +114,7 @@ void applyLatest() {
 }
 
 void onTick() {
-    if (!net_pad::active()) return;
+    if (!net_pad::active() || split_rooms::apart()) return;  // apart, each machine runs its own room's enemies
     if (!character_owner::isHost()) return applyLatest();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
