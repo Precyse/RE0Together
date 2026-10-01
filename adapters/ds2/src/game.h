@@ -26,6 +26,10 @@ std::optional<world_to_screen::Camera> camera();
 // (DS2: Player::GetLastActivatedCamera); 0 before resolve() succeeds.
 uintptr_t frameFunction();
 
+// Guest restriction: while true the local player cannot claim use locations (terminals, orders, quest triggers; for
+// now every "F" interaction), so the host alone runs the world's progress. Any thread.
+void blockScriptedInteractions(bool block);
+
 // Opaque handle of an entity the adapter created; 0 = none.
 using Body = uintptr_t;
 

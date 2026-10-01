@@ -52,7 +52,8 @@ add_library(ds2_adapter SHARED
     src/msvc_rtti.cpp
     src/decima/safe_read.cpp
     src/ds2/game.cpp
-    src/ds2/body.cpp)
+    src/ds2/body.cpp
+    src/ds2/use_gate.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
 target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)

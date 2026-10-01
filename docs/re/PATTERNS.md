@@ -129,3 +129,10 @@ Shape: modern engines run the window pump, render and simulation on different th
 Find it: hook a small function the game calls every frame (DS2: Player::GetLastActivatedCamera) and count calling threads for a few seconds; the busiest is the simulation thread. The window's own thread may pump with GetMessage and never reach a PeekMessage hook.
 Replicate: queue adapter work and run it from that hook on that thread only.
 Seen in: DS2: `main_thread.cpp`. Trap: catching an access violation in the middle of an engine call leaves its locks held and freezes the game; fix the call instead of catching it.
+
+## Permissions are "is it allowed?" queries with a veto flag  [control, authority]
+Shape: before an action (claim an interaction, select a weapon, remove an item) the engine sends a query object to the actor; every interested component may set a refuse flag; the action runs only if nobody refused.
+Find it: message or event class names of the form Is<Action>Allowed; their constructor shows the flag being cleared (DS2: MsgIsAllowedBase +0x10).
+Replicate: to restrict a player (a guest that must not start world progress), refuse in the dispatcher after the game's own handlers ran; the game then hides the prompt and never starts the action, with no half-started state. Same intent as RE0's act-on-trigger check, which evaluates the condition for the right character instead of refusing.
+Seen in: DS2: MsgIsUseLocationClaimAllowed through the entity message dispatcher 0x1401618c0, `ds2/use_gate.cpp`; siblings MsgIsWeaponSelectionAllowed, MsgIsItemRemovalAllowed, MsgIsContextualActionAllowed.
+Trap: dropping the notification that switches an interaction on, or the request message, did not stop DS2's terminal; refuse at the permission query instead.

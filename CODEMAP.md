@@ -144,13 +144,14 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/decima/world_transform.h | Decima WorldPosition (doubles) / RotMatrix / WorldTransform layouts with static_asserts | `decima::WorldTransform` |
 | src/decima/safe_read.cpp | SEH-guarded game memory reads | `decima::safeRead`, `readPointer` |
 | src/pattern_scan.cpp | byte-pattern search in the game's .text, rip-relative targets | `pattern_scan::find`, `ripTarget` |
-| src/player_sync.cpp | PLAYER_STATE (0x0100, 24 bytes: seq, pos, yaw) at 60 Hz on the net thread; newest state per peer, ordered by seq, velocity between reports (passed on to the body), extrapolated position; join/leave toasts | `player_sync::start`, `remotePlayers`, `PlayerState` |
+| src/player_sync.cpp | PLAYER_STATE (0x0100, 24 bytes: seq, pos, yaw) at 60 Hz on the net thread; newest state per peer, ordered by seq, velocity between reports (passed on to the body), extrapolated position; join/leave toasts; tells the game layer whether this machine is a guest (use-location gate) | `player_sync::start`, `remotePlayers`, `PlayerState` |
 | src/world_to_screen.h | pure pinhole projection from a horizontal field of view (unit tested) | `world_to_screen::project` |
 | src/dx12_hook.cpp | hooks CreateSwapChain(ForHwnd) (remembers the game's queue), ExecuteCommandLists (fallback queue), Present / Present1; Dear ImGui DX12 renderer on the game's back buffers, rebuilt when the game recreates its swap chain; a fault disables drawing | `dx12_hook::install` |
 | src/main_thread.cpp | runs adapter work on the game's simulation thread: hooks game::frameFunction, picks the busiest caller thread after a 3 s census, then calls the tick there | `main_thread::install` |
 | src/remote_body.cpp | a body per peer: borrows a loaded NPC (game::borrowBody), moves it to the peer's smoothed pose and velocity each simulation tick, puts it back 3 s after the peer stops reporting | `remote_body::setTarget`, `tick` |
 | src/ds2/body.cpp | DS2 bodies: a background scan of all heaps for DSNpcGroundMover owners with a model and no DSAnimalComponent, nearest to the player; Entity::SetWorldTransform by byte pattern | `game::borrowBody`, `bodyPose`, `placeBody` |
 | src/msvc_rtti.cpp | in-process MSVC RTTI: primary vtable of a class by name | `msvc_rtti::vtableOf` |
+| src/ds2/use_gate.cpp | guest restriction: hooks the entity message dispatcher and refuses the local player's MsgIsUseLocationClaimAllowed while the session says this machine is a guest | `game::blockScriptedInteractions` |
 | src/marker_overlay.cpp | the draw callback: toasts, a labelled marker 1.75 m above each peer's origin (head top when standing) (smoothed toward the extrapolated position, snapped on jumps), optional self marker | `marker_overlay::draw`, `setSelfMarker` |
 | README.md | settings and how to remove the mod | |
 | tests/world_to_screen_test.cpp | projection cases (centre, offsets, behind, large coordinates) | |

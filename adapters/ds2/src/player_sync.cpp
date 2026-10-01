@@ -91,6 +91,7 @@ void tick(NetClient& net) {
     const SessionSnapshot session = net.poll(onFrame);
     debug_stats::setSession(session);
     rememberNames(session);
+    game::blockScriptedInteractions(session.linked && session.localSlot != session.hostSlot);
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;
