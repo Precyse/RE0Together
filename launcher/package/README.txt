@@ -9,9 +9,10 @@ Saves made during co-op always go to the last save slot (20), so your solo saves
 Both players need the same build; the launcher updates itself and refuses a mismatch.
 
 In game
-  V            switch the camera between Rebecca and Billy (controls never swap)
-  E            Team (travel through doors together) / Leave behind
-  Action       at a door or object while the other player has the camera: the camera moves to you
+  V / Y        Team: switch the shared camera between Rebecca and Billy (controls never swap)
+  E / LT       Team (one camera, travel through doors together) / Split up (each player has their own
+               camera and goes anywhere; the other player's doors never touch your screen)
+  Action       Team: at a door or object while the other player has the camera, the camera moves to you
   F8           status panel; Page Up / Page Down scroll it
 
 Updates install themselves when the launcher starts.
