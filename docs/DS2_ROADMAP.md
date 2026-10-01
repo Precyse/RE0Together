@@ -16,6 +16,25 @@ Target architecture: **the host is the world server** (`DS2_NOTES.md`, "Target d
 - **Exit:** fake peer: two bodies on screen, a scripted peer walk drives the second body, the menu moves an item both ways, a blocked terminal on the guest, a pickup held until a fake host confirms. Two PCs: the same with real players.
 - **Risks:** no callable spawn (script exports are stubs); a body's own AI fighting our transform; saves in the Steam cloud need a session redirect like RE0's.
 
+### Two-PC test checklist (Stage A)
+Setup, on both PCs:
+- The same commit of this repo, the launcher built (`launcher/bin/...`) and `adapters/ds2/version.dll` built. The launcher copies `version.dll` into the game folder when it starts the game, and the adapter writes `coop\adapter.ini` on first start.
+- In the game's graphics options, turn frame generation off (DLSS / FSR / XeSS frame generation) before the session. The overlay draws on the game's swap chain and is only tested without it.
+- To see the partner as a body as well as a marker, set `remote_body=1` in `<game>\coop\adapter.ini` (after the first start) and restart the game.
+- Back up `Documents\DEATH STRANDING 2 - ON THE BEACH\<steamid>` on both PCs.
+
+Run:
+1. Host: start the launcher, pick DEATH STRANDING 2, click Host, send the lobby code. Guest: paste the code, click Join. The guest receives the host's saves (`coop\session\Documents\...`), and its game plays that copy.
+2. Both: start the game and load (Continue). Each sees the other's name marker above their position; with `remote_body=1`, a borrowed NPC walks there.
+3. Guest: walk to a terminal. The "Activate Terminal" prompt must not appear, and F must do nothing. Vehicles, cargo pickup and Cargo Management still work.
+4. Host: F7 opens the give/take menu. Give one piece (arrow keys, Enter); it must leave the host's backpack and appear in the guest's (check the guest's Cargo Management). Take one piece back the same way.
+5. Guest: pick up loose cargo that both worlds have (e.g. lost cargo near the start). The piece stays, and the same piece must vanish from the host's world. Then the host picks up another loose piece; it must vanish from the guest's world.
+6. Guest: offload a piece in Cargo Management and pick it up again; it stays (own drops are not asked for).
+
+Collect from both PCs: `<game>\coop\adapter.log`, the launcher's console output, and any `<game>\coop\crash-*.dmp`. The host also receives the guest's log and dumps as `<game>\coop\peer_*`. Note what you saw at each step, with screenshots of anything off.
+
+To play vanilla afterwards: delete `version.dll` and `coop\` from the game folder.
+
 ## Stage B: cargo you can see and share (wishlist 2, 3)
 - **Done so far:** pickups of loose world cargo are the same in both worlds (the guest's confirmed by the host, the host's mirrored to the guests; fake peers both ways). Drops are not mirrored yet.
 - **Players get:** the partner's load shown on their body; ground cargo drop/pickup/handoff in sync; vehicles driven by their owner with their load.
