@@ -12,7 +12,6 @@ struct Config {
     bool coop = false;
     bool trace = false;
     bool overlay = true;  // D3D hooks installed; the panel itself stays hidden until F8
-    bool splitRooms = false;  // players may be in different rooms at once (split_rooms.h)
     bool netTrace = false;  // record the partner's pad and state packets to coop/net_trace.bin
     std::vector<VtableTrace> traceVtables;
 };

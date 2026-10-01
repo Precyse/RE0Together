@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <string>
 
 #include "character_owner.h"
 #include "command_log.h"
@@ -43,15 +42,7 @@ void announce() {
     g_net->send(proto::kMsgPartyMode, true, proto::kSlotAll, {&mode, sizeof(mode)});
 }
 
-void toastMode() {
-    if (g_mode == PartyMode::Team) {
-        debug_overlay::toast("Team", kToastSeconds);
-        return;
-    }
-    const auto waiting = character_owner::other(character_owner::identify(game::controlled()));
-    debug_overlay::toast((std::string("Leave behind: ") + character_owner::name(waiting) + " waits").c_str(),
-                         kToastSeconds);
-}
+void toastMode() { debug_overlay::toast(g_mode == PartyMode::Team ? "Team" : "Split up", kToastSeconds); }
 
 // The game's own follow flag carries the partner through doors with the focused character, so it mirrors the
 // mode: following in TEAM, staying in LEAVE_BEHIND. Written only when it differs.

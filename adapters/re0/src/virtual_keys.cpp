@@ -31,6 +31,7 @@ std::atomic<bool> g_stateHooked{false};
 std::atomic<uint8_t> g_tapKey{0};
 std::atomic<int> g_tapReadsLeft{0};
 std::atomic<bool> g_muted{false};
+std::atomic<uint8_t> g_mutedKey{0};
 
 uintptr_t vtableSlot(void* object, size_t slot) { return reinterpret_cast<uintptr_t>((*static_cast<void***>(object))[slot]); }
 
@@ -39,6 +40,7 @@ HRESULT __stdcall getDeviceStateDetour(void* self, DWORD size, void* data) {
     if (FAILED(result) || size != kKeyboardStateSize || !data) return result;
     auto* keys = static_cast<uint8_t*>(data);
     if (g_muted) std::memset(keys, 0, kKeyboardStateSize);
+    if (const uint8_t key = g_mutedKey; key != 0) keys[key] = 0;
     if (g_tapReadsLeft > 0) {
         keys[g_tapKey.load()] = kKeyDown;
         --g_tapReadsLeft;
@@ -68,6 +70,10 @@ void onDirectInput(void* directInput) {
 void tap(uint8_t scancode) {
     g_tapKey = scancode;
     g_tapReadsLeft = kTapReads;
+}
+
+void setMutedKey(uint8_t scancode) {
+    if (g_mutedKey.exchange(scancode) != scancode) logger::write("virtual_keys: key 0x%02x hidden from the game", scancode);
 }
 
 void setRealKeyboardMuted(bool muted) {

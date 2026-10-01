@@ -12,6 +12,7 @@
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
+#include "room_phase.h"
 #include "split_rooms.h"
 #include "state_sync.h"
 
@@ -53,6 +54,10 @@ void hostSwitchTo(Character wanted, Clock::time_point now) {
 // The one place a switch request enters the host, from its own key and from a guest's SWITCH_REQUEST.
 void queueSwitch(Character target, const char* origin) {
     command_log::note("switch to %s requested by %s", character_owner::name(target), origin);
+    if (split_rooms::independent()) {
+        command_log::decide("switch to %s ignored: independent play", character_owner::name(target));
+        return;
+    }
     g_requested = target;
 }
 
@@ -122,9 +127,23 @@ void guestTick() {
     logger::write("camera_parity: swapped controlled character to %u to match the host", static_cast<unsigned>(wanted));
 }
 
+// Independent play: the camera stays on this machine's own character. Undoes a switch the game made by itself (a
+// pad's switch button; the keyboard key is kept from the game) once the screen is settled; a door replay owns the
+// focus while it runs.
+void keepOwnFocus() {
+    const auto now = Clock::now();
+    const Character own = character_owner::localCharacter();
+    if (own == Character::Unknown || split_rooms::replaying() || game_state::menuOpen() || game_state::doorActive() ||
+        game_state::roomPhase() != room_phase::Main || now - g_lastSwap < kMinSwapInterval) {
+        return;
+    }
+    if (switchTo(own) != SwitchResult::Done) return;
+    g_lastSwap = now;
+    logger::write("camera_parity: independent play, focus back on %s", character_owner::name(own));
+}
+
 void onTick() {
-    // Apart (including a door replay) each machine keeps its own player's character.
-    if (split_rooms::apart()) return;
+    if (split_rooms::independent()) return keepOwnFocus();
     if (!character_owner::isHost()) {
         if (g_net) guestTick();
         return;
@@ -158,6 +177,10 @@ void onLocalSwitchKey() {
     const Character focused = character_owner::identify(game::controlled());
     if (focused == Character::Unknown) return;
     const Character target = character_owner::other(focused);
+    if (split_rooms::independent()) {
+        command_log::decide("switch to %s ignored: independent play", character_owner::name(target));
+        return;
+    }
     if (character_owner::isHost()) {
         queueSwitch(target, "host");
         return;

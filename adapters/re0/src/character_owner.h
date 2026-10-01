@@ -48,8 +48,8 @@ using control_rule::Control;
 // Display name of a character.
 const char* name(Character character);
 
-// Who drives a character on this machine right now: its owner, except that in LEAVE_BEHIND the unfocused character
-// is Locked (see control_rule.h). The one place that rule is applied.
+// Who drives a character on this machine right now: its owner, except that a remote character is Locked while its
+// owner reports another room (control_rule.h). The one place that rule is applied.
 Control controlOf(Character character);
 
 // Makes `character` the focused character on this machine when it is currently the partner (a pointer swap only).
@@ -64,8 +64,7 @@ SwitchResult switchTo(Character character);
 // Log text of a result other than Done.
 const char* reason(SwitchResult result);
 
-// Ownership only, ignoring the party mode: damage, inventory and state sync follow the owner even while the
-// character waits.
+// Ownership only, ignoring presence: damage, inventory and state sync follow the owner wherever it is.
 bool isRemoteOwned(Character character);
 bool isLocalOwned(Character character);
 

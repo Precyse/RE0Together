@@ -4,12 +4,12 @@
 #include <cstring>
 
 #include "debug_stats.h"
+#include "door_travel.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
-#include "party_mode.h"
 #include "room_phase.h"
 
 namespace {
@@ -117,8 +117,9 @@ Control ownerControl(Character character) {
 }  // namespace
 
 Control controlOf(Character character) {
-    const bool focused = character != Character::Unknown && identify(game::controlled()) == character;
-    return control_rule::byPartyMode(ownerControl(character), party_mode::current(), focused);
+    uint16_t peerRoom = 0;
+    const bool peerHere = !door_travel::peerRoom(peerRoom) || peerRoom == game_state::currentRoom();
+    return control_rule::byPresence(ownerControl(character), peerHere);
 }
 
 bool isRemoteOwned(Character character) { return ownerControl(character) == Control::Remote; }

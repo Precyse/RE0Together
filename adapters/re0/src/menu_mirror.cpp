@@ -17,6 +17,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "split_rooms.h"
 
 namespace {
 
@@ -58,9 +59,10 @@ void setFrozen(bool frozen) {
     logger::write("menu_mirror: world %s", frozen ? "frozen" : "resumed");
 }
 
-// Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze.
+// Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze. A peer in another room
+// is not affected by this world, so it is held only while the two are together.
 void __fastcall updateAllDetour(void* self, void* edx) {
-    const bool freeze = anyPeerMenuOpen() && !game_state::uiPausesWorld();
+    const bool freeze = anyPeerMenuOpen() && !split_rooms::apart() && !game_state::uiPausesWorld();
     if (freeze != g_frozen) setFrozen(freeze);
     if (freeze) return;
     g_originalUpdateAll(self, edx);

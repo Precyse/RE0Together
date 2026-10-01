@@ -9,10 +9,9 @@
 namespace {
 
 using control_rule::byOwnership;
-using control_rule::byPartyMode;
+using control_rule::byPresence;
 using control_rule::Control;
 using control_rule::kNoOwner;
-using control_rule::PartyMode;
 
 constexpr int kLocalSlot = 1;
 constexpr int kPeerSlot = 2;
@@ -67,16 +66,13 @@ void testOwnership() {
     check(byOwnership(true, false, kPeerSlot, kLocalSlot) == Control::Remote, "peer's character: remote");
 }
 
-void testPartyMode() {
-    for (const Control owned : {Control::Local, Control::Remote}) {
-        check(byPartyMode(owned, PartyMode::Team, true) == owned, "team, focused keeps ownership");
-        check(byPartyMode(owned, PartyMode::Team, false) == owned, "team, unfocused keeps ownership");
-        check(byPartyMode(owned, PartyMode::LeaveBehind, true) == owned, "leave behind, focused keeps ownership");
-        check(byPartyMode(owned, PartyMode::LeaveBehind, false) == Control::Locked, "leave behind, unfocused locked");
-    }
-    for (const PartyMode mode : {PartyMode::Team, PartyMode::LeaveBehind}) {
-        check(byPartyMode(Control::Vanilla, mode, false) == Control::Vanilla, "vanilla is never changed");
-        check(byPartyMode(Control::Locked, mode, true) == Control::Locked, "locked stays locked");
+void testPresence() {
+    check(byPresence(Control::Remote, true) == Control::Remote, "remote owner in this room: remote");
+    check(byPresence(Control::Remote, false) == Control::Locked, "remote owner elsewhere: locked");
+    for (const bool here : {true, false}) {
+        check(byPresence(Control::Local, here) == Control::Local, "local is never locked by presence");
+        check(byPresence(Control::Vanilla, here) == Control::Vanilla, "vanilla is never changed");
+        check(byPresence(Control::Locked, here) == Control::Locked, "locked stays locked");
     }
 }
 
@@ -87,7 +83,7 @@ int main() {
     testParse();
     testRealConfigFormat();
     testOwnership();
-    testPartyMode();
+    testPresence();
     if (g_failures == 0) std::printf("command_rules_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

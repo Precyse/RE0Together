@@ -2,7 +2,7 @@
 
 #include <atomic>
 #include <chrono>
-#include <deque>
+#include <optional>
 
 #include "character_owner.h"
 #include "door_travel.h"
@@ -21,12 +21,10 @@ using character_owner::Character;
 using door_sync::DoorChange;
 
 constexpr auto kStepTimeout = std::chrono::seconds(20);
-constexpr size_t kMaxQueued = 4;
 
 enum class Step { Idle, FocusDoorCharacter, RunDoor, WaitDoor, FocusOwn };
 
-bool g_enabled = false;
-std::deque<DoorChange> g_queue;  // game thread only
+std::optional<DoorChange> g_next;  // game thread only: the newest peer door not yet replayed
 DoorChange g_current{};
 std::atomic<Step> g_step{Step::Idle};  // written on the game thread, read by the net thread too
 bool g_requested = false;  // the swap or zap for this step was issued
@@ -69,15 +67,15 @@ bool focusStep(Character character) {
 }
 
 void onTick() {
-    if (!g_enabled || !net_pad::active()) {
-        g_queue.clear();
+    if (!net_pad::active()) {
+        g_next.reset();
         g_step = Step::Idle;
         return;
     }
     if (g_step == Step::Idle) {
-        if (g_queue.empty() || !settled()) return;
-        g_current = g_queue.front();
-        g_queue.pop_front();
+        if (!g_next || !settled()) return;
+        g_current = *g_next;
+        g_next.reset();
         logger::write("split_rooms: replaying the peer's door to room 0x%x", g_current.room);
         enter(Step::FocusDoorCharacter);
     }
@@ -114,20 +112,16 @@ void onTick() {
 
 namespace split_rooms {
 
-void configure(bool enabled) {
-    g_enabled = enabled;
-    if (enabled) logger::write("split_rooms: on");
-}
-
 bool takeOver(const DoorChange& change) {
-    if (!g_enabled) return false;
-    // Together in TEAM both characters go through, as without this feature.
+    // Together in TEAM both characters go through.
     if (together() && party_mode::current() == control_rule::PartyMode::Team) return false;
-    if (g_queue.size() < kMaxQueued) g_queue.push_back(change);
+    g_next = change;
     return true;
 }
 
-bool apart() { return g_enabled && net_pad::active() && (replaying() || !together()); }
+bool apart() { return net_pad::active() && (replaying() || !together()); }
+
+bool independent() { return apart() || party_mode::current() == control_rule::PartyMode::LeaveBehind; }
 
 bool replaying() { return g_step != Step::Idle; }
 

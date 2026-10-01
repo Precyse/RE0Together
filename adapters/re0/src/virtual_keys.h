@@ -16,4 +16,7 @@ void tap(uint8_t scancode);
 // While muted the game reads only virtual keys.
 void setRealKeyboardMuted(bool muted);
 
+// The game never sees this key (DIK scan code; 0 = none) while it is set.
+void setMutedKey(uint8_t scancode);
+
 }  // namespace virtual_keys

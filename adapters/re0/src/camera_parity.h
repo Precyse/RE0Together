@@ -4,9 +4,10 @@
 #include "net_client.h"
 #include "protocol.h"
 
-// Shared camera: both machines focus the same character. The host decides; while a peer is connected the adapter
-// owns switching: a local V press becomes a request the host applies (directly on the host itself). The host also
-// focuses its own character, Rebecca, whenever the player objects change.
+// The camera. TEAM together: both machines focus the same character; the host decides, a local V press becomes a request
+// the host applies (directly on the host itself), and the host focuses its own character, Rebecca, whenever the player
+// objects change. Independent play (split_rooms::independent): each machine keeps its own character focused and V
+// does nothing. While a peer is connected the game itself never sees the keyboard switch key (command_input).
 namespace camera_parity {
 
 constexpr uint16_t kMsgSwitchRequest = proto::kFirstGameType + 3;  // 0x0103, guest to host, reliable: u8 character id

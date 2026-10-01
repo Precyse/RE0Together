@@ -7,10 +7,11 @@ namespace control_rule {
 // Who drives a character on this machine.
 //   Vanilla: no co-op peer, the game behaves normally.
 //   Local / Remote: a player drives it; Local reads this machine's pad, Remote replays the owner's input.
-//   Locked: nobody drives it (owner unknown on a guest, or left behind), its pad is blocked.
+//   Locked: nobody drives it here (owner unknown on a guest, or its owner is in another room), its pad is blocked.
 enum class Control : uint8_t { Vanilla, Local, Remote, Locked };
 
-// TEAM: both characters are driven by their owners. LEAVE_BEHIND: the unfocused character waits.
+// TEAM: one shared camera and the partner follows through doors. LEAVE_BEHIND: independent play, each machine keeps
+// its own player's character in focus and nobody follows (split_rooms.h).
 enum class PartyMode : uint8_t { Team, LeaveBehind };
 
 constexpr int kNoOwner = -1;
@@ -22,10 +23,10 @@ constexpr Control byOwnership(bool peerPresent, bool isHost, int ownerSlot, int 
     return ownerSlot == localSlot ? Control::Local : Control::Remote;
 }
 
-// Ownership control adjusted by the party mode: in LEAVE_BEHIND the unfocused driven character is Locked.
-constexpr Control byPartyMode(Control owned, PartyMode mode, bool focused) {
-    const bool driven = owned == Control::Local || owned == Control::Remote;
-    return driven && mode == PartyMode::LeaveBehind && !focused ? Control::Locked : owned;
+// Ownership control adjusted by where the owner is: a remote character whose owner reports another room than the one
+// loaded here is Locked, so the owner's input (meant for that room) is not replayed here.
+constexpr Control byPresence(Control owned, bool ownerInLoadedRoom) {
+    return owned == Control::Remote && !ownerInLoadedRoom ? Control::Locked : owned;
 }
 
 }  // namespace control_rule

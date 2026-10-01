@@ -60,15 +60,13 @@ Config loadConfig() {
             config.coop = value == "1";
         } else if (key == "overlay") {
             config.overlay = value != "0";
-        } else if (key == "split_rooms") {
-            config.splitRooms = value == "1";
         } else if (key == "net_trace") {
             config.netTrace = value == "1";
         } else if (key == "trace_vtables") {
             config.traceVtables = parseVtables(value);
         }
     }
-    logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d split_rooms=%d", config.port, config.trace,
-                  config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.splitRooms);
+    logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d", config.port, config.trace,
+                  config.traceVtables.size(), config.coop, config.overlay, config.netTrace);
     return config;
 }

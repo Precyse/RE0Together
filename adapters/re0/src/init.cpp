@@ -101,7 +101,6 @@ void startSubsystems() {
         return;
     }
     if (config.netTrace) net_trace::enable();
-    split_rooms::configure(config.splitRooms);
     if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop();
     if (config.trace) vtable_tracer::install(config.traceVtables);

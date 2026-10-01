@@ -53,7 +53,7 @@ The V key (partner switch) swaps +0x2c/+0x3c. sGameChara mirrors them at +0x148c
 
 ## Co-op control model (decided 2026-09-29, revised)
 - Fixed ownership: the host always owns Rebecca and the first peer always owns Billy, whoever is focused. When the player objects change (session start, save load) the host focuses Rebecca once through the swap helper; camera_parity mirrors it to the guest.
-- Control rule (`character_owner::controlOf`, pure part in `control_rule.h`): no peer is vanilla; an unknown owner is vanilla on the host and Locked on a guest; TEAM leaves both characters with their owners (Local or Remote); LEAVE_BEHIND locks the unfocused character on every machine and the focused one stays with its owner. Damage, inventory and state sync follow ownership only (`isRemoteOwned`/`isLocalOwned`).
+- Control rule (`character_owner::controlOf`, pure part in `control_rule.h`): no peer is vanilla; an unknown owner is vanilla on the host and Locked on a guest; both characters stay with their owners (Local or Remote) in both party modes; a Remote character is Locked while its owner reports another room than the one loaded here (its input belongs to that room). TEAM = shared camera and following; LEAVE_BEHIND = independent play (each machine focuses its own character, nobody follows). Damage, inventory and state sync follow ownership only (`isRemoteOwned`/`isLocalOwned`).
 - PLAYER_STATE (44 bytes) describes the sender's owned character (position, hp, characterId), whatever the camera is on; `focusedCharacterId` carries the camera character.
 - Menus stay with the focused character's owner (vanilla): the other player presses V to take focus before opening their own inventory.
 - Party commands are adapter-level because the game reads V/E from the focused character's think, whose input on a non-owner's machine is the remote pad. `command_input` polls KC_change (V) and KC_trace (E) from `%LOCALAPPDATA%\CAPCOM\RESIDENT EVIL 0 HD REMASTER\config.ini` with GetAsyncKeyState edges while the game window is foreground. V sends SWITCH_REQUEST 0x0103 (the host applies it directly for itself); the game's own V can still fire, so the host undoes a game-side focus change within 500 ms of an adapter switch. E toggles the party mode: PARTY_REQUEST 0x0109 to the host, which flips and broadcasts PARTY_MODE 0x010A (reliable, also every 2 s); toasts "Team" / "Leave behind: <character> waits". The vanilla E toggles sPlayer +0x40 (u8, 1 = partner follows); party_mode now owns that byte while a peer is connected.
@@ -155,8 +155,13 @@ What separate rooms needs, in order:
 3. door_sync only between players in the same room (already the TEAM rule) and no door forcing while apart.
 4. Enemy authority per room: whoever is in a room simulates its enemies; host authority only when together.
 
-Implemented without step 1 (split_rooms.cpp, opt-in `split_rooms=1`): instead of writing the partner record, every
+Implemented without step 1 (split_rooms.cpp, always on): instead of writing the partner record, every
 peer door is replayed here with the engine's own transitions, so the game keeps the record itself:
 focus the door's character (swap in the same room, Change-phase zap otherwise), run sDoorLoad::start with the
 follow flag (sPlayer +0x40) off, then focus the local character back. Camera parity, enemy_net and enemy_state stop
-while the rooms differ; enemy damage runs locally. Join teleports bypass the replay. Untested with two players.
+while the rooms differ; enemy damage runs locally. Join teleports bypass the replay. Only the newest pending peer
+door is replayed (targets are absolute). LEAVE_BEHIND is independent play even in the same room: own camera on each
+machine, V does nothing, the game never sees the keyboard switch key during co-op (virtual_keys), and a game-made
+switch (pad) is undone. Untested with two players.
+Known gap: each replay is visible on the machine that runs it (zap to the other character, its door, zap back). The
+fix is the partner's room/position record (step 1), which would let a peer door be applied without loading rooms.
