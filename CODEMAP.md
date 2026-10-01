@@ -31,6 +31,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate, 60 s timeout; host re-sends the save to every peer on SAVE_CHANGED | `Create`, `Ready`, `TimedOut`, `EnableAdapter` |
 | LogForwarder.cs | guest diagnostics to the host: new adapter-log bytes every 2 s (LOG_APPEND 0x0050) and any crash-*.dmp written during the session (CRASH_DUMP 0x0051, 32 KiB chunks, retried while still being written); host writes `peer_<steamid>.log` and `peer_<steamid>_<dump>` beside its adapter log | `Create`, `Pump` |
 | BuildCheck.cs | same build on every machine: host sends BUILD_INFO 0x0013 as a peer joins; a guest on a different build stops before the game starts (dev builds only warn); shared `LocalBuild` reads version.txt (also used by Updater) | `BuildCheck.Create`, `LocalBuild`, `Ready`, `Mismatch` |
+| Rejoin.cs | a guest whose lobby fails (Steam: no longer listed in the lobby = dropped) retries joining the same lobby every 5 s for 2 min; the running game is left alone (GameLauncher skips launch and install while it runs) and the join snapshot catches it up | `Rejoin`, `App.TryRejoin` |
 | SaveSender.cs | host: paced FILE_BEGIN/CHUNK/END per new peer, resend until ACK ok | `SendTo`, `OnAck`, `Pump` |
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir, FILE_ACK | `OnFrame`, `Complete` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `TryParseBegin` |

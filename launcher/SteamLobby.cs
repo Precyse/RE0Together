@@ -124,6 +124,8 @@ public sealed class SteamLobby : ILobby
         }
         _members = members;
         Revision++;
+        // Steam lists no members of a lobby we are no longer in: dropped, kicked or timed out.
+        if (members.All(m => m.Id != self.m_SteamID)) Failure ??= "no longer in the lobby (connection lost)";
     }
 
     private bool IsCompatible(CSteamID member) =>

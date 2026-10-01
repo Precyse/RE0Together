@@ -11,6 +11,11 @@ public static class GameLauncher
 
     public static void Launch(GameProfile profile, string? gameDir)
     {
+        if (Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe)).Length > 0)
+        {
+            Log.Info($"{profile.Name} is already running, not starting it again");
+            return;
+        }
         if (gameDir == null) Log.Info($"Game folder for app {profile.SteamAppId} not found, skipping adapter install");
         else InstallAdapters(profile, gameDir);
         Log.Info($"Starting {profile.Name} via Steam");

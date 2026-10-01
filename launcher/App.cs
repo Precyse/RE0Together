@@ -25,6 +25,7 @@ public sealed class App
     private string? _gameDir;
     private bool _launchPending;
     private BuildCheck? _buildCheck;
+    private Rejoin? _rejoin;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -43,7 +44,11 @@ public sealed class App
 
     public void Join(ulong lobbyId) => _commands.Enqueue(() => Open(Command.Join, lobbyId.ToString()));
 
-    public void Leave() => _commands.Enqueue(EndSession);
+    public void Leave() => _commands.Enqueue(() =>
+    {
+        _rejoin = null;
+        EndSession();
+    });
 
     public void Invite() => _commands.Enqueue(() =>
     {
@@ -106,9 +111,10 @@ public sealed class App
 
     private int Loop()
     {
-        while (!_stopRequested && (_interactive || _session?.Ended != true))
+        while (!_stopRequested && (_interactive || _session?.Ended != true || _rejoin != null))
         {
             RunCommands();
+            if (!TryRejoin()) return 1;
             _steam?.Pump();
             _transport!.Pump();
             AcceptInvite();
@@ -116,8 +122,10 @@ public sealed class App
             if (_lobby?.Failure is { } failure)
             {
                 Log.Info($"Lobby failure: {failure}");
-                if (!_interactive) return 1;
+                var guestOf = _session != null && _lobby.OwnerId != _transport!.LocalId ? _lobby.Id : (ulong?)null;
                 EndSession();
+                if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId);
+                else if (!_interactive) return 1;
             }
             if (_session == null && _lobby is { IsReady: true }) StartSession();
             _bridge?.Pump();
@@ -134,6 +142,20 @@ public sealed class App
             Thread.Sleep(PumpIntervalMs);
         }
         return 0;
+    }
+
+    /// <summary>Drives a pending rejoin. False when it gave up and the CLI should exit.</summary>
+    private bool TryRejoin()
+    {
+        if (_rejoin == null || _lobby != null) return true;
+        if (_rejoin.GaveUp)
+        {
+            Log.Info($"Could not rejoin lobby {_rejoin.LobbyId}, giving up");
+            _rejoin = null;
+            return _interactive;
+        }
+        if (_rejoin.AttemptDue()) _lobby = OpenLobby(Command.Join, _rejoin.LobbyId.ToString());
+        return true;
     }
 
     /// <summary>Commands come from another thread; a failing one is logged and the loop carries on.</summary>
@@ -167,6 +189,8 @@ public sealed class App
 
     private void StartSession()
     {
+        if (_rejoin != null) Log.Info("Rejoined the session");
+        _rejoin = null;
         _profile = GameProfile.Load(_lobby!.GameId!);
         _gameDir = ResolveGameDir(_profile);
         _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
