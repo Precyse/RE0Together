@@ -36,7 +36,8 @@ std::optional<Body> borrowBody();
 // Where a body stands now (to put a borrowed NPC back when it is released).
 std::optional<Pose> bodyPose(Body body);
 
-// Moves a body (the engine's SetWorldTransform). False when it faults; the caller then forgets the body.
-bool placeBody(Body body, const Pose& pose);
+// Moves a body (the engine's SetWorldTransform) and gives its mover the velocity it is moving with, so its own
+// animation can follow. False when it faults; the caller then forgets the body.
+bool placeBody(Body body, const Pose& pose, const world_to_screen::Vec3& velocity);
 
 }  // namespace game

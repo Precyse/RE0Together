@@ -25,6 +25,7 @@ struct RemotePlayer {
     uint8_t slot = 0;
     std::string name;
     float position[3] = {};  // newest report extrapolated to now by the peer's velocity
+    float velocity[3] = {};  // metres per second between the two newest reports
     float yaw = 0;
 };
 

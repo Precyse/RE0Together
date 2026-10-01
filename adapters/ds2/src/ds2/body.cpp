@@ -37,6 +37,13 @@ constexpr size_t kScanBlock = 1 << 20;
 
 using SetWorldTransformFn = void (*)(uintptr_t entity, const decima::WorldTransform* transform);
 
+// Mover::SetVelocity, the virtual Entity_ExportedSetVelocity forwards to (slot 0xC8 / 8).
+constexpr size_t kMoverSetVelocitySlot = 0xC8 / sizeof(void*);
+struct Velocity {
+    float x, y, z, w;
+};
+using SetVelocityFn = void (*)(uintptr_t mover, const Velocity* velocity);
+
 SetWorldTransformFn g_setWorldTransform = nullptr;
 
 decima::WorldTransform transformOf(const game::Pose& pose) {
@@ -51,9 +58,14 @@ decima::WorldTransform transformOf(const game::Pose& pose) {
     return t;
 }
 
-bool guardedPlace(uintptr_t body, const decima::WorldTransform* t) {
+bool guardedPlace(uintptr_t body, const decima::WorldTransform* t, const Velocity* v) {
     __try {
         g_setWorldTransform(body, t);
+        const uintptr_t mover = *reinterpret_cast<const uintptr_t*>(body + kEntityMover);
+        if (mover) {
+            const auto setVelocity = (*reinterpret_cast<SetVelocityFn* const*>(mover))[kMoverSetVelocitySlot];
+            setVelocity(mover, v);
+        }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -142,9 +154,10 @@ std::optional<Pose> bodyPose(Body body) {
     return Pose{{t.position.x, t.position.y, t.position.z}, std::atan2(forward[0], forward[1])};
 }
 
-bool placeBody(Body body, const Pose& pose) {
+bool placeBody(Body body, const Pose& pose, const world_to_screen::Vec3& velocity) {
     const decima::WorldTransform t = transformOf(pose);
-    return body && g_setWorldTransform && guardedPlace(body, &t);
+    const Velocity v{static_cast<float>(velocity.x), static_cast<float>(velocity.y), static_cast<float>(velocity.z), 0};
+    return body && g_setWorldTransform && guardedPlace(body, &t, &v);
 }
 
 }  // namespace game

@@ -10,8 +10,8 @@ namespace remote_body {
 
 void setEnabled(bool enabled);
 
-// Render thread, once per frame per visible peer: where that peer's body should be.
-void setTarget(uint8_t slot, const game::Pose& pose);
+// Render thread, once per frame per visible peer: where that peer's body should be and how fast it is moving.
+void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity);
 
 // Simulation thread (main_thread tick): borrows missing bodies, moves live ones, releases those of departed peers.
 void tick();

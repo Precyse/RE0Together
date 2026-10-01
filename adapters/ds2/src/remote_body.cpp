@@ -20,12 +20,13 @@ struct Puppet {
     game::Body body = 0;
     game::Pose home;  // where the borrowed NPC stood, restored on release
     game::Pose target;
+    world_to_screen::Vec3 velocity;
     Clock::time_point targetAt;
 };
 
 // Puts a borrowed NPC back where it was found.
 void release(uint8_t slot, Puppet& puppet) {
-    game::placeBody(puppet.body, puppet.home);
+    game::placeBody(puppet.body, puppet.home, {});
     logger::write("body: slot %u released its body", slot);
     puppet = Puppet{};
 }
@@ -40,11 +41,12 @@ namespace remote_body {
 
 void setEnabled(bool enabled) { g_enabled = enabled; }
 
-void setTarget(uint8_t slot, const game::Pose& pose) {
+void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity) {
     if (!g_enabled.load()) return;
     std::lock_guard lock(g_mutex);
     Puppet& puppet = g_puppets[slot];
     puppet.target = pose;
+    puppet.velocity = velocity;
     puppet.targetAt = Clock::now();
 }
 
@@ -71,7 +73,7 @@ void tick() {
             if (home) puppet.home = *home;
             else logger::write("body: no body for slot %u, marker only", slot);
         }
-        if (puppet.state == State::Live && !game::placeBody(puppet.body, puppet.target)) {
+        if (puppet.state == State::Live && !game::placeBody(puppet.body, puppet.target, puppet.velocity)) {
             logger::write("body: moving the body of slot %u faulted, marker only", slot);
             puppet.state = State::Failed;
         }

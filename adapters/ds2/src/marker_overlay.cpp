@@ -97,7 +97,7 @@ void draw(float width, float height) {
     if (!camera) return;
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
         const world_to_screen::Vec3 at = smoothed(peer);
-        remote_body::setTarget(peer.slot, {at, peer.yaw});
+        remote_body::setTarget(peer.slot, {at, peer.yaw}, {peer.velocity[0], peer.velocity[1], peer.velocity[2]});
         drawMarker(list, *camera, at, peer.name, width, height);
     }
     if (!g_selfMarker.load()) return;

@@ -112,7 +112,8 @@ std::vector<RemotePlayer> remotePlayers() {
     for (const auto& [slot, heard] : g_heard) {
         if (now - heard.at > kStaleAfter) continue;
         const auto name = g_names.find(slot);
-        RemotePlayer peer{slot, name == g_names.end() ? "Player " + std::to_string(slot) : name->second, {}, heard.state.yaw};
+        RemotePlayer peer{slot, name == g_names.end() ? "Player " + std::to_string(slot) : name->second, {},
+                          {heard.velocity[0], heard.velocity[1], heard.velocity[2]}, heard.state.yaw};
         const float elapsed = std::chrono::duration<float>(now - heard.at).count();
         position_blend::extrapolate(heard.state.pos, heard.velocity, elapsed, peer.position);
         out.push_back(std::move(peer));
