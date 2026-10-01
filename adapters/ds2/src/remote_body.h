@@ -4,7 +4,8 @@
 #include "game.h"
 
 // A body per remote player: an NPC the game has already loaded is borrowed, moved to the peer's smoothed pose, and
-// put back where it was found when the peer stops reporting. Poses come from the render thread; the engine calls run
+// put back where it was found when the peer stops reporting. While the peer drives a vehicle the body waits where it
+// was found (it cannot sit in the vehicle; the vehicle and the marker show the peer) and follows again afterwards. Poses come from the render thread; the engine calls run
 // on the simulation thread. A failed borrow or move turns the body off for that peer (the marker stays).
 namespace remote_body {
 

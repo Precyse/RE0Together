@@ -5,7 +5,8 @@ local Sam stands still.
 usage: python fake_peer.py --port 27990 [--radius 3] [--speed 1.4] [--offset-x 0]
                            [--cargo TYPE:NAME,... [--pickup TYPE:X,Y,Z]]
                            [--host [--host-give TYPE] [--pickup-answers accept,refuse] [--host-pickup TYPE:X,Y,Z]]
-                           [--drop TYPE:X,Y,Z|TYPE:here] [--drive VEHICLE_ID [--drive-load KIND,...]]
+                           [--drop TYPE:X,Y,Z|TYPE:here]
+                           [--drive VEHICLE_ID [--drive-load KIND,...] [--drive-window START,END]]
 The circle is centred on the first PLAYER_STATE received from the local player (plus --offset-x along world X).
 With --cargo it also acts as a guest's rack for the host's give/take menu (adapters/ds2/src/cargo_transfer.h):
 reports the pieces in CARGO_LIST, gives one up with CARGO_ADD when the host sends CARGO_TAKE, and adds the kinds
@@ -16,7 +17,8 @@ picked up the piece there. As the guest, --pickup TYPE:X,Y,Z asks the host to co
 role, --drop says this player put a piece down there ("here": 1.5 m from the local player); drops the local player
 makes are printed. --drive VEHICLE_ID (hex) drives that vehicle along the circle (VEHICLE_STATE at 30 Hz); the
 vehicle the local player drives is printed when it changes; --drive-load reports that vehicle's bed holding those
-kinds (VEHICLE_LOAD), and the load of the vehicle the local player drives is printed when it changes.
+kinds (VEHICLE_LOAD); --drive-window drives only between those seconds after start (walking before and after),
+and the load of the vehicle the local player drives is printed when it changes.
 """
 import argparse
 import math
@@ -215,6 +217,7 @@ def main():
                         help="with --host: TYPE:X,Y,Z, tell the guest once that the host picked up that piece")
     parser.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) to drive along the circle")
     parser.add_argument("--drive-load", default=None, help="with --drive: KIND,... the vehicle's bed holds")
+    parser.add_argument("--drive-window", default=None, help="with --drive: START,END seconds after start")
     parser.add_argument("--drop", action="append", default=[],
                         help="TYPE:X,Y,Z or TYPE:here, tell the partner once that this player put that piece down")
     args = parser.parse_args()
@@ -242,6 +245,7 @@ def main():
     last_heartbeat = 0.0
     last_report = 0.0
     last_load = -VEHICLE_LOAD_S
+    window = tuple(map(float, args.drive_window.split(","))) if args.drive_window else (0.0, math.inf)
     load_kinds = [int(k) for k in args.drive_load.split(",") if k] if args.drive_load is not None else None
     seq = 0
     while True:
@@ -252,11 +256,12 @@ def main():
         yaw = math.atan2(heading_x, heading_y)
         seq += 1
         sock.sendall(encode(PLAYER_STATE, 0, SLOT_ALL, STATE.pack(seq, x, y, cz, yaw, 0)))
-        if args.drive is not None and seq % max(1, SEND_HZ // VEHICLE_HZ) == 0:
+        driving = args.drive is not None and window[0] <= now - start < window[1]
+        if driving and seq % max(1, SEND_HZ // VEHICLE_HZ) == 0:
             right, up = (heading_y, -heading_x, 0.0), (0.0, 0.0, 1.0)
             rows = (*right, heading_x, heading_y, 0.0, *up)
             sock.sendall(encode(VEHICLE_STATE, 0, SLOT_ALL, VEHICLE.pack(seq, 0, args.drive, x, y, cz, *rows)))
-        if args.drive is not None and load_kinds is not None and now - last_load >= VEHICLE_LOAD_S:
+        if driving and load_kinds is not None and now - last_load >= VEHICLE_LOAD_S:
             last_load = now
             kinds = struct.pack(f"<{len(load_kinds)}I", *load_kinds)
             load = VEHICLE_LOAD_HEADER.pack(args.drive, len(load_kinds), 0) + kinds

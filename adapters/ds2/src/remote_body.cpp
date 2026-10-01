@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "log.h"
+#include "vehicle_sync.h"
 
 namespace {
 
@@ -22,6 +23,7 @@ struct Puppet {
     game::Pose target;
     world_to_screen::Vec3 velocity;
     Clock::time_point targetAt;
+    bool parked = false;  // put back home while the peer drives
 };
 
 // Puts a borrowed NPC back where it was found.
@@ -73,7 +75,15 @@ void tick() {
             if (home) puppet.home = *home;
             else logger::write("body: no body for slot %u, marker only", slot);
         }
-        if (puppet.state == State::Live && !game::placeBody(puppet.body, puppet.target, puppet.velocity)) {
+        const bool driving = vehicle_sync::isDriving(slot);
+        if (puppet.state == State::Live && driving != puppet.parked) {
+            puppet.parked = driving;
+            if (driving) game::placeBody(puppet.body, puppet.home, {});
+            logger::write("body: slot %u %s", slot,
+                          driving ? "drives, body put back" : "left the vehicle, body follows");
+        }
+        if (puppet.state == State::Live && !puppet.parked &&
+            !game::placeBody(puppet.body, puppet.target, puppet.velocity)) {
             logger::write("body: moving the body of slot %u faulted, marker only", slot);
             puppet.state = State::Failed;
         }

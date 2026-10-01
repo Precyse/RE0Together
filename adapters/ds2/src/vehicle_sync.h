@@ -29,4 +29,7 @@ void tick(NetClient& net, const SessionSnapshot& session);
 // Simulation thread (main_thread tick): moves the vehicles partners are driving.
 void place();
 
+// Whether the partner in `slot` is driving now (its reports are fresh). Any thread.
+bool isDriving(uint8_t slot);
+
 }  // namespace vehicle_sync
