@@ -72,7 +72,7 @@ class Scanner:
             a = attrs_va + i * ATTR_STRIDE
             t = img.ptr(a)
             attr_name = img.cstr(img.ptr(a + ATTR_NAME))
-            if not attr_name or (t and not self.data_ptr(t)):
+            if not attr_name or (t and not self.img.contains(t)):
                 break  # the count byte overshoots on some types; the table ends at the first malformed entry
             if not t:
                 attrs.append({"category": attr_name})

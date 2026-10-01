@@ -3,7 +3,10 @@
 Class vtables come from the exe's MSVC RTTI (static, see disasm.py) and are rebased onto the live module.
 
 usage: python probe.py base                         # live module base and slide
-       python probe.py instances <Class> [max]      # heap objects whose first qword is the class's vtable
+       python probe.py instances <Class> [max] [--near <hex addr>]
+                                                    # heap objects whose first qword is the class's vtable; --near
+                                                    # scans only the allocation holding that address (seconds, not
+                                                    # minutes: entities share the player entity's heap)
        python probe.py refs <hex value> [max]       # where that qword is stored (image .data shown as file VA)
        python probe.py dump <hex addr> [size]       # qwords with the class of any object they point to, and doubles
        python probe.py entity <hex addr>            # Decima Entity world transform (position doubles, rotation rows)
@@ -83,9 +86,21 @@ class Proc:
                 yield mbi.BaseAddress, mbi.RegionSize
             addr = mbi.BaseAddress + mbi.RegionSize
 
-    def find_qword(self, value, limit, include_image=False):
+    def allocation_regions(self, address):
+        """Committed readable regions of the allocation that contains address."""
+        mbi = MEMORY_BASIC_INFORMATION64()
+        k32.VirtualQueryEx(self.h, ctypes.c_void_p(address), ctypes.byref(mbi), ctypes.sizeof(mbi))
+        allocation = mbi.AllocationBase
+        return [(b, sz) for b, sz in self.regions() if self.allocation_of(b) == allocation]
+
+    def allocation_of(self, address):
+        mbi = MEMORY_BASIC_INFORMATION64()
+        k32.VirtualQueryEx(self.h, ctypes.c_void_p(address), ctypes.byref(mbi), ctypes.sizeof(mbi))
+        return mbi.AllocationBase
+
+    def find_qword(self, value, limit, include_image=False, regions=None):
         hits = []
-        for base, size in self.regions(private_only=not include_image):
+        for base, size in regions if regions is not None else self.regions(private_only=not include_image):
             for off in range(0, size, CHUNK):
                 blob = self.read(base + off, min(CHUNK, size - off))
                 if len(blob) < 8:
@@ -115,10 +130,11 @@ class Session:
         return disasm.class_of_vtable(self.img, file_vt)
 
 
-def cmd_instances(s, name, limit):
+def cmd_instances(s, name, limit, near=None):
+    regions = s.proc.allocation_regions(near) if near else None
     for vt, offset in disasm.vtables(s.img, name):
         live = vt + s.slide
-        hits = s.proc.find_qword(live, limit)
+        hits = s.proc.find_qword(live, limit, regions=regions)
         print(f"{name} vtable {live:#x} (subobject +{offset:#x}): {len(hits)} hits")
         for h in hits:
             print(f"  {h - offset:#x}")
@@ -174,11 +190,12 @@ def main():
     if cmd == "diff":
         return cmd_diff(sys.argv[2], sys.argv[3])
     s = Session()
-    limit = int(sys.argv[3]) if len(sys.argv) > 3 and cmd in ("instances", "refs") else DEFAULT_MAX_HITS
+    limit = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else DEFAULT_MAX_HITS
     if cmd == "base":
         print(f"base {s.proc.base:#x} slide {s.slide:#x}")
     elif cmd == "instances":
-        cmd_instances(s, sys.argv[2], limit)
+        near = int(sys.argv[sys.argv.index("--near") + 1], 16) if "--near" in sys.argv else None
+        cmd_instances(s, sys.argv[2], limit, near)
     elif cmd == "refs":
         cmd_refs(s, int(sys.argv[2], 16), limit)
     elif cmd == "dump":

@@ -22,4 +22,21 @@ std::optional<Pose> localPlayer();
 // The camera the game renders from.
 std::optional<world_to_screen::Camera> camera();
 
+// A function the game's simulation thread calls every frame, taking one pointer and returning one
+// (DS2: Player::GetLastActivatedCamera); 0 before resolve() succeeds.
+uintptr_t frameFunction();
+
+// Opaque handle of an entity the adapter created; 0 = none.
+using Body = uintptr_t;
+
+// Borrows a humanoid NPC the game has already loaded near the player to serve as a remote player's body, or 0
+// when none is loaded. Simulation thread only (main_thread).
+Body borrowBody();
+
+// Where a body stands now (to put a borrowed NPC back when it is released).
+std::optional<Pose> bodyPose(Body body);
+
+// Moves a body (the engine's SetWorldTransform). False when it faults; the caller then forgets the body.
+bool placeBody(Body body, const Pose& pose);
+
 }  // namespace game

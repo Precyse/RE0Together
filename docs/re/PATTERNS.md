@@ -117,3 +117,15 @@ Shape: before the peer has a body in the world, the cheapest visible proof is a 
 Find it: the active camera object (position, rotation basis, field of view); the present call of the graphics API for drawing.
 Replicate: hook Present (learn the command queue from swap chain creation on DX12), draw with Dear ImGui, project with the camera's own transform and field of view; keep the projection pure and unit tested. A local self-marker checks the projection against the game's own image (it caught DS2's field of view being horizontal, not vertical). A proxy DLL in the game folder is also loaded by helper processes there (crash reporters); run the adapter only in the game's exe.
 Seen in: DS2: `adapters/ds2/src/dx12_hook.cpp`, `marker_overlay.cpp`, `world_to_screen.h`.
+
+## Borrow a loaded body before you can create one  [presentation, control]
+Shape: creating an entity runs the engine's full spawn pipeline (spawn setup, owner objects, thread rules); moving an existing one is a single locked transform write.
+Find it: count component vtables in the player entity's heap (movers, AI) to see which characters are loaded; a component's owner pointer leads to its entity.
+Replicate: for a first remote body, borrow a loaded NPC, drive its transform from the peer's state on the simulation thread, and put it back where it was found when the peer leaves. Move on to a created body once the spawn setup is understood.
+Seen in: DS2: DSNpcGroundMover +0x48 -> Entity, Entity::SetWorldTransform, `remote_body`, `ds2/body.cpp`. Same idea as RE4R's "Player 2" game object and CrimsonDesertCoop's companion hijack (docs/FINDINGS.md).
+
+## Find the simulation thread by counting callers of a per-frame accessor  [control]
+Shape: modern engines run the window pump, render and simulation on different threads; engine calls that create or link objects are only safe on the simulation thread.
+Find it: hook a small function the game calls every frame (DS2: Player::GetLastActivatedCamera) and count calling threads for a few seconds; the busiest is the simulation thread. The window's own thread may pump with GetMessage and never reach a PeekMessage hook.
+Replicate: queue adapter work and run it from that hook on that thread only.
+Seen in: DS2: `main_thread.cpp`. Trap: catching an access violation in the middle of an engine call leaves its locks held and freezes the game; fix the call instead of catching it.

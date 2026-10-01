@@ -44,10 +44,14 @@ add_library(ds2_adapter SHARED
     src/player_sync.cpp
     src/dx12_hook.cpp
     src/marker_overlay.cpp
+    src/remote_body.cpp
+    src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
+    src/msvc_rtti.cpp
     src/decima/safe_read.cpp
-    src/ds2/game.cpp)
+    src/ds2/game.cpp
+    src/ds2/body.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
 target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)

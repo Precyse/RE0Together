@@ -5,9 +5,11 @@
 #include "dx12_hook.h"
 #include "game.h"
 #include "log.h"
+#include "main_thread.h"
 #include "marker_overlay.h"
 #include "net_client.h"
 #include "player_sync.h"
+#include "remote_body.h"
 
 namespace {
 
@@ -23,9 +25,13 @@ DWORD WINAPI initThread(LPVOID) {
     crash_dump::install();
     const Config config = loadConfig();
     marker_overlay::setSelfMarker(config.selfMarker);
+    remote_body::setEnabled(config.remoteBody);
     if (config.overlay && !dx12_hook::install(marker_overlay::draw)) logger::write("adapter: overlay unavailable");
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
+    if (config.remoteBody && !main_thread::install(game::frameFunction(), remote_body::tick)) {
+        logger::write("adapter: no simulation-thread hook, bodies off");
+    }
     player_sync::start(g_net, config.port);
     return 0;
 }

@@ -41,8 +41,11 @@ Config loadConfig() {
             config.overlay = value != "0";
         } else if (key == "self_marker") {
             config.selfMarker = value == "1";
+        } else if (key == "remote_body") {
+            config.remoteBody = value == "1";
         }
     }
-    logger::write("config: port=%u overlay=%d self_marker=%d", config.port, config.overlay, config.selfMarker);
+    logger::write("config: port=%u overlay=%d self_marker=%d remote_body=%d", config.port, config.overlay,
+                  config.selfMarker, config.remoteBody);
     return config;
 }

@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "player_sync.h"
 #include "position_blend.h"
+#include "remote_body.h"
 #include "toast_queue.h"
 
 namespace {
@@ -95,7 +96,9 @@ void draw(float width, float height) {
     const auto camera = game::camera();
     if (!camera) return;
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
-        drawMarker(list, *camera, smoothed(peer), peer.name, width, height);
+        const world_to_screen::Vec3 at = smoothed(peer);
+        remote_body::setTarget(peer.slot, {at, peer.yaw});
+        drawMarker(list, *camera, at, peer.name, width, height);
     }
     if (!g_selfMarker.load()) return;
     if (const auto self = game::localPlayer()) drawMarker(list, *camera, self->position, "local", width, height);
