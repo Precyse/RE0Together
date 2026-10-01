@@ -42,6 +42,8 @@ add_library(re0_adapter SHARED
     src/game_state.cpp
     src/door_travel.cpp
     src/door_sync.cpp
+    src/crash_dump.cpp
+    src/net_trace.cpp
     src/flag_sync.cpp
     src/join_sync.cpp
     src/session_slot.cpp
@@ -74,7 +76,7 @@ add_library(re0_adapter SHARED
     src/toast_queue.cpp
     dinput8.def)
 set_target_properties(re0_adapter PROPERTIES OUTPUT_NAME dinput8 PREFIX "")
-target_link_libraries(re0_adapter PRIVATE minhook imgui ws2_32)
+target_link_libraries(re0_adapter PRIVATE minhook imgui ws2_32 dbghelp)
 add_custom_command(TARGET re0_adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:re0_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/dinput8.dll)
 
@@ -103,6 +105,10 @@ add_executable(flag_diff_test tests/flag_diff_test.cpp)
 
 add_executable(jitter_target_test tests/jitter_target_test.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test flag_diff_test jitter_target_test)
+add_executable(pad_buffer_test tests/pad_buffer_test.cpp)
+
+add_executable(trace_replay tools/trace_replay.cpp)
+
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

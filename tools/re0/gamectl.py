@@ -4,6 +4,8 @@ usage: python gamectl.py shot [out.png]
        python gamectl.py key <name> [hold_ms] [repeat]   e.g. key enter / key up 50 3 / key w 1500
        python gamectl.py keys <name,name,...>             tap each in order
        python gamectl.py loadsave <slot> [--from-logo]    from the title menu (or the boot logo), load a save slot and continue
+       python gamectl.py idle                             seconds since the user last touched the mouse or keyboard
+Keys are only sent while RE0 is the foreground window; if focus cannot be taken, nothing is sent.
 Menus: Enter confirms, Space cancels, Esc opens pause (Quit Game lives there).
 """
 import ctypes
@@ -70,6 +72,25 @@ def focus(hwnd):
     time.sleep(FOCUS_SETTLE_MS / 1000)
 
 
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wt.UINT), ("dwTime", wt.DWORD)]
+
+
+def idle_seconds():
+    info = LASTINPUTINFO(cbSize=ctypes.sizeof(LASTINPUTINFO))
+    user32.GetLastInputInfo(ctypes.byref(info))
+    return (ctypes.windll.kernel32.GetTickCount() - info.dwTime) / 1000
+
+
+def ensure_foreground(hwnd):
+    """Input must only ever reach the game: refocus once, then refuse."""
+    if user32.GetForegroundWindow() == hwnd:
+        return
+    focus(hwnd)
+    if user32.GetForegroundWindow() != hwnd:
+        sys.exit("RE0 is not the foreground window; no input sent")
+
+
 def send_scan(code, up):
     flags = KEYEVENTF_SCANCODE | (KEYEVENTF_KEYUP if up else 0) | (KEYEVENTF_EXTENDEDKEY if code & EXTENDED else 0)
     inp = INPUT(type=INPUT_KEYBOARD)
@@ -77,7 +98,8 @@ def send_scan(code, up):
     user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
 
 
-def press(name, hold_ms=TAP_MS):
+def press(hwnd, name, hold_ms=TAP_MS):
+    ensure_foreground(hwnd)
     code = SCANCODES[name]
     send_scan(code, False)
     time.sleep(hold_ms / 1000)
@@ -99,22 +121,25 @@ LOAD_MENU_STEPS = [("enter", 9)]                          # title menu (Load Gam
 CONFIRM_STEPS = [("enter", 14), ("enter", 14)]             # load slot -> Continue
 
 
-def run_steps(steps):
+def run_steps(hwnd, steps):
     for key, wait in steps:
-        press(key)
+        press(hwnd, key)
         time.sleep(wait)
 
 
 def load_save(hwnd, slot, from_logo):
     focus(hwnd)
-    run_steps((BOOT_STEPS if from_logo else []) + LOAD_MENU_STEPS + [("down", 1)] * (slot - 1) + CONFIRM_STEPS)
+    run_steps(hwnd, (BOOT_STEPS if from_logo else []) + LOAD_MENU_STEPS + [("down", 1)] * (slot - 1) + CONFIRM_STEPS)
 
 
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    hwnd = find_window()
     cmd = sys.argv[1]
+    if cmd == "idle":
+        print(f"{idle_seconds():.0f}")
+        return
+    hwnd = find_window()
     if cmd == "shot":
         focus(hwnd)
         shot(hwnd, sys.argv[2] if len(sys.argv) > 2 else DEFAULT_SHOT)
@@ -122,13 +147,13 @@ def main():
         focus(hwnd)
         hold = int(sys.argv[3]) if len(sys.argv) > 3 else TAP_MS
         for _ in range(int(sys.argv[4]) if len(sys.argv) > 4 else 1):
-            press(sys.argv[2], hold)
+            press(hwnd, sys.argv[2], hold)
     elif cmd == "loadsave":
         load_save(hwnd, int(sys.argv[2]) if len(sys.argv) > 2 else 1, "--from-logo" in sys.argv)
     elif cmd == "keys":
         focus(hwnd)
         for name in sys.argv[2].split(","):
-            press(name)
+            press(hwnd, name)
     else:
         sys.exit(__doc__)
 

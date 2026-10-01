@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Publish check
+        run: python tools/publish_check.py
+
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x86

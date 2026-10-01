@@ -1,6 +1,6 @@
 # CODEMAP
 
-Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers, checks the save transfer and the reset), `tools/fake_adapter.py` (fake game adapter), `tools/echo_peer.py` (echoes 0x0100/0x0101 frames back after a delay; see `adapters/re0/README.md`), `tools/spoof_peer.py` (sends a wrong slot byte over local transport).
+Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers, checks the save transfer and the reset), `tools/fake_adapter.py` (fake game adapter), `tools/echo_peer.py` (echoes 0x0100/0x0101 frames back after a delay; see `adapters/re0/README.md`), `tools/spoof_peer.py` (sends a wrong slot byte over local transport). RE0 research tools in `tools/re0/`: `gamectl.py` (keys and screenshots to the game window only, refuses unless RE0 is in front; `idle` = seconds since the user last used mouse/keyboard), `probe.py`, `disasm.py`, `watch_write.py`. `tools/publish_check.py` gates pushes and releases.
 
 ## launcher/ (C# .NET 8, namespace CoopLauncher)
 
@@ -63,6 +63,10 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/auto_join.cpp | net thread: a guest outside gameplay (boot, title, load list, game over) with the host in game gets virtual Enter every 2.5 s and a muted keyboard until a character is controlled; waits muted while the host is not in game | `auto_join::onNetTick` |
 | src/virtual_keys.cpp | virtual keyboard on DirectInput: the proxy hands over IDirectInput8, CreateDevice is hooked, the keyboard's GetDeviceState gets tapped keys and optional muting | `virtual_keys::onDirectInput`, `tap`, `setRealKeyboardMuted` |
 | src/jitter_target.h | adaptive remote-pad buffer target (2..8 frames: +1 per underrun, -1 after ~10 s calm; skip beyond target + 6), unit tested | `JitterTarget` |
+| src/pad_buffer.h | remote pad frames between arrival and replay: ordered replay once the JitterTarget depth is reached, underrun, skip-ahead, cap 64 (shared by net_pad and trace_replay, unit tested) | `PadBuffer` |
+| src/crash_dump.cpp | unhandled-exception filter: writes coop\crash-<date>-<time>.dmp (MiniDumpWriteDump) and a log line, then chains to the previous filter; installed at start and again after decryption | `crash_dump::install` |
+| src/net_trace.cpp | opt-in (`net_trace=1`) recording of received PAD_FRAME and PLAYER_STATE packets with arrival ms to coop/net_trace.bin | `net_trace::enable`, `record`, `TraceRecord` |
+| tools/trace_replay.cpp | offline: replays a net_trace.bin (or a synthetic link with latency/jitter/loss) through PadBuffer at 60 fps; reports underruns, skips, buffer delay and PLAYER_STATE gaps | `main` |
 | src/flag_diff.h | pure word diff/apply for flag_sync (unit tested) | `flag_diff::diff`, `apply` |
 | src/room_phase.h | room phase ids and names (sRoomControl +0xb8 manager) and which phases pause the world | `room_phase::name`, `pausesWorld` |
 | src/phase_watch.cpp | net thread: logs every room phase change by name (`phase: Main -> EventDemo`), F8 room phase | `phase_watch::onNetTick` |
@@ -83,7 +87,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/partner_think.cpp | gives every co-op controlled (not Vanilla) character on a cPlayerSubThink a cPlayerThink (with `coop=1`); skips while a door runs and 30 frames after, re-read every tick | `partner_think::enable` |
 | src/pad_frame.h | PAD_FRAME (0x0101) wire structs and pad vtable slot constants | `pad::PadFrame`, `PadPacket` |
 | src/input_record.cpp | per frame: evaluates the original pad vtable queries, sends last 3 frames | `input_record::captureOriginals`, `enable` |
-| src/net_pad.cpp | jitter buffer of the peer's frames, cloned pad object with thunk vtable, peer slot; buffer target from JitterTarget (F8 pad buffer/target) | `net_pad::onPacket`, `advance`, `object`, `analog` |
+| src/net_pad.cpp | jitter buffer of the peer's frames, cloned pad object with thunk vtable, peer slot; buffer target from JitterTarget (F8 pad buffer/target); buffering lives in PadBuffer | `net_pad::onPacket`, `advance`, `object`, `analog` |
 | src/input_redirect.cpp | MinHook on getPad and the analog getter: inside a character's move, Remote reads the NetPad, Locked reads the game's blocked pad, else the real pad | `input_redirect::install`, `realPad`, `realAnalog`, `replayingRemoteInput` |
 | src/state_correction.cpp | remote-owned character position: after its move (game_tick post-move hook) it is pulled toward the owner's newest PLAYER_STATE extrapolated by velocity (dead zone 3, blend 0.5 per tick up to 60, snap beyond; same room only); applies its HP (setHP); `requestForcedCheck` snaps once regardless of distance | `state_correction::onFrame`, `enable`, `requestForcedCheck` |
 | src/position_blend.h | pure blend/extrapolation/classify math (no game, unit tested) | `position_blend::classify`, `blendPosition`, `blendRotation`, `extrapolate` |
@@ -111,6 +115,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/door_phase_test.cpp | x86 exe: door phase predicate (0..4 running; 5 and -1 idle) | |
 | tests/flag_diff_test.cpp | x86 exe: flag word diff set/clear masks, apply round trip, out-of-range word | |
 | tests/jitter_target_test.cpp | x86 exe: jitter target growth, cap, calm shrink, floor | |
+| tests/pad_buffer_test.cpp | x86 exe: PadBuffer waiting, order, stale frames, underrun, skip-ahead, cap, clear | |
 | tests/position_blend_test.cpp | x86 exe: classify thresholds, blend convergence, extrapolation cap, quaternion shorter arc (no game) | |
 | tests/settled_copy_test.cpp | x86 exe: settle delay, resend, adopt and reset of `SettledCopy` (no game) | |
 | tests/floor_pending_test.cpp | x86 exe: put/take coalescing, per-room cap and drop, ordering, room isolation of `floor_pending::Queue` (no game) | |
@@ -142,3 +147,6 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 - Control rule (who drives a character): `control_rule.h` (pure) applied in `character_owner::controlOf`; party commands: `command_input.cpp`, `party_mode.cpp`, `camera_parity.cpp` (trace a press or decision in `adapter.log`, lines starting `command:`); pickup crash guard: `pickup_guard.cpp`
 - Overlay contents: `adapters/re0/src/debug_lines.cpp` (add a stat: counter/gauge in `debug_stats.h`, update it where the event happens, add a line)
 - Reverse-engineering patterns shared across games: `docs/re/PATTERNS.md` (grown by the `coop-re` skill)
+- Before pushing: `python tools/publish_check.py` (no game files, dumps, decompiled output or keys; also runs in the release workflow)
+- Tuning input delay without a partner: `adapters/re0/build/trace_replay.exe --synthetic 120 --jitter 60`, or record with `net_trace=1` and replay the file
+- A crash on a player's machine: `coop\crash-*.dmp` next to adapter.log

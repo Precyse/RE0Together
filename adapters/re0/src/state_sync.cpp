@@ -27,6 +27,7 @@
 #include "inventory_sync.h"
 #include "menu_mirror.h"
 #include "net_pad.h"
+#include "net_trace.h"
 #include "pad_frame.h"
 #include "party_mode.h"
 #include "state_correction.h"
@@ -91,6 +92,7 @@ void logRemoteState(const GameFrame& frame) {
 }
 
 void onFrame(const GameFrame& frame) {
+    net_trace::record(frame);
     if (frame.type == proto::kMsgPartyRequest || frame.type == proto::kMsgPartyMode) {
         party_mode::onFrame(frame);
         return;

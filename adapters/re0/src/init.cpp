@@ -7,6 +7,7 @@
 #include "character_owner.h"
 #include "command_input.h"
 #include "config.h"
+#include "crash_dump.h"
 #include "debug_overlay.h"
 #include "door_sync.h"
 #include "door_travel.h"
@@ -25,6 +26,7 @@
 #include "menu_mirror.h"
 #include "net_client.h"
 #include "net_pad.h"
+#include "net_trace.h"
 #include "partner_think.h"
 #include "party_mode.h"
 #include "pickup_guard.h"
@@ -88,6 +90,7 @@ void reportCloudWrite(const char* name) {
 
 void startSubsystems() {
     logger::write("adapter: starting");
+    crash_dump::install();
     const Config config = loadConfig();
     // Before the decryption wait: the game creates its D3D device right after SteamStub finishes unpacking.
     if (config.overlay && !debug_overlay::install()) logger::write("adapter: overlay unavailable");
@@ -95,10 +98,12 @@ void startSubsystems() {
         logger::write("adapter: game code not decrypted after %lu ms, staying inert", kDecryptTimeoutMs);
         return;
     }
+    if (config.netTrace) net_trace::enable();
     if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop();
     if (config.trace) vtable_tracer::install(config.traceVtables);
     game_tick::install();
+    crash_dump::install();
     if (config.coop) input_redirect::install();
     state_sync::start(g_net, config.port);
 }
