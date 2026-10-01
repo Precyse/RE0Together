@@ -21,6 +21,7 @@ public sealed class SaveReceiver
     private readonly Func<ulong> _hostId;
     private readonly Dictionary<uint, Incoming> _incoming = new();
     private readonly HashSet<string> _received = [];
+    private List<string>? _expected;  // the host's manifest when the profile sends by pattern
 
     public SaveReceiver(SaveSyncProfile config, string sessionDir, ITransport transport, Func<ulong> hostId)
     {
@@ -28,16 +29,22 @@ public sealed class SaveReceiver
         _sessionDir = sessionDir;
         _transport = transport;
         _hostId = hostId;
+        if (config.FilePattern == null) _expected = config.SteamRemoteFiles;
     }
 
-    /// <summary>True once every profile file has arrived and verified.</summary>
-    public bool Complete => _config.SteamRemoteFiles.All(_received.Contains);
+    /// <summary>True once every expected file (the profile's list, or the host's manifest) has arrived and verified.</summary>
+    public bool Complete => _expected != null && _expected.All(_received.Contains);
 
     public void OnFrame(ulong sender, Frame frame)
     {
         if (sender != _hostId()) return;
         switch (frame.Type)
         {
+            case Msg.FileManifest when _config.FilePattern != null && FileMessages.TryParseManifest(frame.Payload, out var names):
+                _expected = names;
+                _received.RemoveWhere(name => !names.Contains(name));
+                Log.Info($"Save sync: host announced {names.Count} files");
+                break;
             case Msg.FileBegin when FileMessages.TryParseBegin(frame.Payload, out var begin):
                 OnBegin(begin);
                 break;
@@ -57,7 +64,7 @@ public sealed class SaveReceiver
 
     private void OnBegin(FileBegin begin)
     {
-        if (!_config.SteamRemoteFiles.Contains(begin.Name) || Path.GetFileName(begin.Name) != begin.Name || begin.Size > MaxFileBytes)
+        if (_expected == null || !_expected.Contains(begin.Name) || Path.GetFileName(begin.Name) != begin.Name || begin.Size > MaxFileBytes)
         {
             Log.Info($"Save sync: ignoring unexpected file '{begin.Name}' ({begin.Size} bytes)");
             return;

@@ -53,6 +53,35 @@ public static class FileMessages
         return Make(Msg.FileAck, p);
     }
 
+    /// <summary>FILE_MANIFEST: u8 count, then per file u8 length + ascii name.</summary>
+    public static Frame Manifest(IReadOnlyList<string> names)
+    {
+        var body = new List<byte> { (byte)names.Count };
+        foreach (var name in names)
+        {
+            var bytes = Encoding.ASCII.GetBytes(name);
+            body.Add((byte)bytes.Length);
+            body.AddRange(bytes);
+        }
+        return Make(Msg.FileManifest, body.ToArray());
+    }
+
+    public static bool TryParseManifest(byte[] payload, out List<string> names)
+    {
+        names = [];
+        if (payload.Length < 1) return false;
+        var offset = 1;
+        for (var i = 0; i < payload[0]; ++i)
+        {
+            if (offset >= payload.Length) return false;
+            int length = payload[offset++];
+            if (offset + length > payload.Length) return false;
+            names.Add(Encoding.ASCII.GetString(payload, offset, length));
+            offset += length;
+        }
+        return true;
+    }
+
     public static bool TryParseBegin(byte[] payload, out FileBegin begin)
     {
         begin = default;

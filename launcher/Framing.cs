@@ -20,12 +20,13 @@ public static class Msg
     public const ushort FileChunk = 0x0041;
     public const ushort FileEnd = 0x0042;
     public const ushort FileAck = 0x0043;
+    public const ushort FileManifest = 0x0044;
     public const ushort LogAppend = 0x0050;
     public const ushort CrashDump = 0x0051;
     public const ushort SaveChanged = 0x0060;
     public const ushort FirstGameType = 0x0100;
 
-    public static bool IsFileTransfer(ushort type) => type is >= FileBegin and <= FileAck;
+    public static bool IsFileTransfer(ushort type) => type is >= FileBegin and <= FileManifest;
 }
 
 public static class Framing

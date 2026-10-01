@@ -31,7 +31,9 @@ public sealed class SaveSyncCoordinator : IDisposable
         if (profile.SaveSync is not { } config) return null;
         if (lobby.OwnerId == transport.LocalId)
         {
-            var source = saveSource ?? (steamAccountId is { } account ? SteamLibrary.UserRemoteDir(profile.SteamAppId, account) : null);
+            var source = saveSource
+                         ?? (config.HostSaveDir is { } hostDir ? SavePaths.Expand(hostDir) : null)
+                         ?? (steamAccountId is { } account ? SteamLibrary.UserRemoteDir(profile.SteamAppId, account) : null);
             if (source == null) throw new ArgumentException("Local transport needs --save-source to host a save sync");
             var sender = new SaveSender(config, source, transport);
             session.PeerJoined += sender.SendTo;
@@ -45,7 +47,8 @@ public sealed class SaveSyncCoordinator : IDisposable
             };
             return new SaveSyncCoordinator(config, gameDir, sender, null);
         }
-        var receiver = new SaveReceiver(config, Path.Combine(gameDir, config.SessionDir), transport, () => lobby.OwnerId);
+        var filesDir = Path.Combine(gameDir, config.GuestSaveDir is { } guestDir ? SavePaths.Expand(guestDir) : config.SessionDir);
+        var receiver = new SaveReceiver(config, filesDir, transport, () => lobby.OwnerId);
         session.FileFrameReceived += receiver.OnFrame;
         return new SaveSyncCoordinator(config, gameDir, null, receiver);
     }

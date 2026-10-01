@@ -42,7 +42,13 @@ public sealed class SaveSender
     public void SendTo(ulong peer)
     {
         _pending.RemoveAll(o => o.Peer == peer);
-        foreach (var name in _config.SteamRemoteFiles)
+        var names = FileNames();
+        if (_config.FilePattern != null)
+        {
+            _transport.Send(peer, FileMessages.Manifest(names));
+            Log.Info($"Save sync: announced {names.Count} files to {peer}");
+        }
+        foreach (var name in names)
         {
             var path = Path.Combine(_sourceDir, name);
             if (!File.Exists(path))
@@ -55,6 +61,12 @@ public sealed class SaveSender
             Log.Info($"Save sync: sending {name} ({data.Length} bytes) to {peer}");
         }
     }
+
+    /// <summary>The profile's fixed list, or every file in the source folder that matches the profile's pattern.</summary>
+    private List<string> FileNames() =>
+        _config.FilePattern is { } pattern
+            ? Directory.GetFiles(_sourceDir, pattern).Select(Path.GetFileName).OfType<string>().Order().ToList()
+            : _config.SteamRemoteFiles;
 
     public void OnAck(ulong peer, Frame frame)
     {

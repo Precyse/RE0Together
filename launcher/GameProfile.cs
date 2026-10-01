@@ -4,7 +4,12 @@ namespace CoopLauncher;
 
 public sealed record AdapterFile(string Src, string Dst);
 
-public sealed record SaveSyncProfile(List<string> SteamRemoteFiles, string SessionDir, string AdapterIni);
+/// <summary>Save sync settings. Fixed files come from the Steam cloud folder (SteamRemoteFiles). A game that keeps its
+/// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host
+/// then sends whatever matches, announced first by a manifest.</summary>
+public sealed record SaveSyncProfile(
+    List<string> SteamRemoteFiles, string SessionDir, string AdapterIni,
+    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
 
 public sealed record GameProfile(
     string Id, string Name, int SteamAppId, string Exe, int MaxPlayers, int Port,
