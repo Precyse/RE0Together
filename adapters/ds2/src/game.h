@@ -91,6 +91,13 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
 // served on its next update). False when the request could not be queued. Any thread.
 bool addCargo(uint32_t type);
 
+// What the bed of vehicle `vehicle` (a VehiclePose id) holds in this world; empty when it is not loaded. Any thread.
+std::vector<Cargo> vehicleCargo(uint64_t vehicle);
+
+// Asks the game to create a piece of `type` in the bed of vehicle `vehicle`. False when that vehicle is not loaded
+// or the game refused. Any thread.
+bool addVehicleCargo(uint64_t vehicle, uint32_t type);
+
 // Asks the game to put a piece of `type` on the ground at `at`, as the world's own cargo is spawned: it starts a
 // little above the spot and falls onto the ground. False when the game refused (e.g. its pool is full). Any thread.
 bool placeCargo(uint32_t type, const world_to_screen::Vec3& at);

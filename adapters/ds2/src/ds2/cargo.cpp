@@ -1,7 +1,8 @@
 // DEATH STRANDING 2: the local player's cargo through DSBaggageManager. Every piece of cargo (weapons and tools
 // too) is a DSBaggage in the manager's pool; a carried one points at a slot of a baggage owner. The local player is
 // the owner whose key is 0: its own slots hold the equipped gear (boots, skeleton, the backpack itself, weapons in
-// hand), its child owner the backpack's contents, which is what is listed and moved. Adding and deleting go through the
+// hand), its child owner the backpack's contents, which is what is listed and moved. A vehicle is the owner whose key
+// is its vehicle id; its bed is its slot of kind 0. Adding and deleting go through the
 // manager's own request queue (the script exports CreateAndAddBaggageToPlayer and DeleteBaggage), which takes the
 // manager's lock and is served by the game on its next update, so any thread may ask. A piece on the ground is made
 // the same way the game spawns world cargo: a create info (kind, world position, no owner) handed to the manager's
@@ -31,9 +32,9 @@ constexpr const char* kCreate = "40 56 41 56 41 57 48 83 EC 40 48 83 79 10 00 4D
 constexpr const char* kInitCreateInfo =
     "48 83 EC 28 33 D2 48 89 11 48 89 51 08 C7 41 10 FF FF FF FF 89 51 14 C5 F9 57 C0 C5 F8 11 41 18";
 // The create info (0xF0 bytes; the type-2 request builds one on its stack): +0x10 kind, +0x18 world position,
-// +0x30 rotation, +0x60 owner, +0x68 slot kind.
+// +0x30 rotation, +0x60 owner (none: on the ground), +0x68 slot kind.
 constexpr size_t kCreateInfoSize = 0xF0;
-constexpr uintptr_t kInfoKind = 0x10, kInfoPosition = 0x18;
+constexpr uintptr_t kInfoKind = 0x10, kInfoPosition = 0x18, kInfoOwner = 0x60, kInfoSlotKind = 0x68;
 constexpr double kPlaceLiftMetres = 0.5;  // a placed piece starts this far above its spot and falls onto the ground
 
 // DSBaggageManager: the baggage pool and the baggage owners (players, vehicles, lockers, ...).
@@ -52,6 +53,8 @@ constexpr uintptr_t kOwnerSlotCount = 0x28, kOwnerSlotData = 0x30;
 constexpr uintptr_t kOwnerChildCount = 0x48, kOwnerChildData = 0x50;
 constexpr size_t kSlotSize = 0x1D0;
 constexpr uint64_t kLocalPlayerKey = 0;
+constexpr uint8_t kBedSlotKind = 0;  // a vehicle's cargo bed (its other slots, kinds 35-37, are not mirrored)
+constexpr uint8_t kNoSlotKind = 0xFF;
 // DSGameBaggageListItem: its LocalizedTextResource name and the kind id.
 constexpr uintptr_t kItemName = 0x20, kItemType = 0x44;
 
@@ -123,19 +126,34 @@ void collectSlots(uintptr_t owner, bool withOwn, int depth, std::vector<SlotRang
     }
 }
 
-std::vector<SlotRange> backpackSlots(uintptr_t manager) {
-    std::vector<SlotRange> slots;
+uintptr_t findOwner(uintptr_t manager, uint64_t wanted) {
     const int32_t owners = readCount(manager + kOwnerCount, kMaxOwners);
     const uintptr_t data = decima::readPointer(manager + kOwnerData);
     for (int32_t i = 0; data && i < owners; ++i) {
         const uintptr_t owner = decima::readPointer(data + i * sizeof(uintptr_t));
         uint64_t key = kFreeHandle;
-        if (owner && decima::safeRead(owner + kOwnerKey, key) && key == kLocalPlayerKey) {
-            collectSlots(owner, false, 0, slots);
-            break;
-        }
+        if (owner && decima::safeRead(owner + kOwnerKey, key) && key == wanted) return owner;
     }
+    return 0;
+}
+
+std::vector<SlotRange> backpackSlots(uintptr_t manager) {
+    std::vector<SlotRange> slots;
+    if (const uintptr_t player = findOwner(manager, kLocalPlayerKey)) collectSlots(player, false, 0, slots);
     return slots;
+}
+
+// The owner's own slots of one kind.
+std::vector<SlotRange> slotsOfKind(uintptr_t owner, uint8_t kind) {
+    std::vector<SlotRange> out;
+    const int32_t slots = readCount(owner + kOwnerSlotCount, kMaxSlots);
+    const uintptr_t data = decima::readPointer(owner + kOwnerSlotData);
+    for (int32_t i = 0; data && i < slots; ++i) {
+        const uintptr_t slot = data + i * kSlotSize;
+        uint8_t slotKind = kNoSlotKind;
+        if (decima::safeRead(slot, slotKind) && slotKind == kind) out.push_back({slot, slot + kSlotSize});
+    }
+    return out;
 }
 
 bool inSlots(const std::vector<SlotRange>& slots, uintptr_t slot) {
@@ -173,22 +191,55 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
 
 std::string itemName(uintptr_t item) { return decima::localizedText(decima::readPointer(item + kItemName)); }
 
-}  // namespace
-
-namespace game {
-
-std::vector<Cargo> carriedCargo() {
-    std::vector<Cargo> out;
-    const uintptr_t baggage = manager();
-    const std::vector<SlotRange> slots = baggage ? backpackSlots(baggage) : std::vector<SlotRange>{};
+std::vector<game::Cargo> piecesIn(uintptr_t manager, const std::vector<SlotRange>& slots) {
+    std::vector<game::Cargo> out;
     if (slots.empty()) return out;
-    for (const PoolEntry& entry : livePool(baggage)) {
+    for (const PoolEntry& entry : livePool(manager)) {
         uint32_t type = 0;
         if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
             out.push_back({entry.handle, type, itemName(entry.item)});
         }
     }
     return out;
+}
+
+// The manager's own create, as world cargo is spawned: with an owner the piece goes into that owner's slot of
+// `slotKind`, without one it lies at `at`.
+bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& at, uintptr_t owner, uint8_t slotKind) {
+    if (!code().create) return false;
+    alignas(16) std::array<uint8_t, kCreateInfoSize> info{};
+    code().initCreateInfo(info.data());
+    std::memcpy(info.data() + kInfoKind, &type, sizeof(type));
+    const double position[3] = {at.x, at.y, at.z};
+    std::memcpy(info.data() + kInfoPosition, position, sizeof(position));
+    if (owner) {
+        std::memcpy(info.data() + kInfoOwner, &owner, sizeof(owner));
+        info[kInfoSlotKind] = slotKind;
+    }
+    uint64_t handle = kFreeHandle;
+    code().create(manager, &handle, info.data());
+    return handle != kFreeHandle;
+}
+
+}  // namespace
+
+namespace game {
+
+std::vector<Cargo> carriedCargo() {
+    const uintptr_t baggage = manager();
+    return baggage ? piecesIn(baggage, backpackSlots(baggage)) : std::vector<Cargo>{};
+}
+
+std::vector<Cargo> vehicleCargo(uint64_t vehicle) {
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? findOwner(baggage, vehicle) : 0;
+    return owner ? piecesIn(baggage, slotsOfKind(owner, kBedSlotKind)) : std::vector<Cargo>{};
+}
+
+bool addVehicleCargo(uint64_t vehicle, uint32_t type) {
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? findOwner(baggage, vehicle) : 0;
+    return owner && createPiece(baggage, type, {}, owner, kBedSlotKind);
 }
 
 std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius) {
@@ -214,15 +265,7 @@ bool addCargo(uint32_t type) {
 
 bool placeCargo(uint32_t type, const world_to_screen::Vec3& at) {
     const uintptr_t baggage = manager();
-    if (!code().create || !baggage) return false;
-    alignas(16) std::array<uint8_t, kCreateInfoSize> info{};
-    code().initCreateInfo(info.data());
-    std::memcpy(info.data() + kInfoKind, &type, sizeof(type));
-    const double position[3] = {at.x, at.y, at.z + kPlaceLiftMetres};
-    std::memcpy(info.data() + kInfoPosition, position, sizeof(position));
-    uint64_t handle = kFreeHandle;
-    code().create(baggage, &handle, info.data());
-    return handle != kFreeHandle;
+    return baggage && createPiece(baggage, type, {at.x, at.y, at.z + kPlaceLiftMetres}, 0, kNoSlotKind);
 }
 
 bool removeCargo(uint64_t handle) {

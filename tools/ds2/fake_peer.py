@@ -5,7 +5,7 @@ local Sam stands still.
 usage: python fake_peer.py --port 27990 [--radius 3] [--speed 1.4] [--offset-x 0]
                            [--cargo TYPE:NAME,... [--pickup TYPE:X,Y,Z]]
                            [--host [--host-give TYPE] [--pickup-answers accept,refuse] [--host-pickup TYPE:X,Y,Z]]
-                           [--drop TYPE:X,Y,Z|TYPE:here] [--drive VEHICLE_ID]
+                           [--drop TYPE:X,Y,Z|TYPE:here] [--drive VEHICLE_ID [--drive-load KIND,...]]
 The circle is centred on the first PLAYER_STATE received from the local player (plus --offset-x along world X).
 With --cargo it also acts as a guest's rack for the host's give/take menu (adapters/ds2/src/cargo_transfer.h):
 reports the pieces in CARGO_LIST, gives one up with CARGO_ADD when the host sends CARGO_TAKE, and adds the kinds
@@ -15,7 +15,8 @@ pickup requests are answered in turn from --pickup-answers, and --host-pickup TY
 picked up the piece there. As the guest, --pickup TYPE:X,Y,Z asks the host to confirm a pickup there. In either
 role, --drop says this player put a piece down there ("here": 1.5 m from the local player); drops the local player
 makes are printed. --drive VEHICLE_ID (hex) drives that vehicle along the circle (VEHICLE_STATE at 30 Hz); the
-vehicle the local player drives is printed when it changes.
+vehicle the local player drives is printed when it changes; --drive-load reports that vehicle's bed holding those
+kinds (VEHICLE_LOAD), and the load of the vehicle the local player drives is printed when it changes.
 """
 import argparse
 import math
@@ -41,6 +42,9 @@ HERE_OFFSET_M = 1.5
 VEHICLE_STATE = 0x0108
 VEHICLE = struct.Struct("<IIQ3f9f")  # seq, reserved, id, position, rotation rows (adapters/ds2/src/vehicle_sync.h)
 VEHICLE_HZ = 30
+VEHICLE_LOAD = 0x0109
+VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
+VEHICLE_LOAD_S = 5.0
 CARGO_REPORT_S = 5.0
 FIRST_FAKE_HANDLE = 0xF000
 
@@ -167,6 +171,7 @@ def wait_for_centre(sock):
 
 def drain(sock, cargo):
     drain.vehicle = None
+    drain.load = None
     """Keep reading so the launcher's buffers never fill; cargo messages go to the rack or the host script."""
     try:
         while True:
@@ -179,6 +184,12 @@ def drain(sock, cargo):
                     drain.vehicle = state[2]
                     x, y, z = state[3:6]
                     print(f"fake_peer: partner drives vehicle {state[2]:#x} at ({x:.1f}, {y:.1f}, {z:.1f})", flush=True)
+            if msg_type == VEHICLE_LOAD and len(body) - 4 >= VEHICLE_LOAD_HEADER.size:
+                vehicle, count, _ = VEHICLE_LOAD_HEADER.unpack_from(body, 4)
+                kinds = struct.unpack_from(f"<{count}I", body, 4 + VEHICLE_LOAD_HEADER.size)
+                if (vehicle, kinds) != drain.load:
+                    drain.load = (vehicle, kinds)
+                    print(f"fake_peer: partner's vehicle {vehicle:#x} holds {list(kinds)}", flush=True)
             if msg_type == CARGO_DROP and len(body) - 4 == CARGO_PICKUP_REQUEST.size:
                 _, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack_from(body, 4)
                 print(f"fake_peer: partner put down {type_id} at ({x:.1f}, {y:.1f}, {z:.1f})", flush=True)
@@ -203,6 +214,7 @@ def main():
     parser.add_argument("--host-pickup", action="append", default=[],
                         help="with --host: TYPE:X,Y,Z, tell the guest once that the host picked up that piece")
     parser.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) to drive along the circle")
+    parser.add_argument("--drive-load", default=None, help="with --drive: KIND,... the vehicle's bed holds")
     parser.add_argument("--drop", action="append", default=[],
                         help="TYPE:X,Y,Z or TYPE:here, tell the partner once that this player put that piece down")
     args = parser.parse_args()
@@ -229,6 +241,8 @@ def main():
     start = time.monotonic()
     last_heartbeat = 0.0
     last_report = 0.0
+    last_load = -VEHICLE_LOAD_S
+    load_kinds = [int(k) for k in args.drive_load.split(",") if k] if args.drive_load is not None else None
     seq = 0
     while True:
         now = time.monotonic()
@@ -242,6 +256,11 @@ def main():
             right, up = (heading_y, -heading_x, 0.0), (0.0, 0.0, 1.0)
             rows = (*right, heading_x, heading_y, 0.0, *up)
             sock.sendall(encode(VEHICLE_STATE, 0, SLOT_ALL, VEHICLE.pack(seq, 0, args.drive, x, y, cz, *rows)))
+        if args.drive is not None and load_kinds is not None and now - last_load >= VEHICLE_LOAD_S:
+            last_load = now
+            kinds = struct.pack(f"<{len(load_kinds)}I", *load_kinds)
+            load = VEHICLE_LOAD_HEADER.pack(args.drive, len(load_kinds), 0) + kinds
+            sock.sendall(encode(VEHICLE_LOAD, FLAG_RELIABLE, SLOT_ALL, load))
         if now - last_heartbeat >= HEARTBEAT_S:
             last_heartbeat = now
             sock.sendall(encode(HEARTBEAT, 0, 0))

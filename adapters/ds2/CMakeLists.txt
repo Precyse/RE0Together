@@ -52,6 +52,7 @@ add_library(ds2_adapter SHARED
     src/cargo_ground.cpp
     src/cargo_menu.cpp
     src/vehicle_sync.cpp
+    src/vehicle_load.cpp
     src/remote_body.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
