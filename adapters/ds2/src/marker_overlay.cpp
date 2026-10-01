@@ -14,7 +14,7 @@
 
 namespace {
 
-constexpr double kHeadHeight = 2.1;  // metres above the reported feet position: just over Sam's head
+constexpr double kHeadHeight = 1.75;  // metres above the entity origin (Sam's feet) to the top of his head
 constexpr float kDiamondRadius = 9.0f;
 constexpr float kOutline = 2.0f;
 constexpr float kLabelSize = 20.0f;
