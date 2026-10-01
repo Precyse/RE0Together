@@ -1,10 +1,12 @@
 #include "init.h"
 
+#include "cargo_menu.h"
 #include "config.h"
 #include "crash_dump.h"
 #include "documents_redirect.h"
 #include "dx12_hook.h"
 #include "game.h"
+#include "input_filter.h"
 #include "log.h"
 #include "main_thread.h"
 #include "marker_overlay.h"
@@ -19,6 +21,11 @@ constexpr DWORD kResolvePollMs = 1000;
 // Leaked on purpose: joining the net thread from a static destructor would run under the loader lock.
 NetClient& g_net = *new NetClient;
 
+void drawOverlay(float width, float height) {
+    marker_overlay::draw(width, height);
+    cargo_menu::draw(width, height);
+}
+
 }  // namespace
 
 DWORD WINAPI initThread(LPVOID) {
@@ -28,7 +35,8 @@ DWORD WINAPI initThread(LPVOID) {
     const Config config = loadConfig();
     marker_overlay::setSelfMarker(config.selfMarker);
     remote_body::setEnabled(config.remoteBody);
-    if (config.overlay && !dx12_hook::install(marker_overlay::draw)) logger::write("adapter: overlay unavailable");
+    if (config.overlay && !dx12_hook::install(drawOverlay)) logger::write("adapter: overlay unavailable");
+    input_filter::install(cargo_menu::claimsKey);
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
     if (config.remoteBody && !main_thread::install(game::frameFunction(), remote_body::tick)) {

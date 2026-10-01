@@ -8,6 +8,11 @@ Settings in `<game dir>\coop\adapter.ini`:
 port=27980
 overlay=1
 self_marker=0
+remote_body=0
 ```
 
-`self_marker=1` also marks your own Sam (checks the projection). Remove `version.dll` and `coop\` from the game folder to play vanilla.
+`self_marker=1` also marks your own Sam (checks the projection). `remote_body=1` borrows a loaded NPC as each partner's body.
+
+The host moves cargo between the two backpacks: F7 opens the menu (your backpack and the guest's), the arrow keys pick a piece and choose the side, Enter moves it across. The game does not see those keys while the menu is open.
+
+Remove `version.dll` and `coop\` from the game folder to play vanilla.

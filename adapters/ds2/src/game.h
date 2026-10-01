@@ -1,7 +1,10 @@
 #pragma once
 // The engine-specific layer: everything the co-op code needs from the running game. One implementation per game
 // build (src/ds2/game.cpp for DEATH STRANDING 2); the rest of the adapter only talks to this interface.
+#include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "world_to_screen.h"
 
@@ -43,5 +46,23 @@ std::optional<Pose> bodyPose(Body body);
 // Moves a body (the engine's SetWorldTransform) and gives its mover the velocity it is moving with, so its own
 // animation can follow. False when it faults; the caller then forgets the body.
 bool placeBody(Body body, const Pose& pose, const world_to_screen::Vec3& velocity);
+
+// One piece of cargo the local player carries.
+struct Cargo {
+    uint64_t handle = 0;  // this machine's id of the piece (what removeCargo takes)
+    uint32_t type = 0;    // the kind of cargo, the same on every machine (what addCargo takes)
+    std::string name;     // its display name in the game's language
+};
+
+// What the local player's backpack holds: cargo, and weapons and tools stowed in it, but not the equipped gear.
+// Any thread.
+std::vector<Cargo> carriedCargo();
+
+// Asks the game to create a piece of cargo of `type` on the local player's backpack (the game's own request queue,
+// served on its next update). False when the request could not be queued. Any thread.
+bool addCargo(uint32_t type);
+
+// Asks the game to delete a carried piece (taking it off the player first). Any thread.
+bool removeCargo(uint64_t handle);
 
 }  // namespace game

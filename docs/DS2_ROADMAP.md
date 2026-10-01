@@ -11,7 +11,7 @@ Target architecture: **the host is the world server** (`DS2_NOTES.md`, "Target d
 
 ## Stage A: two players in one world (now)
 - **Players get:** a visible second Sam (or humanoid) moving with the partner; the guest loads the host's world from a session copy of the host's save; the guest cannot use terminals or trigger orders or quests; the host gives items to and takes items from the guest through an adapter-drawn menu; guest pickups only complete after the host confirms.
-- **Done so far:** position link (PLAYER_STATE 60 Hz), labelled marker, Entity::SetWorldTransform found.
+- **Done so far:** position link (PLAYER_STATE 60 Hz), labelled marker; a borrowed humanoid NPC walks as the partner's body; session saves (Documents redirect) and host-to-guest save sync; the guest gate (every use-location claim refused for now); the host's give/take menu (F7), checked both ways with a fake guest and a fake host (CARGO_LIST / CARGO_TAKE / CARGO_ADD, 0x0101-0x0103).
 - **Learn:** the humanoid spawn path, brain switch-off, the inventory add/remove calls, the interaction/trigger check, save location and slot handling.
 - **Exit:** fake peer: two bodies on screen, a scripted peer walk drives the second body, the menu moves an item both ways, a blocked terminal on the guest, a pickup held until a fake host confirms. Two PCs: the same with real players.
 - **Risks:** no callable spawn (script exports are stubs); a body's own AI fighting our transform; saves in the Steam cloud need a session redirect like RE0's.

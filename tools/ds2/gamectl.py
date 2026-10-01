@@ -53,9 +53,16 @@ def owner_exe(hwnd):
     return os.path.basename(buf.value)
 
 
+def client_area(hwnd):
+    rect = ctypes.wintypes.RECT()
+    shared.user32.GetClientRect(hwnd, ctypes.byref(rect))
+    return rect.right * rect.bottom
+
+
 def find_game_window():
     """The visible top-level window of DS2.exe itself; a title match alone also hits Explorer folders named after
-    the game, and keys sent there would act on the user's desktop."""
+    the game, and keys sent there would act on the user's desktop. The game's start-up launcher window can stay
+    visible next to the game, so the largest one wins."""
     found = []
 
     @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
@@ -67,7 +74,7 @@ def find_game_window():
     shared.user32.EnumWindows(visit, 0)
     if not found:
         sys.exit(f"{GAME_EXE} window not found")
-    return found[0]
+    return max(found, key=client_area)
 
 
 shared.find_window = find_game_window

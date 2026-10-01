@@ -42,9 +42,13 @@ add_library(ds2_adapter SHARED
     src/init.cpp
     src/config.cpp
     src/documents_redirect.cpp
+    src/import_patch.cpp
+    src/input_filter.cpp
     src/player_sync.cpp
     src/dx12_hook.cpp
     src/marker_overlay.cpp
+    src/cargo_transfer.cpp
+    src/cargo_menu.cpp
     src/remote_body.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
@@ -53,7 +57,8 @@ add_library(ds2_adapter SHARED
     src/decima/safe_read.cpp
     src/ds2/game.cpp
     src/ds2/body.cpp
-    src/ds2/use_gate.cpp)
+    src/ds2/use_gate.cpp
+    src/ds2/cargo.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
 target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)

@@ -136,3 +136,17 @@ Find it: message or event class names of the form Is<Action>Allowed; their const
 Replicate: to restrict a player (a guest that must not start world progress), refuse in the dispatcher after the game's own handlers ran; the game then hides the prompt and never starts the action, with no half-started state. Same intent as RE0's act-on-trigger check, which evaluates the condition for the right character instead of refusing.
 Seen in: DS2: MsgIsUseLocationClaimAllowed through the entity message dispatcher 0x1401618c0, `ds2/use_gate.cpp`; siblings MsgIsWeaponSelectionAllowed, MsgIsItemRemovalAllowed, MsgIsContextualActionAllowed.
 Trap: dropping the notification that switches an interaction on, or the request message, did not stop DS2's terminal; refuse at the permission query instead.
+
+## Inventory changes go through the manager's own request queue  [world-state, authority]
+Shape: script-callable "add item to player" / "delete item" functions only append a small request (kind id, handle, owner key) to a queue under the manager's lock; the manager serves the queue on its own update, running every condition and the presentation (the piece appears on the rack, weight changes).
+Find it: the script export names; their bodies are short (lock guard, array append, a type code and the arguments); the one other function that walks the same array is the server, and its switch gives the meaning of every type code.
+Replicate: move items between players by kind, not by object: the giver queues a delete of its own piece, the receiver queues a create of the same kind for its own player. Calls are safe from any thread. Items are per-machine objects; only the kind id is shared.
+Seen in: DS2: DSBaggageManager requests at +0x36610 (CreateAndAddBaggageToPlayer 0x1411eb610, DeleteBaggage 0x1411eb6d0, server 0x1411cd530), `ds2/cargo.cpp`, `cargo_transfer.cpp`; docs/DS2_NOTES.md "Cargo". Same "drop the object, recreate it by kind" idea as RE0's floor items (`Late join = older save + live snapshot`).
+Trap: at the title screen the queue is not served; requests wait there until a save is loaded.
+
+## An adapter menu claims its keys from the game's raw input  [control, ui-perspective]
+Shape: a game reading the keyboard through raw input (WM_INPUT + GetRawInputData) also acts on every key an overlay menu uses.
+Find it: the game's imports (GetRawInputData, RegisterRawInputDevices).
+Replicate: redirect the game's own GetRawInputData import (not a global hook) and, while the menu is open, turn its key presses into an unknown key (make code and virtual key 0xFF); let releases through so no game key stays held. Read the menu's own keys with GetAsyncKeyState while the game window is in front.
+Seen in: DS2: `input_filter.cpp`, `cargo_menu.cpp`, `import_patch.cpp` (shared with the save redirect).
+

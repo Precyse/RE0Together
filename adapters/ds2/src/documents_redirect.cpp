@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 
+#include "import_patch.h"
 #include "paths.h"
 
 namespace {
@@ -39,31 +40,6 @@ HRESULT WINAPI folderPathDetour(HWND window, int csidl, HANDLE token, DWORD flag
     return S_OK;
 }
 
-// Points the game's own import slot for `name` (from SHELL32.dll) at `detour`; returns the original target.
-void* patchImport(const char* name, void* detour) {
-    const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    const IMAGE_DATA_DIRECTORY& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-    for (auto* desc = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(base + dir.VirtualAddress); desc->Name; ++desc) {
-        if (_stricmp(reinterpret_cast<const char*>(base + desc->Name), kShellDll) != 0) continue;
-        auto* names = reinterpret_cast<const IMAGE_THUNK_DATA*>(base + desc->OriginalFirstThunk);
-        auto* slots = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
-        for (; names->u1.AddressOfData; ++names, ++slots) {
-            if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)) continue;
-            const auto* byName = reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData);
-            if (std::strcmp(byName->Name, name) != 0) continue;
-            DWORD old = 0;
-            VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), PAGE_READWRITE, &old);
-            void* original = reinterpret_cast<void*>(slots->u1.Function);
-            slots->u1.Function = reinterpret_cast<ULONGLONG>(detour);
-            VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), old, &old);
-            return original;
-        }
-    }
-    return nullptr;
-}
-
 }  // namespace
 
 namespace documents_redirect {
@@ -72,9 +48,9 @@ void install() {
     g_documents = coopDirectory() + kSessionDocuments;
     if (GetFileAttributesW(g_documents.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     g_knownFolder = reinterpret_cast<KnownFolderFn>(
-        patchImport("SHGetKnownFolderPath", reinterpret_cast<void*>(&knownFolderDetour)));
-    g_folderPath =
-        reinterpret_cast<FolderPathFn>(patchImport("SHGetFolderPathW", reinterpret_cast<void*>(&folderPathDetour)));
+        import_patch::redirect(kShellDll, "SHGetKnownFolderPath", reinterpret_cast<void*>(&knownFolderDetour)));
+    g_folderPath = reinterpret_cast<FolderPathFn>(
+        import_patch::redirect(kShellDll, "SHGetFolderPathW", reinterpret_cast<void*>(&folderPathDetour)));
 }
 
 bool active() { return g_knownFolder && g_folderPath; }
