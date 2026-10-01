@@ -1,0 +1,8 @@
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/minhook64.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/imgui_dx12.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/ds_adapter.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/world_to_screen_test.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/overlay_test.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/proxy_load_test.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/edit_cache.dir
+C:/Users/ahmal/coop-framework/adapters/ds/build/CMakeFiles/rebuild_cache.dir

@@ -14,7 +14,6 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
-#include "room_phase.h"
 #include "scene.h"
 
 namespace {
@@ -40,10 +39,7 @@ Clock::time_point g_lastRequest;
 std::optional<JoinSnapshot> g_snapshot;    // received, not yet applied
 std::optional<JoinSnapshot> g_travelling;  // applied; waiting for the own character's door to arrive
 
-bool inGame() {
-    return game::controlled() && game::partner() && !game_state::doorActive() &&
-           game_state::roomPhase() == room_phase::Main;
-}
+bool inGame() { return game::controlled() && game::partner() && game_state::playing(); }
 
 const CharacterPlace& placeOf(const JoinSnapshot& snapshot, Character character) {
     return snapshot.places[static_cast<size_t>(character)];

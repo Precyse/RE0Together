@@ -108,8 +108,9 @@ std::optional<DoorChange> takePending(bool& bothTravel) {
     return std::exchange(g_pending, std::nullopt);
 }
 
+// A peer door waits for plain gameplay here: started in a menu or another screen it would be lost.
 void onTick() {
-    if (game_state::doorActive()) return;
+    if (!game_state::playing()) return;
     bool bothTravel = false;
     const std::optional<DoorChange> change = takePending(bothTravel);
     if (!change || (!bothTravel && split_rooms::takeOver(*change))) return;

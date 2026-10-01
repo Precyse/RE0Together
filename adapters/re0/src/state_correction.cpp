@@ -164,4 +164,11 @@ void enable() {
 
 void requestForcedCheck() { g_forcedUntil = Clock::now() + kForcedCheckWindow; }
 
+bool latestState(state_sync::PlayerState& out) {
+    std::lock_guard lock(g_mutex);
+    if (!g_hasLast) return false;
+    out = g_last.state;
+    return true;
+}
+
 }  // namespace state_correction

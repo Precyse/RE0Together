@@ -14,19 +14,19 @@
 #include "protocol.h"
 #include "room_phase.h"
 #include "scene.h"
+#include "state_correction.h"
 
 namespace {
 
 using character_owner::Character;
 using event_place::CharacterPlace;
 
-// Closer than this the owner's own reports already agree; an event that moved the character further placed it.
+// Further than this from where its owner says it stands, the peer's character was placed by the cutscene.
 constexpr float kMovedDistance = 50.0f;
 constexpr uint32_t kSceneEntry = 0;
 
 NetClient* g_net = nullptr;
-bool g_inEvent = false;                     // game thread
-std::optional<CharacterPlace> g_atEventStart;  // game thread: the peer's character as the event began
+bool g_inCutscene = false;  // game thread
 
 std::mutex g_mutex;
 std::optional<CharacterPlace> g_incoming;  // guarded by g_mutex
@@ -38,24 +38,29 @@ std::optional<CharacterPlace> placeOf(Character character) {
     return place;
 }
 
-bool moved(const CharacterPlace& before, const CharacterPlace& after) {
-    return before.scene != after.scene || position_blend::distance(before.pos, after.pos) > kMovedDistance;
+// Cutscenes hold the peer's world (menu_mirror), so its owner's reports stand still while the cutscene plays here; a
+// copy that ends up elsewhere than the owner's own report was placed by the cutscene. (Scripted events that do not
+// hold the world are left to the normal position correction: the owner keeps playing through them.)
+bool cutscene(int32_t phase) { return room_phase::isEvent(phase) && room_phase::pausesWorld(phase); }
+
+bool placedByCutscene(const CharacterPlace& here) {
+    state_sync::PlayerState owner;
+    if (!state_correction::latestState(owner) || owner.characterId != here.characterId) return false;
+    return owner.room != here.scene || position_blend::distance(owner.pos, here.pos) > kMovedDistance;
 }
 
-void watchEvents() {
-    const bool inEvent = room_phase::isEvent(game_state::roomPhase());
-    if (inEvent == g_inEvent) return;
-    g_inEvent = inEvent;
-    const Character peer = character_owner::other(character_owner::localCharacter());
-    if (inEvent) {
-        g_atEventStart = placeOf(peer);
-        return;
-    }
+void watchCutscenes() {
+    const bool inCutscene = cutscene(game_state::roomPhase());
+    if (inCutscene == g_inCutscene) return;
+    g_inCutscene = inCutscene;
+    const Character own = character_owner::localCharacter();
+    if (inCutscene || own == Character::Unknown) return;
+    const Character peer = character_owner::other(own);
     const std::optional<CharacterPlace> now = placeOf(peer);
-    if (!g_atEventStart || !now || !moved(*g_atEventStart, *now)) return;
+    if (!now || !placedByCutscene(*now)) return;
     if (g_net->send(proto::kMsgCharacterPlace, true, proto::kSlotAll, proto::bytesOf(*now))) {
-        logger::write("event_place: the event moved %s to scene 0x%02x, sent to its owner", character_owner::name(peer),
-                      now->scene);
+        logger::write("event_place: the cutscene moved %s to scene 0x%02x, sent to its owner",
+                      character_owner::name(peer), now->scene);
     }
 }
 
@@ -70,9 +75,14 @@ void applyIncoming() {
     if (!place || static_cast<Character>(place->characterId) != own) return;
     const uintptr_t player = character_owner::find(own);
     if (place->scene != scene::current()) {
+        // Only into the room the partner stands in: the game's switch to it loads that room, and camera_parity then
+        // puts the camera back on us. Anywhere else the camera would be left on an empty room.
+        if (scene::of(game::partner()) != place->scene) {
+            logger::write("event_place: placement into scene 0x%02x skipped, no character of ours there", place->scene);
+            return;
+        }
         scene::move(player, place->scene, kSceneEntry);
-        // The game's own switch to the partner loads that room; camera_parity then puts the camera back on us.
-        if (scene::of(game::partner()) == place->scene) game::requestRoomPhase(room_phase::Change);
+        game::requestRoomPhase(room_phase::Change);
     }
     game::writeTransform(player, place->pos, place->quat);
     logger::write("event_place: placed %s by the peer's event (scene 0x%02x)", character_owner::name(own), place->scene);
@@ -80,11 +90,11 @@ void applyIncoming() {
 
 void onTick() {
     if (!net_pad::active()) {
-        g_inEvent = false;
+        g_inCutscene = false;
         return;
     }
-    watchEvents();
-    if (!game_state::doorActive() && game_state::roomPhase() == room_phase::Main) applyIncoming();
+    watchCutscenes();
+    if (game_state::playing()) applyIncoming();
 }
 
 }  // namespace

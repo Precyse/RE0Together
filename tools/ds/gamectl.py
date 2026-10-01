@@ -1,0 +1,73 @@
+"""Drive the Death Stranding 2 window for testing, sharing the PC with other game agents.
+
+Reuses tools/re0/gamectl.py (keys only while the game is in front, screenshots of the game window only) with the
+DS2 window title, and adds the shared window lock and the idle rule around launching.
+
+usage: python gamectl.py idle                 # seconds since the user last touched mouse or keyboard
+       python gamectl.py launch               # take the lock (user idle >= 90 s, lock free), start DS2 via Steam
+       python gamectl.py release              # drop the lock (after the game has stopped)
+       python gamectl.py shot [out.png]
+       python gamectl.py key <name> [hold_ms] [repeat]
+       python gamectl.py keys <name,name,...>
+"""
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "re0"))
+import gamectl as shared  # noqa: E402
+
+LOCK = Path(os.path.expanduser("~")) / ".claude" / "game-window.lock"
+OWNER = "ds"
+MIN_IDLE_S = 90
+STEAM_APP_ID = 3280350
+WINDOW_TITLE_PART = "DEATH STRANDING 2"
+DEFAULT_SHOT = str(Path(__file__).resolve().parent / "out" / "shot.png")
+
+shared.WINDOW_TITLE_PART = WINDOW_TITLE_PART
+shared.DEFAULT_SHOT = DEFAULT_SHOT
+
+
+def lock_owner():
+    return LOCK.read_text().strip() if LOCK.exists() else None
+
+
+def acquire():
+    owner = lock_owner()
+    if owner not in (None, OWNER):
+        sys.exit(f"game window lock held by {owner!r}; not launching")
+    idle = shared.idle_seconds()
+    if idle < MIN_IDLE_S:
+        sys.exit(f"user active {idle:.0f} s ago (< {MIN_IDLE_S} s); not launching")
+    LOCK.write_text(OWNER)
+
+
+def release():
+    if lock_owner() == OWNER:
+        LOCK.unlink()
+
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(__doc__)
+    cmd = sys.argv[1]
+    if cmd == "launch":
+        acquire()
+        subprocess.run(["cmd", "/c", "start", "", f"steam://rungameid/{STEAM_APP_ID}"], check=True)
+        print("launched; lock held by", OWNER)
+    elif cmd == "release":
+        release()
+    elif cmd in ("shot", "key", "keys", "idle"):
+        if cmd != "idle" and lock_owner() != OWNER:
+            sys.exit("take the lock first (launch)")
+        Path(DEFAULT_SHOT).parent.mkdir(exist_ok=True)
+        if cmd == "shot" and len(sys.argv) < 3:
+            sys.argv.append(DEFAULT_SHOT)
+        shared.main()
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

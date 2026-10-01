@@ -2,7 +2,8 @@
 
 The adapter connects to it as to its launcher; it is the host (slot 0) and a fake guest (slot 1) owns Billy. Commands
 are read from a text file, one per line, as they are appended:
-    door <scene> <entry>   the fake player's character goes through a door (DOOR_CHANGE), then reports that room
+    door <scene> <entry>   the fake player's character goes through a door (DOOR_CHANGE) and reports that room when
+                           its door would have finished (8 s), like a real peer
     room <scene>           the fake player reports this room (ROOM_STATE every second); "room host" follows the game
     party                  the guest asks for the other party mode (PARTY_REQUEST)
     place <scene> <x> <y> <z>  an event on the fake's side moved the game's character (CHARACTER_PLACE)
@@ -34,8 +35,8 @@ ITEMS, BILLY_ITEMS, REBECCA_ITEMS, ITEM_BLOCK = 0xDCBF44, 0x64, 0x24, 0x40
 REAL_DOOR_ARGS = (33, 1, 0)  # a3, a4, flag of a plain door seen in game
 GUEST_STEAM_ID = 76561190000000001
 BILLY, REBECCA = 0, 1
-DOOR_FLAGS = 0x20001
 TICK_S = 1.0
+DOOR_SECONDS = 8.0  # a real peer reports its new room only when its door animation ends
 POLL_S = 0.1
 
 
@@ -108,15 +109,19 @@ class Session:
                 print("join snapshot sent", flush=True)
                 self.snapshot = None
 
+    def arrive(self, scene):
+        self.guest_scene = scene
+        self.room_state()
+
     def command(self, line):
         words = line.split()
         if not words:
             return
         if words[0] == "door":
             room, entry = int(words[1], 0), int(words[2], 0)
-            self.send(DOOR_CHANGE, struct.pack("<5IB3x", room, entry, 0, 0, DOOR_FLAGS, self.character))
-            self.guest_scene = room
-            self.room_state()
+            a3, a4, flag = REAL_DOOR_ARGS
+            self.send(DOOR_CHANGE, struct.pack("<5IB3x", room, entry, a3, a4, flag, self.character))
+            threading.Timer(DOOR_SECONDS, self.arrive, (room,)).start()
         elif words[0] == "room":
             self.guest_scene = None if words[1] == "host" else int(words[1], 0)
             self.room_state()

@@ -10,7 +10,6 @@
 #include "log.h"
 #include "net_pad.h"
 #include "party_mode.h"
-#include "room_phase.h"
 #include "scene.h"
 
 namespace {
@@ -19,8 +18,6 @@ using character_owner::Character;
 using door_sync::DoorChange;
 
 std::optional<DoorChange> g_pending;  // game thread only: the newest peer door not yet applied (targets are absolute)
-
-bool settled() { return !game_state::doorActive() && game_state::roomPhase() == room_phase::Main; }
 
 void apply(const DoorChange& change) {
     const auto mover = static_cast<Character>(change.characterId);
@@ -38,7 +35,7 @@ void onTick() {
         return;
     }
     // The peer's character must be the partner here; camera_parity puts the camera back on our own one first.
-    if (!g_pending || !settled()) return;
+    if (!g_pending || !game_state::playing()) return;
     if (character_owner::identify(game::controlled()) == static_cast<Character>(g_pending->characterId)) return;
     apply(*g_pending);
     g_pending.reset();

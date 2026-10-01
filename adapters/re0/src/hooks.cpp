@@ -36,12 +36,12 @@ bool install(const char* name, uintptr_t address, void* detour, void** original)
     for (int attempt = 1; attempt <= kInstallAttempts; ++attempt) {
         status = tryInstall(target, detour, original);
         if (status == MH_OK) {
-            logger::write("hooks: %s hooked at 0x%08x (attempt %d)", name, static_cast<unsigned>(address), attempt);
+            logger::write("hooks: %s hooked at %p (attempt %d)", name, target, attempt);
             return true;
         }
         Sleep(kRetryDelayMs);
     }
-    logger::write("hooks: %s failed at 0x%08x: %s", name, static_cast<unsigned>(address), MH_StatusToString(status));
+    logger::write("hooks: %s failed at %p: %s", name, target, MH_StatusToString(status));
     debug_stats::setError("hook %s: %s", name, MH_StatusToString(status));
     return false;
 }

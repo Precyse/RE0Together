@@ -37,6 +37,8 @@ int32_t roomPhase() {
 
 bool uiPausesWorld() { return menuOpen() || room_phase::pausesWorld(roomPhase()); }
 
+bool playing() { return roomPhase() == room_phase::Main && !doorActive() && !menuOpen(); }
+
 uint16_t currentRoom() {
     const uint8_t stage = singletonByte(game::kGameInfoGlobal, game::kGameInfoStageOffset, 0);
     const uint8_t room = singletonByte(game::kGameInfoGlobal, game::kGameInfoRoomOffset, 0);

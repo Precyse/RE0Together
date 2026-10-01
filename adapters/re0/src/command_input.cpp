@@ -7,6 +7,7 @@
 #include "command_log.h"
 #include "debug_stats.h"
 #include "game.h"
+#include "game_state.h"
 #include "key_config.h"
 #include "net_pad.h"
 #include "pad_commands.h"
@@ -50,8 +51,13 @@ void publishFocus() {
                                                                     : static_cast<int>(focused));
 }
 
-// Logs the press; true when it should become a request (game window in front and a peer connected).
-bool accept(const char* name, int virtualKey, bool foreground) {
+// With a peer, in gameplay, the adapter owns both commands: the game's own switch would take this machine's camera,
+// and its partner command would act on the other player's character. In menus and other screens the keys and buttons
+// keep the game's own meaning.
+bool commandsOwned() { return net_pad::active() && game_state::playing(); }
+
+// Logs the press; true when it should become a request (game window in front, a peer connected, in gameplay).
+bool accept(const char* name, int virtualKey, bool foreground, bool owned) {
     command_log::press(name, virtualKey, foreground);
     if (!foreground) {
         command_log::decide("%s ignored: window not foreground", name);
@@ -59,6 +65,10 @@ bool accept(const char* name, int virtualKey, bool foreground) {
     }
     if (!net_pad::active()) {
         command_log::decide("%s ignored: no peer connected", name);
+        return false;
+    }
+    if (!owned) {
+        command_log::decide("%s ignored: not in gameplay", name);
         return false;
     }
     debug_stats::count(debug_stats::Counter::CommandsSent);
@@ -76,16 +86,15 @@ void enable() {
 
 void onNetTick() {
     publishFocus();
-    // With a peer the adapter owns both commands: the game's own switch would take this machine's camera, and its
-    // partner command would act on the other player's character.
-    virtual_keys::setHiddenKeys(net_pad::active() ? g_commandScancodes : virtual_keys::HiddenKeys{});
-    pad_commands::setHidden(net_pad::active());
+    const bool owned = commandsOwned();
+    virtual_keys::setHiddenKeys(owned ? g_commandScancodes : virtual_keys::HiddenKeys{});
+    pad_commands::setHidden(owned);
     const bool foreground = gameIsForeground();
     const pad_commands::Buttons pad = pad_commands::pressed();
     const bool change = pressedEdge(keyDown(g_keys.change) || pad.change, g_changeWasDown);
     const bool trace = pressedEdge(keyDown(g_keys.trace) || pad.trace, g_traceWasDown);
-    if (change && accept("switch", g_keys.change, foreground)) camera_parity::onLocalSwitchKey();
-    if (trace && accept("party", g_keys.trace, foreground)) party_mode::onLocalToggleKey();
+    if (change && accept("switch", g_keys.change, foreground, owned)) camera_parity::onLocalSwitchKey();
+    if (trace && accept("party", g_keys.trace, foreground, owned)) party_mode::onLocalToggleKey();
 }
 
 }  // namespace command_input

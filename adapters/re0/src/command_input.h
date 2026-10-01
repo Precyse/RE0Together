@@ -6,7 +6,8 @@
 // co-op the adapter handles them: switch becomes camera_parity's request, the partner key toggles party_mode. Both
 // keys are hidden from the game's DirectInput keyboard while a peer is connected, so neither this machine's think nor
 // the peer's replay of this pad starts the game's own switch (a swap in the room, the Change phase apart) or orders
-// the partner, which is the other player's character. The controller's buttons are hidden the same way.
+// the partner, which is the other player's character. The controller's buttons are hidden the same way. All of this
+// only in gameplay (Main phase, no menu): in menus and other screens the keys keep the game's own meaning.
 // The keys are polled from the net thread (a ~5 ms tick, independent of the game's move() ticking, so menus,
 // doors and freezes cannot leave the edge detector stale); the requests are queued for the game thread.
 namespace command_input {

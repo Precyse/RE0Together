@@ -1,5 +1,6 @@
 #pragma once
 #include "net_client.h"
+#include "state_sync.h"
 
 namespace state_correction {
 
@@ -13,5 +14,8 @@ void enable();
 // Game thread: for a short window, the next PLAYER_STATE reporting our current room snaps the remote-owned
 // character even below the normal drift threshold.
 void requestForcedCheck();
+
+// The driving peer's latest PLAYER_STATE (its own character, position, scene id); false before the first one.
+bool latestState(state_sync::PlayerState& out);
 
 }  // namespace state_correction
