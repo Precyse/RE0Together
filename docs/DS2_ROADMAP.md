@@ -1,22 +1,70 @@
 # DEATH STRANDING 2 co-op roadmap
 
-Target architecture: **the host is the world server** (`DS2_NOTES.md`, "Target design"). The guest is an ally: they carry, fight and pick up, but never decide world state. Every stage is tested with a fake peer on one PC first, then on two PCs.
+**Goal (the user's words):** "It should be just as if they're playing single player but with a friend. Nearly everything the host does, the partner should be able to do (minus turning in missions, for sync purposes, for now)." Seating in vehicles must be reliable.
+
+Architecture: **the host is the world server** (`DS2_NOTES.md`, "Target design"). The guest does host-equivalent actions; anything that changes the shared world (structures, roads, placed items, combat results, world progress) is carried out through the host, so a guest action becomes a host-confirmed world change rather than a local-only one. The one thing the guest cannot do yet is accept or turn in orders. Every item is tested with a fake peer on one PC first, then on two PCs.
 
 ## End goal (the user's wishlist)
 1. Your inventory and cargo stay yours. Each machine runs its own Sam (backpack, rack, equipment, weight, balance), and the partner never edits them.
-2. The partner's cargo is shown, not simulated: a visual mirror on their body, sent on change, with no physics or weight.
-3. Ground cargo is shared. Drop, pickup and terminal actions run on the actor with the game's own calls, then replay on the other machine. A handoff is a drop plus a pickup. The driver owns the vehicle and its load.
-4. World progress is the host's: orders, deliveries, facilities, the Chiral network, structures and roads. Either player can deliver, and credit goes to the deliverer. A shared locker is host-tracked; private lockers stay per player.
-5. Saves: the host's save holds the world, and personal gear stays on each side. Rejoining gets the current world state.
+2. The partner looks and moves like a second player: a Sam-like body with the owner's real animations, their real rack with the real cargo models, seated in vehicles like the player.
+3. Ground cargo is shared. Drop, pickup and terminal actions run on the actor with the game's own calls, then replay on the other machine. A handoff is a drop plus a pickup. The driver owns the vehicle and its load; the other player can ride along.
+4. World progress is the host's: orders, deliveries, facilities, the Chiral network, structures and roads. The guest builds, repairs and fights like the host, through the host. Credit for a delivery goes to the deliverer (once guest deliveries open). A shared locker is host-tracked; private lockers stay per player.
+5. Enemies (MULEs, bandits, BTs, other hostile AI) react to both players; the host simulates them.
+6. Saves: the host's save holds the world, and personal gear stays on each side. Rejoining gets the current world state.
 
-## Stage A: two players in one world (now)
-- **Players get:** a visible second Sam (or humanoid) moving with the partner; the guest loads the host's world from a session copy of the host's save; the guest cannot use terminals or trigger orders or quests; the host gives items to and takes items from the guest through an adapter-drawn menu; guest pickups only complete after the host confirms.
-- **Done so far:** position link (PLAYER_STATE 60 Hz), labelled marker; a borrowed humanoid NPC walks as the partner's body; session saves (Documents redirect) and host-to-guest save sync; the guest gate (only terminals and story triggers, i.e. sequence-network use locations, are refused); the host's give/take menu (F7), checked both ways with a fake guest and a fake host (CARGO_LIST / CARGO_TAKE / CARGO_ADD, 0x0101-0x0103); guest pickups of world cargo confirmed by the host (CARGO_PICKUP / CARGO_PICKUP_RESULT, 0x0104-0x0105: the host deletes its copy or the guest's pickup is undone), checked on both sides with fakes.
-- **Learn:** the humanoid spawn path, brain switch-off, the inventory add/remove calls, the interaction/trigger check, save location and slot handling.
-- **Exit:** fake peer: two bodies on screen, a scripted peer walk drives the second body, the menu moves an item both ways, a blocked terminal on the guest, a pickup held until a fake host confirms. Two PCs: the same with real players.
-- **Risks:** no callable spawn (script exports are stubs); a body's own AI fighting our transform; saves in the Steam cloud need a session redirect like RE0's.
+## Done (Stages A and B)
+- **Stage A, two players in one world:** position link (PLAYER_STATE 60 Hz), labelled marker; a borrowed humanoid NPC walks as the partner's body; session saves (Documents redirect) and host-to-guest save sync; the guest gate (sequence-network use locations refused: terminals and story triggers); the host's give/take menu (F7, CARGO_LIST / TAKE / ADD 0x0101-0x0103); guest pickups confirmed by the host (0x0104-0x0105). Fake-peer exit met; two-PC run pending (checklist below).
+- **Stage B, cargo you can see and share:** loose world cargo is the same in both worlds: pickups (guest's confirmed by the host, host's mirrored, 0x0106) and drops (0x0107, placed once the receiver is near); the partner's load drawn as boxes on their body (overlay, stopgap until item 6); the driver's vehicle moves in the other world (VEHICLE_STATE 0x0108), stays where it is left, its bed is mirrored by kind (VEHICLE_LOAD 0x0109). Stopgap: the partner's body waits at its home spot while they drive (until item 1). Fake-peer exit met; two-PC crate handoff pending.
 
-### Two-PC test checklist (Stage A)
+## Order of work (parity)
+Each item lists what players get and its exit tests. Fake-peer tests first, then two PCs.
+
+### 1. Reliable vehicle seating (now)
+- **Players get:** the partner visibly sits in the driver's or passenger's seat with the game's own seated / driving pose, follows the vehicle exactly, and gets in and out with the game's own enter and exit; no hidden or floating body.
+- **Learn:** how the game seats Sam: the player-in-vehicle states (DSPlayerVehicleRideOnState, DSPlayerVehicleDriveState, DSPlayerVehicleRideOffState, passenger states), the seat attach on the vehicle entity, the animation states used. Whether a borrowed NPC can take them; if not, build the proper remote body (item 3) here.
+- **Exit:** fake peer: enter, drive, exit and re-enter five times without a body left behind, misplaced or stuck; the body stays in the seat at speed and on slopes; screenshots of the partner seated. Two PCs: both players in one vehicle, driver and passenger, in both directions.
+
+### 2. Riding with the host
+- **Players get:** both seats work in either direction; the passenger's view rides along with the vehicle the partner drives; the driver owns the vehicle, its physics and its load, the passenger rides it.
+- **Learn:** the passenger state for the local player in a vehicle moved by the partner's reports (the local vehicle copy must stay kinematic under the passenger), the passenger camera.
+- **Exit:** fake driver drives a loop with the local player as passenger: the local Sam stays seated, the camera follows smoothly, getting out puts him beside the vehicle; then the roles swap.
+
+### 3. The partner's body as a real second player
+- **Players get:** a Sam-like body (Sam's model, or a Sam-like porter) instead of whichever NPC is nearest, present everywhere, not only where NPCs are loaded.
+- **Learn:** a body that runs the player's own animation graph and vehicle states: the player entity resource, or a porter NPC resource with the player's animation set; the spawn setup that faulted before (`DS2_NOTES.md`, "In-world remote body").
+- **Exit:** the body appears at the partner in an empty area (no NPC nearby), looks like Sam / a porter, and survives area changes and the partner leaving and rejoining.
+
+### 4. The guest's terminals: everything but orders
+- **Players get:** the guest uses terminals for everything (private room, lockers, fabrication, Cargo Management at terminals, upgrades, mail, ...) except accepting and turning in orders; refusing those shows a toast.
+- **Learn:** the order transactions behind the terminal menu (accept, deliver / turn in) and the point to refuse them; the narrowed gate replaces the sequence-network refusal.
+- **Exit:** fake host session: the guest opens a terminal, uses the private room, a locker and fabrication; accepting an order and delivering are refused with a toast and nothing changes in either world; the host still does both.
+
+### 5. Shared world through the host (Stage C, reordered)
+- **Players get:** the guest builds structures and roads, repairs, places items, and its combat results count, all as host-confirmed world changes; the host's structures, roads, orders, facilities and Chiral network show in the guest's world.
+- **Learn:** the world-state managers (`DS2_NOTES.md`, "Stage C map": FactDatabase, DSConstructionManager, DSRoadManager, DSNetRoadSyncManager, DSMissionSystem); which progress is facts and which is objects; structure create / destroy / damage.
+- **Exit:** fake host builds and destroys a structure and completes an order, and the guest shows it; a fake guest builds a structure and the host creates it (and refuses one it cannot place); a road repair by the guest appears in both worlds.
+
+### 6. Animation mirroring
+- **Players get:** the partner's body plays the owner's real animation state, not walk / idle from velocity: run, balance and stumble, fall, climb, ladder, rope, crouch, aim, throw, combat moves, cargo pickup and drop motions, carrying poses.
+- **Learn:** the player's animation state machine (states and graph parameters) and how to drive a remote body's animation graph with them, as the RE4R motion-layer approach does (`FINDINGS.md`).
+- **Exit:** fake peer replays a recorded sequence (walk, run, stumble, ladder up, crouch, aim, throw, pick up, put down) and the body plays each recognisably; two PCs: each player's moves show on the other screen within a few frames.
+
+### 7. Cargo stacking with the real models
+- **Players get:** the partner's real rack layout (stack order, back, sides, hands, legs) with the real cargo models on their body, replacing the overlay boxes; the partner organises their own cargo in Cargo Management as in single player and the mirror follows.
+- **Learn:** how the game attaches carried pieces' models to Sam (slot attach points per slot kind) and whether a remote body can carry model-only copies (no weight, no physics).
+- **Exit:** fake guest with a recorded rack (back stack, side, hand, legs): the body shows each piece's model in place; a reorder or offload on the owner's side shows within one second.
+
+### 8. Enemies
+- **Players get:** MULEs, armed bandits, BTs and other hostile AI react to both players; hits on either side count; being grabbed and knocked down, cargo stolen by MULEs, timefall and BT encounters work for both.
+- **Learn:** the enemy managers and their targeting; RE0's enemy_net / enemy_state pattern: the host simulates enemies, guest hits are forwarded to the host, enemy state is broadcast.
+- **Exit:** fake guest stands near a MULE camp: the MULEs detect and chase the guest's body; a guest hit (scripted) damages the enemy on the host; a MULE stealing the guest's cargo shows on both sides; a BT area triggers for the guest.
+
+### 9. Persistence and the last restrictions (Stage D)
+- **Players get:** rejoin into the current world; personal gear saved on each side; guest order acceptance and deliveries (credit to the deliverer); the host's Social Strand content mirrored to the guest.
+- **Exit:** a guest rejoins mid-session and sees the current world; a guest delivery saves correctly on both sides; the guest's own strand fetch is off during co-op.
+- **Risks:** online strand content tied to the PSN/Steam account (riskiest piece, last on purpose).
+
+## Two-PC test checklist (Stages A and B)
 Setup, on both PCs:
 - The same commit of this repo, the launcher built (`launcher/bin/...`) and `adapters/ds2/version.dll` built. The launcher copies `version.dll` into the game folder when it starts the game, and the adapter writes `coop\adapter.ini` on first start.
 - In the game's graphics options, turn frame generation off (DLSS / FSR / XeSS frame generation) before the session. The overlay draws on the game's swap chain and is only tested without it.
@@ -26,31 +74,12 @@ Setup, on both PCs:
 Run:
 1. Host: start the launcher, pick DEATH STRANDING 2, click Host, send the lobby code. Guest: paste the code, click Join. The guest receives the host's saves (`coop\session\Documents\...`), and its game plays that copy.
 2. Both: start the game and load (Continue). Each sees the other's name marker above their position; with `remote_body=1`, a borrowed NPC walks there.
-3. Guest: walk to a terminal. The "Activate Terminal" prompt must not appear, and F must do nothing. Vehicles, cargo pickup and Cargo Management still work.
+3. Guest: walk to a terminal. The "Activate Terminal" prompt must not appear, and F must do nothing. Vehicles, cargo pickup and Cargo Management still work. (Changes with item 4.)
 4. Host: F7 opens the give/take menu. Give one piece (arrow keys, Enter); it must leave the host's backpack and appear in the guest's (check the guest's Cargo Management). Take one piece back the same way.
 5. Guest: pick up loose cargo that both worlds have (e.g. lost cargo near the start). The piece stays, and the same piece must vanish from the host's world. Then the host picks up another loose piece; it must vanish from the guest's world.
 6. Guest: offload a piece in Cargo Management (Ring Menu, Cargo Management, the piece, Offload); the same piece must appear at that spot in the host's world. The host then offloads one; it must appear in the guest's world. Either player picks one of them up; it must vanish from the other world.
+7. Either: drive a vehicle; it must move in the other world and its bed contents must match.
 
 Collect from both PCs: `<game>\coop\adapter.log`, the launcher's console output, and any `<game>\coop\crash-*.dmp`. The host also receives the guest's log and dumps as `<game>\coop\peer_*`. Note what you saw at each step, with screenshots of anything off.
 
 To play vanilla afterwards: delete `version.dll` and `coop\` from the game folder.
-
-## Stage B: cargo you can see and share (wishlist 2, 3)
-- **Done so far:** loose world cargo is the same in both worlds: pickups (the guest's confirmed by the host, the host's mirrored to the guests) and drops (placed at the same spot in the other world once its player is near); fake peers both ways. The partner's load is drawn on their body (one box per piece in their backpack, two wide up the back, updated within 0.5 s of a change); an overlay, so it shows through walls. Vehicles: the driver's vehicle moves in the other world (VEHICLE_STATE, 30 Hz), stays where it is left, and a player's own vehicle is never moved by the partner; the driver's vehicle bed is mirrored too (VEHICLE_LOAD, by kind); the partner's body waits at its home spot while they drive.
-- **Players get:** the partner's load shown on their body; ground cargo drop/pickup/handoff in sync; vehicles driven by their owner with their load.
-- **Learn:** cargo item identities across machines, the drop/pickup entry points, vehicle ownership and seats.
-- **Exit:** fake peer replays a drop and a pickup to the same item on the ground; mirror updates within one second of a rack change; two-PC handoff of one crate.
-- **Risks:** item ids that are per-machine (need a host-issued id like RE0's floor items); physics-simulated cargo drifting apart.
-
-## Stage C: one shared world (wishlist 4)
-- **Done so far:** static map of the world-state managers (FactDatabase, DSConstructionManager, DSRoadManager, DSNetRoadSyncManager, DSMissionSystem) and a replication idea per kind; `DS2_NOTES.md`, "Stage C map".
-- **Players get:** structures, roads, orders and deliveries (credit to the deliverer), facility connections, the Chiral network and a shared locker, all following the host.
-- **Learn:** the world-state managers and which state is a flag set versus objects; structure build and damage events.
-- **Exit:** fake host builds and destroys a structure and completes an order, and the guest shows it; two-PC delivery by the guest credited to the guest.
-- **Risks:** structure state tied to the online Social Strand system; order scripts that assume one player.
-
-## Stage D: persistence and the last restrictions (wishlist 5)
-- **Players get:** rejoin into the current world; personal gear saved on each side; guest deliveries allowed; the host's Social Strand content mirrored to the guest.
-- **Learn:** which strand content lives in the save and which is fetched per account online.
-- **Exit:** a guest rejoins mid-session and sees the current world; a guest delivery saves correctly on both sides; the guest's own strand fetch is off during co-op.
-- **Risks:** online strand content tied to the PSN/Steam account (riskiest piece, last on purpose).
