@@ -46,8 +46,8 @@ public sealed class Session : IDisposable
     /// <summary>Transport ids of the other members in the slot map.</summary>
     public IReadOnlyList<ulong> PeerIds => _slots.Keys.Where(id => id != _transport.LocalId).ToList();
 
-    /// <summary>A guest's adapter log lines (LOG_APPEND), with the sender's transport id. Never relayed to the adapter.</summary>
-    public event Action<ulong, Frame>? LogFrameReceived;
+    /// <summary>A guest's diagnostics (LOG_APPEND, CRASH_DUMP), with the sender's transport id. Never relayed to the adapter.</summary>
+    public event Action<ulong, Frame>? DiagnosticsFrameReceived;
 
     public void Pump()
     {
@@ -187,9 +187,9 @@ public sealed class Session : IDisposable
             FileFrameReceived?.Invoke(senderId, frame);
             return;
         }
-        if (frame.Type == Msg.LogAppend)
+        if (frame.Type is Msg.LogAppend or Msg.CrashDump)
         {
-            LogFrameReceived?.Invoke(senderId, frame);
+            DiagnosticsFrameReceived?.Invoke(senderId, frame);
             return;
         }
         if (!_active || !_slots.TryGetValue(senderId, out var slot)) return;
