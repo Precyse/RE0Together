@@ -17,6 +17,7 @@ Target architecture: **the host is the world server** (`DS2_NOTES.md`, "Target d
 - **Risks:** no callable spawn (script exports are stubs); a body's own AI fighting our transform; saves in the Steam cloud need a session redirect like RE0's.
 
 ## Stage B: cargo you can see and share (wishlist 2, 3)
+- **Done so far:** pickups of loose world cargo are the same in both worlds (the guest's confirmed by the host, the host's mirrored to the guests; fake peers both ways). Drops are not mirrored yet.
 - **Players get:** the partner's load shown on their body; ground cargo drop/pickup/handoff in sync; vehicles driven by their owner with their load.
 - **Learn:** cargo item identities across machines, the drop/pickup entry points, vehicle ownership and seats.
 - **Exit:** fake peer replays a drop and a pickup to the same item on the ground; mirror updates within one second of a rack change; two-PC handoff of one crate.
