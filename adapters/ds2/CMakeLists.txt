@@ -56,6 +56,8 @@ add_library(ds2_adapter SHARED
     src/pattern_scan.cpp
     src/msvc_rtti.cpp
     src/decima/safe_read.cpp
+    src/decima/entity.cpp
+    src/decima/localized_text.cpp
     src/ds2/game.cpp
     src/ds2/body.cpp
     src/ds2/use_gate.cpp

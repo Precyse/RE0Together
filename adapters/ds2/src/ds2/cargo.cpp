@@ -4,10 +4,10 @@
 // hand), its child owner the backpack's contents, which is what is listed and moved. Adding and deleting go through the
 // manager's own request queue (the script exports CreateAndAddBaggageToPlayer and DeleteBaggage), which takes the
 // manager's lock and is served by the game on its next update, so any thread may ask (docs/DS2_NOTES.md, "Cargo").
-#include <array>
 #include <cstring>
 #include <vector>
 
+#include "decima/localized_text.h"
 #include "decima/safe_read.h"
 #include "game.h"
 #include "log.h"
@@ -39,16 +39,14 @@ constexpr uintptr_t kOwnerSlotCount = 0x28, kOwnerSlotData = 0x30;
 constexpr uintptr_t kOwnerChildCount = 0x48, kOwnerChildData = 0x50;
 constexpr size_t kSlotSize = 0x1D0;
 constexpr uint64_t kLocalPlayerKey = 0;
-// DSGameBaggageListItem and its LocalizedTextResource name.
+// DSGameBaggageListItem: its LocalizedTextResource name and the kind id.
 constexpr uintptr_t kItemName = 0x20, kItemType = 0x44;
-constexpr uintptr_t kTextChars = 0x20, kTextLength = 0x28;
 
 constexpr bool kToBackpack = true;  // the create request's second argument: the backpack slot (kind 1)
 constexpr int32_t kMaxPool = 1 << 16;
 constexpr int32_t kMaxOwners = 1 << 14;
 constexpr int32_t kMaxSlots = 256;
 constexpr int kMaxOwnerDepth = 4;
-constexpr size_t kMaxNameBytes = 63;
 
 using CreateAndAddFn = void (*)(uint32_t type, bool backpack);
 using DeleteFn = void (*)(uint64_t handle);
@@ -152,15 +150,7 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
     return out;
 }
 
-std::string itemName(uintptr_t item) {
-    const uintptr_t text = decima::readPointer(item + kItemName);
-    const uintptr_t chars = text ? decima::readPointer(text + kTextChars) : 0;
-    uint32_t length = 0;
-    if (!chars || !decima::safeRead(text + kTextLength, length)) return {};
-    std::array<char, kMaxNameBytes> buffer{};
-    const size_t size = length < buffer.size() ? length : buffer.size();
-    return decima::safeCopy(buffer.data(), chars, size) ? std::string(buffer.data(), size) : std::string{};
-}
+std::string itemName(uintptr_t item) { return decima::localizedText(decima::readPointer(item + kItemName)); }
 
 }  // namespace
 

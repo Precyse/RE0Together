@@ -1,13 +1,18 @@
-// DEATH STRANDING 2: guest restriction. Before the player claims a use location (the "F" interactions: terminals,
-// order and quest triggers), the game asks the player entity MsgIsUseLocationClaimAllowed through the entity message
-// dispatcher (0x1401618c0); any handler can refuse by setting the message's veto byte. While blocking, the adapter
-// refuses after the game's own handlers ran, so the guest gets no prompt and never starts the interaction (or a
-// terminal's autosave). The query does not say which use location is meant, so every claim is refused for now
-// (docs/DS2_NOTES.md, "Guest restrictions").
+// DEATH STRANDING 2: guest restriction. Before the player claims a use location (the "F" interactions), the player's
+// DSPlayerUseLocationController asks the player entity MsgIsUseLocationClaimAllowed through the entity message
+// dispatcher (0x1401618c0); any handler can refuse by setting the message's veto byte. The query does not name the
+// use location, so the adapter looks at the controller's candidates itself: it refuses only while one of them is
+// driven by a sequence network (terminals, order and quest triggers), and leaves other interactions alone. Sequence
+// network use locations are learned from the game's own MsgSequenceNetworkUseLocationActivated / Deactivated, whose
+// SequenceNetworkDSUseLocationInstance holds its use location while active (docs/DS2_NOTES.md, "Guest restrictions").
 #include <windows.h>
 
 #include <atomic>
+#include <mutex>
+#include <set>
 
+#include "decima/entity.h"
+#include "decima/localized_text.h"
 #include "decima/safe_read.h"
 #include "ds2/player.h"
 #include "game.h"
@@ -23,29 +28,83 @@ constexpr const char* kDispatch =
     "48 89 54 24 10 57 48 83 EC 40 48 89 5C 24 50 48 8B FA 48 89 74 24 68 48 8B F1 4C 89 6C 24 30 45 8B E9 "
     "4C 89 7C 24 20 4D";
 constexpr const char* kClaimQuery = "MsgIsUseLocationClaimAllowed";
+constexpr const char* kActivated = "MsgSequenceNetworkUseLocationActivated";
+constexpr const char* kDeactivated = "MsgSequenceNetworkUseLocationDeactivated";
+constexpr const char* kController = "DSPlayerUseLocationController";
 constexpr uintptr_t kEntityLock = 0x2A8;
 constexpr uintptr_t kVeto = 0x10;  // MsgIsAllowedBase: byte, 0 when built (RTTI constructor 0x140831830), 1 = refused
 constexpr uint8_t kRefused = 1;
+constexpr uintptr_t kNodeInstance = 0x10;      // MsgSequenceNetworkNodeBase: the sending node instance
+constexpr uintptr_t kInstanceLocation = 0x28;  // SequenceNetworkDSUseLocationInstance: its use location while active
+// DSPlayerUseLocationController: the use locations it may claim (its update 0x140e82d00 walks them after the query).
+constexpr uintptr_t kCandidateCount = 0x200, kCandidateData = 0x208;
+constexpr size_t kCandidateStride = 0x20;  // first qword: the DSUseLocationGame
+constexpr int32_t kMaxCandidates = 64;
+constexpr uintptr_t kLocationResource = 0x40;  // DSUseLocationGame: its DSUseLocationResourceGame
+constexpr uintptr_t kResourcePrompt = 0x90;    // ... whose LocalizedTextResource is the prompt ("Activate Terminal")
 
 using DispatchFn = void (*)(uintptr_t handlers, uintptr_t lock, uintptr_t message, uint32_t flags);
 
+struct Vtables {
+    uintptr_t claimQuery = 0, activated = 0, deactivated = 0, controller = 0;
+};
+
 DispatchFn g_dispatch = nullptr;
-uintptr_t g_claimQueryVtable = 0;
+Vtables g_vtables;
 std::atomic<bool> g_blocking{false};
+std::atomic<uintptr_t> g_lastRefused{0};  // the use location refused last (logged once per location)
+std::mutex g_mutex;                       // guards g_sequenceNodes (the dispatcher runs on several game threads)
+std::set<uintptr_t> g_sequenceNodes;      // SequenceNetworkDSUseLocationInstance objects that are active now
+
+// The first of the local player's claim candidates that belongs to an active sequence network node, or 0.
+uintptr_t sequenceLocationInReach(uintptr_t player) {
+    const uintptr_t controller = decima::findComponent(player, g_vtables.controller);
+    int32_t count = 0;
+    const uintptr_t data = controller ? decima::readPointer(controller + kCandidateData) : 0;
+    if (!data || !decima::safeRead(controller + kCandidateCount, count) || count <= 0 || count > kMaxCandidates) {
+        return 0;
+    }
+    std::set<uintptr_t> locations;
+    for (int32_t i = 0; i < count; ++i) locations.insert(decima::readPointer(data + i * kCandidateStride));
+    std::lock_guard lock(g_mutex);
+    for (uintptr_t node : g_sequenceNodes) {
+        const uintptr_t location = decima::readPointer(node + kInstanceLocation);
+        if (locations.contains(location)) return location;
+    }
+    return 0;
+}
 
 void dispatchDetour(uintptr_t handlers, uintptr_t lock, uintptr_t message, uint32_t flags) {
+    const uintptr_t type = decima::readPointer(message);
+    if (type == g_vtables.activated || type == g_vtables.deactivated) {
+        const uintptr_t node = decima::readPointer(message + kNodeInstance);
+        std::lock_guard guard(g_mutex);
+        if (type == g_vtables.activated) {
+            g_sequenceNodes.insert(node);
+        } else {
+            g_sequenceNodes.erase(node);
+        }
+    }
     g_dispatch(handlers, lock, message, flags);
-    if (!g_blocking.load() || decima::readPointer(message) != g_claimQueryVtable) return;
-    if (lock - kEntityLock != ds2::localPlayerEntity()) return;
+    if (!g_blocking.load() || type != g_vtables.claimQuery) return;
+    const uintptr_t player = ds2::localPlayerEntity();
+    if (lock - kEntityLock != player) return;
+    const uintptr_t location = sequenceLocationInReach(player);
+    if (!location) return;
     *reinterpret_cast<uint8_t*>(message + kVeto) = kRefused;
+    if (g_lastRefused.exchange(location) == location) return;
+    const uintptr_t resource = decima::readPointer(location + kLocationResource);
+    logger::write("use_gate: refused \"%s\" (sequence network)",
+                  decima::localizedText(decima::readPointer(resource + kResourcePrompt)).c_str());
 }
 
 bool install() {
-    g_claimQueryVtable = msvc_rtti::vtableOf(kClaimQuery);
+    g_vtables = {msvc_rtti::vtableOf(kClaimQuery), msvc_rtti::vtableOf(kActivated), msvc_rtti::vtableOf(kDeactivated),
+                 msvc_rtti::vtableOf(kController)};
     const uintptr_t dispatch = pattern_scan::find(kDispatch);
-    if (!g_claimQueryVtable || !dispatch) {
-        logger::write("use_gate: dispatcher %p or claim query %p not found", reinterpret_cast<void*>(dispatch),
-                      reinterpret_cast<void*>(g_claimQueryVtable));
+    if (!g_vtables.claimQuery || !g_vtables.activated || !g_vtables.deactivated || !g_vtables.controller || !dispatch) {
+        logger::write("use_gate: dispatcher %p or a message/controller class not found",
+                      reinterpret_cast<void*>(dispatch));
         return false;
     }
     return hooks::install("entity message dispatch", dispatch, reinterpret_cast<void*>(&dispatchDetour),
@@ -56,12 +115,11 @@ bool install() {
 
 namespace game {
 
+bool watchInteractions() { return install(); }
+
 void blockScriptedInteractions(bool block) {
-    if (g_blocking.load() == block) return;
-    static const bool installed = install();  // the first time a guest needs it; a host never hooks
-    if (!installed) return;
-    g_blocking = block;
-    logger::write("use_gate: use-location claims %s", block ? "refused (guest)" : "allowed");
+    if (g_blocking.exchange(block) == block) return;
+    logger::write("use_gate: sequence-network claims %s", block ? "refused (guest)" : "allowed");
 }
 
 }  // namespace game

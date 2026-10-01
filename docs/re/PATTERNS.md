@@ -135,6 +135,7 @@ Shape: before an action (claim an interaction, select a weapon, remove an item) 
 Find it: message or event class names of the form Is<Action>Allowed; their constructor shows the flag being cleared (DS2: MsgIsAllowedBase +0x10).
 Replicate: to restrict a player (a guest that must not start world progress), refuse in the dispatcher after the game's own handlers ran; the game then hides the prompt and never starts the action, with no half-started state. Same intent as RE0's act-on-trigger check, which evaluates the condition for the right character instead of refusing.
 Seen in: DS2: MsgIsUseLocationClaimAllowed through the entity message dispatcher 0x1401618c0, `ds2/use_gate.cpp`; siblings MsgIsWeaponSelectionAllowed, MsgIsItemRemovalAllowed, MsgIsContextualActionAllowed.
+Narrow it: when the query does not name its target, read the asker's own candidate list at query time (DS2: DSPlayerUseLocationController +0x200) and refuse only for the targets you mean; learn which those are from the engine's own activation messages (DS2: SequenceNetworkDSUseLocationInstance via MsgSequenceNetworkUseLocationActivated / Deactivated). Hook before the world loads so no activation is missed.
 Trap: dropping the notification that switches an interaction on, or the request message, did not stop DS2's terminal; refuse at the permission query instead.
 
 ## Inventory changes go through the manager's own request queue  [world-state, authority]

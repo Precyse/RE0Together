@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "decima/entity.h"
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/player.h"
@@ -30,9 +31,6 @@ constexpr uintptr_t kComponentOwner = 0x48;     // a component's entity (live: m
 constexpr uintptr_t kEntityMover = 0xC0;        // Entity.Mover, RTTI
 constexpr uintptr_t kEntityTransform = 0xE8;    // Entity.Orientation (WorldTransform), RTTI
 constexpr uintptr_t kEntityModel = 0xC8;        // Entity.Model, RTTI
-constexpr uintptr_t kComponentCount = 0xA0;     // Entity.Components (EntityComponentContainer): u32 count
-constexpr uintptr_t kComponentArray = 0xA8;     // ... and the component pointer array
-constexpr uint32_t kMaxComponents = 256;
 constexpr size_t kScanBlock = 1 << 20;
 
 using SetWorldTransformFn = void (*)(uintptr_t entity, const decima::WorldTransform* transform);
@@ -78,16 +76,6 @@ uintptr_t ownerOfMover(uintptr_t mover) {
     return entity && decima::readPointer(entity + kEntityMover) == mover ? entity : 0;
 }
 
-bool hasComponent(uintptr_t entity, uintptr_t vtable) {
-    uint32_t count = 0;
-    const uintptr_t array = decima::readPointer(entity + kComponentArray);
-    if (!decima::safeRead(entity + kComponentCount, count) || !array || count > kMaxComponents) return false;
-    for (uint32_t i = 0; i < count; ++i) {
-        if (decima::readPointer(decima::readPointer(array + i * sizeof(uintptr_t))) == vtable) return true;
-    }
-    return false;
-}
-
 double distanceSquared(uintptr_t a, uintptr_t b) {
     decima::WorldPosition pa{}, pb{};
     if (!decima::safeRead(a + kEntityTransform, pa) || !decima::safeRead(b + kEntityTransform, pb)) return 1e30;
@@ -113,7 +101,8 @@ uintptr_t findHumanoidNpc() {
             for (size_t i = 0; i < size / sizeof(uintptr_t); ++i) {
                 if (block[i] != moverVtable) continue;
                 const uintptr_t entity = ownerOfMover(at + off + i * sizeof(uintptr_t));
-                if (!entity || !decima::readPointer(entity + kEntityModel) || hasComponent(entity, animalVtable)) continue;
+                if (!entity || !decima::readPointer(entity + kEntityModel)) continue;
+                if (decima::findComponent(entity, animalVtable)) continue;
                 const double distance = distanceSquared(entity, player);
                 if (!best || distance < bestDistance) best = entity, bestDistance = distance;
             }
