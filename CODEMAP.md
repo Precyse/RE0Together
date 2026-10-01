@@ -1,6 +1,6 @@
 # CODEMAP
 
-Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers, checks the save transfer and the reset), `tools/fake_adapter.py` (fake game adapter), `tools/echo_peer.py` (echoes 0x0100/0x0101 frames back after a delay; see `adapters/re0/README.md`), `tools/spoof_peer.py` (sends a wrong slot byte over local transport), `tools/diagnostics_test.py` (guest log lines and a crash dump reach the host). RE0 research tools in `tools/re0/`: `gamectl.py` (keys and screenshots to the game window only, refuses unless RE0 is in front; `idle` = seconds since the user last used mouse/keyboard), `probe.py`, `disasm.py`, `watch_write.py`. `tools/publish_check.py` gates pushes and releases.
+Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers, checks the save transfer and the reset), `tools/fake_adapter.py` (fake game adapter), `tools/echo_peer.py` (echoes 0x0100/0x0101 frames back after a delay; see `adapters/re0/README.md`), `tools/spoof_peer.py` (sends a wrong slot byte over local transport), `tools/diagnostics_test.py` (guest log lines and a crash dump reach the host), `tools/build_check_test.py` (mismatched builds refuse, matching ones carry on). RE0 research tools in `tools/re0/`: `gamectl.py` (keys and screenshots to the game window only, refuses unless RE0 is in front; `idle` = seconds since the user last used mouse/keyboard), `probe.py`, `disasm.py`, `watch_write.py`. `tools/publish_check.py` gates pushes and releases.
 
 ## launcher/ (C# .NET 8, namespace CoopLauncher)
 
@@ -30,6 +30,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | GameProfile.cs | `games/<id>.json` loader, optional `saveSync` block | `Load`, `ListIds` |
 | SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate, 60 s timeout; host re-sends the save to every peer on SAVE_CHANGED | `Create`, `Ready`, `TimedOut`, `EnableAdapter` |
 | LogForwarder.cs | guest diagnostics to the host: new adapter-log bytes every 2 s (LOG_APPEND 0x0050) and any crash-*.dmp written during the session (CRASH_DUMP 0x0051, 32 KiB chunks, retried while still being written); host writes `peer_<steamid>.log` and `peer_<steamid>_<dump>` beside its adapter log | `Create`, `Pump` |
+| BuildCheck.cs | same build on every machine: host sends BUILD_INFO 0x0013 as a peer joins; a guest on a different build stops before the game starts (dev builds only warn); shared `LocalBuild` reads version.txt (also used by Updater) | `BuildCheck.Create`, `LocalBuild`, `Ready`, `Mismatch` |
 | SaveSender.cs | host: paced FILE_BEGIN/CHUNK/END per new peer, resend until ACK ok | `SendTo`, `OnAck`, `Pump` |
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir, FILE_ACK | `OnFrame`, `Complete` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `TryParseBegin` |

@@ -29,9 +29,9 @@ EXIT_TIMEOUT_S = 15
 POLL_S = 0.2
 
 
-def launcher(args, log_path):
+def launcher(args, log_path, exe=LAUNCHER):
     log = open(log_path, "w")
-    return subprocess.Popen([str(LAUNCHER)] + args, stdout=log, stderr=subprocess.STDOUT,
+    return subprocess.Popen([str(exe)] + args, stdout=log, stderr=subprocess.STDOUT,
                             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
 
 

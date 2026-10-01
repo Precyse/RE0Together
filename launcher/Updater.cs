@@ -12,7 +12,6 @@ namespace CoopLauncher;
 public static class Updater
 {
     private const string ConfigFile = "update.json";
-    private const string VersionFile = "version.txt";
     private const string PlaceholderRepo = "OWNER/REPO";
     private const string ReleaseUrlFormat = "https://api.github.com/repos/{0}/releases/tags/latest";
     private const string UserAgent = "coop-launcher-updater";
@@ -48,10 +47,10 @@ public static class Updater
         try
         {
             var release = ReadRepo() is { } repo ? FetchRelease(repo) : null;
-            if (release is not { Build: { } build, ZipUrl: { } zipUrl } || build <= LocalBuild()) return false;
+            if (release is not { Build: { } build, ZipUrl: { } zipUrl } || build <= BuildCheck.LocalBuild()) return false;
             Log.Info($"Installing build {build}");
             InstallFrom(zipUrl, root);
-            if (LocalBuild() < build) throw new InvalidDataException($"package did not update {VersionFile}");
+            if (BuildCheck.LocalBuild() < build) throw new InvalidDataException($"package did not update {BuildCheck.VersionFile}");
             Relaunch(args);
             return true;
         }
@@ -78,11 +77,6 @@ public static class Updater
         return string.IsNullOrWhiteSpace(repo) || repo == PlaceholderRepo ? null : repo;
     }
 
-    private static int LocalBuild()
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, VersionFile);
-        return File.Exists(path) && int.TryParse(File.ReadAllText(path).Trim(), out var build) ? build : 0;
-    }
 
     private static Release? FetchRelease(string repo)
     {

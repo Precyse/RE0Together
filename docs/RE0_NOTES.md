@@ -133,3 +133,24 @@ Each client controls its own character. On each machine, the remote player is th
 
 ## Party command path (revised 2026-09-29)
 E/V are polled by `command_input::onNetTick` on the net thread (~5 ms), not from a game_tick callback and not from the render path: the net loop keeps running through menus, doors and the world freeze, so the raw-key edge detector never stalls (a hook-driven detector missed edges whenever move() stopped). A press logs `command: <name> pressed (VK, foreground)`; it becomes a request only with the game window in front and a peer connected. Host and guest presses share one request path per command (`camera_parity::queueSwitch`, `party_mode::queueToggle`; a guest's SWITCH_REQUEST / PARTY_REQUEST calls the same function); the host decides on the game thread and logs applied or ignored with the reason (door active, focus already set, no partner object, partner is not the target, no peer connected). Panel: last command and last decision with age. `key_config` reads the first `KC_change`/`KC_trace` line in any section whose value is a known `KB_` name.
+
+## Separate rooms study (2026-09-30, unmodified game, solo)
+Goal: both players in different rooms at once (each machine loads its own player's room). Findings so far:
+- Leaving the partner behind (E = stay, controlled character takes a door) clears the partner's in-room bit
+  (+0xc 0x4000); the game keeps simulating only the loaded room.
+- Each character has an `sCollision::SbcInfo` at +0x1870 (vtable 0xcc3fb4): +0x1880 stage, +0x1884 room of the
+  collision set it uses. The left-behind partner keeps its old room there (2, 3 in the test).
+- **SbcInfo is not the partner's room record.** Rewriting the partner's SbcInfo room and position, then reloading
+  rooms, changed nothing: on return the game placed the partner back in its real room at a position of its own
+  (241, 600, 2852) and set the in-room bit. A separate partner room/position record exists.
+- Current-room record: sGameInfo +0x2a7c {entry, stage, room, previous room}; +0x2a90..+0x2a9c gets a copy once
+  the characters split (0xffff while together). Candidate for the partner's room: sGameInfo +0x1e5c (3 in both
+  snapshots, the room the partner stayed in); needs a third sample with the partner in a different room.
+- Controls in this setup are camera-relative (D moves right on screen), not tank controls.
+
+What separate rooms needs, in order:
+1. The partner room/position record (write it when the remote player changes rooms, so a reunion places them
+   correctly through the game's own logic).
+2. Camera parity off while apart: each machine focuses its own player's character.
+3. door_sync only between players in the same room (already the TEAM rule) and no door forcing while apart.
+4. Enemy authority per room: whoever is in a room simulates its enemies; host authority only when together.

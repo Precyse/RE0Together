@@ -24,6 +24,7 @@ public sealed class App
     private GameProfile? _profile;
     private string? _gameDir;
     private bool _launchPending;
+    private BuildCheck? _buildCheck;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -170,6 +171,7 @@ public sealed class App
         _gameDir = ResolveGameDir(_profile);
         _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
         _session = new Session(_profile, _lobby, _transport!, _bridge);
+        _buildCheck = BuildCheck.Create(_session, _transport!, _lobby);
         if (_gameDir != null)
         {
             _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby);
@@ -181,6 +183,8 @@ public sealed class App
     /// <summary>Starts the game once save sync is ready. False when the save sync timed out.</summary>
     private bool TryLaunch()
     {
+        if (_buildCheck?.Mismatch != null) return false;
+        if (_buildCheck?.Ready == false) return true;
         if (_saveSync?.TimedOut == true)
         {
             Log.Info("Save sync timed out, not launching the game");
@@ -196,6 +200,7 @@ public sealed class App
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
     private void EndSession()
     {
+        _buildCheck = null;
         _logForwarder = null;
         _saveSync?.Dispose();
         _saveSync = null;

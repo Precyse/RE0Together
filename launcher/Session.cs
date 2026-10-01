@@ -46,6 +46,9 @@ public sealed class Session : IDisposable
     /// <summary>Transport ids of the other members in the slot map.</summary>
     public IReadOnlyList<ulong> PeerIds => _slots.Keys.Where(id => id != _transport.LocalId).ToList();
 
+    /// <summary>A peer's build number (BUILD_INFO), with the sender's transport id.</summary>
+    public event Action<ulong, Frame>? BuildInfoReceived;
+
     /// <summary>A guest's diagnostics (LOG_APPEND, CRASH_DUMP), with the sender's transport id. Never relayed to the adapter.</summary>
     public event Action<ulong, Frame>? DiagnosticsFrameReceived;
 
@@ -185,6 +188,11 @@ public sealed class Session : IDisposable
         if (Msg.IsFileTransfer(frame.Type))
         {
             FileFrameReceived?.Invoke(senderId, frame);
+            return;
+        }
+        if (frame.Type == Msg.BuildInfo)
+        {
+            BuildInfoReceived?.Invoke(senderId, frame);
             return;
         }
         if (frame.Type is Msg.LogAppend or Msg.CrashDump)
