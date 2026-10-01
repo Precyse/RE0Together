@@ -60,7 +60,12 @@ void tick() {
             continue;
         }
         if (puppet.state == State::Pending) {
-            puppet.body = game::borrowBody();
+            const auto borrowed = game::borrowBody();
+            if (!borrowed) {
+                ++it;
+                continue;
+            }
+            puppet.body = *borrowed;
             const auto home = game::bodyPose(puppet.body);
             puppet.state = home ? State::Live : State::Failed;
             if (home) puppet.home = *home;

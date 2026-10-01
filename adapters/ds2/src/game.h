@@ -29,9 +29,9 @@ uintptr_t frameFunction();
 // Opaque handle of an entity the adapter created; 0 = none.
 using Body = uintptr_t;
 
-// Borrows a humanoid NPC the game has already loaded near the player to serve as a remote player's body, or 0
-// when none is loaded. Simulation thread only (main_thread).
-Body borrowBody();
+// Borrows a humanoid NPC the game has already loaded (the nearest to the player) to serve as a remote player's body.
+// Nothing while the background search runs (call again later), then the body, or 0 when none is loaded.
+std::optional<Body> borrowBody();
 
 // Where a body stands now (to put a borrowed NPC back when it is released).
 std::optional<Pose> bodyPose(Body body);
