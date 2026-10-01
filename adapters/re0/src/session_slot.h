@@ -3,7 +3,8 @@
 
 #include "net_client.h"
 
-// The save slot the session plays: the host's last loaded or saved slot. The host announces it with its room phase
+// The save slot the session plays: the host's last loaded or saved slot. Every save made during a session goes to
+// the dedicated co-op slot (the last player slot), so co-op progress never overwrites a solo save. The host announces it with its room phase
 // (SAVE_SLOT 0x010F, {i32 slot, i32 phase}, reliable, on change and every 2 s); on the guest every load request from
 // the menus is turned into that slot, so a guest can only ever load the host's game.
 namespace session_slot {

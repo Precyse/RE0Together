@@ -20,6 +20,9 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 12 | Guest starts the game after the host is already playing (any room) | guest goes through the menus by itself (keys ignored), loads the host's slot, then is teleported into the host's room with the host's inventories | `auto_join:` lines, `session_slot: load of slot N turned into the host's slot`, `join_sync: teleporting`, `join_sync: in the host's room` |
 | 13 | Die, host picks Continue | guest waits muted on game over, then continues by itself into the host's save | `auto_join: waiting for the host to be in game` |
 | 14 | Play with some lag (Wi-Fi) | Billy's input stays smooth; the target settles | pad buffer/target, pad underruns |
-| 15 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
+| 15 | Host saves at a typewriter, picking slot 1 | the save lands in slot 20; slot 1 is unchanged | `session_slot: save to slot 0 kept in the co-op slot 19` |
+| 16 | Guest pulls their network cable for ~20 s, then reconnects | guest launcher rejoins by itself, guest snaps back into the host's room | `Rejoining lobby`, `Rejoined the session`, `join_sync:` lines |
+| 17 | Guest on an older build joins | guest launcher refuses with the build numbers | `Build mismatch:` |
+| 18 | Guest leaves mid-game | the host's Billy returns to partner AI (not driven by the host's keys) | `partner_think: restored partner AI` |
 
 Report any row that fails, together with both logs.

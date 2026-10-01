@@ -20,6 +20,7 @@ using session_slot::kUnknown;
 
 constexpr auto kAnnounceInterval = std::chrono::seconds(2);
 constexpr int32_t kPlayerSlots = 20;  // slots 0..19 are player saves; higher ones are system data (options)
+constexpr int32_t kCoopSlot = kPlayerSlots - 1;  // every save made during a session goes here, never over a solo save
 
 bool isPlayerSlot(int32_t slot) { return slot >= 0 && slot < kPlayerSlots; }
 
@@ -73,8 +74,11 @@ bool __fastcall loadAltDetour(void* self, void* edx, int32_t slot, int32_t arg) 
 }
 
 bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
-    const bool accepted = g_originalSave(self, edx, slot);
-    if (accepted) remember(slot);
+    const bool coop = net_pad::active() && isPlayerSlot(slot);
+    const int32_t target = coop ? kCoopSlot : slot;
+    if (coop && slot != target) logger::write("session_slot: save to slot %d kept in the co-op slot %d", slot, target);
+    const bool accepted = g_originalSave(self, edx, target);
+    if (accepted) remember(target);
     return accepted;
 }
 
