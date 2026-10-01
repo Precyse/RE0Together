@@ -1,8 +1,9 @@
 #pragma once
 // Cargo moved between the two players' racks, decided by the host. Each machine keeps its own Sam and cargo; a
 // transfer deletes the piece on the giver's machine and creates the same kind on the receiver's with the game's own
-// requests (game::removeCargo / addCargo). The host gives and takes through cargo_menu; the guest only reports what
-// it carries and carries out the host's takes.
+// requests (game::removeCargo / addCargo). Every player reports what its backpack holds (the host's menu lists the
+// guest's, each player draws the partner's on their body); the host gives and takes through cargo_menu, and the guest
+// carries out the host's takes.
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -14,7 +15,7 @@
 
 namespace cargo_transfer {
 
-constexpr uint16_t kMsgCargoList = proto::kFirstGameType + 1;  // 0x0101, guest to host, reliable: CargoList
+constexpr uint16_t kMsgCargoList = proto::kFirstGameType + 1;  // 0x0101, each player to all, reliable: CargoList
 constexpr uint16_t kMsgCargoTake = proto::kFirstGameType + 2;  // 0x0102, host to guest, reliable: CargoTake
 constexpr uint16_t kMsgCargoAdd = proto::kFirstGameType + 3;   // 0x0103, giver to receiver, reliable: CargoAdd
 
@@ -53,7 +54,7 @@ void tick(NetClient& net, const SessionSnapshot& session);
 // Render thread (cargo_menu).
 bool isHost();
 std::vector<game::Cargo> localCargo();
-std::optional<Partner> partner();  // host only: the guest and what it reported carrying
+std::optional<Partner> partner();  // the partner and what it reported carrying (the host's menu needs a host)
 void give(const game::Cargo& piece);  // host: its own piece to the guest
 void take(const game::Cargo& piece);  // host: the guest's piece to itself
 

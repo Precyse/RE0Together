@@ -13,7 +13,7 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kRefreshInterval = std::chrono::milliseconds(500);
-constexpr auto kReportInterval = std::chrono::seconds(5);  // the guest re-sends its list this often even unchanged
+constexpr auto kReportInterval = std::chrono::seconds(5);  // the list is re-sent this often even unchanged
 
 enum class Action { Give, Take };
 
@@ -30,7 +30,7 @@ std::vector<Request> g_requests;
 std::atomic<bool> g_host{false};
 std::atomic<uint8_t> g_hostSlot{0};
 std::vector<uint32_t> g_awaited;  // host, net thread: kinds asked of the guest whose CARGO_ADD has not come yet
-std::vector<cargo_transfer::CargoEntry> g_reported;  // guest, net thread: the list sent last
+std::vector<cargo_transfer::CargoEntry> g_reported;  // net thread: the list sent last
 Clock::time_point g_lastRefresh;
 Clock::time_point g_lastReport;
 
@@ -102,7 +102,7 @@ void refreshLocal(const Clock::time_point now) {
     g_local = std::move(carried);
 }
 
-void reportToHost(NetClient& net, const SessionSnapshot& session, const Clock::time_point now) {
+void report(NetClient& net, const Clock::time_point now) {
     std::vector<cargo_transfer::CargoEntry> entries;
     {
         std::lock_guard lock(g_mutex);
@@ -116,9 +116,16 @@ void reportToHost(NetClient& net, const SessionSnapshot& session, const Clock::t
     std::vector<uint8_t> payload(sizeof(count) + count * sizeof(cargo_transfer::CargoEntry));
     std::memcpy(payload.data(), &count, sizeof(count));
     if (count) std::memcpy(payload.data() + sizeof(count), entries.data(), count * sizeof(cargo_transfer::CargoEntry));
-    if (!net.send(cargo_transfer::kMsgCargoList, true, session.hostSlot, payload)) return;
+    if (!net.send(cargo_transfer::kMsgCargoList, true, proto::kSlotAll, payload)) return;
     g_reported = std::move(entries);
     g_lastReport = now;
+}
+
+void forgetDepartedPartner(const SessionSnapshot& session) {
+    std::lock_guard lock(g_mutex);
+    const bool here = g_partner && std::any_of(session.peers.begin(), session.peers.end(),
+                                               [](const PeerInfo& peer) { return peer.slot == g_partner->slot; });
+    if (!here) g_partner.reset();
 }
 
 // Takes a piece off a shown list, so a second press before the next refresh cannot move it twice.
@@ -129,15 +136,12 @@ bool claim(std::vector<game::Cargo>& shown, uint64_t handle) {
     return true;
 }
 
-void runRequests(NetClient& net, const SessionSnapshot& session) {
+void runRequests(NetClient& net) {
     std::vector<Request> requests;
     uint8_t partnerSlot = 0;
     {
         std::lock_guard lock(g_mutex);
-        const bool partnerHere = g_partner && std::any_of(session.peers.begin(), session.peers.end(),
-                                                          [](const PeerInfo& peer) { return peer.slot == g_partner->slot; });
-        if (!partnerHere) {
-            g_partner.reset();
+        if (!g_partner) {
             g_requests.clear();
             return;
         }
@@ -168,7 +172,7 @@ namespace cargo_transfer {
 void onFrame(NetClient& net, const GameFrame& frame) {
     const bool host = g_host.load();
     if (!host && frame.slot != g_hostSlot.load()) return;  // a guest only takes orders from the host
-    if (frame.type == kMsgCargoList && host) {
+    if (frame.type == kMsgCargoList) {
         if (auto partner = parseList(frame.slot, frame.payload)) {
             std::lock_guard lock(g_mutex);
             g_partner = std::move(partner);
@@ -195,12 +199,10 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_hostSlot = session.hostSlot;
     const auto now = Clock::now();
     refreshLocal(now);
+    forgetDepartedPartner(session);
     if (!session.linked) return;
-    if (host) {
-        runRequests(net, session);
-    } else {
-        reportToHost(net, session, now);
-    }
+    report(net, now);
+    if (host) runRequests(net);
 }
 
 bool isHost() { return g_host.load(); }

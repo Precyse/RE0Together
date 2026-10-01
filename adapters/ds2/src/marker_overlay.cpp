@@ -6,8 +6,10 @@
 #include <map>
 #include <string>
 
+#include "cargo_transfer.h"
 #include "game.h"
 #include "imgui.h"
+#include "load_overlay.h"
 #include "player_sync.h"
 #include "position_blend.h"
 #include "remote_body.h"
@@ -95,9 +97,13 @@ void draw(float width, float height) {
     drawToasts(list, width);
     const auto camera = game::camera();
     if (!camera) return;
+    const auto partner = cargo_transfer::partner();
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
         const world_to_screen::Vec3 at = smoothed(peer);
         remote_body::setTarget(peer.slot, {at, peer.yaw}, {peer.velocity[0], peer.velocity[1], peer.velocity[2]});
+        if (partner && partner->slot == peer.slot) {
+            load_overlay::draw(list, *camera, at, peer.yaw, static_cast<int>(partner->cargo.size()), width, height);
+        }
         drawMarker(list, *camera, at, peer.name, width, height);
     }
     if (!g_selfMarker.load()) return;
