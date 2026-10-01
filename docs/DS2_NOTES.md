@@ -36,7 +36,11 @@ Confirmed live (2026-10-01): `PlayerManager` is a `PlayerManagerGame` (+0x48 and
 
 Local player chain used by the adapter: `PlayerManager -> +0x48 (Player*) -> +0x48 (Entity*) -> +0xE8 WorldTransform`. Camera: `Player -> camera stack -> CameraEntity -> +0xE8 WorldTransform, +0x3D4 FOV`.
 
-## Leads for an in-world remote body (stretch goal, not yet tried)
+## In-world remote body (first attempt, 2026-10-01)
+- **Spawn exports are stubbed in the exe.** `SpawnSetup_ExportedCreateEntityFromSpawnSetup` (helper 0x140729410, registered from 0x140725e35) and `EconomyManagerResource_sExportedCreateMenuPreviewEntityForEntityResource` (helper 0x14085d0b0, from 0x14085622b) are registered with the shared function 0x1400bb3c0 = `xor eax, eax; ret`. Calling them would do nothing; the real spawn path has to come from SpawnSetup / Spawnpoint code itself (virtuals, `SpawnCommand`), not the script table.
+- **Entity::SetWorldTransform is real and lock-safe:** export 0x14014a880 (`Entity_ExportedSetWorldTransform`, helper 0x1401469c0) calls 0x140120070(entity, const WorldTransform&): takes the entity's SRW lock at +0x2A8, copies the 0x40 bytes to +0xE8, sets dirty bit 0 at +0x98, unlocks; then 0x1401201a0(entity) propagates. This is the primitive to drive a puppet body once one exists.
+- **No humanoid to borrow at the save point.** A live scan outdoors by the DHV Magellan found one DSPlayerEntity (Sam) and one AIEntityHumanoid, which is Sam's own AI view (+0x8 Scene, +0x10 the DSPlayerEntity). The RE4R/DD2gether "take a real character and switch off its brain" recipe needs a spawned or nearby NPC first.
+- `probe.py instances` reads every private region (about 7 GB here) and took 7 minutes; narrow it before using it in a loop.
 - Script-exported names that create or place entities: `CreateEntityFromSpawnSetup`, `CreateEntity`, `CreateMenuPreviewEntityForEntityResource` (builds a preview entity from an EntityResource, a candidate for a Sam look-alike without AI), `SetWorldTransform`, `PlaceOnWorldTransform`, `TeleportTransform`. Resolve them with `tools/ds2/symbols.py`.
 - Reflected types: `SpawnSetup` (0x108), `SpawnpointGame`, `DSPlayerEntityResource` (0x580), `HumanoidResource`, `HumanoidComponentResource`.
 - The reference mods' recipe (docs/FINDINGS.md: DD2gether, RE4R): spawn a real character, switch off its own brain at the animation-state-machine / AI level, then drive transform plus animation state from the owner.
