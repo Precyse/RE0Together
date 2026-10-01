@@ -41,6 +41,7 @@ add_library(ds2_adapter SHARED
     src/proxy.cpp
     src/init.cpp
     src/config.cpp
+    src/documents_redirect.cpp
     src/player_sync.cpp
     src/dx12_hook.cpp
     src/marker_overlay.cpp
@@ -54,7 +55,7 @@ add_library(ds2_adapter SHARED
     src/ds2/body.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
-target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)
+target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)
 add_custom_command(TARGET ds2_adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:ds2_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/version.dll)
 

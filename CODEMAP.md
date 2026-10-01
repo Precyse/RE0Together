@@ -134,9 +134,10 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 
 | file | owns | key members |
 |---|---|---|
-| src/proxy.cpp | the 17 version.dll exports forwarded to the system DLL by linker directives; DllMain pins the module and starts the init thread, only inside DS2.exe (the crash reporter loads the DLL too) | `DllMain`, `hostIsGame` |
+| src/proxy.cpp | the 17 version.dll exports forwarded to the system DLL by linker directives; DllMain (only inside DS2.exe: the crash reporter loads the DLL too) installs the session-save redirect, pins the module and starts the init thread | `DllMain`, `hostIsGame` |
 | src/init.cpp | start-up: crash dumps, config, DX12 overlay hooks, waits for the player to exist, then the launcher link | `initThread` |
 | src/config.cpp | `coop/adapter.ini` (port 27980, overlay, self_marker, remote_body) | `loadConfig` |
+| src/documents_redirect.cpp | session saves: with `coop\session\Documents` present, the game's import slots for SHGetKnownFolderPath / SHGetFolderPathW return that folder for Documents (patched from DllMain) | `documents_redirect::install`, `active` |
 | src/game.h | the engine interface the rest of the adapter uses: resolve, local player pose, render camera, a per-frame simulation function, bodies | `game::resolve`, `localPlayer`, `camera`, `frameFunction`, `borrowBody`, `placeBody` |
 | src/ds2/game.cpp | DS2 implementation: byte patterns for Player::GetLocalPlayer (PlayerManager global) and Player::GetLastActivatedCamera (camera stack offsets); Player -> Entity -> WorldTransform; CameraEntity FOV / near plane | `findCode`, `localPlayerObject`, `lastActivatedCamera` |
 | src/decima/world_transform.h | Decima WorldPosition (doubles) / RotMatrix / WorldTransform layouts with static_asserts | `decima::WorldTransform` |

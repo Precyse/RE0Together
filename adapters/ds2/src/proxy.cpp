@@ -4,6 +4,7 @@
 
 #include <cwchar>
 
+#include "documents_redirect.h"
 #include "init.h"
 
 namespace {
@@ -48,6 +49,7 @@ BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {
         HMODULE pinned = nullptr;
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                            reinterpret_cast<LPCWSTR>(&DllMain), &pinned);
+        documents_redirect::install();
         if (HANDLE thread = CreateThread(nullptr, 0, initThread, nullptr, 0, nullptr)) CloseHandle(thread);
     }
     return TRUE;

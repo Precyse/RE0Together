@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "crash_dump.h"
+#include "documents_redirect.h"
 #include "dx12_hook.h"
 #include "game.h"
 #include "log.h"
@@ -22,6 +23,7 @@ NetClient& g_net = *new NetClient;
 
 DWORD WINAPI initThread(LPVOID) {
     logger::write("adapter: start (DEATH STRANDING 2)");
+    logger::write("adapter: saves go to the session folder: %s", documents_redirect::active() ? "yes" : "no");
     crash_dump::install();
     const Config config = loadConfig();
     marker_overlay::setSelfMarker(config.selfMarker);
