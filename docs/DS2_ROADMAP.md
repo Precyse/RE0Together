@@ -54,6 +54,11 @@ Each item lists what players get and its exit tests. Fake-peer tests first, then
 - **Learn:** how NPCs are spawned (spawn setups, encounters, the AI ride mover and `AIRiderPosture`), how the NPC animation network differs from the player's (`tools/ds2/out/analysis/ANIMATION.md`), and whether an animation network or its clips can be swapped or shared between a player entity and an NPC body (NPC clips on Sam, Sam's clips on an NPC).
 - **Exit:** the remote player body plays the MULE passenger pose in the passenger seat; an NPC body plays a recorded sequence of Sam's moves recognisably.
 
+### 6c. The partner's held equipment
+- **Players get:** what the partner draws from the weapon wheel (weapon, grenade, consumable, tool) is in their hand on their body, the same model in the same hand, and goes away when they holster it.
+- **Learn:** how the game attaches the drawn item's model to Sam (the equipment component, the attach joint, the item resource id), the wheel's Equip / Get Ready call as the hook point, and the call that equips an item on another entity.
+- **Exit:** single PC with the animation mirror on (`mirror_animation=1`): Sam draws a weapon, a grenade and a consumable from the wheel (key 1) and the body beside him holds the same models, A/B screenshots with and without the equip message; then through a fake peer (EQUIP_STATE, reliable, item id plus slot, sent on change).
+
 ### 7. Cargo stacking with the real models
 - **Players get:** the partner's real rack layout (stack order, back, sides, hands, legs) with the real cargo models on their body, replacing the overlay boxes; the partner organises their own cargo in Cargo Management as in single player and the mirror follows.
 - **Learn:** how the game attaches carried pieces' models to Sam (slot attach points per slot kind) and whether a remote body can carry model-only copies (no weight, no physics).
