@@ -53,7 +53,6 @@ add_library(ds2_adapter SHARED
     src/cargo_menu.cpp
     src/vehicle_sync.cpp
     src/vehicle_load.cpp
-    src/remote_body.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
@@ -65,6 +64,14 @@ add_library(ds2_adapter SHARED
     src/ds2/body.cpp
     src/ds2/place.cpp
     src/ds2/vehicle.cpp
+    src/ds2/player_state.cpp
+    src/ds2/remote_player.cpp
+    src/ds2/remote_camera.cpp
+    src/ds2/remote_guards.cpp
+    src/ds2/remote_appearance.cpp
+    src/ds2/remote_ride.cpp
+    src/ds2/remote_context.cpp
+    src/ds2/setdriver_guard.cpp
     src/ds2/use_gate.cpp
     src/ds2/cargo.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})

@@ -15,6 +15,7 @@
 #include "decima/localized_text.h"
 #include "decima/safe_read.h"
 #include "ds2/player.h"
+#include "ds2/remote_context.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -85,7 +86,9 @@ void dispatchDetour(uintptr_t handlers, uintptr_t lock, uintptr_t message, uint3
             g_sequenceNodes.erase(node);
         }
     }
+    const bool toRemote = remote_context::enter(handlers);
     g_dispatch(handlers, lock, message, flags);
+    remote_context::leave(toRemote);
     if (!g_blocking.load() || type != g_vtables.claimQuery) return;
     const uintptr_t player = ds2::localPlayerEntity();
     if (lock - kEntityLock != player) return;

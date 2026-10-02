@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "decima/safe_read.h"
+#include "ds2/engine.h"
 #include "log.h"
 #include "pattern_scan.h"
 
@@ -12,15 +13,16 @@ namespace {
 constexpr const char* kSetWorldTransform =
     "48 85 C9 74 1A 53 48 83 EC 20 48 8B D9 E8 ?? ?? ?? ?? 48 8B CB E8 ?? ?? ?? ?? 48 83 C4 20 5B C3";
 constexpr uintptr_t kEntityMover = 0xC0;      // Entity.Mover, RTTI
-constexpr uintptr_t kEntityTransform = 0xE8;  // Entity.Orientation (WorldTransform), RTTI
 // Mover::SetVelocity, the virtual Entity_ExportedSetVelocity forwards to (slot 0xC8 / 8).
 constexpr size_t kMoverSetVelocitySlot = 0xC8 / sizeof(void*);
+constexpr uintptr_t kPlaceOnWorldTransform = 0x140132740;  // (entity, transform, bool, bool)
 
 struct Velocity {
     float x, y, z, w;
 };
 using SetWorldTransformFn = void (*)(uintptr_t entity, const decima::WorldTransform* transform);
 using SetVelocityFn = void (*)(uintptr_t mover, const Velocity* velocity);
+using PlaceOnWorldFn = void (*)(uintptr_t entity, const decima::WorldTransform* transform, bool a, bool b);
 
 SetWorldTransformFn setWorldTransform() {
     static const auto found = [] {
@@ -48,6 +50,15 @@ bool guardedPlace(SetWorldTransformFn set, uintptr_t entity, const decima::World
 }  // namespace
 
 namespace ds2 {
+
+bool teleportEntity(uintptr_t entity, const decima::WorldTransform& transform) {
+    __try {
+        reinterpret_cast<PlaceOnWorldFn>(at(kPlaceOnWorldTransform))(entity, &transform, false, false);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
 
 bool placeEntity(uintptr_t entity, const decima::WorldTransform& transform, const world_to_screen::Vec3& velocity) {
     const SetWorldTransformFn set = setWorldTransform();

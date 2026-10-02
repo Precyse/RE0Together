@@ -112,10 +112,11 @@ void place() {
     }
 }
 
-bool isDriving(uint8_t slot) {
+std::optional<uint64_t> drivenVehicleId(uint8_t slot) {
     std::lock_guard lock(g_mutex);
     const auto driven = g_driven.find(slot);
-    return driven != g_driven.end() && Clock::now() - driven->second.at <= kStaleAfter;
+    if (driven == g_driven.end() || Clock::now() - driven->second.at > kStaleAfter) return std::nullopt;
+    return driven->second.state.id;
 }
 
 }  // namespace vehicle_sync

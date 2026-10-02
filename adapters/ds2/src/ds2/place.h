@@ -12,6 +12,10 @@ namespace ds2 {
 // False when Entity::SetWorldTransform is not found or the call faulted.
 bool placeEntity(uintptr_t entity, const decima::WorldTransform& transform, const world_to_screen::Vec3& velocity);
 
+// Entity::PlaceOnWorldTransform: a teleport, which also resets a player mover's capsule (a plain SetWorldTransform on
+// a player entity is written back by the mover). False when the call faulted.
+bool teleportEntity(uintptr_t entity, const decima::WorldTransform& transform);
+
 // An entity's current transform, or false when unreadable.
 bool entityTransform(uintptr_t entity, decima::WorldTransform& out);
 

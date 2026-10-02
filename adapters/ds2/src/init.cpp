@@ -22,9 +22,8 @@ constexpr DWORD kResolvePollMs = 1000;
 // Leaked on purpose: joining the net thread from a static destructor would run under the loader lock.
 NetClient& g_net = *new NetClient;
 
-// Engine work on the game's simulation thread: the partners' bodies and the vehicles they drive.
+// Engine work on the game's simulation thread: the vehicles partners drive (their bodies run on the engine's own update).
 void simulationTick() {
-    remote_body::tick();
     vehicle_sync::place();
 }
 
@@ -42,13 +41,14 @@ DWORD WINAPI initThread(LPVOID) {
     const Config config = loadConfig();
     marker_overlay::setSelfMarker(config.selfMarker);
     remote_body::setEnabled(config.remoteBody);
+    if (config.remoteBody) remote_body::installEarly();
     if (config.overlay && !dx12_hook::install(drawOverlay)) logger::write("adapter: overlay unavailable");
     input_filter::install(cargo_menu::claimsKey);
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
     if (!main_thread::install(game::frameFunction(), simulationTick)) {
-        logger::write("adapter: no simulation-thread hook, partners' bodies and vehicles stay put");
+        logger::write("adapter: no simulation-thread hook, partners' vehicles stay put");
     }
     player_sync::start(g_net, config.port);
     return 0;

@@ -11,7 +11,7 @@ self_marker=0
 remote_body=0
 ```
 
-`self_marker=1` also marks your own Sam (checks the projection). `remote_body=1` borrows a loaded NPC as each partner's body.
+`self_marker=1` also marks your own Sam (checks the projection). `remote_body=1` gives the partner a body: a second player entity (own camera, Sam's costume, the game's own walking and vehicle get-in and get-off) that follows the partner and rides the vehicle the partner drives.
 
 The host moves cargo between the two backpacks: F7 opens the menu (your backpack and the guest's), the arrow keys pick a piece and choose the side, Enter moves it across. The game does not see those keys while the menu is open.
 

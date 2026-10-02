@@ -40,15 +40,8 @@ void blockScriptedInteractions(bool block);
 // Opaque handle of an entity the adapter created; 0 = none.
 using Body = uintptr_t;
 
-// Borrows a humanoid NPC the game has already loaded (the nearest to the player) to serve as a remote player's body.
-// Nothing while the background search runs (call again later), then the body, or 0 when none is loaded.
-std::optional<Body> borrowBody();
-
-// Where a body stands now (to put a borrowed NPC back when it is released).
-std::optional<Pose> bodyPose(Body body);
-
 // Moves a body (the engine's SetWorldTransform) and gives its mover the velocity it is moving with, so its own
-// animation can follow. False when it faults; the caller then forgets the body.
+// animation can follow. False when it faults.
 bool placeBody(Body body, const Pose& pose, const world_to_screen::Vec3& velocity);
 
 // A vehicle and where it is. The id is the game's own, saved with the world, so the host's and the guest's copies of

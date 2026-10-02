@@ -8,6 +8,7 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/place.h"
+#include "ds2/vehicle.h"
 #include "game.h"
 #include "log.h"
 #include "pattern_scan.h"
@@ -52,6 +53,22 @@ void forEachRecord(uintptr_t vehicles, Visit visit) {
 
 }  // namespace
 
+namespace ds2 {
+
+uintptr_t loadedVehicle(uint64_t id) {
+    const uintptr_t vehicles = manager();
+    uintptr_t found = 0;
+    if (vehicles) {
+        forEachRecord(vehicles, [&](uint64_t recordId, uintptr_t entity) {
+            if (recordId == id) found = entity;
+            return recordId == id;
+        });
+    }
+    return found;
+}
+
+}  // namespace ds2
+
 namespace game {
 
 std::optional<VehiclePose> drivenVehicle() {
@@ -71,14 +88,7 @@ std::optional<VehiclePose> drivenVehicle() {
 }
 
 bool placeVehicle(const VehiclePose& pose, const world_to_screen::Vec3& velocity) {
-    const uintptr_t vehicles = manager();
-    uintptr_t target = 0;
-    if (vehicles) {
-        forEachRecord(vehicles, [&](uint64_t id, uintptr_t entity) {
-            if (id == pose.id) target = entity;
-            return id == pose.id;
-        });
-    }
+    const uintptr_t target = ds2::loadedVehicle(pose.id);
     if (!target) return false;
     decima::WorldTransform t{};
     t.position = {pose.position.x, pose.position.y, pose.position.z};

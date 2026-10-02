@@ -4,6 +4,7 @@
 // extrapolated by the vehicle's speed between reports. When the reports stop, the copy stays where it was left. If
 // both players claim the same vehicle, each machine keeps its own driver's.
 #include <cstdint>
+#include <optional>
 
 #include "net_client.h"
 #include "protocol.h"
@@ -29,7 +30,7 @@ void tick(NetClient& net, const SessionSnapshot& session);
 // Simulation thread (main_thread tick): moves the vehicles partners are driving.
 void place();
 
-// Whether the partner in `slot` is driving now (its reports are fresh). Any thread.
-bool isDriving(uint8_t slot);
+// The id of the vehicle the partner in `slot` is driving now (its reports are fresh), if any. Any thread.
+std::optional<uint64_t> drivenVehicleId(uint8_t slot);
 
 }  // namespace vehicle_sync
