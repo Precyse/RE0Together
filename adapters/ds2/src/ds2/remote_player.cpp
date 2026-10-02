@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cmath>
 #include <chrono>
 #include <cstring>
 #include <mutex>
@@ -14,6 +15,7 @@
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
 #include "ds2/player_state.h"
+#include "ds2/remote_animation.h"
 #include "ds2/remote_appearance.h"
 #include "ds2/remote_camera.h"
 #include "ds2/remote_context.h"
@@ -148,9 +150,27 @@ void finishSpawn() {
     }
 }
 
+// Loopback test of the animation mirror: the body stands beside the local player, so both poses can be compared.
+constexpr double kLoopbackBeside = 1.3;  // metres to the local player's right
+
+bool loopbackPose(game::Pose& pose) {
+    decima::WorldTransform sam{};
+    if (!decima::safeRead(samEntity() + ds2::kEntityTransform, sam)) return false;
+    const float* right = sam.orientation.row[0];
+    const float* forward = sam.orientation.row[1];
+    pose.position = {sam.position.x + right[0] * kLoopbackBeside, sam.position.y + right[1] * kLoopbackBeside,
+                     sam.position.z};
+    pose.yaw = std::atan2(forward[0], forward[1]);
+    return true;
+}
+
 void follow() {
     game::Pose pose;
     world_to_screen::Vec3 velocity;
+    if (remote_animation::mirrorsLocalPlayer() && loopbackPose(pose)) {
+        game::placeBody(g_entity.load(), pose, {});
+        return;
+    }
     {
         std::lock_guard lock(g_targetMutex);
         if (Clock::now() - g_targetAt > kTargetStale) return;
@@ -212,6 +232,7 @@ void installEarly() {
     remote_guards::installEarly();
     remote_camera::installEarly();
     remote_appearance::installEarly();
+    remote_animation::installEarly();
     hooks::install("object list update", ds2::at(kObjectListUpdate), reinterpret_cast<void*>(&updateDetour),
                    reinterpret_cast<void**>(&g_update));
 }

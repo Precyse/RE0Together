@@ -12,6 +12,7 @@
 #include "marker_overlay.h"
 #include "net_client.h"
 #include "player_sync.h"
+#include "ds2/remote_animation.h"
 #include "remote_body.h"
 #include "vehicle_sync.h"
 
@@ -42,6 +43,7 @@ DWORD WINAPI initThread(LPVOID) {
     marker_overlay::setSelfMarker(config.selfMarker);
     remote_body::setEnabled(config.remoteBody);
     if (config.remoteBody) remote_body::installEarly();
+    remote_animation::setMirrorLocalPlayer(config.mirrorAnimation);
     if (config.overlay && !dx12_hook::install(drawOverlay)) logger::write("adapter: overlay unavailable");
     input_filter::install(cargo_menu::claimsKey);
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");

@@ -41,6 +41,8 @@ Config loadConfig() {
             config.overlay = value != "0";
         } else if (key == "self_marker") {
             config.selfMarker = value == "1";
+        } else if (key == "mirror_animation") {
+            config.mirrorAnimation = value == "1";
         } else if (key == "remote_body") {
             config.remoteBody = value == "1";
         }

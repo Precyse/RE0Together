@@ -69,6 +69,7 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_camera.cpp
     src/ds2/remote_guards.cpp
     src/ds2/remote_appearance.cpp
+    src/ds2/remote_animation.cpp
     src/ds2/remote_ride.cpp
     src/ds2/remote_context.cpp
     src/ds2/setdriver_guard.cpp
