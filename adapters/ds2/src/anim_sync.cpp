@@ -18,6 +18,21 @@ constexpr size_t kEntryHeaderSize = 3;  // u16 index, u8 type
 Clock::time_point g_lastSend;
 Clock::time_point g_lastSnapshot;
 uint32_t g_seq = 0;
+constexpr auto kStatsInterval = std::chrono::seconds(5);
+Clock::time_point g_lastStats;
+uint64_t g_bytesSent = 0;
+uint32_t g_reportsSent = 0;
+
+void countSent(Clock::time_point now, size_t bytes) {
+    g_bytesSent += bytes;
+    ++g_reportsSent;
+    if (now - g_lastStats < kStatsInterval) return;
+    const double seconds = std::chrono::duration<double>(now - g_lastStats).count();
+    logger::write("anim_sync: sent %u reports, %.0f bytes/s in the last %.0f s", g_reportsSent, g_bytesSent / seconds, seconds);
+    g_lastStats = now;
+    g_bytesSent = 0;
+    g_reportsSent = 0;
+}
 
 size_t valueSize(uint8_t type) { return remote_animation::valueBytes(type); }
 
@@ -71,7 +86,8 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     }
     const std::vector<remote_animation::Change> changes = remote_animation::takeLocalChanges();
     if (changes.empty()) return;
-    net.send(kMsgAnimState, false, proto::kSlotAll, encode(changes, snapshot));
+    const std::vector<uint8_t> payload = encode(changes, snapshot);
+    if (net.send(kMsgAnimState, false, proto::kSlotAll, payload)) countSent(now, payload.size());
 }
 
 }  // namespace anim_sync

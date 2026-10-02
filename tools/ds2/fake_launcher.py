@@ -5,7 +5,7 @@ circle's centre is --offset m ahead of the first local PLAYER_STATE (--phase: th
 the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead and 1.2 m to the local player's right).
 --drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
-when the reports start and leaves when they stop. --echo-anim sends the local player's ANIM_STATE back as the peer's
+when the reports start and leaves when they stop. --follow keeps the circle centre ahead of the local player as it moves. --echo-anim sends the local player's ANIM_STATE back as the peer's
 (the remote then copies the local player through the real wire format). Prints the local player's pose.
 
 usage: python fake_launcher.py [--port 27980] [--radius 1.2] [--speed 1.4] [--hold 5] [--offset 3.5] [--phase 0]
@@ -52,6 +52,7 @@ def main():
     p.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) the peer drives, parked at --drive-pos")
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
+    p.add_argument("--follow", action="store_true", help="the circle centre follows the local player instead of staying where it started")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
@@ -99,11 +100,13 @@ def serve(sock, a):
         if now - last_hb >= 1.0:
             last_hb = now
             sock.sendall(encode(HEARTBEAT, HOST_SLOT, flags=0))
-        if local and centre is None:
+        if local and (centre is None or a.follow):
             fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])  # forward (yaw = atan2(forward.x, forward.y))
+            first = centre is None
             centre = (local["x"] + fx * a.offset + a.radius, local["y"] + fy * a.offset, local["z"])
-            start = now
-            print(f"circle centre {centre}", flush=True)
+            if first:
+                start = now
+                print(f"circle centre {centre}", flush=True)
         if centre and a.drive is not None:
             begin, end = map(float, a.drive_window.split(","))
             if begin <= now - start < end:
