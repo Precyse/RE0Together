@@ -43,6 +43,8 @@ Config loadConfig() {
             config.selfMarker = value == "1";
         } else if (key == "mirror_animation") {
             config.mirrorAnimation = value == "1";
+        } else if (key == "log_facts") {
+            config.logFacts = value == "1";
         } else if (key == "remote_body") {
             config.remoteBody = value == "1";
         }
