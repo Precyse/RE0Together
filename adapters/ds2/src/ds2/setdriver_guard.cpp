@@ -19,9 +19,25 @@ constexpr uintptr_t kLastDrivenId = 0x110;
 constexpr uintptr_t kLastDrivenId2 = 0x118;
 constexpr uintptr_t kVehicleListCount = 0x8;
 constexpr uintptr_t kVehicleListCount2 = 0xA0;
+constexpr uintptr_t kVehicleHasDriver = 0x4fc;  // non-zero while the vehicle has a driver
+constexpr uintptr_t kVehicleDriverKey = 0x4b0;  // that driver's key
 
 using SetDriverFn = bool (*)(uintptr_t vehicle, const uint64_t* key, bool enter, uintptr_t driver, bool flag);
 SetDriverFn g_setDriver = nullptr;
+bool g_loggedEnter = false;
+bool g_loggedLeave = false;
+
+// DS2 has no passenger seat for players: a second rider's SetDriver would fail every frame because the vehicle's
+// one driver slot is taken. The remote's enter and leave are answered as done instead, and the vehicle keeps its
+// driver; the remote's ride states finish and it sits as a passenger.
+bool answersAsPassenger(uintptr_t vehicle, const uint64_t* key, bool enter) {
+    const bool taken = ds2::field<uint32_t>(vehicle, kVehicleHasDriver) != 0 &&
+                       ds2::field<uint64_t>(vehicle, kVehicleDriverKey) != *key;
+    bool& logged = enter ? g_loggedEnter : g_loggedLeave;
+    if (taken && !logged) logger::write("setdriver_guard: remote %s as a passenger", enter ? "enters" : "leaves");
+    logged = taken;
+    return taken;
+}
 
 bool setDriverDetour(uintptr_t vehicle, const uint64_t* key, bool enter, uintptr_t driver, bool flag) {
     const uintptr_t remote = remote_player::entity();
@@ -29,6 +45,7 @@ bool setDriverDetour(uintptr_t vehicle, const uint64_t* key, bool enter, uintptr
     const bool isRemote = remoteKey || remote_context::active();
     const uintptr_t manager = decima::readPointer(ds2::at(kVehicleManagerGlobal));
     if (!isRemote || !manager) return g_setDriver(vehicle, key, enter, driver, flag);
+    if (remoteKey && answersAsPassenger(vehicle, key, enter)) return true;
 
     const uintptr_t block = manager + kLocalDriving;
     const uintptr_t driven = ds2::field<uintptr_t>(block, kDrivenVehicle);

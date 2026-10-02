@@ -10,6 +10,7 @@
 #include "ds2/player_state.h"
 #include "ds2/remote_player.h"
 #include "ds2/vehicle.h"
+#include "game.h"
 #include "log.h"
 #include "vehicle_sync.h"
 
@@ -37,11 +38,18 @@ constexpr double kDoorRight = 2.6;
 constexpr double kDoorForward = 1.8;
 constexpr double kDoorUp = 0.8;
 constexpr auto kBoardRetry = std::chrono::seconds(3);
+// The passenger seat, in the vehicle's frame: the other of the two seat pods on the cab roof (the driver's is at
+// right 0.40, forward 1.57, up 2.36).
+constexpr double kPassengerRight = -0.40;
+constexpr double kPassengerForward = 1.57;
+constexpr double kPassengerUp = 2.36;
 
 enum class Stage { OnFoot, Boarding, Riding, Leaving };
 
 Stage g_stage = Stage::OnFoot;
 Clock::time_point g_boardedAt;
+bool g_passenger = false;  // the local player drives the same vehicle: the remote rides along
+uint64_t g_vehicleId = 0;
 
 using ClearParentFn = void (*)(uintptr_t entity);
 
@@ -77,6 +85,24 @@ void clearRequest(uintptr_t plugin) {
     if (owner) ds2::field<uint8_t>(owner, kOwnerRequestKind) = 0;
 }
 
+// A passenger sits where the second seat pod is; the engine's states put it at the driver's.
+void seatAsPassenger(uintptr_t vehicle) {
+    decima::WorldTransform truck{};
+    if (!decima::safeRead(vehicle + ds2::kEntityTransform, truck)) return;
+    const auto& r = truck.orientation.row;
+    decima::WorldTransform seat = truck;
+    seat.position.x += r[0][0] * kPassengerRight + r[1][0] * kPassengerForward + r[2][0] * kPassengerUp;
+    seat.position.y += r[0][1] * kPassengerRight + r[1][1] * kPassengerForward + r[2][1] * kPassengerUp;
+    seat.position.z += r[0][2] * kPassengerRight + r[1][2] * kPassengerForward + r[2][2] * kPassengerUp;
+    ds2::teleportEntity(remote_player::entity(), seat);
+}
+
+// Whether the local player drives the vehicle too (each machine keeps its own driver; the partner then rides along).
+bool localDrives(uint64_t vehicleId) {
+    const auto own = game::drivenVehicle();
+    return own && own->id == vehicleId;
+}
+
 void releaseVehicle() {
     reinterpret_cast<ClearParentFn>(ds2::at(kClearParent))(remote_player::entity());  // the engine leaves it linked
     g_stage = Stage::OnFoot;
@@ -96,9 +122,12 @@ void tick() {
     switch (g_stage) {
         case Stage::OnFoot:
             if (const uintptr_t vehicle = driven ? ds2::loadedVehicle(*driven) : 0) {
+                g_vehicleId = *driven;
+                g_passenger = localDrives(g_vehicleId);
                 requestBoarding(plugin, vehicle);
                 g_stage = Stage::Boarding;
-                logger::write("remote_ride: boarding vehicle %llx", static_cast<unsigned long long>(*driven));
+                logger::write("remote_ride: boarding vehicle %llx as %s", static_cast<unsigned long long>(g_vehicleId),
+                              g_passenger ? "a passenger" : "the driver");
             }
             break;
         case Stage::Boarding:
@@ -116,10 +145,12 @@ void tick() {
         case Stage::Riding:
             if (phase == kPhaseOnFoot) {  // the engine ended the ride itself
                 releaseVehicle();
-            } else if (!driven) {
+            } else if (!driven || (g_passenger && !localDrives(g_vehicleId))) {
                 ds2::field<uint8_t>(plugin, kPluginRequestedPhase) = kPhaseRideOff;
                 g_stage = Stage::Leaving;
                 logger::write("remote_ride: leaving");
+            } else if (g_passenger) {
+                seatAsPassenger(ds2::loadedVehicle(g_vehicleId));
             }
             break;
         case Stage::Leaving:
