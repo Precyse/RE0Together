@@ -3,7 +3,7 @@ RE0's adapter.ini). Listens on the adapter port, answers HELLO with WELCOME + PE
 PLAYER_STATE (slot 1) at 60 Hz: still for --hold seconds, then walking a circle of --radius m at --speed m/s. The
 circle's centre is --offset m ahead of the first local PLAYER_STATE (--phase: the start angle, degrees; --speed 0 keeps
 the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead and 1.2 m to the local player's right).
---drive ID (hex) reports the peer driving that vehicle, parked at --drive-pos x,y,z with an upright orientation,
+--drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
 when the reports start and leaves when they stop. Prints the local player's pose.
 
@@ -21,7 +21,7 @@ HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002
 FLAG_RELIABLE = 1
 HOST_SLOT, PEER_SLOT, MAX_PLAYERS, EPOCH = 0, 1, 2, 1
 STATE = struct.Struct("<I3ffI")
-VEHICLE = struct.Struct("<IIQ3f9f")  # seq, reserved, id, position, rotation rows
+VEHICLE = struct.Struct("<IIQ3f9f")  # seq, role (0 driver, 1 passenger), id, position, rotation rows
 SEND_HZ = 60
 
 
@@ -49,6 +49,7 @@ def main():
     p.add_argument("--phase", type=float, default=0.0, help="start angle on the circle, degrees (90 = Sam's left when he faces +X)")
     p.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) the peer drives, parked at --drive-pos")
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
+    p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
     server = socket.socket()
@@ -103,7 +104,7 @@ def serve(sock, a):
             if begin <= now - start < end:
                 x, y, z = map(float, a.drive_pos.split(","))
                 seq += 1
-                sock.sendall(encode(VEHICLE_STATE, PEER_SLOT, VEHICLE.pack(seq, 0, a.drive, x, y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1), flags=0))
+                sock.sendall(encode(VEHICLE_STATE, PEER_SLOT, VEHICLE.pack(seq, a.drive_role, a.drive, x, y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1), flags=0))
         if centre:
             t = max(0.0, now - start - a.hold)
             angle = math.radians(a.phase) + t * a.speed / a.radius

@@ -118,7 +118,8 @@ void tick() {
     const uintptr_t plugin = ds2::ridePlugin(remote_player::entity());
     if (!plugin) return;
     const uint8_t phase = ds2::field<uint8_t>(plugin, kPluginPhase);
-    const auto driven = vehicle_sync::drivenVehicleId(remote_player::slot());
+    const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
+    const auto driven = riding ? std::optional<uint64_t>(riding->id) : std::nullopt;
     switch (g_stage) {
         case Stage::OnFoot:
             if (const uintptr_t vehicle = driven ? ds2::loadedVehicle(*driven) : 0) {
