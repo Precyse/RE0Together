@@ -233,6 +233,7 @@ void installEarly() {
     remote_camera::installEarly();
     remote_appearance::installEarly();
     remote_animation::installEarly();
+    remote_ride::installEarly();
     hooks::install("object list update", ds2::at(kObjectListUpdate), reinterpret_cast<void*>(&updateDetour),
                    reinterpret_cast<void**>(&g_update));
 }

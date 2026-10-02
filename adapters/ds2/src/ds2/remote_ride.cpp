@@ -1,11 +1,13 @@
 #include "ds2/remote_ride.h"
 
+
 #include <chrono>
 #include <cstdint>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
+#include "hooks.h"
 #include "ds2/place.h"
 #include "ds2/player_state.h"
 #include "ds2/remote_player.h"
@@ -32,6 +34,8 @@ constexpr uint8_t kPhaseDrive = 2;
 constexpr uint8_t kPhaseRideOff = 3;
 
 constexpr uintptr_t kClearParent = 0x14014ae00;
+constexpr uintptr_t kMoverUpdate = 0x140ec81e0;  // DSPlayerMover update (message handler)
+constexpr uintptr_t kComponentOwner = 0x48;
 
 // The driver's door, in the vehicle's frame (right, forward, up): where the engine's door check lets a player board.
 constexpr double kDoorRight = 2.6;
@@ -85,16 +89,34 @@ void clearRequest(uintptr_t plugin) {
     if (owner) ds2::field<uint8_t>(owner, kOwnerRequestKind) = 0;
 }
 
-// A passenger sits where the second seat pod is; the engine's states put it at the driver's.
-void seatAsPassenger(uintptr_t vehicle) {
+// The pod's world transform on the vehicle, or false when the vehicle is not readable.
+bool passengerSeat(uintptr_t vehicle, decima::WorldTransform& seat) {
     decima::WorldTransform truck{};
-    if (!decima::safeRead(vehicle + ds2::kEntityTransform, truck)) return;
+    if (!decima::safeRead(vehicle + ds2::kEntityTransform, truck)) return false;
     const auto& r = truck.orientation.row;
-    decima::WorldTransform seat = truck;
+    seat = truck;
     seat.position.x += r[0][0] * kPassengerRight + r[1][0] * kPassengerForward + r[2][0] * kPassengerUp;
     seat.position.y += r[0][1] * kPassengerRight + r[1][1] * kPassengerForward + r[2][1] * kPassengerUp;
     seat.position.z += r[0][2] * kPassengerRight + r[1][2] * kPassengerForward + r[2][2] * kPassengerUp;
-    ds2::teleportEntity(remote_player::entity(), seat);
+    return true;
+}
+
+// DSPlayerMover's update writes a seated player's transform (the driver's seat) into the entity itself. The remote,
+// as a passenger, is moved to the second pod right after that call, on the same thread and inside the same update.
+using MoverUpdateFn = uint64_t (*)(uintptr_t mover, uintptr_t message, uintptr_t a3, uintptr_t a4, uintptr_t a5,
+                                   uintptr_t a6, uintptr_t a7, uintptr_t a8);
+MoverUpdateFn g_moverUpdate = nullptr;
+
+uint64_t moverUpdateDetour(uintptr_t mover, uintptr_t message, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6,
+                           uintptr_t a7, uintptr_t a8) {
+    const uint64_t result = g_moverUpdate(mover, message, a3, a4, a5, a6, a7, a8);
+    const uintptr_t remote = remote_player::entity();
+    decima::WorldTransform seat{};
+    if (remote && g_stage == Stage::Riding && g_passenger && ds2::field<uintptr_t>(mover, kComponentOwner) == remote &&
+        passengerSeat(ds2::loadedVehicle(g_vehicleId), seat)) {
+        ds2::teleportEntity(remote, seat);
+    }
+    return result;
 }
 
 // Whether the local player drives the vehicle too (each machine keeps its own driver; the partner then rides along).
@@ -113,6 +135,11 @@ void releaseVehicle() {
 namespace remote_ride {
 
 bool holdsBody() { return g_stage != Stage::OnFoot; }
+
+void installEarly() {
+    hooks::install("player mover update", ds2::at(kMoverUpdate), reinterpret_cast<void*>(&moverUpdateDetour),
+                   reinterpret_cast<void**>(&g_moverUpdate));
+}
 
 void tick() {
     const uintptr_t plugin = ds2::ridePlugin(remote_player::entity());
@@ -150,8 +177,6 @@ void tick() {
                 ds2::field<uint8_t>(plugin, kPluginRequestedPhase) = kPhaseRideOff;
                 g_stage = Stage::Leaving;
                 logger::write("remote_ride: leaving");
-            } else if (g_passenger) {
-                seatAsPassenger(ds2::loadedVehicle(g_vehicleId));
             }
             break;
         case Stage::Leaving:

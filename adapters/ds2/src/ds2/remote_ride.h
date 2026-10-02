@@ -4,6 +4,9 @@
 // RideOn, Drive and RideOff (with the seated animation, SetDriver and the parent link), exactly as for Sam.
 namespace remote_ride {
 
+// Start-up: hooks the engine call that places a seated player.
+void installEarly();
+
 // Simulation thread, once per frame while the remote is live.
 void tick();
 
