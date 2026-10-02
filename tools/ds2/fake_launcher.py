@@ -5,7 +5,7 @@ circle's centre is --offset m ahead of the first local PLAYER_STATE (--phase: th
 the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead and 1.2 m to the local player's right).
 --drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
-when the reports start and leaves when they stop. --follow keeps the circle centre ahead of the local player as it moves. --echo-anim sends the local player's ANIM_STATE back as the peer's
+when the reports start and leaves when they stop. --follow stands the peer beside the local player (--offset ahead, --radius to its right, same heading) wherever it goes. --echo-anim sends the local player's ANIM_STATE back as the peer's
 (the remote then copies the local player through the real wire format). Prints the local player's pose.
 
 usage: python fake_launcher.py [--port 27980] [--radius 1.2] [--speed 1.4] [--hold 5] [--offset 3.5] [--phase 0]
@@ -52,7 +52,7 @@ def main():
     p.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) the peer drives, parked at --drive-pos")
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
-    p.add_argument("--follow", action="store_true", help="the circle centre follows the local player instead of staying where it started")
+    p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
@@ -119,6 +119,11 @@ def serve(sock, a):
             x = centre[0] + a.radius * math.cos(angle) - a.radius
             y = centre[1] + a.radius * math.sin(angle)
             yaw = math.atan2(-math.sin(angle), math.cos(angle)) if t > 0 else 0.0
+            if a.follow and local:  # beside the local player: --offset ahead, --radius to its right, facing the same way
+                fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
+                x = local["x"] + fx * a.offset + fy * a.radius
+                y = local["y"] + fy * a.offset - fx * a.radius
+                yaw = local["yaw"]
             seq += 1
             sock.sendall(encode(PLAYER_STATE, PEER_SLOT, STATE.pack(seq, x, y, centre[2], yaw, 0), flags=0))
         time.sleep(1.0 / SEND_HZ)
