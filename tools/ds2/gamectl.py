@@ -13,6 +13,7 @@ usage: python gamectl.py idle                 # seconds since the user last touc
        python gamectl.py keys <name,name,...>
        python gamectl.py mouse <dx> <dy> [steps]  # relative mouse motion (camera), only while the game is in front
        python gamectl.py click left|right [hold_ms]  # a mouse button press, only while the game is in front
+       python gamectl.py wheel up|down [notches]      # mouse wheel notches, only while the game is in front
 """
 import ctypes
 import ctypes.wintypes
@@ -32,6 +33,8 @@ INPUT_MOUSE = 0
 MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_BUTTONS = {"left": (0x0002, 0x0004), "right": (0x0008, 0x0010)}  # (down, up)
 DEFAULT_CLICK_HOLD_MS = 80
+MOUSEEVENTF_WHEEL = 0x0800
+WHEEL_NOTCH = 120
 MOUSE_STEP_MS = 10
 DEFAULT_MOUSE_STEPS = 20
 MIN_IDLE_S = 90
@@ -135,6 +138,19 @@ def click(button, hold_ms):
         time.sleep(wait / 1000)
 
 
+def wheel(direction, notches):
+    hwnd = shared.find_window()
+    shared.focus(hwnd)
+    for _ in range(notches):
+        shared.ensure_foreground(hwnd)
+        inp = shared.INPUT(type=INPUT_MOUSE)
+        delta = WHEEL_NOTCH if direction == "up" else -WHEEL_NOTCH
+        ctypes.memmove(ctypes.addressof(inp) + shared.INPUT.u.offset,
+                       ctypes.byref(MOUSEINPUT(0, 0, delta & 0xFFFFFFFF, MOUSEEVENTF_WHEEL, 0, 0)), ctypes.sizeof(MOUSEINPUT))
+        shared.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(shared.INPUT))
+        time.sleep(MOUSE_STEP_MS / 1000)
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
@@ -153,6 +169,10 @@ def main():
         if lock_owner() != OWNER:
             sys.exit("take the lock first (launch)")
         click(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else DEFAULT_CLICK_HOLD_MS)
+    elif cmd == "wheel":
+        if lock_owner() != OWNER:
+            sys.exit("take the lock first (launch)")
+        wheel(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 1)
     elif cmd == "release":
         release()
     elif cmd in ("shot", "key", "keys", "idle"):
