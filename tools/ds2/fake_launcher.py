@@ -5,7 +5,8 @@ circle's centre is --offset m ahead of the first local PLAYER_STATE (--phase: th
 the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead and 1.2 m to the local player's right).
 --drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
-when the reports start and leaves when they stop. Prints the local player's pose.
+when the reports start and leaves when they stop. --echo-anim sends the local player's ANIM_STATE back as the peer's
+(the remote then copies the local player through the real wire format). Prints the local player's pose.
 
 usage: python fake_launcher.py [--port 27980] [--radius 1.2] [--speed 1.4] [--hold 5] [--offset 3.5] [--phase 0]
                                [--drive ID --drive-pos X,Y,Z --drive-window START,END]
@@ -18,6 +19,7 @@ import threading
 import time
 
 HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002, 0x0003, 0x0020, 0x0100, 0x0108
+ANIM_STATE = 0x010A
 FLAG_RELIABLE = 1
 HOST_SLOT, PEER_SLOT, MAX_PLAYERS, EPOCH = 0, 1, 2, 1
 STATE = struct.Struct("<I3ffI")
@@ -50,6 +52,7 @@ def main():
     p.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) the peer drives, parked at --drive-pos")
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
+    p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
     server = socket.socket()
@@ -83,6 +86,8 @@ def serve(sock, a):
             if msg_type == PLAYER_STATE and len(body) >= 4 + STATE.size:
                 _, x, y, z, yaw, _ = STATE.unpack_from(body, 4)
                 local.update(x=x, y=y, z=z, yaw=yaw)
+            elif msg_type == ANIM_STATE and a.echo_anim:
+                sock.sendall(encode(ANIM_STATE, PEER_SLOT, body[4:], flags=0))
                 if time.monotonic() - last_print > 5:
                     last_print = time.monotonic()
                     print(f"local ({x:.2f}, {y:.2f}, {z:.2f}) yaw {yaw:.2f}", flush=True)

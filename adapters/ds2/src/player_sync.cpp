@@ -5,6 +5,7 @@
 #include <map>
 #include <mutex>
 
+#include "anim_sync.h"
 #include "cargo_ground.h"
 #include "cargo_transfer.h"
 #include "debug_stats.h"
@@ -98,6 +99,7 @@ void tick(NetClient& net) {
         cargo_ground::onFrame(net, frame);
         vehicle_sync::onFrame(frame);
         vehicle_load::onFrame(frame);
+        anim_sync::onFrame(frame);
     });
     debug_stats::setSession(session);
     rememberNames(session);
@@ -106,6 +108,7 @@ void tick(NetClient& net) {
     cargo_ground::tick(net, session);
     vehicle_sync::tick(net, session);
     vehicle_load::tick(net, session);
+    anim_sync::tick(net, session);
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

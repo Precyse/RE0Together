@@ -1,8 +1,11 @@
 #include "ds2/remote_animation.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
-#include <cstdint>
+#include <chrono>
+#include <cstring>
+#include <mutex>
 #include <string>
 
 #include "decima/safe_read.h"
@@ -12,6 +15,8 @@
 #include "log.h"
 
 namespace {
+
+using Clock = std::chrono::steady_clock;
 
 constexpr uintptr_t kAnimationManagerRecord = 0x1441E72F0;
 constexpr uintptr_t kMorphemeGetAnimatedPose = 0x140237280;  // MsgGetAnimatedPose handlers of the two concrete managers
@@ -33,14 +38,38 @@ constexpr uint8_t kTypeInt = 1;
 constexpr uint8_t kTypeFloat = 2;
 constexpr uint8_t kTypeQuat = 3;
 constexpr size_t kNameBytes = 48;
+constexpr size_t kMaxVariables = 1024;
+constexpr auto kSampleInterval = std::chrono::milliseconds(33);
+constexpr auto kPeerStaleAfter = std::chrono::seconds(3);
 
 using HandlerFn = void (*)(uintptr_t component, uintptr_t message);
 using SetBoolFn = void (*)(uintptr_t manager, int index, uint8_t value);
 using SetValueFn = void (*)(uintptr_t manager, int index, const float* value);
 
 std::atomic<bool> g_mirrorLocal{false};
+std::atomic<bool> g_collecting{false};
+std::atomic<bool> g_snapshotRequested{true};
 HandlerFn g_morpheme = nullptr;
 HandlerFn g_graph = nullptr;
+
+// Sending side: the value last reported for each variable.
+struct Sent {
+    bool valid = false;
+    remote_animation::Change change{};
+};
+std::array<Sent, kMaxVariables> g_sent;
+Clock::time_point g_lastSample;
+std::mutex g_outboxMutex;
+std::vector<remote_animation::Change> g_outbox;
+
+// Receiving side: the partner's newest value of each variable.
+struct Peer {
+    bool valid = false;
+    remote_animation::Change change{};
+};
+std::mutex g_peerMutex;
+std::array<Peer, kMaxVariables> g_peer;
+Clock::time_point g_peerAt;
 
 uintptr_t managerOf(uintptr_t entity) { return ds2::componentByRecord(entity, kAnimationManagerRecord); }
 
@@ -77,27 +106,43 @@ void logLayout(uintptr_t samManager, uintptr_t remoteManager) {
                   mismatches);
 }
 
-void copyVariable(uintptr_t target, int index, uintptr_t source) {
+void writeVariable(uintptr_t manager, int index, uint8_t type, const uint8_t* value) {
     const auto setValue = reinterpret_cast<SetValueFn>(ds2::at(kSetFloat));
-    switch (ds2::field<uint8_t>(source, kVariableType)) {
+    switch (type) {
         case kTypeBool:
-            reinterpret_cast<SetBoolFn>(ds2::at(kSetBool))(target, index, ds2::field<uint8_t>(source, kVariableValue));
+            reinterpret_cast<SetBoolFn>(ds2::at(kSetBool))(manager, index, value[0]);
             break;
         case kTypeInt: {
-            const float value = static_cast<float>(ds2::field<int32_t>(source, kVariableValue));
-            setValue(target, index, &value);
+            int32_t integer;
+            std::memcpy(&integer, value, sizeof(integer));
+            const float asFloat = static_cast<float>(integer);
+            setValue(manager, index, &asFloat);
             break;
         }
-        case kTypeFloat:
-            setValue(target, index, reinterpret_cast<const float*>(source + kVariableValue));
+        case kTypeFloat: {
+            float number;
+            std::memcpy(&number, value, sizeof(number));
+            setValue(manager, index, &number);
             break;
-        case kTypeQuat:
-            reinterpret_cast<SetValueFn>(ds2::at(kSetQuat))(target, index,
-                                                            reinterpret_cast<const float*>(source + kVariableValue));
+        }
+        case kTypeQuat: {
+            float quat[4];
+            std::memcpy(quat, value, sizeof(quat));
+            reinterpret_cast<SetValueFn>(ds2::at(kSetQuat))(manager, index, quat);
             break;
+        }
         default:
             break;
     }
+}
+
+remote_animation::Change readVariable(uintptr_t variable, int index) {
+    remote_animation::Change change{};
+    change.index = static_cast<uint16_t>(index);
+    change.type = ds2::field<uint8_t>(variable, kVariableType);
+    std::memcpy(change.value, reinterpret_cast<const void*>(variable + kVariableValue),
+                remote_animation::valueBytes(change.type));
+    return change;
 }
 
 void mirrorLocalPlayer(uintptr_t remoteManager) {
@@ -113,14 +158,58 @@ void mirrorLocalPlayer(uintptr_t remoteManager) {
     const uintptr_t source = decima::readPointer(samManager + kVariables);
     for (int32_t i = 0; i < count; ++i) {
         const uintptr_t variable = source + i * kVariableSize;
-        if (ds2::field<int32_t>(variable, kVariableGraphId) != -1) copyVariable(remoteManager, i, variable);
+        if (ds2::field<int32_t>(variable, kVariableGraphId) == -1) continue;
+        const remote_animation::Change change = readVariable(variable, i);
+        writeVariable(remoteManager, i, change.type, change.value);
     }
 }
 
+void applyPartner(uintptr_t remoteManager) {
+    std::lock_guard lock(g_peerMutex);
+    if (Clock::now() - g_peerAt > kPeerStaleAfter) return;
+    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(remoteManager, kVariableCount), kMaxVariables);
+    for (int32_t i = 0; i < count; ++i) {
+        const Peer& peer = g_peer[i];
+        if (peer.valid) writeVariable(remoteManager, i, peer.change.type, peer.change.value);
+    }
+}
+
+// Samples the local player's variables: what changed since the last report (everything on a snapshot).
+void sampleLocalPlayer(uintptr_t samManager) {
+    const auto now = Clock::now();
+    if (now - g_lastSample < kSampleInterval) return;
+    g_lastSample = now;
+    const bool snapshot = g_snapshotRequested.exchange(false);
+    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(samManager, kVariableCount), kMaxVariables);
+    const uintptr_t source = decima::readPointer(samManager + kVariables);
+    std::vector<remote_animation::Change> changes;
+    for (int32_t i = 0; i < count; ++i) {
+        const uintptr_t variable = source + i * kVariableSize;
+        if (ds2::field<int32_t>(variable, kVariableGraphId) == -1) continue;
+        const remote_animation::Change change = readVariable(variable, i);
+        const size_t size = remote_animation::valueBytes(change.type);
+        Sent& sent = g_sent[i];
+        if (size == 0 || (!snapshot && sent.valid && std::memcmp(sent.change.value, change.value, size) == 0)) continue;
+        sent = {true, change};
+        changes.push_back(change);
+    }
+    if (changes.empty()) return;
+    std::lock_guard lock(g_outboxMutex);
+    g_outbox.insert(g_outbox.end(), changes.begin(), changes.end());
+}
+
 void beforePose(uintptr_t component) {
+    const uintptr_t owner = ds2::field<uintptr_t>(component, kComponentOwner);
     const uintptr_t remote = remote_player::entity();
-    if (!remote || ds2::field<uintptr_t>(component, kComponentOwner) != remote) return;
-    if (g_mirrorLocal.load()) mirrorLocalPlayer(component);
+    if (remote && owner == remote) {
+        if (g_mirrorLocal.load()) {
+            mirrorLocalPlayer(component);
+        } else {
+            applyPartner(component);
+        }
+    } else if (g_collecting.load() && owner && owner == remote_player::samEntity()) {
+        sampleLocalPlayer(component);
+    }
 }
 
 void morphemeDetour(uintptr_t component, uintptr_t message) {
@@ -137,6 +226,20 @@ void graphDetour(uintptr_t component, uintptr_t message) {
 
 namespace remote_animation {
 
+size_t valueBytes(uint8_t type) {
+    switch (type) {
+        case kTypeBool:
+            return 1;
+        case kTypeInt:
+        case kTypeFloat:
+            return 4;
+        case kTypeQuat:
+            return 16;
+        default:
+            return 0;
+    }
+}
+
 void installEarly() {
     hooks::install("morpheme animated pose", ds2::at(kMorphemeGetAnimatedPose),
                    reinterpret_cast<void*>(&morphemeDetour), reinterpret_cast<void**>(&g_morpheme));
@@ -147,5 +250,26 @@ void installEarly() {
 void setMirrorLocalPlayer(bool enabled) { g_mirrorLocal = enabled; }
 
 bool mirrorsLocalPlayer() { return g_mirrorLocal.load(); }
+
+void setCollecting(bool enabled) {
+    if (enabled && !g_collecting.exchange(true)) g_snapshotRequested = true;
+    if (!enabled) g_collecting = false;
+}
+
+void requestSnapshot() { g_snapshotRequested = true; }
+
+std::vector<Change> takeLocalChanges() {
+    std::lock_guard lock(g_outboxMutex);
+    std::vector<Change> out;
+    out.swap(g_outbox);
+    return out;
+}
+
+void setPeerChange(uint8_t, const Change& change) {
+    if (change.index >= kMaxVariables) return;
+    std::lock_guard lock(g_peerMutex);
+    g_peer[change.index] = {true, change};
+    g_peerAt = Clock::now();
+}
 
 }  // namespace remote_animation
