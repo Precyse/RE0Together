@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <cstdio>
 #include <set>
 #include <string>
 
@@ -59,14 +60,24 @@ std::atomic<uintptr_t> g_lastRefused{0};  // the use location refused last (logg
 std::mutex g_mutex;                       // guards g_sequenceNodes (the dispatcher runs on several game threads)
 std::set<uintptr_t> g_sequenceNodes;      // SequenceNetworkDSUseLocationInstance objects that are active now
 
-// Terminals are usable by the guest (only accepting and turning in orders is refused: order_gate.cpp); their use
-// location prompt is "Activate Terminal". The match is on the prompt text, so it holds for the English game only.
-constexpr const char* kTerminalPromptWord = "Terminal";
+// Terminals are usable by the guest (only accepting and turning in orders is refused: order_gate.cpp). A terminal's
+// use location is recognised by the UUID of its prompt text resource ("Activate Terminal"; the same in every language)
+// or of its own resource, read at +0x10 of the resource (docs/DS2_NOTES.md, "Guest terminals").
+constexpr const char* kTerminalTextUuid = "332c8d09007f44fbbddd64ee6d203e03";
+constexpr const char* kTerminalResourceUuid = "25504a7813cd4a4eaba9a532390cb721";
+
+std::string uuidText(uintptr_t object) {
+    char text[33] = {};
+    uint8_t bytes[16] = {};
+    decima::safeCopy(bytes, object + 0x10, sizeof(bytes));
+    for (size_t i = 0; i < sizeof(bytes); ++i) sprintf_s(text + i * 2, 3, "%02x", bytes[i]);
+    return text;
+}
 
 bool isTerminal(uintptr_t location) {
     const uintptr_t resource = decima::readPointer(location + kLocationResource);
-    return decima::localizedText(decima::readPointer(resource + kResourcePrompt)).find(kTerminalPromptWord) !=
-           std::string::npos;
+    const uintptr_t text = decima::readPointer(resource + kResourcePrompt);
+    return uuidText(text) == kTerminalTextUuid || uuidText(resource) == kTerminalResourceUuid;
 }
 
 // The first of the local player's claim candidates that belongs to an active sequence network node (other than a
