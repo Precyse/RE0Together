@@ -75,6 +75,7 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_context.cpp
     src/ds2/setdriver_guard.cpp
     src/ds2/use_gate.cpp
+    src/ds2/order_gate.cpp
     src/ds2/cargo.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")

@@ -37,6 +37,11 @@ bool watchInteractions();
 // the world's progress; vehicles, cargo and other interactions stay usable. Needs watchInteractions(). Any thread.
 void blockScriptedInteractions(bool block);
 
+// Guest restriction on orders: hooks the terminal menus' accept and turn-in callbacks (once, at start-up), and while
+// `block` is true they refuse with a toast. Terminals themselves stay usable. Any thread.
+void watchOrders();
+void blockOrders(bool block);
+
 // Opaque handle of an entity the adapter created; 0 = none.
 using Body = uintptr_t;
 

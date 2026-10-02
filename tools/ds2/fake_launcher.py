@@ -5,7 +5,7 @@ circle's centre is --offset m ahead of the first local PLAYER_STATE (--phase: th
 the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead and 1.2 m to the local player's right).
 --drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
-when the reports start and leaves when they stop. --follow stands the peer beside the local player (--offset ahead, --radius to its right, same heading) wherever it goes. --echo-anim sends the local player's ANIM_STATE back as the peer's
+when the reports start and leaves when they stop. --follow stands the peer beside the local player (--offset ahead, --radius to its right, same heading) wherever it goes. --guest makes the local player the guest (slot 1) of a host peer (slot 0). --echo-anim sends the local player's ANIM_STATE back as the peer's
 (the remote then copies the local player through the real wire format). Prints the local player's pose.
 
 usage: python fake_launcher.py [--port 27980] [--radius 1.2] [--speed 1.4] [--hold 5] [--offset 3.5] [--phase 0]
@@ -53,6 +53,7 @@ def main():
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
+    p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
@@ -70,11 +71,12 @@ def main():
 
 
 def serve(sock, a):
+    peer_slot = HOST_SLOT if a.guest else PEER_SLOT
     (length,) = struct.unpack("<I", read_exact(sock, 4))
     read_exact(sock, length)
-    sock.sendall(encode(WELCOME, HOST_SLOT, struct.pack("<BBBI", HOST_SLOT, HOST_SLOT, MAX_PLAYERS, EPOCH)))
+    sock.sendall(encode(WELCOME, HOST_SLOT, struct.pack("<BBBI", PEER_SLOT if a.guest else HOST_SLOT, HOST_SLOT, MAX_PLAYERS, EPOCH)))
     name = b"fake peer"
-    sock.sendall(encode(PEER_UP, HOST_SLOT, struct.pack("<BQB", PEER_SLOT, 0x1100001DEADBEEF, len(name)) + name))
+    sock.sendall(encode(PEER_UP, HOST_SLOT, struct.pack("<BQB", HOST_SLOT if a.guest else PEER_SLOT, 0x1100001DEADBEEF, len(name)) + name))
     print("adapter linked", flush=True)
     local = {}
 
@@ -88,7 +90,7 @@ def serve(sock, a):
                 _, x, y, z, yaw, _ = STATE.unpack_from(body, 4)
                 local.update(x=x, y=y, z=z, yaw=yaw)
             elif msg_type == ANIM_STATE and a.echo_anim:
-                sock.sendall(encode(ANIM_STATE, PEER_SLOT, body[4:], flags=0))
+                sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
                 if time.monotonic() - last_print > 5:
                     last_print = time.monotonic()
                     print(f"local ({x:.2f}, {y:.2f}, {z:.2f}) yaw {yaw:.2f}", flush=True)
@@ -112,7 +114,7 @@ def serve(sock, a):
             if begin <= now - start < end:
                 x, y, z = map(float, a.drive_pos.split(","))
                 seq += 1
-                sock.sendall(encode(VEHICLE_STATE, PEER_SLOT, VEHICLE.pack(seq, a.drive_role, a.drive, x, y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1), flags=0))
+                sock.sendall(encode(VEHICLE_STATE, peer_slot, VEHICLE.pack(seq, a.drive_role, a.drive, x, y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1), flags=0))
         if centre:
             t = max(0.0, now - start - a.hold)
             angle = math.radians(a.phase) + t * a.speed / a.radius
@@ -125,7 +127,7 @@ def serve(sock, a):
                 y = local["y"] + fy * a.offset - fx * a.radius
                 yaw = local["yaw"]
             seq += 1
-            sock.sendall(encode(PLAYER_STATE, PEER_SLOT, STATE.pack(seq, x, y, centre[2], yaw, 0), flags=0))
+            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, 0), flags=0))
         time.sleep(1.0 / SEND_HZ)
 
 

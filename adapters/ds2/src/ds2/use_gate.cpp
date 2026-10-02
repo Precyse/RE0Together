@@ -2,7 +2,8 @@
 // DSPlayerUseLocationController asks the player entity MsgIsUseLocationClaimAllowed through the entity message
 // dispatcher (0x1401618c0); any handler can refuse by setting the message's veto byte. The query does not name the
 // use location, so the adapter looks at the controller's candidates itself: it refuses only while one of them is
-// driven by a sequence network (terminals, order and quest triggers), and leaves other interactions alone. Sequence
+// driven by a sequence network (order and quest triggers, not terminals: order_gate.cpp refuses the order
+// transactions inside the terminal), and leaves other interactions alone. Sequence
 // network use locations are learned from the game's own MsgSequenceNetworkUseLocationActivated / Deactivated, whose
 // SequenceNetworkDSUseLocationInstance holds its use location while active (docs/DS2_NOTES.md, "Guest restrictions").
 #include <windows.h>
@@ -10,6 +11,7 @@
 #include <atomic>
 #include <mutex>
 #include <set>
+#include <string>
 
 #include "decima/entity.h"
 #include "decima/localized_text.h"
@@ -57,7 +59,18 @@ std::atomic<uintptr_t> g_lastRefused{0};  // the use location refused last (logg
 std::mutex g_mutex;                       // guards g_sequenceNodes (the dispatcher runs on several game threads)
 std::set<uintptr_t> g_sequenceNodes;      // SequenceNetworkDSUseLocationInstance objects that are active now
 
-// The first of the local player's claim candidates that belongs to an active sequence network node, or 0.
+// Terminals are usable by the guest (only accepting and turning in orders is refused: order_gate.cpp); their use
+// location prompt is "Activate Terminal". The match is on the prompt text, so it holds for the English game only.
+constexpr const char* kTerminalPromptWord = "Terminal";
+
+bool isTerminal(uintptr_t location) {
+    const uintptr_t resource = decima::readPointer(location + kLocationResource);
+    return decima::localizedText(decima::readPointer(resource + kResourcePrompt)).find(kTerminalPromptWord) !=
+           std::string::npos;
+}
+
+// The first of the local player's claim candidates that belongs to an active sequence network node (other than a
+// terminal), or 0.
 uintptr_t sequenceLocationInReach(uintptr_t player) {
     const uintptr_t controller = decima::findComponent(player, g_vtables.controller);
     int32_t count = 0;
@@ -70,7 +83,7 @@ uintptr_t sequenceLocationInReach(uintptr_t player) {
     std::lock_guard lock(g_mutex);
     for (uintptr_t node : g_sequenceNodes) {
         const uintptr_t location = decima::readPointer(node + kInstanceLocation);
-        if (locations.contains(location)) return location;
+        if (locations.contains(location) && !isTerminal(location)) return location;
     }
     return 0;
 }

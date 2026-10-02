@@ -103,7 +103,9 @@ void tick(NetClient& net) {
     });
     debug_stats::setSession(session);
     rememberNames(session);
-    game::blockScriptedInteractions(session.linked && session.localSlot != session.hostSlot);
+    const bool guest = session.linked && session.localSlot != session.hostSlot;
+    game::blockScriptedInteractions(guest);
+    game::blockOrders(guest);
     cargo_transfer::tick(net, session);
     cargo_ground::tick(net, session);
     vehicle_sync::tick(net, session);

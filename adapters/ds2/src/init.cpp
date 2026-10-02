@@ -46,6 +46,7 @@ DWORD WINAPI initThread(LPVOID) {
     remote_animation::setMirrorLocalPlayer(config.mirrorAnimation);
     if (config.overlay && !dx12_hook::install(drawOverlay)) logger::write("adapter: overlay unavailable");
     input_filter::install(cargo_menu::claimsKey);
+    game::watchOrders();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
