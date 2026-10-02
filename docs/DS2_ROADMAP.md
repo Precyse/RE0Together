@@ -49,6 +49,11 @@ Each item lists what players get and its exit tests. Fake-peer tests first, then
 - **Learn:** the player's animation state machine (states and graph parameters) and how to drive a remote body's animation graph with them, as the RE4R motion-layer approach does (`FINDINGS.md`).
 - **Exit:** fake peer replays a recorded sequence (walk, run, stumble, ladder up, crouch, aim, throw, pick up, put down) and the body plays each recognisably; two PCs: each player's moves show on the other screen within a few frames.
 
+### 6b. The NPC system and shared animations
+- **Players get:** poses the player network lacks (a true passenger pose, as MULEs and porters ride) on the partner's body, and NPC bodies that can play Sam's moves where the game needs a stand-in.
+- **Learn:** how NPCs are spawned (spawn setups, encounters, the AI ride mover and `AIRiderPosture`), how the NPC animation network differs from the player's (`tools/ds2/out/analysis/ANIMATION.md`), and whether an animation network or its clips can be swapped or shared between a player entity and an NPC body (NPC clips on Sam, Sam's clips on an NPC).
+- **Exit:** the remote player body plays the MULE passenger pose in the passenger seat; an NPC body plays a recorded sequence of Sam's moves recognisably.
+
 ### 7. Cargo stacking with the real models
 - **Players get:** the partner's real rack layout (stack order, back, sides, hands, legs) with the real cargo models on their body, replacing the overlay boxes; the partner organises their own cargo in Cargo Management as in single player and the mirror follows.
 - **Learn:** how the game attaches carried pieces' models to Sam (slot attach points per slot kind) and whether a remote body can carry model-only copies (no weight, no physics).
