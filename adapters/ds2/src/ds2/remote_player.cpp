@@ -21,6 +21,7 @@
 #include "ds2/remote_baggage.h"
 #include "ds2/remote_context.h"
 #include "ds2/remote_guards.h"
+#include "ds2/remote_marker.h"
 #include "ds2/remote_player.h"
 #include "ds2/remote_ride.h"
 #include "ds2/setdriver_guard.h"
@@ -145,6 +146,7 @@ void spawn() {
 void finishSpawn() {
     if (ds2::field<uintptr_t>(g_entity.load(), ds2::kEntityController)) {
         g_stage = remote_camera::give() ? Stage::Live : Stage::Failed;
+        remote_marker::detachRemote();
         logger::write("remote_body: %s", g_stage == Stage::Live ? "live" : "no camera, off");
     } else if (++g_waitedFrames > kControllerWaitFrames) {
         logger::write("remote_body: no controller after %d frames, off", g_waitedFrames);
