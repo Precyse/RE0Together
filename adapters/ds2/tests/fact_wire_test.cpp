@@ -1,5 +1,7 @@
 // fact_wire: the FACT_SET payload round trip and its rejections (no game).
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <cstring>
 #include <vector>
 
@@ -25,8 +27,37 @@ fact_wire::Entry entry(uint8_t kind, uint8_t flags, uint8_t seed, uint32_t value
 
 }  // namespace
 
-int main() {
+// Cross-language mode, driven by tools/ds2/fact_wire_test.py: `--decode <file>` prints one line per entry of a payload
+// the script encoded; `--encode <file>` writes a payload of known entries for the script to decode.
+int crossLanguage(const std::string& mode, const char* path) {
     using namespace fact_wire;
+    if (mode == "--encode") {
+        const std::vector<Entry> entries{entry(kKindBool, kFlagArg5, 1, 1), entry(kKindInt, kFlagArg6, 40, 0xFFFFFFFEu)};
+        const std::vector<uint8_t> payload = encode(entries);
+        std::FILE* f = std::fopen(path, "wb");
+        if (!f) return 1;
+        std::fwrite(payload.data(), 1, payload.size(), f);
+        std::fclose(f);
+        return 0;
+    }
+    std::FILE* f = std::fopen(path, "rb");
+    if (!f) return 1;
+    std::vector<uint8_t> payload(sizeof(Header) + kMaxEntries * sizeof(Entry) + 1);
+    payload.resize(std::fread(payload.data(), 1, payload.size(), f));
+    std::fclose(f);
+    std::vector<Entry> entries;
+    if (!decode(payload, entries)) return 2;
+    for (const Entry& e : entries) {
+        std::printf("%u %u", e.kind, e.flags);
+        for (uint8_t b : e.uuid) std::printf(" %u", b);
+        std::printf(" %u\n", e.value);
+    }
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    using namespace fact_wire;
+    if (argc == 3) return crossLanguage(argv[1], argv[2]);
     const std::vector<Entry> sent{entry(kKindBool, kFlagArg5, 1, 1), entry(kKindInt, kFlagArg5 | kFlagArg6, 40, 0xFFFFFFFEu)};
     const std::vector<uint8_t> payload = encode(sent);
     check(payload.size() == sizeof(Header) + 2 * sizeof(Entry), "payload is the header plus the entries");

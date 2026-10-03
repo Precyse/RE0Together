@@ -185,7 +185,8 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | README.md | settings and how to remove the mod | |
 | tests/world_to_screen_test.cpp | projection cases (centre, offsets, behind, large coordinates) |
 | tests/load_shape_test.cpp | load stack placement and facing, box size, hull | |
-| tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game) | |
+| tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game); `--encode/--decode <file>` modes for the python cross-check | |
+| tools/ds2/fact_wire_test.py | cross-language FACT_SET check: python encodes and C++ decodes, C++ encodes and python decodes, truncation rejected (no game) | |
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |
 | tests/overlay_test.cpp | real D3D12 swap chain created after the hooks: every Present draws, also after the swap chain is recreated on a new queue and format | |
 
