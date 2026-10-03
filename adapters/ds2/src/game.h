@@ -194,6 +194,9 @@ void removeStructure(const struct_wire::Remove& removal);
 // the host's. Needs story::installEarly. Any thread.
 void setStoryRole(bool host, bool guest);
 
+// Host: the next poll also reports every mission in progress (a joined or resynced guest). Any thread.
+void requestStorySnapshot();
+
 // Host: the story events since the last call. Any thread.
 std::vector<story_wire::Event> takeStoryEvents();
 

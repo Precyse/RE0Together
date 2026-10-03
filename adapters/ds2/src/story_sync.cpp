@@ -2,13 +2,16 @@
 
 #include "game.h"
 #include "log.h"
+#include "resync.h"
 #include "story_wire.h"
 
 namespace {
 
 // Net thread only.
 bool g_guest = false;
+bool g_requestedAtGameplay = false;
 uint8_t g_hostSlot = 0;
+size_t g_knownPeers = 0;
 
 }  // namespace
 
@@ -29,7 +32,18 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_guest = session.linked && !host;
     g_hostSlot = session.hostSlot;
     game::setStoryRole(host, g_guest);
+    if (g_guest) {
+        if (!game::gameplaySettled()) {
+            g_requestedAtGameplay = false;
+        } else if (!g_requestedAtGameplay && resync::request(net, g_hostSlot, resync::kStory)) {
+            g_requestedAtGameplay = true;
+        }
+    } else {
+        g_requestedAtGameplay = false;
+    }
     if (!host) return;
+    if (session.peers.size() > g_knownPeers || !resync::takeRequests(resync::kStory).empty()) game::requestStorySnapshot();
+    g_knownPeers = session.peers.size();
     for (const story_wire::Event& event : game::takeStoryEvents()) {
         if (!net.send(story_wire::kMsgStoryEvent, true, proto::kSlotAll, proto::bytesOf(event))) {
             logger::write("story_sync: could not send a story event");

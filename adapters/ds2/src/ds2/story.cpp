@@ -1,15 +1,17 @@
 // DEATH STRANDING 2: missions and story stages. Every mission transition is a request (start 0x1413ef8b0, success
-// 0x1413efc00, fail 0x1413efda0) queued on the mission system's controller and applied by one drain through the
-// appliers StartMission 0x141395cc0, CompleteMission 0x141396730 and FailMission 0x1413973c0; a story stage changes
-// through SectionManager::RequestSectionActive 0x1413bdad0. The host reports what its appliers did and which sections
-// switched; a guest's own requests are vetoed and the host's events are replayed through the same request calls
-// (their own conditions and side effects run), with the order cargo flag preset so the guest creates no cargo
-// (docs/DS2_NOTES.md, "Story sync").
+// 0x1413efc00, fail 0x1413efda0) queued on the mission system's controller and applied by one drain; a story stage
+// changes through SectionManager::RequestSectionActive 0x1413bdad0. The host polls the mission map and reports every
+// state change whichever path made it, plus the sections it switches; a guest's own requests are vetoed and the host's
+// events are replayed through the same request calls (their own conditions and side effects run), with the order
+// cargo flag preset so the guest creates no cargo (docs/DS2_NOTES.md, "Story sync").
 #include "ds2/story.h"
 
 #include <atomic>
+#include <windows.h>
+
 #include <cstring>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "decima/safe_read.h"
@@ -31,18 +33,19 @@ constexpr uintptr_t kRequestStart = 0x1413ef8b0;    // (controller, mission, con
 constexpr uintptr_t kRequestSuccess = 0x1413efc00;  // (controller, mission, flag)
 constexpr uintptr_t kRequestFail = 0x1413efda0;     // (controller, mission, reason)
 constexpr uintptr_t kRequestSection = 0x1413bdad0;  // (SectionManager*, section, bool active)
-constexpr uintptr_t kApplyStart = 0x141395cc0;      // (controller, mission, request)
-constexpr uintptr_t kApplySuccess = 0x141396730;
-constexpr uintptr_t kApplyFail = 0x1413973c0;
-constexpr uintptr_t kMissionId = 0x28, kMissionFlags = 0x24;
+constexpr uintptr_t kMissionId = 0x28, kMissionFlags = 0x24, kMissionState = 0x22;
+constexpr uintptr_t kMissionMap = 0x08;  // Impl: {entries*, +0x0C capacity}; entry {u64 id, mission*, u32 hash}
+constexpr uintptr_t kMapCapacity = 0x0C, kEntryMission = 0x08, kEntryHash = 0x10;
+constexpr size_t kMapEntrySize = 0x18;
+constexpr uint16_t kStateProgress = 20, kStateFailed = 30, kStateSuccess = 40;  // EDSMissionState
+constexpr ULONGLONG kPollIntervalMs = 500;
+constexpr uint32_t kNoRow = 0xFFFFFFFF;  // start request argument: no terminal list row
 constexpr uint32_t kCargoPreparedFlag = 1u << 18;    // order cargo already prepared: the guest creates none
-constexpr uintptr_t kRequestA = 10, kRequestB = 14;  // the 18-byte request {u64 id, u16 kind, u32 a, u32 b}
-constexpr uintptr_t kSectionUuid = 0x10;             // the section's GGUUID (to be checked live)
+constexpr uintptr_t kSectionUuid = 0x10;             // the DSMissionSectionResource's GGUUID
 constexpr size_t kMaxQueued = 256;
 
 using Fn8 = uint64_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 Fn8 g_requestStart = nullptr, g_requestSuccess = nullptr, g_requestFail = nullptr, g_requestSection = nullptr;
-Fn8 g_applyStart = nullptr, g_applySuccess = nullptr, g_applyFail = nullptr;
 
 std::atomic<bool> g_host{false};
 std::atomic<bool> g_guest{false};
@@ -59,6 +62,7 @@ uintptr_t controller() {
 }
 
 void report(const story_wire::Event& event) {
+    logger::write("story: host event kind %u mission %llx", event.kind, static_cast<unsigned long long>(event.missionId));
     std::lock_guard lock(g_mutex);
     if (g_outgoing.size() < kMaxQueued) g_outgoing.push_back(event);
 }
@@ -106,32 +110,71 @@ uint64_t requestSectionDetour(uintptr_t manager, uintptr_t section, uintptr_t ac
     return g_requestSection(manager, section, active, d, e, f, g, h);
 }
 
-// The appliers run only from the drain, after the request's own conditions passed: the host reports what really happened.
-uint64_t applyStartDetour(uintptr_t c, uintptr_t mission, uintptr_t request, uintptr_t d, uintptr_t e, uintptr_t f,
-                          uintptr_t g, uintptr_t h) {
-    const uint64_t result = g_applyStart(c, mission, request, d, e, f, g, h);
-    if (g_host.load()) {
-        uint32_t a = 0;
-        int32_t b = 0;
-        decima::safeRead(request + kRequestA, a);
-        decima::safeRead(request + kRequestB, b);
-        report(missionEvent(story_wire::Kind::MissionStart, mission, a, b));
+uintptr_t missionImpl() {
+    const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
+    return system ? decima::readPointer(system + kImplOffset) : 0;
+}
+
+// Every mission's id and state.
+std::unordered_map<uint64_t, uint16_t> readMissions() {
+    std::unordered_map<uint64_t, uint16_t> states;
+    const uintptr_t impl = missionImpl();
+    const uintptr_t entries = impl ? decima::readPointer(impl + kMissionMap) : 0;
+    if (!entries) return states;
+    const uint32_t capacity = ds2::field<uint32_t>(impl, kMissionMap + kMapCapacity);
+    for (uint32_t i = 0; i < capacity; ++i) {
+        const uintptr_t entry = entries + i * kMapEntrySize;
+        const uintptr_t mission = decima::readPointer(entry + kEntryMission);
+        if (!mission || ds2::field<uint32_t>(entry, kEntryHash) == 0) continue;
+        states[ds2::field<uint64_t>(mission, kMissionId)] = ds2::field<uint16_t>(mission, kMissionState);
     }
-    return result;
+    return states;
 }
 
-uint64_t applySuccessDetour(uintptr_t c, uintptr_t mission, uintptr_t request, uintptr_t d, uintptr_t e, uintptr_t f,
-                            uintptr_t g, uintptr_t h) {
-    const uint64_t result = g_applySuccess(c, mission, request, d, e, f, g, h);
-    if (g_host.load()) report(missionEvent(story_wire::Kind::MissionSuccess, mission, 0, 0));
-    return result;
+void reportState(uint64_t id, uint16_t state) {
+    story_wire::Kind kind;
+    if (state == kStateProgress) {
+        kind = story_wire::Kind::MissionStart;
+    } else if (state == kStateFailed) {
+        kind = story_wire::Kind::MissionFail;
+    } else if (state == kStateSuccess) {
+        kind = story_wire::Kind::MissionSuccess;
+    } else {
+        return;
+    }
+    story_wire::Event event{};
+    event.kind = static_cast<uint8_t>(kind);
+    event.a = kind == story_wire::Kind::MissionStart ? kNoRow : 0;
+    event.missionId = id;
+    report(event);
 }
 
-uint64_t applyFailDetour(uintptr_t c, uintptr_t mission, uintptr_t request, uintptr_t d, uintptr_t e, uintptr_t f,
-                         uintptr_t g, uintptr_t h) {
-    const uint64_t result = g_applyFail(c, mission, request, d, e, f, g, h);
-    if (g_host.load()) report(missionEvent(story_wire::Kind::MissionFail, mission, 0, 0));
-    return result;
+std::atomic<bool> g_snapshotRequested{true};
+
+// Host, simulation thread: reports each mission whose state changed since the last poll; a requested snapshot also
+// reports every mission in progress.
+void pollMissions() {
+    static std::unordered_map<uint64_t, uint16_t> known;
+    static ULONGLONG lastPoll = 0;
+    static bool baselined = false;
+    if (!g_host.load()) {
+        known.clear();
+        baselined = false;
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (now - lastPoll < kPollIntervalMs) return;
+    lastPoll = now;
+    const std::unordered_map<uint64_t, uint16_t> current = readMissions();
+    if (current.empty()) return;
+    const bool snapshot = g_snapshotRequested.exchange(false);
+    for (const auto& [id, state] : current) {
+        const auto before = known.find(id);
+        const bool changed = baselined && (before == known.end() || before->second != state);
+        if (changed || (snapshot && state == kStateProgress)) reportState(id, state);
+    }
+    known = current;
+    baselined = true;
 }
 
 void replayMission(const story_wire::Event& event) {
@@ -144,7 +187,10 @@ void replayMission(const story_wire::Event& event) {
         logger::write("story: mission %llx not found here, event dropped", static_cast<unsigned long long>(event.missionId));
         return;
     }
-    if (kind == story_wire::Kind::MissionStart) {
+    const uint16_t state = ds2::field<uint16_t>(mission, kMissionState);
+    const bool starts = kind == story_wire::Kind::MissionStart;
+    if ((starts && state >= kStateProgress) || (!starts && state != kStateProgress)) return;
+    if (starts) {
         ds2::field<uint32_t>(mission, kMissionFlags) |= kCargoPreparedFlag;
         struct StartArgs {
             uint32_t a;
@@ -210,12 +256,7 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_requestFail));
     hooks::install("story request section", ds2::at(kRequestSection), reinterpret_cast<void*>(&requestSectionDetour),
                    reinterpret_cast<void**>(&g_requestSection));
-    hooks::install("story apply start", ds2::at(kApplyStart), reinterpret_cast<void*>(&applyStartDetour),
-                   reinterpret_cast<void**>(&g_applyStart));
-    hooks::install("story apply success", ds2::at(kApplySuccess), reinterpret_cast<void*>(&applySuccessDetour),
-                   reinterpret_cast<void**>(&g_applySuccess));
-    hooks::install("story apply fail", ds2::at(kApplyFail), reinterpret_cast<void*>(&applyFailDetour),
-                   reinterpret_cast<void**>(&g_applyFail));
+    sim_tick::add(&pollMissions);
     sim_tick::add(&applyIncoming);
 }
 
@@ -238,6 +279,8 @@ std::vector<story_wire::Event> takeStoryEvents() {
     out.swap(g_outgoing);
     return out;
 }
+
+void requestStorySnapshot() { g_snapshotRequested = true; }
 
 void replayStoryEvent(const story_wire::Event& event) {
     std::lock_guard lock(g_mutex);

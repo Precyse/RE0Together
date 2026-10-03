@@ -16,7 +16,8 @@ enum Scope : uint32_t {
     kFacts = 1,      // the host's fact snapshot (fact_sync)
     kAuthority = 2,  // the claims the peer owns (authority_sync)
     kAnim = 4,       // a full ANIM_STATE snapshot (anim_sync)
-    kAll = kFacts | kAuthority | kAnim
+    kStory = 8,      // every mission in progress (story_sync)
+    kAll = kFacts | kAuthority | kAnim | kStory
 };
 
 struct ResyncRequest {
