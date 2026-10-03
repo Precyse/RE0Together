@@ -8,7 +8,7 @@ struct Config {
     bool mirrorAnimation = false;  // loopback test: the partner body copies the local player animation
     bool logFacts = false;         // log every FactDatabase write (mapping which facts an action changes)
     bool enemyVeto = false;    // guest: the game's own enemy spawns fail (the host's enemies are the only ones)
-    bool remoteBody = false;   // the partner's body: a second player entity that walks and rides
+    bool remoteBody = true;    // the partner's body: a second player entity that walks and rides (adapter.ini remote_body=0 turns it off)
 };
 
 // Reads <game dir>\coop\adapter.ini, writing the defaults first when it is missing.
