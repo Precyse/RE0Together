@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstring>
 #include <map>
+#include <set>
 #include <vector>
 
 #include "game.h"
@@ -21,6 +22,9 @@ constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and
 Clock::time_point g_lastCheck;
 Clock::time_point g_lastChange;
 std::vector<equip_sync::Held> g_reported;
+std::vector<equip_sync::Held> g_lastWanted;
+uint64_t g_protectedOwner = 0;
+std::set<uint64_t> g_protected;  // handles of the pieces the body was born with
 std::map<uint8_t, std::vector<equip_sync::Held>> g_peerHeld;  // by source slot
 
 bool lessHeld(const equip_sync::Held& a, const equip_sync::Held& b) {
@@ -51,10 +55,24 @@ void report(NetClient& net) {
 
 // Brings the body's slots to what its partner carries: extra pieces deleted, missing kinds created.
 void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Clock::time_point now) {
-    if (now - g_lastChange < kSettle) return;
+    // Only a target that has not changed since the previous check is applied: a flapping partner would otherwise
+    // create and delete pieces in the body's slots every few hundred milliseconds.
+    const bool steady = wanted == g_lastWanted;
+    g_lastWanted = wanted;
+    if (!steady || now - g_lastChange < kSettle) return;
+    if (ownerKey != g_protectedOwner) {
+        // The pieces the body is born with (its shoes, skeleton and so on): deleting one crashed the player entity's
+        // equipment code, so they are never deleted, only added to.
+        g_protectedOwner = ownerKey;
+        g_protected.clear();
+        for (const uint8_t slot : equip_sync::kMirroredSlots) {
+            for (const game::Cargo& piece : game::slotPieces(ownerKey, slot)) g_protected.insert(piece.handle);
+        }
+    }
     std::vector<equip_sync::Held> have = heldBy(ownerKey);
     if (have == wanted) return;
     g_lastChange = now;
+    int changes = 0;
     for (const uint8_t slot : equip_sync::kMirroredSlots) {
         std::vector<equip_sync::Held> missing;
         for (const equip_sync::Held& want : wanted) {
@@ -65,13 +83,14 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
                                             [&](const equip_sync::Held& m) { return m.type == piece.type; });
             if (match != missing.end()) {
                 missing.erase(match);
-            } else {
+            } else if (!g_protected.contains(piece.handle)) {
                 game::removeCargo(piece.handle);
+                ++changes;
             }
         }
-        for (const equip_sync::Held& want : missing) game::addSlotPiece(ownerKey, slot, want.type);
+        for (const equip_sync::Held& want : missing) changes += game::addSlotPiece(ownerKey, slot, want.type);
     }
-    logger::write("equip_sync: the body's slots now follow %zu carried pieces", wanted.size());
+    if (changes) logger::write("equip_sync: the body's slots now follow %zu carried pieces (%d changes)", wanted.size(), changes);
 }
 
 }  // namespace

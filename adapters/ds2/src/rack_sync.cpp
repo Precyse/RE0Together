@@ -19,11 +19,16 @@ constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and
 // Net thread only.
 Clock::time_point g_lastCheck;
 Clock::time_point g_lastChange;
+std::map<uint32_t, size_t> g_lastWanted;
 
 // Brings the body's backpack to the partner's kinds: extra pieces deleted, missing kinds created.
 void follow(uint64_t ownerKey, const std::vector<game::Cargo>& wanted, Clock::time_point now) {
     std::map<uint32_t, size_t> want;
     for (const game::Cargo& piece : wanted) ++want[piece.type];
+    // Only a target that has not changed since the previous check is applied (see equip_sync).
+    const bool steady = want == g_lastWanted;
+    g_lastWanted = want;
+    if (!steady) return;
     std::map<uint32_t, std::vector<uint64_t>> have;
     for (const game::Cargo& piece : game::backpackCargo(ownerKey)) have[piece.type].push_back(piece.handle);
     bool same = true;
