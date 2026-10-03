@@ -17,6 +17,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "paths.h"
+#include "remote_apply.h"
 
 namespace {
 
@@ -42,7 +43,6 @@ std::atomic<uint64_t> g_calls{0};
 
 std::atomic<uintptr_t> g_database{0};  // seen as the first argument of every write
 std::atomic<bool> g_share{false};
-thread_local bool t_applying = false;  // a write the guest makes itself is never queued
 ds2::GameplayClock g_clock;
 std::atomic<int64_t> g_clockAt{0};
 std::mutex g_queueMutex;
@@ -87,7 +87,7 @@ bool gameplayRunning() {
 
 // Queues a change for the guests: one entry per fact, the last value.
 void queue(uint8_t kind, const uint8_t* uuid, uint32_t value, uintptr_t flag5, uintptr_t flag6) {
-    if (!g_share.load() || t_applying || !gameplayRunning()) return;
+    if (!g_share.load() || remote_apply::active() || !gameplayRunning()) return;
     fact_wire::Entry entry{};
     entry.kind = kind;
     entry.flags = (static_cast<uint8_t>(flag5) ? fact_wire::kFlagArg5 : 0) | (static_cast<uint8_t>(flag6) ? fact_wire::kFlagArg6 : 0);
@@ -166,10 +166,9 @@ bool applyFact(const fact_wire::Entry& fact) {
     uint32_t value = fact.value;
     uint32_t previous = ~fact.value;
     uint8_t changed = 0;
-    t_applying = true;
+    const remote_apply::Scope applying;
     writer(database, fact.uuid, &value, &previous, (fact.flags & fact_wire::kFlagArg5) != 0,
            (fact.flags & fact_wire::kFlagArg6) != 0, &changed, 0);
-    t_applying = false;
     return true;
 }
 

@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "anim_sync.h"
+#include "authority_sync.h"
 #include "cargo_ground.h"
 #include "cargo_transfer.h"
 #include "debug_stats.h"
@@ -14,6 +15,9 @@
 #include "game.h"
 #include "log.h"
 #include "position_blend.h"
+#include "reject_counters.h"
+#include "resync.h"
+#include "resync_trigger.h"
 #include "toast_queue.h"
 #include "vehicle_load.h"
 #include "vehicle_sync.h"
@@ -104,6 +108,8 @@ void tick(NetClient& net) {
         fact_sync::onFrame(frame);
         equip_sync::onFrame(frame);
         anim_sync::onFrame(frame);
+        authority_sync::onFrame(frame);
+        resync::onFrame(frame);
     });
     debug_stats::setSession(session);
     rememberNames(session);
@@ -117,6 +123,10 @@ void tick(NetClient& net) {
     fact_sync::tick(net, session);
     equip_sync::tick(net, session);
     anim_sync::tick(net, session);
+    authority_sync::tick(net, session);
+    resync_trigger::poll(net);
+    const std::string rejects = reject_counters::summaryIfDue(nowUs());
+    if (!rejects.empty()) logger::write("%s", rejects.c_str());
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

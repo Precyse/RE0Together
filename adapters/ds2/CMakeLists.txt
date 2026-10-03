@@ -56,6 +56,11 @@ add_library(ds2_adapter SHARED
     src/vehicle_load.cpp
     src/fact_sync.cpp
     src/equip_sync.cpp
+    src/authority.cpp
+    src/authority_sync.cpp
+    src/reject_counters.cpp
+    src/resync.cpp
+    src/resync_trigger.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
@@ -92,6 +97,18 @@ add_executable(load_shape_test tests/load_shape_test.cpp)
 
 add_executable(fact_wire_test tests/fact_wire_test.cpp)
 target_include_directories(fact_wire_test PRIVATE src ${SHARED_DIR})
+
+# Unit tests that run without the game: tests/<name>.cpp plus the listed sources, run by ctest.
+enable_testing()
+function(add_unit_test name)
+    add_executable(${name} tests/${name}.cpp ${ARGN})
+    target_include_directories(${name} PRIVATE src ${SHARED_DIR})
+    target_compile_options(${name} PRIVATE /W4 /WX /utf-8)
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
+add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 
 add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
 target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})
