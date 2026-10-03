@@ -83,3 +83,34 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 3. Keep an engine-neutral gameplay core and implement the per-engine primitives:
    `enumerate_actors`, `local_player`, `bind_remote(slot) -> body`, `suppress_ai(body)`, `warp(body, pos, rot)`, `play_action(body, id)`, `set_locomotion(body, speed, dir)`, `read_anim(body)`, `force_anim(body, anim)`, `apply_hit(descriptor)`.
 4. Authority: the host (slot 0) owns enemies, world flags and pickups. Guests send their own player state plus hit descriptors.
+
+## Game messages of the DS2 adapter (0x0100 and up, adapter-owned)
+
+The launcher relays these as opaque bytes; the source slot is the transport's. Integers little-endian, structs packed as written (`adapters/ds2/src`). Ids in `adapters/ds2` are not shared with RE0's (`adapters/re0/src/protocol.h` reuses the range for its own messages).
+
+| type | name | dir | reliable | payload |
+|---|---|---|---|---|
+| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 reserved |
+| 0x0101-0x0107 | cargo list/take/add, pickups, drops | | see header | `cargo_transfer.h`, `cargo_ground.h` |
+| 0x0108 | VEHICLE_STATE | driver/passenger to all | no | `vehicle_sync.h` (64 bytes) |
+| 0x0109 | VEHICLE_LOAD | driver to all | yes | `vehicle_load.h` |
+| 0x010A | ANIM_STATE | all | no | AnimHeader, optional u64 sender time, entries (below) |
+| 0x010B | FACT_SET | host to all | yes | u32 count, u32 reserved, count x 24-byte facts (`fact_wire.h`) |
+| 0x010C | EQUIP_STATE | all | yes | `equip_sync.h` |
+| 0x010D-0x0110 | WORLD_ENV, ORDER_START, STRUCT_CREATE, STRUCT_REMOVE | | | reserved, not built |
+| 0x0111 | AUTH_CLAIM | owner or host to all | yes | AuthMessage |
+| 0x0112 | AUTH_DECLINE | declining owner to all | yes | AuthMessage |
+| 0x0113 | AUTH_STOP | owner or host to all | yes | AuthMessage |
+| 0x0114 | CLOCK_PING | to one slot | no | u64 sender time (µs) |
+| 0x0115 | CLOCK_PONG | to the pinger | no | u64 echoed ping time, u64 answerer time (µs) |
+| 0x0116 | ANIM_EVENT | all | yes | same payload as ANIM_STATE, entries are pulses |
+| 0x0117 | FACT_SNAPSHOT | host to one slot (or all) | yes | u32 snapshot id, u16 chunk index, u16 chunk count, then a FACT_SET payload |
+| 0x0118 | RESYNC | to one slot or all | yes | u32 scopes (1 facts, 2 authority, 4 anim) |
+
+- **Time.** A timestamp is the sender's monotonic clock in microseconds (`TimeUs`). A receiver converts it with the per-peer offset from CLOCK_PING / CLOCK_PONG: the answerer stamps its time when it replies, the pinger takes the stamp as the middle of the round trip (`offset = peer - (t0 + t3) / 2`), and the estimate is the median of the last 16 samples (valid from 3). Pings go out every 250 ms until 16 samples are held, then every 2 s. A stream rendered from timestamps shows the report nearest `now - delay` with a delay of 150-300 ms that rises at once with measured lateness and falls 10 ms every 3 s.
+- **ANIM_STATE / ANIM_EVENT payload.** `AnimHeader {u32 seq, u16 count, u16 flags}` (flag 1 = snapshot, flag 2 = timestamped), then, only with flag 2, `u64 sentUs`, then `count` entries `{u16 index, u8 type, value}` (value 1, 4 or 16 bytes for type bool 0, int 1, float 2, quat 3). Backward compatible: a payload without flag 2 is the old layout and decodes with no timestamp, so `proto` stays 1; the build check already refuses mismatched adapters, and every sender sets flag 2. ANIM_EVENT carries pulses (a boolean that left its resting value and came back within 500 ms) with the pulse value; the receiver writes it into the remote's animation for 100 ms on top of the partner's state.
+- **Authority.** `AuthMessage {u64 id, u32 epoch, u8 owner, u8[3] reserved}` (16 bytes). Every machine keeps the same `{id, owner, epoch}` table (epoch starts at 1, every change adds one) and applies the same rules to the same messages. CLAIM: `owner` owns `id` at `epoch`; the sender must be `owner` or the host; a newer epoch replaces the record, the same epoch and owner is a duplicate, two owners at one epoch resolve to the lower slot, an older epoch is dropped. STOP: `owner` stops acting; valid from `owner` (a release, which also clears the barred list) or from the host; must carry the record's current epoch; the record becomes unowned at epoch + 1. DECLINE: sent by `owner` when it cannot host the object; the record becomes unowned at epoch + 1 and the slot is barred from owning it until a voluntary release; the host picks the next owner that is not barred. A slot that leaves loses its objects (unowned, epoch + 1). A joining peer, or a RESYNC for scope 2, makes each owner repeat its CLAIMs.
+- **FACT_SNAPSHOT.** The host keeps the last value of every fact it changed during gameplay and sends all of them, in chunks of up to 256 facts, to a peer when it joins and whenever a peer asks (RESYNC scope 1). A guest asks once its own gameplay has settled (8 s with its state machine active). Chunks apply on arrival: they are reliable, in order with the FACT_SET deltas, and writing a fact twice is harmless.
+- **RESYNC.** Asks the receiver to resend whole snapshots of the parts named in `scopes`. A machine also resyncs on demand by creating `<game>\coop\resync_now.txt` (the adapter deletes it): it asks every peer and resends its own state.
+- **Reject counters.** A message the adapter drops (stale epoch, unknown object, wrong sender, barred owner, malformed payload, held too long, queue full) is counted per message type and reason and logged as `rejects: 0x0111 stale_epoch=3 ...` every 5 s while the totals change.
+- **Pending queue.** A message addressed to an object the receiver does not have yet may be held for at most 10 s, then dropped and counted as expired.

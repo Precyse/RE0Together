@@ -8,6 +8,7 @@
 #include <mutex>
 #include <string>
 
+#include "anim_event.h"
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/remote_player.h"
@@ -33,10 +34,10 @@ constexpr uintptr_t kVariableName = 0x00;
 constexpr uintptr_t kVariableGraphId = 0x08;  // -1: not bound to the graph
 constexpr uintptr_t kVariableType = 0x0D;
 constexpr uintptr_t kVariableValue = 0x20;
-constexpr uint8_t kTypeBool = 0;
-constexpr uint8_t kTypeInt = 1;
-constexpr uint8_t kTypeFloat = 2;
-constexpr uint8_t kTypeQuat = 3;
+using remote_animation::kTypeBool;
+using remote_animation::kTypeFloat;
+using remote_animation::kTypeInt;
+using remote_animation::kTypeQuat;
 constexpr size_t kNameBytes = 48;
 constexpr size_t kMaxVariables = 1024;
 constexpr auto kSampleInterval = std::chrono::milliseconds(33);
@@ -172,6 +173,9 @@ void applyPartner(uintptr_t remoteManager) {
         const Peer& peer = g_peer[i];
         if (peer.valid) writeVariable(remoteManager, i, peer.change.type, peer.change.value);
     }
+    for (const remote_animation::Change& pulse : anim_event::active(remote_player::slot())) {
+        if (pulse.index < count) writeVariable(remoteManager, pulse.index, pulse.type, pulse.value);
+    }
 }
 
 // Samples the local player's variables: what changed since the last report (everything on a snapshot).
@@ -225,20 +229,6 @@ void graphDetour(uintptr_t component, uintptr_t message) {
 }  // namespace
 
 namespace remote_animation {
-
-size_t valueBytes(uint8_t type) {
-    switch (type) {
-        case kTypeBool:
-            return 1;
-        case kTypeInt:
-        case kTypeFloat:
-            return 4;
-        case kTypeQuat:
-            return 16;
-        default:
-            return 0;
-    }
-}
 
 void installEarly() {
     hooks::install("morpheme animated pose", ds2::at(kMorphemeGetAnimatedPose),

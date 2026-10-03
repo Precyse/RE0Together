@@ -4,22 +4,12 @@
 // its own states from them. Before the graph evaluates the remote (MsgGetAnimatedPose), every variable of the source is
 // written into the remote's manager, so the remote copies the source's animation whatever its own states do. The
 // source is the partner's reported variables (anim_sync), or the local player (loopback test).
-#include <cstddef>
 #include <cstdint>
 #include <vector>
 
+#include "anim_change.h"
+
 namespace remote_animation {
-
-// One animation variable: its index in the manager's table, the engine's type (0 bool, 1 int, 2 float, 3 quat) and
-// its value (1, 4 or 16 bytes by the type).
-struct Change {
-    uint16_t index;
-    uint8_t type;
-    uint8_t value[16];
-};
-
-// Bytes of a value of that type, 0 for a type that is not mirrored.
-size_t valueBytes(uint8_t type);
 
 void installEarly();
 

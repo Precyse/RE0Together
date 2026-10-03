@@ -3,10 +3,12 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <vector>
 
@@ -17,6 +19,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "paths.h"
+#include "remote_apply.h"
 
 namespace {
 
@@ -30,6 +33,7 @@ constexpr int kMaxLogged = 4000;
 constexpr int64_t kCheckIntervalMs = 500;
 constexpr int64_t kClockIntervalMs = 250;  // how often the writers re-check that gameplay has started
 constexpr size_t kMaxQueued = 4096;
+constexpr size_t kMaxKnown = 16384;  // distinct facts remembered for a join snapshot
 
 using WriteFn = uint64_t (*)(uintptr_t database, const uint8_t* uuid, const void* value, const void* previous,
                             uintptr_t flag5, uintptr_t flag6, uint8_t* changed, uintptr_t a8);
@@ -42,11 +46,12 @@ std::atomic<uint64_t> g_calls{0};
 
 std::atomic<uintptr_t> g_database{0};  // seen as the first argument of every write
 std::atomic<bool> g_share{false};
-thread_local bool t_applying = false;  // a write the guest makes itself is never queued
 ds2::GameplayClock g_clock;
 std::atomic<int64_t> g_clockAt{0};
 std::mutex g_queueMutex;
 std::vector<fact_wire::Entry> g_queue;
+using FactKey = std::array<uint8_t, kGuidSize + 1>;  // the kind, then the UUID
+std::map<FactKey, fact_wire::Entry> g_known;  // the last queued value of every fact, kept for join snapshots
 
 void hex(const uint8_t* bytes, char* out) {
     for (size_t i = 0; i < kGuidSize; ++i) sprintf_s(out + i * 2, 3, "%02x", bytes[i]);
@@ -60,7 +65,7 @@ bool logging() {
     const int64_t now = GetTickCount64();
     if (now - checkedAt.load() > kCheckIntervalMs) {
         checkedAt = now;
-        on = GetFileAttributesW((coopDirectory() + L"\facts_on.txt").c_str()) != INVALID_FILE_ATTRIBUTES;
+        on = GetFileAttributesW((coopDirectory() + L"\\facts_on.txt").c_str()) != INVALID_FILE_ATTRIBUTES;
         if (on) logger::write("world_facts: %llu writes seen so far", static_cast<unsigned long long>(g_calls.load()));
     }
     return on.load();
@@ -87,13 +92,16 @@ bool gameplayRunning() {
 
 // Queues a change for the guests: one entry per fact, the last value.
 void queue(uint8_t kind, const uint8_t* uuid, uint32_t value, uintptr_t flag5, uintptr_t flag6) {
-    if (!g_share.load() || t_applying || !gameplayRunning()) return;
+    if (!g_share.load() || remote_apply::active() || !gameplayRunning()) return;
     fact_wire::Entry entry{};
     entry.kind = kind;
     entry.flags = (static_cast<uint8_t>(flag5) ? fact_wire::kFlagArg5 : 0) | (static_cast<uint8_t>(flag6) ? fact_wire::kFlagArg6 : 0);
     std::memcpy(entry.uuid, uuid, kGuidSize);
     entry.value = value;
+    FactKey key{kind};
+    std::memcpy(key.data() + 1, uuid, kGuidSize);
     std::lock_guard lock(g_queueMutex);
+    if (g_known.contains(key) || g_known.size() < kMaxKnown) g_known[key] = entry;
     for (fact_wire::Entry& queued : g_queue) {
         if (queued.kind == kind && std::memcmp(queued.uuid, uuid, kGuidSize) == 0) {
             queued = entry;
@@ -148,6 +156,7 @@ void shareFactWrites(bool on) {
     if (g_share.exchange(on) && !on) {
         std::lock_guard lock(g_queueMutex);
         g_queue.clear();
+        g_known.clear();
     }
 }
 
@@ -158,6 +167,16 @@ std::vector<fact_wire::Entry> takeFactWrites() {
     return out;
 }
 
+std::vector<fact_wire::Entry> factSnapshot() {
+    std::lock_guard lock(g_queueMutex);
+    std::vector<fact_wire::Entry> out;
+    out.reserve(g_known.size());
+    for (const auto& [key, entry] : g_known) out.push_back(entry);
+    return out;
+}
+
+bool gameplaySettled() { return gameplayRunning(); }
+
 bool applyFact(const fact_wire::Entry& fact) {
     const uintptr_t database = g_database.load();
     WriteFn writer = fact.kind == fact_wire::kKindBool ? g_writeBool : g_writeInt;
@@ -166,10 +185,9 @@ bool applyFact(const fact_wire::Entry& fact) {
     uint32_t value = fact.value;
     uint32_t previous = ~fact.value;
     uint8_t changed = 0;
-    t_applying = true;
+    const remote_apply::Scope applying;
     writer(database, fact.uuid, &value, &previous, (fact.flags & fact_wire::kFlagArg5) != 0,
            (fact.flags & fact_wire::kFlagArg6) != 0, &changed, 0);
-    t_applying = false;
     return true;
 }
 

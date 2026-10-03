@@ -57,6 +57,14 @@ add_library(ds2_adapter SHARED
     src/fact_sync.cpp
     src/equip_sync.cpp
     src/env_sync.cpp
+    src/authority.cpp
+    src/authority_sync.cpp
+    src/reject_counters.cpp
+    src/resync.cpp
+    src/resync_trigger.cpp
+    src/clock_sync.cpp
+    src/anim_event.cpp
+    src/pending_queue.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
@@ -109,3 +117,22 @@ add_dependencies(proxy_load_test ds2_adapter)
 foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test env_wire_test proxy_load_test overlay_test)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()
+
+# Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
+enable_testing()
+foreach(target world_to_screen_test load_shape_test fact_wire_test)
+    add_test(NAME ${target} COMMAND ${target})
+endforeach()
+
+function(add_unit_test name)
+    add_executable(${name} tests/${name}.cpp ${ARGN})
+    target_include_directories(${name} PRIVATE src ${SHARED_DIR})
+    target_compile_options(${name} PRIVATE /W4 /WX /utf-8)
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
+add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
+add_unit_test(timing_test)
+add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
+add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
