@@ -60,6 +60,8 @@ add_library(ds2_adapter SHARED
     src/env_sync.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
+    src/partner_cargo_sync.cpp
+    src/ds2/partner_cargo.cpp
     src/authority.cpp
     src/authority_sync.cpp
     src/reject_counters.cpp

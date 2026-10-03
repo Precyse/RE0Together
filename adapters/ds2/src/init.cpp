@@ -15,6 +15,7 @@
 #include "ds2/remote_animation.h"
 #include "ds2/enemy_veto.h"
 #include "ds2/sim_tick.h"
+#include "ds2/partner_cargo.h"
 #include "ds2/story.h"
 #include "ds2/structures.h"
 #include "ds2/world_env.h"
@@ -57,6 +58,7 @@ DWORD WINAPI initThread(LPVOID) {
     world_env::installEarly();
     if (config.enemyVeto) enemy_veto::installEarly();
     story::installEarly();
+    partner_cargo::installEarly();
     structures::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");

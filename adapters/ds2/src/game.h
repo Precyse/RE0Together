@@ -128,6 +128,12 @@ bool addBackpackCargo(uint64_t playerKey, uint32_t type);
 // local player's own key. Any thread.
 void setOwnerActive(uint64_t ownerKey, bool active);
 
+// The address of the baggage owner with this key (0 = the local player's), 0 when there is none. Any thread.
+uintptr_t baggageOwner(uint64_t ownerKey);
+
+// Host: the pieces of the partner's rack that the game moved into a terminal (delivered) since the last call. Any thread.
+std::vector<Cargo> takeDeliveredByPartner();
+
 // What one slot kind of the baggage owner `ownerKey` holds (0 = the local player, a vehicle's id, a remote body's
 // network id); empty when there is no such owner. Any thread.
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind);

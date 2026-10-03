@@ -353,6 +353,11 @@ void setOwnerActive(uint64_t ownerKey, bool active) {
     }
 }
 
+uintptr_t baggageOwner(uint64_t ownerKey) {
+    const uintptr_t baggage = manager();
+    return baggage ? findOwner(baggage, ownerKey) : 0;
+}
+
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {
     const uintptr_t baggage = manager();
     const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
