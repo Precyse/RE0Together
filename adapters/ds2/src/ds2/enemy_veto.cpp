@@ -23,7 +23,8 @@ constexpr uintptr_t kFindComponentResource = 0x14016a040;  // (EntityResource*, 
 constexpr uintptr_t kInfoEntityUuid = 0x40;
 constexpr uintptr_t kInfoResourceRef = 0x198;  // streaming reference: [ref] = holder, [ref + 8] flags
 constexpr uintptr_t kRefFlags = 0x8;
-constexpr int kRefLoadedShift = 52;        // the top bit of (flags >> 52): the resource is loaded
+constexpr int kRefStateShift = 52;         // (flags >> 52) is the reference's state byte
+constexpr uint64_t kRefLoadedBit = 1 << 7;  // set in the state byte: the resource is loaded
 constexpr uintptr_t kHolderResource = 0x20;  // holder + 0x20 = the EntityResource
 constexpr size_t kUuidSize = 16;
 constexpr int kMaxLogged = 60;
@@ -57,7 +58,7 @@ std::atomic<int> g_passed{0};
 uintptr_t resourceOf(uintptr_t info) {
     const uintptr_t ref = decima::readPointer(info + kInfoResourceRef);
     uint64_t flags = 0;
-    if (!ref || !decima::safeRead(ref + kRefFlags, flags) || static_cast<int64_t>(flags >> kRefLoadedShift) >= 0) return 0;
+    if (!ref || !decima::safeRead(ref + kRefFlags, flags) || ((flags >> kRefStateShift) & kRefLoadedBit) == 0) return 0;
     return decima::readPointer(decima::readPointer(ref) + kHolderResource);
 }
 
