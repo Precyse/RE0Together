@@ -49,7 +49,7 @@ void report(NetClient& net) {
     logger::write("equip_sync: reported %zu carried pieces", held.size());
 }
 
-// Brings the body's holster slots to what its partner carries: extra pieces deleted, missing kinds created.
+// Brings the body's slots to what its partner carries: extra pieces deleted, missing kinds created.
 void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Clock::time_point now) {
     if (now - g_lastChange < kSettle) return;
     std::vector<equip_sync::Held> have = heldBy(ownerKey);
@@ -71,7 +71,7 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
         }
         for (const equip_sync::Held& want : missing) game::addSlotPiece(ownerKey, slot, want.type);
     }
-    logger::write("equip_sync: the body's holsters now follow %zu carried pieces", wanted.size());
+    logger::write("equip_sync: the body's slots now follow %zu carried pieces", wanted.size());
 }
 
 }  // namespace
