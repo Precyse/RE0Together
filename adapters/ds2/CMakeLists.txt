@@ -61,6 +61,8 @@ add_library(ds2_adapter SHARED
     src/reject_counters.cpp
     src/resync.cpp
     src/resync_trigger.cpp
+    src/clock_sync.cpp
+    src/anim_event.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
@@ -109,6 +111,8 @@ endfunction()
 
 add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
 add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
+add_unit_test(timing_test)
+add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 
 add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
 target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})

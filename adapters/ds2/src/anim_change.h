@@ -1,0 +1,36 @@
+#pragma once
+// One animation variable as the adapter moves it around: its index in the animation manager's table (the same on both
+// machines), the engine's variable type and its value. Pure data, shared by the wire codec and the engine side.
+#include <cstddef>
+#include <cstdint>
+
+namespace remote_animation {
+
+constexpr uint8_t kTypeBool = 0;
+constexpr uint8_t kTypeInt = 1;
+constexpr uint8_t kTypeFloat = 2;
+constexpr uint8_t kTypeQuat = 3;
+constexpr size_t kMaxValueBytes = 16;
+
+struct Change {
+    uint16_t index;
+    uint8_t type;
+    uint8_t value[kMaxValueBytes];  // 1, 4 or 16 bytes by the type
+};
+
+// Bytes of a value of that type, 0 for a type that is not mirrored.
+inline size_t valueBytes(uint8_t type) {
+    switch (type) {
+        case kTypeBool:
+            return 1;
+        case kTypeInt:
+        case kTypeFloat:
+            return 4;
+        case kTypeQuat:
+            return 16;
+        default:
+            return 0;
+    }
+}
+
+}  // namespace remote_animation

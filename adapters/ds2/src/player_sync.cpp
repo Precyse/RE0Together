@@ -5,10 +5,12 @@
 #include <map>
 #include <mutex>
 
+#include "anim_event.h"
 #include "anim_sync.h"
 #include "authority_sync.h"
 #include "cargo_ground.h"
 #include "cargo_transfer.h"
+#include "clock_sync.h"
 #include "debug_stats.h"
 #include "equip_sync.h"
 #include "fact_sync.h"
@@ -108,6 +110,8 @@ void tick(NetClient& net) {
         fact_sync::onFrame(frame);
         equip_sync::onFrame(frame);
         anim_sync::onFrame(frame);
+        anim_event::onFrame(frame);
+        clock_sync::onFrame(net, frame);
         authority_sync::onFrame(frame);
         resync::onFrame(frame);
     });
@@ -123,6 +127,7 @@ void tick(NetClient& net) {
     fact_sync::tick(net, session);
     equip_sync::tick(net, session);
     anim_sync::tick(net, session);
+    clock_sync::tick(net, session);
     authority_sync::tick(net, session);
     resync_trigger::poll(net);
     const std::string rejects = reject_counters::summaryIfDue(nowUs());
