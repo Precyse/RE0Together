@@ -1,14 +1,18 @@
 #include "ds2/sim_tick.h"
 
-#include <vector>
+#include <windows.h>
+
+#include <cstdio>
 
 #include "ds2/engine.h"
 #include "hooks.h"
+#include "log.h"
 
 namespace {
 
 constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
 constexpr size_t kMaxCallbacks = 8;
+constexpr double kReportSeconds = 5.0;  // how often the frame rate and the callbacks' cost are logged
 
 // The update takes more than its first four arguments; they are passed through untouched.
 using UpdateFn = uint64_t (*)(uintptr_t, float, float, uint8_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
@@ -17,9 +21,39 @@ UpdateFn g_update = nullptr;
 sim_tick::Callback g_callbacks[kMaxCallbacks] = {};
 size_t g_count = 0;  // written at start-up only
 
+int64_t g_spent = 0;  // simulation thread only: counter ticks the callbacks took in this window
+
+int64_t counter() {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return now.QuadPart;
+}
+
+// Logs the frames per second of the update and what the registered callbacks cost per frame, every few seconds.
+void report(int64_t now) {
+    static int64_t frequency = [] {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        return f.QuadPart;
+    }();
+    static int64_t windowStart = now;
+    static int frames = 0;
+    ++frames;
+    const double seconds = static_cast<double>(now - windowStart) / frequency;
+    if (seconds < kReportSeconds) return;
+    logger::write("sim_tick: %.1f frames/s, callbacks %.0f us/frame", frames / seconds,
+                  frames ? 1e6 * static_cast<double>(g_spent) / frequency / frames : 0.0);
+    windowStart = now;
+    g_spent = 0;
+    frames = 0;
+}
+
 uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t s5, uintptr_t s6, uintptr_t s7,
                       uintptr_t s8) {
+    const int64_t start = counter();
     for (size_t i = 0; i < g_count; ++i) g_callbacks[i]();
+    g_spent += counter() - start;
+    report(start);
     return g_update(self, a, b, flag, s5, s6, s7, s8);
 }
 

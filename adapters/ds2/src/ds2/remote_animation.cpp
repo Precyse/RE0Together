@@ -1,5 +1,7 @@
 #include "ds2/remote_animation.h"
 
+#include <windows.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -107,7 +109,11 @@ void logLayout(uintptr_t samManager, uintptr_t remoteManager) {
                   mismatches);
 }
 
+// Writes a variable unless the manager already holds that value (the setters are the costly part: a few hundred a frame).
 void writeVariable(uintptr_t manager, int index, uint8_t type, const uint8_t* value) {
+    const size_t size = remote_animation::valueBytes(type);
+    const uintptr_t variable = decima::readPointer(manager + kVariables) + static_cast<uintptr_t>(index) * kVariableSize;
+    if (size && std::memcmp(reinterpret_cast<const void*>(variable + kVariableValue), value, size) == 0) return;
     const auto setValue = reinterpret_cast<SetValueFn>(ds2::at(kSetFloat));
     switch (type) {
         case kTypeBool:
@@ -202,6 +208,19 @@ void sampleLocalPlayer(uintptr_t samManager) {
     g_outbox.insert(g_outbox.end(), changes.begin(), changes.end());
 }
 
+// Sam's entity, looked up at most every few hundred milliseconds: every animated entity in the world passes here.
+uintptr_t cachedSamEntity() {
+    constexpr ULONGLONG kRefreshMs = 250;
+    static std::atomic<uintptr_t> sam{0};
+    static std::atomic<ULONGLONG> at{0};
+    const ULONGLONG now = GetTickCount64();
+    if (now - at.load() > kRefreshMs) {
+        sam = remote_player::samEntity();
+        at = now;
+    }
+    return sam.load();
+}
+
 void beforePose(uintptr_t component) {
     const uintptr_t owner = ds2::field<uintptr_t>(component, kComponentOwner);
     const uintptr_t remote = remote_player::entity();
@@ -211,7 +230,7 @@ void beforePose(uintptr_t component) {
         } else {
             applyPartner(component);
         }
-    } else if (g_collecting.load() && owner && owner == remote_player::samEntity()) {
+    } else if (g_collecting.load() && owner && owner == cachedSamEntity()) {
         sampleLocalPlayer(component);
     }
 }

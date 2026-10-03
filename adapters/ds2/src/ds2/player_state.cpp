@@ -23,7 +23,8 @@ int64_t nowMs() {
 namespace ds2 {
 
 uintptr_t ridePlugin(uintptr_t playerEntity) {
-    const uintptr_t component = decima::findComponent(playerEntity, msvc_rtti::vtableOf(kPlayerComponent));
+    static const uintptr_t vtable = msvc_rtti::vtableOf(kPlayerComponent);  // a scan of the whole image: once
+    const uintptr_t component = decima::findComponent(playerEntity, vtable);
     const uintptr_t state = component ? decima::readPointer(component + kComponentState) : 0;
     return state ? decima::readPointer(state + kStateRidePlugin) : 0;
 }
