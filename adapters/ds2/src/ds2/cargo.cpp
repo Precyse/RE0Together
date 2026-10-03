@@ -7,6 +7,7 @@
 // manager's lock and is served by the game on its next update, so any thread may ask. A piece on the ground is made
 // the same way the game spawns world cargo: a create info (kind, world position, no owner) handed to the manager's
 // create, which reserves the piece under the manager's lock and builds it on its update (docs/DS2_NOTES.md, "Cargo").
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <vector>
@@ -72,6 +73,7 @@ constexpr int32_t kMaxPool = 1 << 16;
 constexpr int32_t kMaxOwners = 1 << 14;
 constexpr int32_t kMaxSlots = 256;
 constexpr int kMaxOwnerDepth = 4;
+constexpr size_t kMaxOwnerTree = 64;
 
 using CreateAndAddFn = void (*)(uint32_t type, bool backpack);
 using DeleteFn = void (*)(uint64_t handle);
@@ -144,6 +146,29 @@ uintptr_t findOwner(uintptr_t manager, uint64_t wanted) {
         if (owner && decima::safeRead(owner + kOwnerKey, key) && key == wanted) return owner;
     }
     return 0;
+}
+
+// Whether `owner` (a baggage owner other than the local player's) is the local player's own owner or sits in its tree
+// of child owners (the backpack). The remote body's owner shares the local player's backpack objects, so writing to
+// anything reachable from the local player's tree would change the local inventory: every write to a partner's
+// owner is refused when this holds.
+bool sharesWithLocalPlayer(uintptr_t manager, uint64_t ownerKey, uintptr_t owner) {
+    if (ownerKey == kLocalPlayerKey) return false;  // the caller is the local player's own code path
+    std::vector<uintptr_t> tree;
+    const uintptr_t player = findOwner(manager, kLocalPlayerKey);
+    if (!player) return false;
+    tree.push_back(player);
+    for (size_t next = 0; next < tree.size() && tree.size() < kMaxOwnerTree; ++next) {
+        const int32_t children = readCount(tree[next] + kOwnerChildCount, kMaxOwners);
+        const uintptr_t childData = decima::readPointer(tree[next] + kOwnerChildData);
+        for (int32_t i = 0; childData && i < children; ++i) {
+            if (const uintptr_t child = decima::readPointer(childData + i * sizeof(uintptr_t))) tree.push_back(child);
+        }
+    }
+    const bool shared = std::find(tree.begin(), tree.end(), owner) != tree.end();
+    if (shared) logger::write("cargo: refused a write to baggage owner %llx: it is part of the local player's tree",
+                              static_cast<unsigned long long>(ownerKey));
+    return shared;
 }
 
 std::vector<SlotRange> backpackSlots(uintptr_t manager) {
@@ -292,13 +317,14 @@ std::vector<Cargo> carriedCargo() {
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {
     const uintptr_t baggage = manager();
     const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
-    return owner ? piecesIn(baggage, slotsOfKind(owner, slotKind)) : std::vector<Cargo>{};
+    return owner && !sharesWithLocalPlayer(baggage, ownerKey, owner) ? piecesIn(baggage, slotsOfKind(owner, slotKind))
+                                                                     : std::vector<Cargo>{};
 }
 
 bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type) {
     const uintptr_t baggage = manager();
     const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
-    return owner && createPiece(baggage, type, {}, owner, slotKind);
+    return owner && !sharesWithLocalPlayer(baggage, ownerKey, owner) && createPiece(baggage, type, {}, owner, slotKind);
 }
 
 std::vector<Cargo> vehicleCargo(uint64_t vehicle) { return slotPieces(vehicle, kBedSlotKind); }
