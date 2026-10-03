@@ -83,7 +83,7 @@ Each item lists what players get and its exit tests. Fake-peer tests first, then
 Setup, on both PCs:
 - The same commit of this repo, the launcher built (`launcher/bin/...`) and `adapters/ds2/version.dll` built. The launcher copies `version.dll` into the game folder when it starts the game, and the adapter writes `coop\adapter.ini` on first start.
 - In the game's graphics options, turn frame generation off (DLSS / FSR / XeSS frame generation) before the session. The overlay draws on the game's swap chain and is only tested without it.
-- To see the partner as a body as well as a marker, set `remote_body=1` in `<game>\coop\adapter.ini` (after the first start) and restart the game.
+- The partner's body is on by default (`remote_body=0` in `<game>\coopdapter.ini` turns it off; the file is written by the first start).
 - Back up `Documents\DEATH STRANDING 2 - ON THE BEACH\<steamid>` on both PCs.
 
 Run:
