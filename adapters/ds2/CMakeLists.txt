@@ -56,6 +56,7 @@ add_library(ds2_adapter SHARED
     src/vehicle_load.cpp
     src/fact_sync.cpp
     src/equip_sync.cpp
+    src/env_sync.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
@@ -79,6 +80,7 @@ add_library(ds2_adapter SHARED
     src/ds2/use_gate.cpp
     src/ds2/order_gate.cpp
     src/ds2/world_facts.cpp
+    src/ds2/world_env.cpp
     src/ds2/cargo.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
@@ -93,6 +95,9 @@ add_executable(load_shape_test tests/load_shape_test.cpp)
 add_executable(fact_wire_test tests/fact_wire_test.cpp)
 target_include_directories(fact_wire_test PRIVATE src ${SHARED_DIR})
 
+add_executable(env_wire_test tests/env_wire_test.cpp)
+target_include_directories(env_wire_test PRIVATE src ${SHARED_DIR})
+
 add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
 target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})
 target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)
@@ -100,6 +105,6 @@ target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d
 add_executable(proxy_load_test tests/proxy_load_test.cpp)
 add_dependencies(proxy_load_test ds2_adapter)
 
-foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test proxy_load_test overlay_test)
+foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test env_wire_test proxy_load_test overlay_test)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

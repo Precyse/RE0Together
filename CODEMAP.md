@@ -181,12 +181,16 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/fact_wire.h | FACT_SET (0x010B, host to all, reliable) payload: header {count}, entries {kind bool/int, flags, 16-byte fact UUID, value}, `encode`/`decode` with validation | `fact_wire::Entry`, `encode`, `decode` |
 | src/fact_sync.cpp | host: sends the queued fact changes each tick; guest: decodes the host's FACT_SET and writes the facts into its own database (kept pending until the database is found) | `fact_sync::onFrame`, `tick` |
 | src/equip_sync.cpp | EQUIP_STATE (0x010C, reliable, on change): the local player's pieces in the holster slots 4-7 (polled at 500 ms); the partner's body gets the same kinds created in the holster slots of its own baggage owner (key = its network id) and extra pieces deleted; hand slots 8/9 are not used (the game ejects pieces there) | `equip_sync::onFrame`, `tick` |
+| src/env_wire.h | WORLD_ENV (0x010D, host to all, reliable) payload: flags, forecast slot, time of day, day, forecast clock and threshold, 64 region weather types (82 bytes); `decode`, `hoursApart` | `env_wire::WorldEnv`, `decode` |
+| src/env_sync.cpp | host: reads the clock and weather every 200 ms and sends WORLD_ENV once a second or at once on a change; guest: hands the newest one to the game layer; releases when it stops being a guest | `env_sync::onFrame`, `tick` |
+| src/ds2/world_env.cpp | the game's clock and weather: `game::readWorldEnv` (GameWorldTimeState and DSWeatherManager), `followWorldEnv` / `releaseWorldEnv` (detours on the time update 0x1406eaa90 and the weather update 0x141ef3240 snap the time, set region types through 0x141f09a40 and pin the forecast clock) | `world_env::installEarly`, `game::readWorldEnv`, `followWorldEnv`, `releaseWorldEnv` |
 | src/cargo_menu.cpp | the host's give/take menu (F7, arrows, Enter): both backpacks side by side, an arrow for the move; claims its keys from the game while open | `cargo_menu::draw`, `claimsKey` |
 | src/marker_overlay.cpp | the draw callback: toasts, each peer's load (load_overlay), a labelled marker 1.75 m above each peer's origin (head top when standing) (smoothed toward the extrapolated position, snapped on jumps), optional self marker | `marker_overlay::draw`, `setSelfMarker` |
 | README.md | settings and how to remove the mod | |
 | tests/world_to_screen_test.cpp | projection cases (centre, offsets, behind, large coordinates) |
 | tests/load_shape_test.cpp | load stack placement and facing, box size, hull | |
 | tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game); `--encode/--decode <file>` modes for the python cross-check | |
+| tests/env_wire_test.cpp | WORLD_ENV round trip, wrong size, time outside the day, time-of-day distance (no game) | |
 | tools/ds2/ds2types.py | query the odradek DS2 type schema (G:\coop-scratch\ds2\types\ds2_types.json): class with inherited fields at absolute offsets, enum values, find / field / at | `python ds2types.py DSBaggage` |
 | tools/ds2/fact_wire_test.py | cross-language FACT_SET check: python encodes and C++ decodes, C++ encodes and python decodes, truncation rejected (no game) | |
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |

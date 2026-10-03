@@ -9,6 +9,7 @@
 #include "cargo_ground.h"
 #include "cargo_transfer.h"
 #include "debug_stats.h"
+#include "env_sync.h"
 #include "equip_sync.h"
 #include "fact_sync.h"
 #include "game.h"
@@ -102,6 +103,7 @@ void tick(NetClient& net) {
         vehicle_sync::onFrame(frame);
         vehicle_load::onFrame(frame);
         fact_sync::onFrame(frame);
+        env_sync::onFrame(frame);
         equip_sync::onFrame(frame);
         anim_sync::onFrame(frame);
     });
@@ -115,6 +117,7 @@ void tick(NetClient& net) {
     vehicle_sync::tick(net, session);
     vehicle_load::tick(net, session);
     fact_sync::tick(net, session);
+    env_sync::tick(net, session);
     equip_sync::tick(net, session);
     anim_sync::tick(net, session);
     const auto now = Clock::now();

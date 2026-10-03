@@ -21,6 +21,8 @@ import time
 HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002, 0x0003, 0x0020, 0x0100, 0x0108
 ANIM_STATE = 0x010A
 EQUIP_STATE = 0x010C
+WORLD_ENV = 0x010D
+ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
 EQUIP_ENTRY = struct.Struct("<B3xI")  # hand slot kind, cargo kind (equip_sync.h)
 FLAG_RELIABLE = 1
 HOST_SLOT, PEER_SLOT, MAX_PLAYERS, EPOCH = 0, 1, 2, 1
@@ -57,6 +59,7 @@ def main():
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
+    p.add_argument("--env", default="", help="HOURS[,DAY[,REGION:TYPE...]]: as the host peer, send this WORLD_ENV once a second (types from a host capture)")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
@@ -94,6 +97,10 @@ def serve(sock, a):
             if msg_type == PLAYER_STATE and len(body) >= 4 + STATE.size:
                 _, x, y, z, yaw, _ = STATE.unpack_from(body, 4)
                 local.update(x=x, y=y, z=z, yaw=yaw)
+            elif msg_type == WORLD_ENV and len(body) - 4 == ENV.size:
+                flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
+                shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
+                print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
             elif msg_type == EQUIP_STATE and a.echo_equip:
                 sock.sendall(encode(EQUIP_STATE, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
@@ -104,7 +111,7 @@ def serve(sock, a):
 
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None
-    last_held, last_equip = None, 0.0
+    last_held, last_equip, last_env = None, 0.0, 0.0
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -117,6 +124,14 @@ def serve(sock, a):
             if first:
                 start = now
                 print(f"circle centre {centre}", flush=True)
+        if a.env and now - last_env >= 1.0:
+            last_env = now
+            fields = a.env.split(",")
+            types = [0xE] * 64
+            for item in fields[2:]:
+                region, kind = item.split(":")
+                types[int(region)] = int(kind)
+            sock.sendall(encode(WORLD_ENV, peer_slot, ENV.pack(0, 0, float(fields[0]), int(fields[1]) if len(fields) > 1 else 1, 100.0, 200.0, *types)))
         if centre and a.equip:
             begin, end = map(float, a.equip_window.split(","))
             held = begin <= now - start < end

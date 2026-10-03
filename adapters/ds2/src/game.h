@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "env_wire.h"
 #include "fact_wire.h"
 #include "world_to_screen.h"
 
@@ -129,5 +130,16 @@ std::vector<fact_wire::Entry> takeFactWrites();
 // Writes one fact into this world's fact database as the game's own writer does (the guest following the host).
 // False until the game has written a fact itself, which is how the database is found. Any thread.
 bool applyFact(const fact_wire::Entry& fact);
+
+// The world's time of day and weather as the game holds them. False until the world exists. Any thread.
+bool readWorldEnv(env_wire::WorldEnv& out);
+
+// Guest: from now on the world's clock and weather follow `env` (applied on the game's next time and weather updates:
+// the time snaps when it drifted, region weather is set through the game's own setter, the guest's forecast is
+// pinned). Call again with each newer WORLD_ENV. Any thread.
+void followWorldEnv(const env_wire::WorldEnv& env);
+
+// Stops following: the world runs its own clock and forecast again. Any thread.
+void releaseWorldEnv();
 
 }  // namespace game
