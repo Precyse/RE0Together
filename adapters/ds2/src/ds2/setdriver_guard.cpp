@@ -1,11 +1,14 @@
 #include "ds2/setdriver_guard.h"
 
+#include <atomic>
 #include <cstdint>
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/remote_context.h"
 #include "ds2/remote_player.h"
+#include "game.h"
+#include "vehicle_sync.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -21,9 +24,13 @@ constexpr uintptr_t kVehicleListCount = 0x8;
 constexpr uintptr_t kVehicleListCount2 = 0xA0;
 constexpr uintptr_t kVehicleHasDriver = 0x4fc;  // non-zero while the vehicle has a driver
 constexpr uintptr_t kVehicleDriverKey = 0x4b0;  // that driver's key
+constexpr uintptr_t kVehicleFreeGate = 0x140beec80;  // (vehicle) -> bool: free to use (the Use Vehicle prompt and its searches)
 
 using SetDriverFn = bool (*)(uintptr_t vehicle, const uint64_t* key, bool enter, uintptr_t driver, bool flag);
 SetDriverFn g_setDriver = nullptr;
+using FreeGateFn = bool (*)(uintptr_t vehicle);
+FreeGateFn g_freeGate = nullptr;
+std::atomic<uint64_t> g_samPassengerVehicle{0};
 bool g_loggedEnter = false;
 bool g_loggedLeave = false;
 
@@ -39,7 +46,29 @@ bool answersAsPassenger(uintptr_t vehicle, const uint64_t* key, bool enter) {
     return taken;
 }
 
+// The vehicle the partner reports driving, if it is this one.
+bool partnerDrives(uintptr_t vehicle) {
+    const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
+    return riding && riding->role == vehicle_sync::kRoleDriver &&
+           riding->id == ds2::field<uint64_t>(vehicle, ds2::kEntityNetworkId);
+}
+
+// The "Use Vehicle" prompt is red while the vehicle has a driver. It is let through for the vehicle the partner drives
+// when the local player is on foot, so he can sit in the second pod.
+bool freeGateDetour(uintptr_t vehicle) {
+    if (g_freeGate(vehicle)) return true;
+    return vehicle && !game::drivenVehicle() && g_samPassengerVehicle.load() == 0 && partnerDrives(vehicle);
+}
+
 bool setDriverDetour(uintptr_t vehicle, const uint64_t* key, bool enter, uintptr_t driver, bool flag) {
+    const uintptr_t sam = remote_player::samEntity();
+    if (sam && key && *key == ds2::field<uint64_t>(sam, ds2::kEntityNetworkId) && !remote_context::active() &&
+        ds2::field<uint32_t>(vehicle, kVehicleHasDriver) != 0 && ds2::field<uint64_t>(vehicle, kVehicleDriverKey) != *key) {
+        // The partner holds the driver slot: Sam's enter or leave is answered as done, he never becomes the driver.
+        g_samPassengerVehicle = enter ? ds2::field<uint64_t>(vehicle, ds2::kEntityNetworkId) : 0;
+        logger::write("setdriver_guard: the local player %s as a passenger", enter ? "enters" : "leaves");
+        return true;
+    }
     const uintptr_t remote = remote_player::entity();
     const bool remoteKey = remote && key && *key == ds2::field<uint64_t>(remote, ds2::kEntityNetworkId);
     const bool isRemote = remoteKey || remote_context::active();
@@ -71,6 +100,12 @@ namespace setdriver_guard {
 void install() {
     hooks::install("vehicle set driver", ds2::at(kSetDriver), reinterpret_cast<void*>(&setDriverDetour),
                    reinterpret_cast<void**>(&g_setDriver));
+    hooks::install("vehicle free gate", ds2::at(kVehicleFreeGate), reinterpret_cast<void*>(&freeGateDetour),
+                   reinterpret_cast<void**>(&g_freeGate));
 }
+
+uint64_t localPassengerVehicle() { return g_samPassengerVehicle.load(); }
+
+void endLocalPassenger() { g_samPassengerVehicle = 0; }
 
 }  // namespace setdriver_guard

@@ -11,6 +11,7 @@
 #include "ds2/place.h"
 #include "ds2/player_state.h"
 #include "ds2/remote_player.h"
+#include "ds2/setdriver_guard.h"
 #include "ds2/vehicle.h"
 #include "game.h"
 #include "log.h"
@@ -42,6 +43,7 @@ constexpr double kDoorRight = 2.6;
 constexpr double kDoorForward = 1.8;
 constexpr double kDoorUp = 0.8;
 constexpr auto kBoardRetry = std::chrono::seconds(3);
+constexpr double kBoardReachMetres = 6.0;  // from Sam to the vehicle's origin
 // The passenger seat, in the vehicle's frame: the other of the two seat pods on the cab roof (the driver's is at
 // right 0.40, forward 1.57, up 2.36).
 constexpr double kPassengerRight = -0.40;
@@ -52,6 +54,7 @@ enum class Stage { OnFoot, Boarding, Riding, Leaving };
 
 Stage g_stage = Stage::OnFoot;
 Clock::time_point g_boardedAt;
+Clock::time_point g_samBoardedAt;  // the last update that seated the local player
 bool g_passenger = false;  // the local player drives the same vehicle: the remote rides along
 uint64_t g_vehicleId = 0;
 
@@ -101,6 +104,26 @@ bool passengerSeat(uintptr_t vehicle, decima::WorldTransform& seat) {
     return true;
 }
 
+// The local player as a passenger of the vehicle the partner drives (setdriver_guard answers his SetDriver): he is moved
+// to the second pod right after his mover wrote the driver's seat, and let go when his ride states have ended.
+void seatLocalPassenger() {
+    const uint64_t vehicleId = setdriver_guard::localPassengerVehicle();
+    static uint64_t seenId = 0;
+    if (vehicleId != seenId) {
+        seenId = vehicleId;
+        g_samBoardedAt = Clock::now();  // the ride states take a moment to leave the on-foot phase
+    }
+    if (!vehicleId) return;
+    const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
+    decima::WorldTransform seat{};
+    if (plugin && ds2::field<uint8_t>(plugin, kPluginPhase) == kPhaseOnFoot) {
+        if (Clock::now() - g_samBoardedAt > kBoardRetry) setdriver_guard::endLocalPassenger();
+        return;
+    }
+    if (passengerSeat(ds2::loadedVehicle(vehicleId), seat)) ds2::teleportEntity(remote_player::samEntity(), seat);
+    g_samBoardedAt = Clock::now();
+}
+
 // DSPlayerMover's update writes a seated player's transform (the driver's seat) into the entity itself. The remote,
 // as a passenger, is moved to the second pod right after that call, on the same thread and inside the same update.
 using MoverUpdateFn = uint64_t (*)(uintptr_t mover, uintptr_t message, uintptr_t a3, uintptr_t a4, uintptr_t a5,
@@ -112,6 +135,7 @@ uint64_t moverUpdateDetour(uintptr_t mover, uintptr_t message, uintptr_t a3, uin
     const uint64_t result = g_moverUpdate(mover, message, a3, a4, a5, a6, a7, a8);
     const uintptr_t remote = remote_player::entity();
     decima::WorldTransform seat{};
+    if (ds2::field<uintptr_t>(mover, kComponentOwner) == remote_player::samEntity()) seatLocalPassenger();
     if (remote && g_stage == Stage::Riding && g_passenger && ds2::field<uintptr_t>(mover, kComponentOwner) == remote &&
         passengerSeat(ds2::loadedVehicle(g_vehicleId), seat)) {
         ds2::teleportEntity(remote, seat);
@@ -147,7 +171,34 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_moverUpdate));
 }
 
+// The local player on foot beside the vehicle the partner drives presses F: the game's own prompt is open for him (see
+// setdriver_guard) but its action does not start a ride, so the same request the remote uses is written to his ride
+// plugin. Boards as a passenger; leaving is the game's own (F again).
+void boardLocalPassenger() {
+    static bool wasDown = false;
+    const bool down = (GetAsyncKeyState('F') & 0x8000) != 0;
+    const bool edge = down && !wasDown;
+    wasDown = down;
+    if (!edge || setdriver_guard::localPassengerVehicle() || game::drivenVehicle()) return;
+    const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
+    const uintptr_t vehicle = riding && riding->role == vehicle_sync::kRoleDriver ? ds2::loadedVehicle(riding->id) : 0;
+    const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
+    const uintptr_t owner = plugin ? decima::readPointer(plugin + kPluginOwner) : 0;
+    decima::WorldTransform truck{}, sam{};
+    if (!vehicle || !owner || !decima::safeRead(vehicle + ds2::kEntityTransform, truck) ||
+        !decima::safeRead(remote_player::samEntity() + ds2::kEntityTransform, sam)) {
+        return;
+    }
+    const double dx = truck.position.x - sam.position.x, dy = truck.position.y - sam.position.y,
+                 dz = truck.position.z - sam.position.z;
+    if (dx * dx + dy * dy + dz * dz > kBoardReachMetres * kBoardReachMetres) return;
+    ds2::field<uint64_t>(owner, kOwnerRequestTarget) = ds2::field<uint64_t>(vehicle, ds2::kEntityNetworkId);
+    ds2::field<uint8_t>(owner, kOwnerRequestKind) = kRequestEnter;
+    logger::write("remote_ride: the local player boards the partner's vehicle as a passenger");
+}
+
 void tick() {
+    boardLocalPassenger();
     const uintptr_t plugin = ds2::ridePlugin(remote_player::entity());
     if (!plugin) return;
     const uint8_t phase = ds2::field<uint8_t>(plugin, kPluginPhase);
