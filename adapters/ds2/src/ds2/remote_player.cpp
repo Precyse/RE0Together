@@ -60,9 +60,6 @@ constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame 
 constexpr double kSpawnAhead = 2.5;  // metres in front of Sam and
 constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves the body to the partner
 constexpr int kControllerWaitFrames = 300;
-// The core action plugin turns active as soon as Continue is chosen, while the title screen is still up and the world
-// loads; the body is created only after it has stayed active this long.
-constexpr auto kGameplaySettle = std::chrono::seconds(8);
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
 constexpr uint8_t kNoSlot = 0xFF;
 
@@ -81,8 +78,7 @@ uintptr_t g_netPlayer = 0;
 std::atomic<uintptr_t> g_entity{0};
 int g_waitedFrames = 0;
 UpdateFn g_update = nullptr;
-Clock::time_point g_gameplaySince;  // when the local player's state machine last became active
-bool g_gameplay = false;
+ds2::GameplayClock g_gameplay;
 uintptr_t g_samAtSpawn = 0;
 
 // The partner's pose from the render thread, applied on the update thread.
@@ -186,16 +182,6 @@ void follow() {
     game::placeBody(g_entity.load(), pose, velocity);
 }
 
-// Tracks whether gameplay is running: the local player's state machine is active (it is not on the title screen, in
-// the loading screen's first moments, or once the game returns to the title).
-void trackGameplay() {
-    const bool active = ds2::inGameplay(samEntity());
-    if (active && !g_gameplay) g_gameplaySince = Clock::now();
-    g_gameplay = active;
-}
-
-bool gameplaySettled() { return g_gameplay && Clock::now() - g_gameplaySince >= kGameplaySettle; }
-
 // The world the remote lived in is gone (return to title, another load): the engine destroys its entities with it,
 // so only this module's references are dropped, and the body is created again once gameplay resumes.
 void forgetBody() {
@@ -208,11 +194,11 @@ void forgetBody() {
 }
 
 void advance() {
-    trackGameplay();
-    if (g_stage != Stage::Idle && (!g_gameplay || samEntity() != g_samAtSpawn)) forgetBody();
+    g_gameplay.update(samEntity());
+    if (g_stage != Stage::Idle && (!g_gameplay.active() || samEntity() != g_samAtSpawn)) forgetBody();
     switch (g_stage) {
         case Stage::Idle:
-            if (g_enabled.load() && gameplaySettled() && targetFresh()) {
+            if (g_enabled.load() && g_gameplay.settled() && targetFresh()) {
                 g_samAtSpawn = samEntity();
                 spawn();
                 finishSpawn();  // the camera must exist before the engine updates the remote for the first time

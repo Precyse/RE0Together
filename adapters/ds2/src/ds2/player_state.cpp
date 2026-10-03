@@ -13,6 +13,11 @@ constexpr uintptr_t kStateRidePlugin = 0x718;
 constexpr uintptr_t kPluginParent = 0x10;       // the plugin it depends on: the core action plugin
 constexpr uintptr_t kPluginActive = 0x8;
 
+int64_t nowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
 }  // namespace
 
 namespace ds2 {
@@ -27,6 +32,21 @@ bool inGameplay(uintptr_t playerEntity) {
     const uintptr_t plugin = ridePlugin(playerEntity);
     const uintptr_t core = plugin ? decima::readPointer(plugin + kPluginParent) : 0;
     return core && field<uint8_t>(core, kPluginActive) != 0;
+}
+
+void GameplayClock::update(uintptr_t playerEntity) {
+    if (!inGameplay(playerEntity)) {
+        m_since = kInactive;
+        return;
+    }
+    int64_t expected = kInactive;
+    m_since.compare_exchange_strong(expected, nowMs());
+}
+
+bool GameplayClock::settled() const {
+    const int64_t since = m_since.load();
+    return since != kInactive &&
+           nowMs() - since >= std::chrono::duration_cast<std::chrono::milliseconds>(kGameplaySettle).count();
 }
 
 }  // namespace ds2
