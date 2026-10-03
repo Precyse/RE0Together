@@ -134,6 +134,12 @@ void releaseVehicle() {
 
 namespace remote_ride {
 
+void reset() {
+    g_stage = Stage::OnFoot;
+    g_passenger = false;
+    g_vehicleId = 0;
+}
+
 bool holdsBody() { return g_stage != Stage::OnFoot; }
 
 void installEarly() {

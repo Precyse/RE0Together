@@ -10,6 +10,9 @@ void installEarly();
 // Simulation thread, once per frame while the remote is live.
 void tick();
 
+// Forgets the ride: the world the remote rode in is gone.
+void reset();
+
 // True while the remote boards, rides or leaves: the vehicle moves it, so it must not follow the partner's pose.
 bool holdsBody();
 
