@@ -197,6 +197,8 @@ bool inSlots(const std::vector<SlotRange>& slots, uintptr_t slot) {
     return false;
 }
 
+bool isOrderId(uint64_t id);
+
 struct PoolEntry {
     uint64_t handle;
     uintptr_t item;
@@ -238,8 +240,8 @@ std::vector<game::Cargo> piecesIn(uintptr_t manager, const std::vector<SlotRange
     for (const PoolEntry& entry : livePool(manager)) {
         uint32_t type = 0;
         if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
-            out.push_back({entry.handle, type, itemName(entry.item), entry.orderId, entry.secondId, entry.category,
-                           entry.durability});
+            out.push_back({entry.handle, type, itemName(entry.item), isOrderId(entry.orderId) ? entry.orderId : 0,
+                           entry.secondId, entry.category, entry.durability});
         }
     }
     return out;
@@ -331,6 +333,14 @@ std::vector<Cargo> vehicleCargo(uint64_t vehicle) { return slotPieces(vehicle, k
 
 bool addVehicleCargo(uint64_t vehicle, uint32_t type) { return addSlotPiece(vehicle, kBedSlotKind, type); }
 
+std::optional<uint64_t> findOrderPiece(uint64_t orderId) {
+    const uintptr_t baggage = manager();
+    if (!baggage || !isOrderId(orderId)) return std::nullopt;
+    const OrderPieces found = findOrderPieces(baggage, orderId);
+    if (found.elsewhere.empty()) return std::nullopt;
+    return found.elsewhere.front();
+}
+
 std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius) {
     std::vector<LooseCargo> out;
     const uintptr_t baggage = manager();
@@ -341,7 +351,7 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
         if (entry.slot || dot(offset, offset) > radius * radius || !decima::safeRead(entry.item + kItemType, type)) {
             continue;
         }
-        out.push_back({entry.handle, type, entry.position});
+        out.push_back({entry.handle, type, entry.position, isOrderId(entry.orderId) ? entry.orderId : 0});
     }
     return out;
 }

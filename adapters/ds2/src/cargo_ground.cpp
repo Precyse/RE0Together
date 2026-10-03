@@ -46,8 +46,8 @@ double distanceSquared(const world_to_screen::Vec3& a, const world_to_screen::Ve
     return world_to_screen::dot(d, d);
 }
 
-cargo_ground::Spot spot(uint32_t request, uint32_t type, const world_to_screen::Vec3& at) {
-    return {request, type, {static_cast<float>(at.x), static_cast<float>(at.y), static_cast<float>(at.z)}};
+cargo_ground::Spot spot(uint32_t request, uint32_t type, const world_to_screen::Vec3& at, uint64_t orderId) {
+    return {request, type, {static_cast<float>(at.x), static_cast<float>(at.y), static_cast<float>(at.z)}, 0, orderId};
 }
 
 world_to_screen::Vec3 where(const cargo_ground::Spot& spot) {
@@ -55,7 +55,8 @@ world_to_screen::Vec3 where(const cargo_ground::Spot& spot) {
 }
 
 // The loose piece of this kind lying nearest the spot in this world, within kMatchMetres.
-std::optional<uint64_t> findLoose(uint32_t type, const world_to_screen::Vec3& at) {
+std::optional<uint64_t> findLoose(uint32_t type, const world_to_screen::Vec3& at, uint64_t orderId) {
+    if (orderId) return game::findOrderPiece(orderId);  // identity: wherever this world keeps it
     std::optional<uint64_t> best;
     double bestDistance = 0;
     for (const game::LooseCargo& piece : game::looseCargo(at, kMatchMetres)) {
@@ -68,14 +69,15 @@ std::optional<uint64_t> findLoose(uint32_t type, const world_to_screen::Vec3& at
 }
 
 void ask(NetClient& net, uint8_t hostSlot, const game::Cargo& piece, const world_to_screen::Vec3& at) {
-    const cargo_ground::Spot request = spot(g_nextRequest++, piece.type, at);
+    const cargo_ground::Spot request = spot(g_nextRequest++, piece.type, at, piece.orderId);
     if (!net.send(cargo_ground::kMsgPickup, true, hostSlot, proto::bytesOf(request))) return;
     g_pending[request.request] = piece;
     logger::write("cargo_ground: asked the host for %s (%u)", piece.name.c_str(), piece.type);
 }
 
-void announce(NetClient& net, uint16_t type, const char* what, uint32_t kind, const world_to_screen::Vec3& at) {
-    net.send(type, true, proto::kSlotAll, proto::bytesOf(spot(0, kind, at)));
+void announce(NetClient& net, uint16_t type, const char* what, uint32_t kind, const world_to_screen::Vec3& at,
+              uint64_t orderId) {
+    net.send(type, true, proto::kSlotAll, proto::bytesOf(spot(0, kind, at, orderId)));
     logger::write("cargo_ground: %s %u at (%.1f, %.1f, %.1f)", what, kind, at.x, at.y, at.z);
 }
 
@@ -90,7 +92,7 @@ void watch(NetClient& net, const SessionSnapshot& session, bool host, Clock::tim
         const bool newlyLoose = !g_recentLoose.contains(piece.handle);
         g_recentLoose[piece.handle] = {piece, now};
         if (newlyLoose && g_recentCarried.erase(piece.handle)) {
-            announce(net, cargo_ground::kMsgDrop, "put down", piece.type, piece.position);
+            announce(net, cargo_ground::kMsgDrop, "put down", piece.type, piece.position, piece.orderId);
         }
     }
     std::set<uint64_t> carriedNow;
@@ -102,7 +104,7 @@ void watch(NetClient& net, const SessionSnapshot& session, bool host, Clock::tim
         const world_to_screen::Vec3 at = loose->second.piece.position;
         g_recentLoose.erase(loose);
         if (host) {
-            announce(net, cargo_ground::kMsgHostPickup, "host picked up", piece.type, at);
+            announce(net, cargo_ground::kMsgHostPickup, "host picked up", piece.type, at, piece.orderId);
         } else {
             ask(net, session.hostSlot, piece, at);
         }
@@ -115,7 +117,7 @@ void watch(NetClient& net, const SessionSnapshot& session, bool host, Clock::tim
 
 // Host: takes the guest's piece out of this world if it lies here too.
 void answer(NetClient& net, uint8_t guestSlot, const cargo_ground::Spot& request) {
-    const auto handle = findLoose(request.type, where(request));
+    const auto handle = findLoose(request.type, where(request), request.orderId);
     const bool accepted = handle && game::removeCargo(*handle);
     net.send(cargo_ground::kMsgPickupResult, true, guestSlot,
              proto::bytesOf(cargo_ground::PickupResult{request.request, accepted ? 1u : 0u}));
@@ -125,7 +127,7 @@ void answer(NetClient& net, uint8_t guestSlot, const cargo_ground::Spot& request
 
 // Guest: the host picked up a piece, so this world's copy goes too.
 void follow(const cargo_ground::Spot& pickup) {
-    const auto handle = findLoose(pickup.type, where(pickup));
+    const auto handle = findLoose(pickup.type, where(pickup), pickup.orderId);
     if (handle) game::removeCargo(*handle);
     logger::write("cargo_ground: host picked up %u at (%.1f, %.1f, %.1f), %s here", pickup.type, pickup.position[0],
                   pickup.position[1], pickup.position[2], handle ? "removed" : "not found");

@@ -89,10 +89,15 @@ struct LooseCargo {
     uint64_t handle = 0;
     uint32_t type = 0;
     world_to_screen::Vec3 position;
+    uint64_t orderId = 0;  // the order the piece belongs to (0: plain cargo), the same in both worlds
 };
 
 // Loose pieces within `radius` metres of `around`. Any thread.
 std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius);
+
+// The handle of the piece of this order (an order id, as in Cargo::orderId) that this world holds anywhere outside the
+// local backpack (a locker, a shelf, the ground): order pieces are matched by identity, not by where they lie.
+std::optional<uint64_t> findOrderPiece(uint64_t orderId);
 
 // What addCargo did: made the request, must be asked again shortly (a stale copy of an order piece was being removed
 // first), or will never work (the backpack already holds that order piece, the game refused).

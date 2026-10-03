@@ -1,7 +1,7 @@
 #pragma once
 // Loose cargo on the ground, kept the same in both worlds; the host decides. A piece a player puts down appears at the
 // same spot in the other world (CARGO_DROP), once that world's player is near enough for the ground there to be
-// loaded. When the guest picks up a piece, it asks the host, which deletes the same piece (same kind, same place)
+// loaded (an order piece is matched by its order id, any other by kind and place). When the guest picks up a piece, it asks the host, which deletes the same piece (same kind, same place)
 // from its own world and accepts, or refuses when it has no such piece (someone has it already); a refused piece is
 // taken off the guest's backpack again. When the host picks one up, the guests delete their copy.
 //
@@ -24,8 +24,10 @@ struct Spot {
     uint32_t request;   // the guest's number for a pickup, echoed in the result; 0 otherwise
     uint32_t type;      // the kind of cargo
     float position[3];  // world metres
+    uint32_t reserved;
+    uint64_t orderId;   // the order the piece belongs to, 0 for plain cargo: such a piece is matched by this, not by place
 };
-static_assert(sizeof(Spot) == 20);
+static_assert(sizeof(Spot) == 32);
 
 struct PickupResult {
     uint32_t request;
