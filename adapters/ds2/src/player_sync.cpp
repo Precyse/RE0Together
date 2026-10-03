@@ -12,6 +12,7 @@
 #include "cargo_transfer.h"
 #include "clock_sync.h"
 #include "debug_stats.h"
+#include "rack_sync.h"
 #include "struct_sync.h"
 #include "env_sync.h"
 #include "equip_sync.h"
@@ -133,6 +134,7 @@ void tick(NetClient& net) {
     env_sync::tick(net, session);
     struct_sync::tick(net, session);
     equip_sync::tick(net, session);
+    rack_sync::tick(net, session);
     anim_sync::tick(net, session);
     clock_sync::tick(net, session);
     authority_sync::tick(net, session);

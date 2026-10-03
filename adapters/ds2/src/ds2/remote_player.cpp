@@ -64,6 +64,7 @@ constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves 
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
 constexpr uint8_t kNoSlot = 0xFF;
+constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
 
 enum class Stage { Idle, WaitController, Live, Failed };
 
@@ -78,6 +79,7 @@ Stage g_stage = Stage::Idle;
 uintptr_t g_netPlayer = 0;
 std::atomic<uintptr_t> g_entity{0};
 int g_waitedFrames = 0;
+Clock::time_point g_liveSince;
 ds2::GameplayClock g_gameplay;
 uintptr_t g_samAtSpawn = 0;
 
@@ -130,6 +132,7 @@ void spawn() {
     at.position.y += forward[1] * kSpawnAhead + right[1] * kSpawnRight;
     remote_appearance::onSpawned();
     remote_baggage::beginSpawn();
+    remote_marker::snapshot();
     {
         remote_camera::SpawnScope scope;
         reinterpret_cast<RequestSpawnFn>(ds2::at(kRequestSpawn))(player, true, &at);
@@ -146,7 +149,9 @@ void spawn() {
 void finishSpawn() {
     if (ds2::field<uintptr_t>(g_entity.load(), ds2::kEntityController)) {
         g_stage = remote_camera::give() ? Stage::Live : Stage::Failed;
-        remote_marker::detachRemote();
+        g_liveSince = Clock::now();
+        remote_marker::repair();
+
         logger::write("remote_body: %s", g_stage == Stage::Live ? "live" : "no camera, off");
     } else if (++g_waitedFrames > kControllerWaitFrames) {
         logger::write("remote_body: no controller after %d frames, off", g_waitedFrames);
@@ -210,6 +215,7 @@ void advance() {
             finishSpawn();
             break;
         case Stage::Live:
+            if (Clock::now() - g_liveSince < kMarkerRepairWindow) remote_marker::repair();
             remote_ride::tick();
             if (!remote_ride::holdsBody()) follow();
             break;

@@ -101,7 +101,7 @@ void draw(float width, float height) {
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
         const world_to_screen::Vec3 at = smoothed(peer);
         remote_body::setTarget(peer.slot, {at, peer.yaw}, {peer.velocity[0], peer.velocity[1], peer.velocity[2]});
-        if (partner && partner->slot == peer.slot) {
+        if (partner && partner->slot == peer.slot && !remote_body::ownerKey()) {  // the body carries the real rack once it exists
             load_overlay::draw(list, *camera, at, peer.yaw, static_cast<int>(partner->cargo.size()), width, height);
         }
         drawMarker(list, *camera, at, peer.name, width, height);

@@ -171,9 +171,9 @@ bool sharesWithLocalPlayer(uintptr_t manager, uint64_t ownerKey, uintptr_t owner
     return shared;
 }
 
-std::vector<SlotRange> backpackSlots(uintptr_t manager) {
+std::vector<SlotRange> backpackSlots(uintptr_t manager, uint64_t playerKey = kLocalPlayerKey) {
     std::vector<SlotRange> slots;
-    if (const uintptr_t player = findOwner(manager, kLocalPlayerKey)) collectSlots(player, false, 0, slots);
+    if (const uintptr_t player = findOwner(manager, playerKey)) collectSlots(player, false, 0, slots);
     return slots;
 }
 
@@ -296,8 +296,8 @@ OrderPieces findOrderPieces(uintptr_t manager, uint64_t orderId) {
 }
 
 // The local player's backpack owner: its child owner that has a slot of the main-load kind.
-uintptr_t backpackOwner(uintptr_t manager) {
-    const uintptr_t player = findOwner(manager, kLocalPlayerKey);
+uintptr_t backpackOwner(uintptr_t manager, uint64_t playerKey = kLocalPlayerKey) {
+    const uintptr_t player = findOwner(manager, playerKey);
     const int32_t children = player ? readCount(player + kOwnerChildCount, kMaxOwners) : 0;
     const uintptr_t childData = player ? decima::readPointer(player + kOwnerChildData) : 0;
     for (int32_t i = 0; childData && i < children; ++i) {
@@ -314,6 +314,21 @@ namespace game {
 std::vector<Cargo> carriedCargo() {
     const uintptr_t baggage = manager();
     return baggage ? piecesIn(baggage, backpackSlots(baggage)) : std::vector<Cargo>{};
+}
+
+// A remote body's own backpack: its pieces, or none when its owner or the backpack is part of the local player's tree.
+std::vector<Cargo> backpackCargo(uint64_t playerKey) {
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? backpackOwner(baggage, playerKey) : 0;
+    if (!owner || sharesWithLocalPlayer(baggage, playerKey, owner)) return {};
+    return piecesIn(baggage, slotsOfKind(owner, kBackpackSlotKind));
+}
+
+bool addBackpackCargo(uint64_t playerKey, uint32_t type) {
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? backpackOwner(baggage, playerKey) : 0;
+    return owner && !sharesWithLocalPlayer(baggage, playerKey, owner) &&
+           createPiece(baggage, type, {}, owner, kBackpackSlotKind);
 }
 
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {

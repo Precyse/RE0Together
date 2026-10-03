@@ -116,6 +116,12 @@ std::vector<Cargo> vehicleCargo(uint64_t vehicle);
 // or the game refused. Any thread.
 bool addVehicleCargo(uint64_t vehicle, uint32_t type);
 
+// What the backpack of the player whose baggage owner has this key holds (a remote body's network id), and a new piece
+// of `type` created into that backpack's main load: how the partner's rack is shown on the body. Both refuse an owner
+// that is part of the local player's tree. Any thread.
+std::vector<Cargo> backpackCargo(uint64_t playerKey);
+bool addBackpackCargo(uint64_t playerKey, uint32_t type);
+
 // What one slot kind of the baggage owner `ownerKey` holds (0 = the local player, a vehicle's id, a remote body's
 // network id); empty when there is no such owner. Any thread.
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind);

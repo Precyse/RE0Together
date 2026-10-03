@@ -56,6 +56,7 @@ add_library(ds2_adapter SHARED
     src/vehicle_load.cpp
     src/fact_sync.cpp
     src/equip_sync.cpp
+    src/rack_sync.cpp
     src/env_sync.cpp
     src/struct_sync.cpp
     src/authority.cpp
