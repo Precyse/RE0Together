@@ -18,6 +18,7 @@
 #include "ds2/remote_animation.h"
 #include "ds2/remote_appearance.h"
 #include "ds2/remote_camera.h"
+#include "ds2/remote_baggage.h"
 #include "ds2/remote_context.h"
 #include "ds2/remote_guards.h"
 #include "ds2/remote_player.h"
@@ -127,6 +128,7 @@ void spawn() {
     at.position.x += forward[0] * kSpawnAhead + right[0] * kSpawnRight;
     at.position.y += forward[1] * kSpawnAhead + right[1] * kSpawnRight;
     remote_appearance::onSpawned();
+    remote_baggage::beginSpawn();
     {
         remote_camera::SpawnScope scope;
         reinterpret_cast<RequestSpawnFn>(ds2::at(kRequestSpawn))(player, true, &at);
@@ -237,6 +239,7 @@ void setEnabled(bool enabled) { g_enabled = enabled; }
 
 void installEarly() {
     remote_context::install();
+    remote_baggage::installEarly();
     setdriver_guard::install();
     remote_guards::installEarly();
     remote_camera::installEarly();

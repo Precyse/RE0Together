@@ -80,6 +80,7 @@ add_library(ds2_adapter SHARED
     src/ds2/player_state.cpp
     src/ds2/remote_player.cpp
     src/ds2/remote_camera.cpp
+    src/ds2/remote_baggage.cpp
     src/ds2/remote_guards.cpp
     src/ds2/remote_appearance.cpp
     src/ds2/remote_animation.cpp
