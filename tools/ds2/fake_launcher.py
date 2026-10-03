@@ -22,6 +22,8 @@ HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002
 ANIM_STATE = 0x010A
 EQUIP_STATE = 0x010C
 CARGO_LIST = 0x0101
+VEHICLE_LOAD = 0x0109
+VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
 CARGO_ADD = 0x0103
 CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 WORLD_ENV = 0x010D
@@ -87,6 +89,7 @@ def main():
     p.add_argument("--give-order", default="", help="SECONDS: send CARGO_ADD of the locker order piece Special Plant Seeds (order 0x1000071000018e) after that long, as the host giving it to the guest")
     p.add_argument("--host-picks-order", default="", help="SECONDS: send HOST_PICKUP of the order piece Special Plant Seeds (matched by order id at a position nowhere near it)")
     p.add_argument("--give-plain", default="", help="SECONDS: send CARGO_ADD of a Headache Pills piece with durability 123 (a worn piece)")
+    p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
@@ -144,6 +147,7 @@ def serve(sock, a):
     last_held, last_equip, last_env = None, 0.0, 0.0
     struct_added = struct_removed = False
     gave = picked = gave_plain = False
+    last_load = 0.0
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -200,6 +204,10 @@ def serve(sock, a):
             if begin <= now - start < end:
                 x, y, z = map(float, a.drive_pos.split(","))
                 seq += 1
+                if a.drive_load and now - last_load >= 5.0:
+                    last_load = now
+                    kinds = [int(k) for k in a.drive_load.split(",")]
+                    sock.sendall(encode(VEHICLE_LOAD, peer_slot, VEHICLE_LOAD_HEADER.pack(a.drive, len(kinds), 0) + struct.pack(f"<{len(kinds)}I", *kinds)))
                 sock.sendall(encode(VEHICLE_STATE, peer_slot, VEHICLE.pack(seq, a.drive_role, a.drive, x, y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1), flags=0))
         if centre:
             t = max(0.0, now - start - a.hold)

@@ -94,6 +94,7 @@ Run:
 5. Guest: pick up loose cargo that both worlds have (e.g. lost cargo near the start). The piece stays, and the same piece must vanish from the host's world. Then the host picks up another loose piece; it must vanish from the guest's world.
 6. Guest: offload a piece in Cargo Management (Ring Menu, Cargo Management, the piece, Offload); the same piece must appear at that spot in the host's world. The host then offloads one; it must appear in the guest's world. Either player picks one of them up; it must vanish from the other world.
 7. Either: drive a vehicle; it must move in the other world and its bed contents must match.
+8. Order turn-in after a give and return (needs a delivery by hand): host takes a short order with a close destination, gives one of its order pieces to the guest and takes it back (F7), then delivers it at the terminal or destination; the delivery must count and the hand-over menu must list the piece under the order. Also check that the guest's own copy of the piece (a locker) is gone after the give, and that nothing is duplicated.
 
 Collect from both PCs: `<game>\coop\adapter.log`, the launcher's console output, and any `<game>\coop\crash-*.dmp`. The host also receives the guest's log and dumps as `<game>\coop\peer_*`. Note what you saw at each step, with screenshots of anything off.
 
