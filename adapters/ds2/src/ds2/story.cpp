@@ -45,6 +45,10 @@ constexpr uint32_t kCargoPreparedFlag = 1u << 18;    // order cargo already prep
 constexpr uintptr_t kSectionUuid = 0x10;             // the DSMissionSectionResource's GGUUID
 constexpr uintptr_t kRequestChangeArea = 0x140709cc0;  // (unused, u16 EDSArea, bool, WorldTransform*, i32 constructionId, bool)
 constexpr uint32_t kFlagFirstBool = 1, kFlagLastBool = 2;
+constexpr uintptr_t kGameStateStack = 0x14623E338;  // GameModule: +0x340 count, +0x348 array of states, state +0x10 type
+constexpr uintptr_t kStackCount = 0x340, kStackArray = 0x348, kStateType = 0x10;
+constexpr uint32_t kFirstBlockingState = 5, kLastBlockingState = 19;  // menus and other states an area change must not cut
+constexpr double kGuestOffsetMeters = 2.0;  // the guest lands beside the host's destination, not on it
 constexpr size_t kMaxQueued = 256;
 
 using Fn8 = uint64_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
@@ -197,12 +201,31 @@ uint64_t changeAreaDetour(uintptr_t unused, uintptr_t area, uintptr_t first, uin
     return g_changeArea(unused, area, first, transform, construction, last, g, h);
 }
 
-void replayAreaChange(const story_wire::Event& event) {
+bool blockingStateUp() {
+    const uintptr_t module = decima::readPointer(ds2::at(kGameStateStack));
+    const int32_t count = module ? ds2::field<int32_t>(module, kStackCount) : 0;
+    const uintptr_t states = module ? decima::readPointer(module + kStackArray) : 0;
+    for (int32_t i = 0; states && i < count; ++i) {
+        const uintptr_t state = decima::readPointer(states + i * sizeof(uintptr_t));
+        const uint32_t type = state ? ds2::field<uint32_t>(state, kStateType) : 0;
+        if (type >= kFirstBlockingState && type <= kLastBlockingState) return true;
+    }
+    return false;
+}
+
+// False while a blocking state is up: the event waits for a later tick.
+bool replayAreaChange(const story_wire::Event& event) {
+    if (blockingStateUp()) return false;
     alignas(16) uint8_t transform[story_wire::kTransformSize];
     std::memcpy(transform, event.transform, sizeof(transform));
+    double x;
+    std::memcpy(&x, transform, sizeof(x));
+    x += kGuestOffsetMeters;
+    std::memcpy(transform, &x, sizeof(x));
     reinterpret_cast<uint64_t (*)(uintptr_t, uint16_t, bool, const void*, int32_t, bool)>(ds2::at(kRequestChangeArea))(
         0, static_cast<uint16_t>(event.a), event.flags & kFlagFirstBool, transform, event.b, event.flags & kFlagLastBool);
     logger::write("story: replayed an area change to %u", event.a);
+    return true;
 }
 
 void replayMission(const story_wire::Event& event) {
@@ -260,17 +283,21 @@ void applyIncoming() {
         if (g_incoming.empty()) return;
         events.swap(g_incoming);
     }
+    std::vector<story_wire::Event> waiting;
     t_replaying = true;
     for (const story_wire::Event& event : events) {
         if (story_wire::isMission(static_cast<story_wire::Kind>(event.kind))) {
             replayMission(event);
         } else if (story_wire::isAreaChange(static_cast<story_wire::Kind>(event.kind))) {
-            replayAreaChange(event);
+            if (!replayAreaChange(event)) waiting.push_back(event);
         } else {
             replaySection(event);
         }
     }
     t_replaying = false;
+    if (waiting.empty()) return;
+    std::lock_guard lock(g_mutex);
+    g_incoming.insert(g_incoming.begin(), waiting.begin(), waiting.end());
 }
 
 }  // namespace
