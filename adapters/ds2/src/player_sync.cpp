@@ -112,6 +112,7 @@ void tick(NetClient& net) {
     const bool guest = session.linked && session.localSlot != session.hostSlot;
     game::blockScriptedInteractions(guest);
     game::blockOrders(guest);
+    game::vetoEnemies(guest);
     cargo_transfer::tick(net, session);
     cargo_ground::tick(net, session);
     vehicle_sync::tick(net, session);

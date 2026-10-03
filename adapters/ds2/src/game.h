@@ -142,4 +142,9 @@ void followWorldEnv(const env_wire::WorldEnv& env);
 // Stops following: the world runs its own clock and forecast again. Any thread.
 void releaseWorldEnv();
 
+// Guest: while `veto` is true the game's own spawns of enemies (BTs, MULEs, armed humans, catchers, hunters) fail, so
+// the host's enemies are the only ones (they appear as puppets). Needs enemy_veto::installEarly (adapter.ini
+// enemy_veto=1). Any thread.
+void vetoEnemies(bool veto);
+
 }  // namespace game

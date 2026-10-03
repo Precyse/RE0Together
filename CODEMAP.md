@@ -184,6 +184,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/env_wire.h | WORLD_ENV (0x010D, host to all, reliable) payload: flags, forecast slot, time of day, day, forecast clock and threshold, 64 region weather types (82 bytes); `decode`, `hoursApart` | `env_wire::WorldEnv`, `decode` |
 | src/env_sync.cpp | host: reads the clock and weather every 200 ms and sends WORLD_ENV once a second or at once on a change; guest: hands the newest one to the game layer; releases when it stops being a guest | `env_sync::onFrame`, `tick` |
 | src/ds2/world_env.cpp | the game's clock and weather: `game::readWorldEnv` (GameWorldTimeState and DSWeatherManager), `followWorldEnv` / `releaseWorldEnv` (detours on the time update 0x1406eaa90 and the weather update 0x141ef3240 snap the time, set region types through 0x141f09a40 and pin the forecast clock) | `world_env::installEarly`, `game::readWorldEnv`, `followWorldEnv`, `releaseWorldEnv` |
+| src/ds2/enemy_veto.cpp | guest: detour on EntitySpawnInfo::CreateEntity 0x14016d350 failing the spawns of enemy entity resources (adapter.ini enemy_veto=1; counts logged); `game::vetoEnemies` switches it with the guest role | `enemy_veto::installEarly`, `game::vetoEnemies` |
 | src/cargo_menu.cpp | the host's give/take menu (F7, arrows, Enter): both backpacks side by side, an arrow for the move; claims its keys from the game while open | `cargo_menu::draw`, `claimsKey` |
 | src/marker_overlay.cpp | the draw callback: toasts, each peer's load (load_overlay), a labelled marker 1.75 m above each peer's origin (head top when standing) (smoothed toward the extrapolated position, snapped on jumps), optional self marker | `marker_overlay::draw`, `setSelfMarker` |
 | README.md | settings and how to remove the mod | |
@@ -191,6 +192,8 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tests/load_shape_test.cpp | load stack placement and facing, box size, hull | |
 | tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game); `--encode/--decode <file>` modes for the python cross-check | |
 | tests/env_wire_test.cpp | WORLD_ENV round trip, wrong size, time outside the day, time-of-day distance (no game) | |
+| tools/ds2/ds2types.py | queries DS2's reflected type schema from G:\coop-scratch\ds2	ypes\ds2_types.json (not in the repo): `<Class>`, `find <re>`, `field <re>`, `at <Name> <hex>` | |
+| docs/research/ (MULTIPLAYER_MODS.md, _2, _DEEP) | survey of 15 co-op mods and ranked ideas for DS2 (ideas only, no code copied) | |
 | tools/ds2/ds2types.py | query the odradek DS2 type schema (G:\coop-scratch\ds2\types\ds2_types.json): class with inherited fields at absolute offsets, enum values, find / field / at | `python ds2types.py DSBaggage` |
 | tools/ds2/fact_wire_test.py | cross-language FACT_SET check: python encodes and C++ decodes, C++ encodes and python decodes, truncation rejected (no game) | |
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |

@@ -13,6 +13,7 @@
 #include "net_client.h"
 #include "player_sync.h"
 #include "ds2/remote_animation.h"
+#include "ds2/enemy_veto.h"
 #include "ds2/world_env.h"
 #include "ds2/world_facts.h"
 #include "remote_body.h"
@@ -51,6 +52,7 @@ DWORD WINAPI initThread(LPVOID) {
     game::watchOrders();
     world_facts::installEarly(config.logFacts);
     world_env::installEarly();
+    if (config.enemyVeto) enemy_veto::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);

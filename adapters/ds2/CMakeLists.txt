@@ -81,6 +81,7 @@ add_library(ds2_adapter SHARED
     src/ds2/order_gate.cpp
     src/ds2/world_facts.cpp
     src/ds2/world_env.cpp
+    src/ds2/enemy_veto.cpp
     src/ds2/cargo.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
