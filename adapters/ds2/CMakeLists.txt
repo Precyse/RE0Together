@@ -63,6 +63,7 @@ add_library(ds2_adapter SHARED
     src/resync_trigger.cpp
     src/clock_sync.cpp
     src/anim_event.cpp
+    src/pending_queue.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
@@ -100,8 +101,23 @@ add_executable(load_shape_test tests/load_shape_test.cpp)
 add_executable(fact_wire_test tests/fact_wire_test.cpp)
 target_include_directories(fact_wire_test PRIVATE src ${SHARED_DIR})
 
-# Unit tests that run without the game: tests/<name>.cpp plus the listed sources, run by ctest.
+add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
+target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})
+target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)
+
+add_executable(proxy_load_test tests/proxy_load_test.cpp)
+add_dependencies(proxy_load_test ds2_adapter)
+
+foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test proxy_load_test overlay_test)
+    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+endforeach()
+
+# Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
+foreach(target world_to_screen_test load_shape_test fact_wire_test)
+    add_test(NAME ${target} COMMAND ${target})
+endforeach()
+
 function(add_unit_test name)
     add_executable(${name} tests/${name}.cpp ${ARGN})
     target_include_directories(${name} PRIVATE src ${SHARED_DIR})
@@ -113,14 +129,4 @@ add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
 add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
-
-add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
-target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})
-target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)
-
-add_executable(proxy_load_test tests/proxy_load_test.cpp)
-add_dependencies(proxy_load_test ds2_adapter)
-
-foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test proxy_load_test overlay_test)
-    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-endforeach()
+add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)

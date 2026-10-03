@@ -16,6 +16,7 @@ enum class Reason : uint8_t {
     InvalidOwner,   // the named owner declined or is otherwise barred from owning it
     Malformed,      // the payload does not parse
     Expired,        // held for an object that never appeared
+    Overflow,       // a bounded queue was full and the message was dropped
     Count
 };
 

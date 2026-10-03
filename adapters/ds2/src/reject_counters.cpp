@@ -27,6 +27,7 @@ const char* name(Reason reason) {
         case Reason::InvalidOwner: return "invalid_owner";
         case Reason::Malformed: return "malformed";
         case Reason::Expired: return "expired";
+        case Reason::Overflow: return "overflow";
         case Reason::Count: break;
     }
     return "?";

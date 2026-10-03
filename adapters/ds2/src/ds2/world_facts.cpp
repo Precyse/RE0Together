@@ -3,10 +3,12 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <vector>
 
@@ -31,6 +33,7 @@ constexpr int kMaxLogged = 4000;
 constexpr int64_t kCheckIntervalMs = 500;
 constexpr int64_t kClockIntervalMs = 250;  // how often the writers re-check that gameplay has started
 constexpr size_t kMaxQueued = 4096;
+constexpr size_t kMaxKnown = 16384;  // distinct facts remembered for a join snapshot
 
 using WriteFn = uint64_t (*)(uintptr_t database, const uint8_t* uuid, const void* value, const void* previous,
                             uintptr_t flag5, uintptr_t flag6, uint8_t* changed, uintptr_t a8);
@@ -47,6 +50,8 @@ ds2::GameplayClock g_clock;
 std::atomic<int64_t> g_clockAt{0};
 std::mutex g_queueMutex;
 std::vector<fact_wire::Entry> g_queue;
+using FactKey = std::array<uint8_t, kGuidSize + 1>;  // the kind, then the UUID
+std::map<FactKey, fact_wire::Entry> g_known;  // the last queued value of every fact, kept for join snapshots
 
 void hex(const uint8_t* bytes, char* out) {
     for (size_t i = 0; i < kGuidSize; ++i) sprintf_s(out + i * 2, 3, "%02x", bytes[i]);
@@ -93,7 +98,10 @@ void queue(uint8_t kind, const uint8_t* uuid, uint32_t value, uintptr_t flag5, u
     entry.flags = (static_cast<uint8_t>(flag5) ? fact_wire::kFlagArg5 : 0) | (static_cast<uint8_t>(flag6) ? fact_wire::kFlagArg6 : 0);
     std::memcpy(entry.uuid, uuid, kGuidSize);
     entry.value = value;
+    FactKey key{kind};
+    std::memcpy(key.data() + 1, uuid, kGuidSize);
     std::lock_guard lock(g_queueMutex);
+    if (g_known.contains(key) || g_known.size() < kMaxKnown) g_known[key] = entry;
     for (fact_wire::Entry& queued : g_queue) {
         if (queued.kind == kind && std::memcmp(queued.uuid, uuid, kGuidSize) == 0) {
             queued = entry;
@@ -148,6 +156,7 @@ void shareFactWrites(bool on) {
     if (g_share.exchange(on) && !on) {
         std::lock_guard lock(g_queueMutex);
         g_queue.clear();
+        g_known.clear();
     }
 }
 
@@ -157,6 +166,16 @@ std::vector<fact_wire::Entry> takeFactWrites() {
     out.swap(g_queue);
     return out;
 }
+
+std::vector<fact_wire::Entry> factSnapshot() {
+    std::lock_guard lock(g_queueMutex);
+    std::vector<fact_wire::Entry> out;
+    out.reserve(g_known.size());
+    for (const auto& [key, entry] : g_known) out.push_back(entry);
+    return out;
+}
+
+bool gameplaySettled() { return gameplayRunning(); }
 
 bool applyFact(const fact_wire::Entry& fact) {
     const uintptr_t database = g_database.load();

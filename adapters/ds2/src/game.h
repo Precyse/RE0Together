@@ -119,6 +119,14 @@ void shareFactWrites(bool on);
 // The queued fact changes, oldest first; empties the queue. Any thread.
 std::vector<fact_wire::Entry> takeFactWrites();
 
+// Every fact the game changed during the host's gameplay since sharing started (the last value of each), for a guest
+// that needs the whole picture; the queue above only holds what is new. Any thread.
+std::vector<fact_wire::Entry> factSnapshot();
+
+// Whether the local player has been in gameplay long enough for the world to have settled (not loading, not on the
+// title screen); the same gate the fact queue uses. Any thread.
+bool gameplaySettled();
+
 // Writes one fact into this world's fact database as the game's own writer does (the guest following the host).
 // False until the game has written a fact itself, which is how the database is found. Any thread.
 bool applyFact(const fact_wire::Entry& fact);
