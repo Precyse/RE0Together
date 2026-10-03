@@ -47,19 +47,21 @@ def read_exact(sock, n):
 
 
 LADDER_ID = 11700  # an id the save does not use
+ANCHOR_TAIL = bytes.fromhex("0000000047 7a5541".replace(" ", ""))  # the captured climbing anchor: its rope length
 LADDER_AHEAD = 8.0  # metres ahead of the local player (a ladder the player grabs cannot be removed under them: the game crashes)
 # The tail of the captured ladder descriptor (+0x328..+0x340), tools/ds2 out dump submit_kind10_0284
 LADDER_TAIL = bytes.fromhex("0100000000" "8b6abf" "6666" "1a41" "00000000" "ffffffff" "00020000")
 
 
-def ladder_payload(local):
-    """STRUCT_CREATE for the captured ladder, ahead of the local player and facing the way it faces."""
+def ladder_payload(local, kind=10):
+    """STRUCT_CREATE for a captured structure (kind 10 ladder, 11 climbing anchor), ahead of the local player and facing the way it faces."""
     fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
+    tail = LADDER_TAIL if kind == 10 else ANCHOR_TAIL
     position = struct.pack("<3d", local["x"] + fx * LADDER_AHEAD, local["y"] + fy * LADDER_AHEAD, local["z"])
     rotation = struct.pack("<9f", 0.0, 0.0, -1.0, fx, fy, 0.0, fy, -fx, 0.0)  # as the captured ladder: its long axis is the first row (straight down), then heading, then the horizontal right
     transform = position + rotation + bytes(4)
-    fixed = struct.pack("<BBBBI16s", 10, 3, 1, len(LADDER_TAIL), LADDER_ID, bytes(16)) + transform + struct.pack("<f", 360000.0)
-    return fixed + LADDER_TAIL
+    fixed = struct.pack("<BBBBI16s", kind, 3 if kind == 10 else 14, 1, len(tail), LADDER_ID, bytes(16)) + transform + struct.pack("<f", 360000.0)
+    return fixed + tail
 
 
 def main():
@@ -78,6 +80,7 @@ def main():
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--env", default="", help="HOURS[,DAY[,REGION:TYPE...]]: as the host peer, send this WORLD_ENV once a second (types from a host capture)")
     p.add_argument("--struct", default="", help="ADD,REMOVE seconds after the first local state: replay the captured ladder 3 m ahead of the local player, then remove it")
+    p.add_argument("--struct-kind", type=int, default=10, help="10 = the captured ladder, 11 = the captured climbing anchor")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
@@ -147,7 +150,7 @@ def serve(sock, a):
             add_at, remove_at = map(float, a.struct.split(","))
             if not struct_added and now - start >= add_at:
                 struct_added = True
-                sock.sendall(encode(STRUCT_CREATE, peer_slot, ladder_payload(local)))
+                sock.sendall(encode(STRUCT_CREATE, peer_slot, ladder_payload(local, a.struct_kind)))
                 print("struct: ladder replayed", flush=True)
             if struct_added and not struct_removed and now - start >= remove_at:
                 struct_removed = True

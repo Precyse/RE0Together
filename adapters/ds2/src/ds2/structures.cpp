@@ -10,7 +10,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <mutex>
 #include <vector>
 
@@ -21,7 +23,6 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
-#include "msvc_rtti.h"
 
 namespace {
 
@@ -32,12 +33,14 @@ constexpr uintptr_t kSubmit = 0x141263280;       // (manager, descriptor)
 constexpr uintptr_t kObjectById = 0x141269580;   // (manager, u32 id) -> DSConstructionObject or 0
 constexpr uintptr_t kRemoveByPlayer = 0x1412d9c80;  // ConstructionExportedFunctions::RemoveConstructionByPlayer(u32 id)
 constexpr uintptr_t kRequestRemove = 0x14127f5f0;        // DSConstructionObject slot 4 (object, factor, bool, bool)
-constexpr uintptr_t kLadderRequestRemove = 0x1412f3bf0;  // the ladder's override
+constexpr uintptr_t kLadderRequestRemove = 0x1412f3bf0;     // the overrides of the base RequestRemove:
+constexpr uintptr_t kCatapultRequestRemove = 0x141312770;  // the ladder's, the catapult's
+constexpr uintptr_t kSafetyHouseRequestRemove = 0x141308470;  // and the safety house's
 constexpr uintptr_t kPlayerPlacementCaller = 0x14200cc0d;  // the submit inside the held-item placement (slot 46)
 
 // DSConstructionCreationDescriptor.
 constexpr uintptr_t kDescKind = 0x10, kDescSubKind = 0x60, kDescId = 0x6C, kDescLevel = 0x70, kDescGuid = 0x74,
-                    kDescDurability = 0x84, kDescFlags = 0x94, kDescOwner = 0xE8, kDescTail = 0x328;
+                    kDescDurability = 0x84, kDescFlags = 0x94, kDescOwner = 0xE8;
 constexpr uintptr_t kDescTransform = 0x18;
 constexpr uint8_t kOriginPlayer = 1;
 constexpr uint16_t kPlayerBuildFlags = 0x101;
@@ -45,7 +48,6 @@ constexpr uint32_t kPlayerOwner = 1;  // descriptor +0xE8 as the player's own de
 constexpr uintptr_t kObjectId = 0x70;  // DSConstructionObject: its construction id
 constexpr uint32_t kMaxRemoveFactor = 0x40;  // the entry is also reached with a pointer-sized second argument
 constexpr size_t kMaxQueued = 256;
-constexpr const char* kLadderClass = "DSLadder";
 
 using Fn8 = uint64_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 using FactoryFn = uintptr_t (*)(uintptr_t manager, uint8_t kind);
@@ -54,7 +56,7 @@ using SubmitFn = void (*)(uintptr_t manager, uintptr_t desc);
 using ObjectByIdFn = uintptr_t (*)(uintptr_t manager, uint32_t id);
 using RemoveByPlayerFn = void (*)(uint32_t id);
 
-Fn8 g_submit = nullptr, g_requestRemove = nullptr, g_ladderRequestRemove = nullptr;
+Fn8 g_submit = nullptr, g_requestRemove = nullptr;
 std::atomic<bool> g_host{false};
 std::atomic<bool> g_guest{false};
 thread_local bool t_applying = false;  // the adapter itself is building or removing: never reported or refused
@@ -72,25 +74,43 @@ uintptr_t fileVa(void* address) {
 
 uintptr_t manager() { return decima::readPointer(ds2::at(kConstructionManagerGlobal)); }
 
-bool isLadder(uintptr_t object) {
-    static const uintptr_t vtable = msvc_rtti::vtableOf(kLadderClass);
-    return vtable && decima::readPointer(object) == vtable;
+// Whether a qword of a descriptor's own fields looks like a pointer (a user-space address): those are never sent.
+bool looksLikePointer(uint64_t value) {
+    constexpr uint64_t kLowest = 0x10000;
+    constexpr uint64_t kUserSpaceEnd = 0x800000000000;
+    return value >= kLowest && value < kUserSpaceEnd && (value & 7) == 0;
 }
 
 bool describe(uintptr_t desc, struct_wire::Placed& out) {
     struct_wire::Create& c = out.create;
     c = {};
     decima::safeRead(desc + kDescKind, c.kind);
-    if (c.kind != struct_wire::kKindLadder) return false;
-    c.tailBytes = struct_wire::kLadderTailBytes;
+    const struct_wire::KindInfo* info = struct_wire::kindInfo(c.kind);
+    if (!info) return false;
+    c.tailBytes = info->tailBytes;
     decima::safeRead(desc + kDescSubKind, c.subKind);
     decima::safeRead(desc + kDescLevel, c.level);
     decima::safeRead(desc + kDescId, c.id);
     decima::safeRead(desc + kDescDurability, c.durability);
-    out.tail.resize(c.tailBytes);
-    return decima::safeCopy(c.guid, desc + kDescGuid, sizeof(c.guid)) &&
-           decima::safeCopy(c.transform, desc + kDescTransform, sizeof(c.transform)) &&
-           decima::safeCopy(out.tail.data(), desc + kDescTail, out.tail.size());
+    out.tail.assign(c.tailBytes, 0);
+    if (!decima::safeCopy(c.guid, desc + kDescGuid, sizeof(c.guid)) ||
+        !decima::safeCopy(c.transform, desc + kDescTransform, sizeof(c.transform)) ||
+        !decima::safeCopy(out.tail.data(), desc + struct_wire::kBaseDescriptorBytes, out.tail.size())) {
+        return false;
+    }
+    for (const uint8_t skip : {info->skipFirst, info->skipSecond}) {
+        if (skip != struct_wire::kNoSkip) std::memset(out.tail.data() + skip, 0, sizeof(uint64_t));
+    }
+    for (size_t offset = 0; offset + sizeof(uint64_t) <= out.tail.size(); offset += sizeof(uint64_t)) {
+        uint64_t qword;
+        std::memcpy(&qword, out.tail.data() + offset, sizeof(qword));
+        if (looksLikePointer(qword)) {
+            logger::write("structures: kind %u tail qword +0x%zx looks like a pointer (%llx), not sent", c.kind, offset,
+                          static_cast<unsigned long long>(qword));
+            std::memset(out.tail.data() + offset, 0, sizeof(qword));
+        }
+    }
+    return true;
 }
 
 // A structure placed by the player's held item (not loaded from the save, not built by an online handler or a mission).
@@ -103,7 +123,14 @@ uint64_t submitDetour(uintptr_t mgr, uintptr_t desc, uintptr_t c, uintptr_t d, u
         }
         struct_wire::Placed placed;
         if (g_host.load() && describe(desc, placed)) {
-            logger::write("structures: placed kind %u id %u", placed.create.kind, placed.create.id);
+            std::string tail;
+            for (const uint8_t byte : placed.tail) {
+                char hex[4];
+                snprintf(hex, sizeof(hex), "%02x ", byte);
+                tail += hex;
+            }
+            logger::write("structures: placed kind %u sub %u level %u id %u, tail %s", placed.create.kind, placed.create.subKind,
+                          placed.create.level, placed.create.id, tail.c_str());
             std::lock_guard lock(g_mutex);
             if (g_placed.size() < kMaxQueued) g_placed.push_back(std::move(placed));
         }
@@ -111,10 +138,12 @@ uint64_t submitDetour(uintptr_t mgr, uintptr_t desc, uintptr_t c, uintptr_t d, u
     return g_submit(mgr, desc, c, d, e, f, g, h);
 }
 
+uintptr_t objectById(uintptr_t mgr, uint32_t id);
+
 void noteRemoval(uintptr_t object, uintptr_t factor) {
-    if (t_applying || !g_host.load() || factor > kMaxRemoveFactor || !isLadder(object)) return;
+    if (t_applying || !g_host.load() || factor > kMaxRemoveFactor) return;
     uint32_t id = 0;
-    if (!decima::safeRead(object + kObjectId, id)) return;
+    if (!decima::safeRead(object + kObjectId, id) || objectById(manager(), id) != object) return;
     std::lock_guard lock(g_mutex);
     const bool queued = std::any_of(g_removed.begin(), g_removed.end(), [&](const auto& r) { return r.id == id; });
     if (queued || g_removed.size() >= kMaxQueued) return;
@@ -128,11 +157,16 @@ uint64_t requestRemoveDetour(uintptr_t object, uintptr_t factor, uintptr_t b, ui
     return g_requestRemove(object, factor, b, c, e, f, g, h);
 }
 
-uint64_t ladderRequestRemoveDetour(uintptr_t object, uintptr_t factor, uintptr_t b, uintptr_t c, uintptr_t e,
-                                   uintptr_t f, uintptr_t g, uintptr_t h) {
-    noteRemoval(object, factor);
-    return g_ladderRequestRemove(object, factor, b, c, e, f, g, h);
-}
+// One detour and trampoline per override of RequestRemove (the ladder's, the catapult's, the safety house's).
+template <int N>
+struct Override {
+    static inline Fn8 original = nullptr;
+    static uint64_t detour(uintptr_t object, uintptr_t factor, uintptr_t b, uintptr_t c, uintptr_t e, uintptr_t f,
+                           uintptr_t g, uintptr_t h) {
+        noteRemoval(object, factor);
+        return original(object, factor, b, c, e, f, g, h);
+    }
+};
 
 uintptr_t objectById(uintptr_t mgr, uint32_t id) { return reinterpret_cast<ObjectByIdFn>(ds2::at(kObjectById))(mgr, id); }
 
@@ -157,7 +191,7 @@ void create(uintptr_t mgr, const struct_wire::Placed& placed) {
     ds2::field<float>(desc, kDescDurability) = c.durability;
     ds2::field<uint16_t>(desc, kDescFlags) = kPlayerBuildFlags;
     ds2::field<uint32_t>(desc, kDescOwner) = kPlayerOwner;
-    std::memcpy(reinterpret_cast<void*>(desc + kDescTail), placed.tail.data(), placed.tail.size());
+    std::memcpy(reinterpret_cast<void*>(desc + struct_wire::kBaseDescriptorBytes), placed.tail.data(), placed.tail.size());
     reinterpret_cast<SubmitFn>(ds2::at(kSubmit))(mgr, desc);
     logger::write("structures: built kind %u id %u", c.kind, c.id);
 }
@@ -201,8 +235,12 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_submit));
     hooks::install("structure request remove", ds2::at(kRequestRemove), reinterpret_cast<void*>(&requestRemoveDetour),
                    reinterpret_cast<void**>(&g_requestRemove));
-    hooks::install("ladder request remove", ds2::at(kLadderRequestRemove),
-                   reinterpret_cast<void*>(&ladderRequestRemoveDetour), reinterpret_cast<void**>(&g_ladderRequestRemove));
+    hooks::install("ladder request remove", ds2::at(kLadderRequestRemove), reinterpret_cast<void*>(&Override<0>::detour),
+                   reinterpret_cast<void**>(&Override<0>::original));
+    hooks::install("catapult request remove", ds2::at(kCatapultRequestRemove), reinterpret_cast<void*>(&Override<1>::detour),
+                   reinterpret_cast<void**>(&Override<1>::original));
+    hooks::install("safety house request remove", ds2::at(kSafetyHouseRequestRemove),
+                   reinterpret_cast<void*>(&Override<2>::detour), reinterpret_cast<void**>(&Override<2>::original));
     sim_tick::add(&applyPending);
 }
 

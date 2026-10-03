@@ -15,9 +15,50 @@ constexpr uint16_t kMsgStructCreate = proto::kFirstGameType + 15;  // 0x010F, ho
 constexpr uint16_t kMsgStructRemove = proto::kFirstGameType + 16;  // 0x0110, host to all, reliable
 
 constexpr uint8_t kKindLadder = 10;
-constexpr uint8_t kLadderTailBytes = 0x18;  // the ladder's own fields after the base descriptor
+constexpr size_t kBaseDescriptorBytes = 0x328;  // the common part of every creation descriptor; the kind's own fields follow
 constexpr size_t kMaxTailBytes = 0x40;
 constexpr size_t kTransformBytes = 0x40;  // WorldTransform: position (3 doubles), orientation (3x3 floats), padding
+
+// A player-buildable structure kind (the descriptor's category byte, +0x10): how many bytes of its own fields follow
+// the common part, and the qwords among them that are left out because they may hold pointers or handles once the
+// structure is in use (docs/DS2_NOTES.md, "Structure sync"). Kinds whose fields are not known are not carried.
+struct KindInfo {
+    uint8_t kind;
+    uint8_t tailBytes;
+    uint8_t skipFirst;  // offset (from the start of the tail) of a qword not to copy, or kNoSkip
+    uint8_t skipSecond;
+};
+constexpr uint8_t kNoSkip = 0xFF;
+constexpr KindInfo kKinds[] = {
+    {2, 0x00, kNoSkip, kNoSkip},   // SafetyHouse
+    {3, 0x00, kNoSkip, kNoSkip},   // Post
+    {4, 0x08, kNoSkip, kNoSkip},   // WatchTower
+    {5, 0x18, kNoSkip, kNoSkip},   // Catapult
+    {6, 0x00, kNoSkip, kNoSkip},   // Charger
+    {7, 0x00, kNoSkip, kNoSkip},   // RainShelter
+    {9, 0x08, kNoSkip, kNoSkip},   // Zipline
+    {10, 0x18, kNoSkip, kNoSkip},  // Ladder
+    {11, 0x08, kNoSkip, kNoSkip},  // FieldRope (the climbing anchor): its length; the rope state is rebuilt by the game
+    {12, 0x08, kNoSkip, kNoSkip},  // Bridge
+    {14, 0x28, kNoSkip, kNoSkip},  // CatapultShell
+    {15, 0x08, kNoSkip, kNoSkip},  // ChiralBridge
+    {16, 0x08, kNoSkip, kNoSkip},  // JumpStand
+    {20, 0x00, kNoSkip, kNoSkip},  // FastTravelStation
+    {21, 0x18, 0x10, kNoSkip},     // ElectricWall (+0x338 may hold a pointer)
+    {22, 0x28, 0x08, 0x1C},        // Shield (replaceable block: +0x330 and +0x344)
+    {23, 0x30, 0x08, 0x1C},        // FixedGun
+    {26, 0x10, kNoSkip, kNoSkip},  // BoringMachine
+    {32, 0x28, 0x08, 0x1C},        // WaterGun
+    {33, 0x28, 0x08, 0x1C},        // ChiralShockCannon
+    {34, 0x10, kNoSkip, kNoSkip},  // CompactLight
+};
+
+inline const KindInfo* kindInfo(uint8_t kind) {
+    for (const KindInfo& info : kKinds) {
+        if (info.kind == kind) return &info;
+    }
+    return nullptr;
+}
 
 struct Create {
     uint8_t kind;
@@ -44,8 +85,11 @@ struct Placed {
     std::vector<uint8_t> tail;
 };
 
-// Only the kinds whose own fields are known are carried.
-inline bool supported(const Create& c) { return c.kind == kKindLadder && c.tailBytes == kLadderTailBytes; }
+// Only the kinds whose own fields are known are carried, with their tail of the known length.
+inline bool supported(const Create& c) {
+    const KindInfo* info = kindInfo(c.kind);
+    return info && c.tailBytes == info->tailBytes;
+}
 
 inline std::vector<uint8_t> encode(const Placed& placed) {
     std::vector<uint8_t> payload(sizeof(Create) + placed.tail.size());
