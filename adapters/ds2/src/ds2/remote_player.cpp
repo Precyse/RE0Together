@@ -64,6 +64,7 @@ constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves 
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
 constexpr uint8_t kNoSlot = 0xFF;
+constexpr uintptr_t kRemovePlayer = 0x1407549f0;  // PlayerManagerGame::RemovePlayer(manager, player): out of the lists, player-left
 constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
 
 enum class Stage { Idle, WaitController, Live, Failed };
@@ -191,8 +192,22 @@ void follow() {
 
 // The world the remote lived in is gone (return to title, another load): the engine destroys its entities with it,
 // so only this module's references are dropped, and the body is created again once gameplay resumes.
+// The world the remote lived in is going: its entity goes with it, so the player is only taken out of the player
+// manager's lists (the load back to the title waits for every listed player to be ready). Its entity pointer is cleared
+// first so the removal does not touch the dead entity, and an extra reference on the player objects keeps the removal
+// from running their destructors (the references are never given back: two small objects per world).
+void unlistPlayer() {
+    const uintptr_t player = remotePlayer();
+    if (!player) return;
+    for (const uintptr_t object : {player, g_netPlayer}) InterlockedIncrement(reinterpret_cast<volatile LONG*>(object + kRefCount));
+    ds2::field<uintptr_t>(player, kPlayerEntity) = 0;
+    reinterpret_cast<void (*)(uintptr_t manager, uintptr_t player)>(ds2::at(kRemovePlayer))(playerManager(), player);
+    logger::write("remote_body: player unlisted from the player manager");
+}
+
 void forgetBody() {
     logger::write("remote_body: gameplay ended, body forgotten");
+    unlistPlayer();
     g_entity = 0;
     g_netPlayer = 0;
     g_samAtSpawn = 0;
