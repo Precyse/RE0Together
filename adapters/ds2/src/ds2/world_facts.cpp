@@ -2,12 +2,18 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 #include "ds2/engine.h"
+#include "ds2/player.h"
+#include "ds2/player_state.h"
+#include "game.h"
 #include "hooks.h"
 #include "log.h"
 #include "paths.h"
@@ -15,15 +21,18 @@
 namespace {
 
 // The exported setters forward to these writers, which the engine's own code also calls directly:
-// (database, const GUID* fact UUID, const value*, ...) with more arguments on the stack.
+// (database, const GUID* fact UUID, const value*, const byte* default, persistence flag, persistence flag,
+// bool* changed). Both are thread-safe: they lock one of 32 stripes chosen from the database address.
 constexpr uintptr_t kWriteBool = 0x1401499c0;
 constexpr uintptr_t kWriteInt = 0x14064d080;
-constexpr size_t kGuidSize = 16;
+constexpr size_t kGuidSize = fact_wire::kUuidSize;
 constexpr int kMaxLogged = 4000;
 constexpr int64_t kCheckIntervalMs = 500;
+constexpr int64_t kClockIntervalMs = 250;  // how often the writers re-check that gameplay has started
+constexpr size_t kMaxQueued = 4096;
 
-using WriteFn = uint64_t (*)(uintptr_t database, const uint8_t* uuid, const void* value, uintptr_t a4, uintptr_t a5,
-                            uintptr_t a6, uintptr_t a7, uintptr_t a8);
+using WriteFn = uint64_t (*)(uintptr_t database, const uint8_t* uuid, const void* value, const void* previous,
+                            uintptr_t flag5, uintptr_t flag6, uint8_t* changed, uintptr_t a8);
 
 WriteFn g_writeBool = nullptr;
 WriteFn g_writeInt = nullptr;
@@ -31,11 +40,19 @@ std::atomic<bool> g_log{false};
 std::atomic<int> g_logged{0};
 std::atomic<uint64_t> g_calls{0};
 
+std::atomic<uintptr_t> g_database{0};  // seen as the first argument of every write
+std::atomic<bool> g_share{false};
+thread_local bool t_applying = false;  // a write the guest makes itself is never queued
+ds2::GameplayClock g_clock;
+std::atomic<int64_t> g_clockAt{0};
+std::mutex g_queueMutex;
+std::vector<fact_wire::Entry> g_queue;
+
 void hex(const uint8_t* bytes, char* out) {
     for (size_t i = 0; i < kGuidSize; ++i) sprintf_s(out + i * 2, 3, "%02x", bytes[i]);
 }
 
-// Logging is switched on while the file <game>\coopacts_on.txt exists (checked twice a second): the loading burst of
+// Logging is switched on while the file <game>\coop\facts_on.txt exists (checked twice a second): the loading burst of
 // thousands of writes would otherwise fill the log before the action under study.
 bool logging() {
     static std::atomic<int64_t> checkedAt{0};
@@ -58,16 +75,57 @@ void record(const char* kind, const uint8_t* uuid, double value) {
     logger::write("world_facts: %s fact %s = %g", kind, uuidHex, value);
 }
 
-uint64_t writeBoolDetour(uintptr_t database, const uint8_t* uuid, const void* value, uintptr_t a4, uintptr_t a5,
-                         uintptr_t a6, uintptr_t a7, uintptr_t a8) {
-    record("bool", uuid, *static_cast<const uint8_t*>(value));
-    return g_writeBool(database, uuid, value, a4, a5, a6, a7, a8);
+// Whether the world is in gameplay, not loading or on the title screen (checked a few times a second).
+bool gameplayRunning() {
+    const int64_t now = GetTickCount64();
+    if (now - g_clockAt.load() > kClockIntervalMs) {
+        g_clockAt = now;
+        g_clock.update(ds2::localPlayerEntity());
+    }
+    return g_clock.settled();
 }
 
-uint64_t writeIntDetour(uintptr_t database, const uint8_t* uuid, const void* value, uintptr_t a4, uintptr_t a5,
-                        uintptr_t a6, uintptr_t a7, uintptr_t a8) {
+// Queues a change for the guests: one entry per fact, the last value.
+void queue(uint8_t kind, const uint8_t* uuid, uint32_t value, uintptr_t flag5, uintptr_t flag6) {
+    if (!g_share.load() || t_applying || !gameplayRunning()) return;
+    fact_wire::Entry entry{};
+    entry.kind = kind;
+    entry.flags = (static_cast<uint8_t>(flag5) ? fact_wire::kFlagArg5 : 0) | (static_cast<uint8_t>(flag6) ? fact_wire::kFlagArg6 : 0);
+    std::memcpy(entry.uuid, uuid, kGuidSize);
+    entry.value = value;
+    std::lock_guard lock(g_queueMutex);
+    for (fact_wire::Entry& queued : g_queue) {
+        if (queued.kind == kind && std::memcmp(queued.uuid, uuid, kGuidSize) == 0) {
+            queued = entry;
+            return;
+        }
+    }
+    if (g_queue.size() < kMaxQueued) g_queue.push_back(entry);
+}
+
+// Calls the original writer, then reports the write if it changed the fact.
+uint64_t write(WriteFn original, uint8_t kind, uintptr_t database, const uint8_t* uuid, const void* value,
+               const void* previous, uintptr_t flag5, uintptr_t flag6, uint8_t* changed, uintptr_t a8) {
+    g_database = database;
+    const uint64_t result = original(database, uuid, value, previous, flag5, flag6, changed, a8);
+    if (changed && *changed) {
+        uint32_t bits = 0;
+        std::memcpy(&bits, value, kind == fact_wire::kKindBool ? sizeof(uint8_t) : sizeof(uint32_t));
+        queue(kind, uuid, bits, flag5, flag6);
+    }
+    return result;
+}
+
+uint64_t writeBoolDetour(uintptr_t database, const uint8_t* uuid, const void* value, const void* previous,
+                         uintptr_t flag5, uintptr_t flag6, uint8_t* changed, uintptr_t a8) {
+    record("bool", uuid, *static_cast<const uint8_t*>(value));
+    return write(g_writeBool, fact_wire::kKindBool, database, uuid, value, previous, flag5, flag6, changed, a8);
+}
+
+uint64_t writeIntDetour(uintptr_t database, const uint8_t* uuid, const void* value, const void* previous,
+                        uintptr_t flag5, uintptr_t flag6, uint8_t* changed, uintptr_t a8) {
     record("int", uuid, *static_cast<const int32_t*>(value));
-    return g_writeInt(database, uuid, value, a4, a5, a6, a7, a8);
+    return write(g_writeInt, fact_wire::kKindInt, database, uuid, value, previous, flag5, flag6, changed, a8);
 }
 
 }  // namespace
@@ -83,3 +141,36 @@ void installEarly(bool log) {
 }
 
 }  // namespace world_facts
+
+namespace game {
+
+void shareFactWrites(bool on) {
+    if (g_share.exchange(on) && !on) {
+        std::lock_guard lock(g_queueMutex);
+        g_queue.clear();
+    }
+}
+
+std::vector<fact_wire::Entry> takeFactWrites() {
+    std::lock_guard lock(g_queueMutex);
+    std::vector<fact_wire::Entry> out;
+    out.swap(g_queue);
+    return out;
+}
+
+bool applyFact(const fact_wire::Entry& fact) {
+    const uintptr_t database = g_database.load();
+    WriteFn writer = fact.kind == fact_wire::kKindBool ? g_writeBool : g_writeInt;
+    if (!database || !writer) return false;
+    // `previous` differs from the new value so a fact the database does not hold yet counts as changed.
+    uint32_t value = fact.value;
+    uint32_t previous = ~fact.value;
+    uint8_t changed = 0;
+    t_applying = true;
+    writer(database, fact.uuid, &value, &previous, (fact.flags & fact_wire::kFlagArg5) != 0,
+           (fact.flags & fact_wire::kFlagArg6) != 0, &changed, 0);
+    t_applying = false;
+    return true;
+}
+
+}  // namespace game

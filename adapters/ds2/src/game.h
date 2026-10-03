@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "fact_wire.h"
 #include "world_to_screen.h"
 
 namespace game {
@@ -102,5 +103,16 @@ bool placeCargo(uint32_t type, const world_to_screen::Vec3& at);
 
 // Asks the game to delete a piece, carried or on the ground. Any thread.
 bool removeCargo(uint64_t handle);
+
+// While `on` (the host), the story, order and progress facts the game changes during gameplay are queued, last value
+// per fact; loading and the title screen are never queued. Any thread. Needs world_facts::installEarly.
+void shareFactWrites(bool on);
+
+// The queued fact changes, oldest first; empties the queue. Any thread.
+std::vector<fact_wire::Entry> takeFactWrites();
+
+// Writes one fact into this world's fact database as the game's own writer does (the guest following the host).
+// False until the game has written a fact itself, which is how the database is found. Any thread.
+bool applyFact(const fact_wire::Entry& fact);
 
 }  // namespace game
