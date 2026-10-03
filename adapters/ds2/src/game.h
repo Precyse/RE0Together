@@ -8,6 +8,7 @@
 
 #include "env_wire.h"
 #include "fact_wire.h"
+#include "story_wire.h"
 #include "struct_wire.h"
 #include "world_to_screen.h"
 
@@ -188,5 +189,15 @@ std::vector<struct_wire::Remove> takeRemovedStructures();
 // Guest: builds the host's structure under the host's id / removes it, on the simulation thread's next frame. Any thread.
 void buildStructure(const struct_wire::Placed& placed);
 void removeStructure(const struct_wire::Remove& removal);
+
+// The story roles: the host reports its missions and story sections, a guest vetoes its own story requests and replays
+// the host's. Needs story::installEarly. Any thread.
+void setStoryRole(bool host, bool guest);
+
+// Host: the story events since the last call. Any thread.
+std::vector<story_wire::Event> takeStoryEvents();
+
+// Guest: replays the host's event on the simulation thread's next frame. Any thread.
+void replayStoryEvent(const story_wire::Event& event);
 
 }  // namespace game

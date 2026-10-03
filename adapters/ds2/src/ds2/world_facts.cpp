@@ -92,7 +92,7 @@ bool gameplayRunning() {
 
 // Queues a change for the guests: one entry per fact, the last value.
 void queue(uint8_t kind, const uint8_t* uuid, uint32_t value, uintptr_t flag5, uintptr_t flag6) {
-    if (!g_share.load() || remote_apply::active() || !gameplayRunning()) return;
+    if (!g_share.load() || remote_apply::active() || !static_cast<uint8_t>(flag5) || !gameplayRunning()) return;  // only Persistent facts
     fact_wire::Entry entry{};
     entry.kind = kind;
     entry.flags = (static_cast<uint8_t>(flag5) ? fact_wire::kFlagArg5 : 0) | (static_cast<uint8_t>(flag6) ? fact_wire::kFlagArg6 : 0);

@@ -91,6 +91,7 @@ def main():
     p.add_argument("--give-plain", default="", help="SECONDS: send CARGO_ADD of a Headache Pills piece with durability 123 (a worn piece)")
     p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
+    p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
@@ -146,7 +147,7 @@ def serve(sock, a):
     seq, start, last_hb, centre = 0, None, 0.0, None
     last_held, last_equip, last_env = None, 0.0, 0.0
     struct_added = struct_removed = False
-    gave = picked = gave_plain = False
+    gave = picked = gave_plain = told_story = False
     last_load = 0.0
     while True:
         now = time.monotonic()
@@ -182,6 +183,12 @@ def serve(sock, a):
             gave_plain = True
             sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(306656069, 0, 123.0, 0, 0, 0)))
             print("cargo: gave a worn plain piece", flush=True)
+        if a.story and start is not None and not told_story:
+            seconds, kind, mission = a.story.split(":")
+            if now - start >= float(seconds):
+                told_story = True
+                sock.sendall(encode(0x0119, peer_slot, struct.pack("<B3xIiIQ16s", int(kind), 0, -1, 0, int(mission, 16), bytes(16))))
+                print("story: event sent", flush=True)
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")

@@ -190,6 +190,9 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/ds2/enemy_veto.cpp | guest: detour on EntitySpawnInfo::CreateEntity 0x14016d350 failing the spawns of enemy entity resources (adapter.ini enemy_veto=1; counts logged); `game::vetoEnemies` switches it with the guest role | `enemy_veto::installEarly`, `game::vetoEnemies` |
 | src/struct_wire.h | STRUCT_CREATE (0x010F: kind, sub-kind, level, id, guid, transform, durability, the kind's tail) and STRUCT_REMOVE (0x0110: id, factor) payloads; ladders only (`supported`) | `struct_wire::Create`, `Remove`, `Placed`, `encode`, `decode` |
 | src/struct_sync.cpp | host: sends the placed and removed structures each tick; guest: decodes them and queues them for the game layer | `struct_sync::onFrame`, `tick` |
+| src/story_wire.h | STORY_EVENT (0x0119, host to all, reliable): kind (mission start/success/fail, section active/inactive), mission id, args, section UUID; `decode` | `story_wire::Event`, `decode` |
+| src/story_sync.cpp | host: sends the story events each tick; guest: decodes them and queues them for replay | `story_sync::onFrame`, `tick` |
+| src/ds2/story.cpp | hooks the mission request functions, appliers and the section request: the host reports, a guest vetoes its own requests and replays the host's through the same calls (bit 18 preset on starts) | `story::installEarly`, `game::setStoryRole`, `takeStoryEvents`, `replayStoryEvent` |
 | src/ds2/structures.cpp | hooks the structure submit 0x141263280 (player placements by caller 0x14200cc0d) and RequestRemove of a ladder; guest builds with factory + Init + submit and removes through RemoveConstructionByPlayer 0x1412d9c80 on the simulation tick; refuses the guest's own placements | `structures::installEarly`, `game::setStructureRole`, `takePlacedStructures`, `takeRemovedStructures`, `buildStructure`, `removeStructure` |
 | src/ds2/sim_tick.cpp | the one detour on the engine's per-frame object update 0x140215460; modules register a function that runs ahead of it on the simulation thread (remote body, structures); logs frames/s and the callbacks' cost every 5 s | `sim_tick::installEarly`, `add` |
 | src/time_us.h | `TimeUs` and `nowUs()`: the monotonic microsecond clock every network timestamp uses | `nowUs` |
@@ -218,6 +221,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game); `--encode/--decode <file>` modes for the python cross-check | |
 | tests/env_wire_test.cpp | WORLD_ENV round trip, wrong size, time outside the day, time-of-day distance (no game) | |
 | tests/struct_wire_test.cpp | STRUCT_CREATE / STRUCT_REMOVE round trip, short and long payloads, unsupported kind, wrong tail (no game) | |
+| tests/story_wire_test.cpp | STORY_EVENT round trip, short/long payload, unknown kind (no game) | |
 | tools/ds2/ds2types.py | queries DS2's reflected type schema from G:\coop-scratch\ds2	ypes\ds2_types.json (not in the repo): `<Class>`, `find <re>`, `field <re>`, `at <Name> <hex>` | |
 | docs/research/ (MULTIPLAYER_MODS.md, _2, _DEEP) | survey of 15 co-op mods and ranked ideas for DS2 (ideas only, no code copied) | |
 | tests/authority_test.cpp | claim / release / decline / stop across three tables, stale and duplicate messages, the tie rule, barred owners, wrong senders, leaving slots, the change handler, reject counters (no game) | |
