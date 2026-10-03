@@ -14,6 +14,7 @@ using GetRawInputDataFn = UINT(WINAPI*)(HRAWINPUT, UINT, LPVOID, PUINT, UINT);
 
 GetRawInputDataFn g_original = nullptr;
 input_filter::KeyFilter g_claims = nullptr;
+bool g_claimed[256] = {};  // keys whose press was claimed: their release is claimed too (the window thread only)
 
 UINT WINAPI getRawInputDataDetour(HRAWINPUT input, UINT command, LPVOID data, PUINT size, UINT headerSize) {
     const UINT result = g_original(input, command, data, size, headerSize);
@@ -21,7 +22,11 @@ UINT WINAPI getRawInputDataDetour(HRAWINPUT input, UINT command, LPVOID data, PU
     auto* raw = static_cast<RAWINPUT*>(data);
     if (raw->header.dwType != RIM_TYPEKEYBOARD) return result;
     RAWKEYBOARD& key = raw->data.keyboard;
-    if ((key.Flags & RI_KEY_BREAK) == 0 && g_claims(key.VKey)) {
+    const bool release = (key.Flags & RI_KEY_BREAK) != 0;
+    const bool known = key.VKey < sizeof(g_claimed);
+    const bool claim = release ? known && g_claimed[key.VKey] : g_claims(key.VKey);
+    if (known && !release) g_claimed[key.VKey] = claim;  // kept through the release (the game may read an event twice)
+    if (claim) {
         key.MakeCode = kUnknownKey;
         key.VKey = kUnknownKey;
     }
