@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 #include "game.h"
 
@@ -17,5 +18,10 @@ void installEarly();
 
 // Render thread, once per frame per visible peer: where that peer's body should be and how fast it is moving.
 void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity);
+
+// The baggage owner key of the body (its network id), and the slot of the peer it stands for; empty / 0xFF until it
+// is live. Any thread.
+std::optional<uint64_t> ownerKey();
+uint8_t slot();
 
 }  // namespace remote_body

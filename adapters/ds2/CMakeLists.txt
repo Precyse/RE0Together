@@ -55,6 +55,7 @@ add_library(ds2_adapter SHARED
     src/anim_sync.cpp
     src/vehicle_load.cpp
     src/fact_sync.cpp
+    src/equip_sync.cpp
     src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp

@@ -20,6 +20,8 @@ import time
 
 HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002, 0x0003, 0x0020, 0x0100, 0x0108
 ANIM_STATE = 0x010A
+EQUIP_STATE = 0x010C
+EQUIP_ENTRY = struct.Struct("<B3xI")  # hand slot kind, cargo kind (equip_sync.h)
 FLAG_RELIABLE = 1
 HOST_SLOT, PEER_SLOT, MAX_PLAYERS, EPOCH = 0, 1, 2, 1
 STATE = struct.Struct("<I3ffI")
@@ -55,6 +57,9 @@ def main():
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
+    p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
+    p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
+    p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
     server = socket.socket()
@@ -89,6 +94,8 @@ def serve(sock, a):
             if msg_type == PLAYER_STATE and len(body) >= 4 + STATE.size:
                 _, x, y, z, yaw, _ = STATE.unpack_from(body, 4)
                 local.update(x=x, y=y, z=z, yaw=yaw)
+            elif msg_type == EQUIP_STATE and a.echo_equip:
+                sock.sendall(encode(EQUIP_STATE, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
                 if time.monotonic() - last_print > 5:
@@ -97,6 +104,7 @@ def serve(sock, a):
 
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None
+    last_held, last_equip = None, 0.0
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -109,6 +117,15 @@ def serve(sock, a):
             if first:
                 start = now
                 print(f"circle centre {centre}", flush=True)
+        if centre and a.equip:
+            begin, end = map(float, a.equip_window.split(","))
+            held = begin <= now - start < end
+            if held != last_held or now - last_equip >= 5.0:
+                last_held, last_equip = held, now
+                pieces = [tuple(int(v) for v in item.split(":")) for item in a.equip.split(",")] if held else []
+                body = struct.pack("<II", len(pieces), 0) + b"".join(EQUIP_ENTRY.pack(slot, kind) for slot, kind in pieces)
+                sock.sendall(encode(EQUIP_STATE, peer_slot, body))
+                print(f"equip: peer holds {pieces}", flush=True)
         if centre and a.drive is not None:
             begin, end = map(float, a.drive_window.split(","))
             if begin <= now - start < end:

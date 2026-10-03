@@ -230,17 +230,21 @@ std::vector<Cargo> carriedCargo() {
     return baggage ? piecesIn(baggage, backpackSlots(baggage)) : std::vector<Cargo>{};
 }
 
-std::vector<Cargo> vehicleCargo(uint64_t vehicle) {
+std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {
     const uintptr_t baggage = manager();
-    const uintptr_t owner = baggage ? findOwner(baggage, vehicle) : 0;
-    return owner ? piecesIn(baggage, slotsOfKind(owner, kBedSlotKind)) : std::vector<Cargo>{};
+    const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
+    return owner ? piecesIn(baggage, slotsOfKind(owner, slotKind)) : std::vector<Cargo>{};
 }
 
-bool addVehicleCargo(uint64_t vehicle, uint32_t type) {
+bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type) {
     const uintptr_t baggage = manager();
-    const uintptr_t owner = baggage ? findOwner(baggage, vehicle) : 0;
-    return owner && createPiece(baggage, type, {}, owner, kBedSlotKind);
+    const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
+    return owner && createPiece(baggage, type, {}, owner, slotKind);
 }
+
+std::vector<Cargo> vehicleCargo(uint64_t vehicle) { return slotPieces(vehicle, kBedSlotKind); }
+
+bool addVehicleCargo(uint64_t vehicle, uint32_t type) { return addSlotPiece(vehicle, kBedSlotKind, type); }
 
 std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius) {
     std::vector<LooseCargo> out;

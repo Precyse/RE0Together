@@ -158,3 +158,10 @@ Find it: snapshot the objects around the player (handle, owner, position) twice 
 Replicate: let the action run, report it to the authority with what it needs to find its own copy (kind and position), and undo it locally with the engine's own delete when refused. Remember the objects the player released itself so taking them back needs no confirmation.
 Seen in: DS2: `cargo_ground.cpp` (pool handle, slot +0x98, position +0x40). Prefer a veto (`Permissions are "is it allowed?" queries with a veto flag`) wherever one exists: the undo is visible for a moment.
 
+
+## Host-owned enemies, guest puppets  [authority, control, presentation]
+Shape: every enemy spawn funnels through one creation function, and every hit through one damage-apply function. The host runs both for real; the guest vetoes enemy creation and shows puppets (its own engine entity, AI components switched off) driven by the host's state.
+Find it: spawn-start message or spawn-request ctor xrefs down to the single create; classify by the resource's component types; damage message ctor up to the manager that builds and dispatches it.
+Replicate: guest veto returns the engine's own "spawn failed" result (groups and loading complete); keep the vetoed request as the puppet recipe and re-run it when the host announces the enemy (deterministic entity UUIDs match the two sides). Guest hits on puppets go to the host as damage descriptors; the host rebuilds a real hit with the guest's body as attacker. Enemy hits on the guest's body go back to the guest.
+Seen in: DD2gether / RE4R (docs/FINDINGS.md: puppets via prefab spawn, AI off, damage descriptors). DS2 (static, tools/ds2/out/analysis/ENEMIES.md): veto EntitySpawnInfo::CreateEntity 0x14016d350, classify with FindComponentResourceByType 0x14016a040, damage at EntityManagerGame::ApplyDamage 0x1406fd570.
+Traps: DS2 bare EntityResource::CreateEntity with an NPC resource faults (no SpawnSetup): create puppets through the spawn request instead.

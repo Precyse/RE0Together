@@ -254,6 +254,14 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_update));
 }
 
+std::optional<uint64_t> ownerKey() {
+    const uintptr_t entity = g_entity.load();
+    if (g_stage != Stage::Live || !entity) return std::nullopt;
+    return ds2::field<uint64_t>(entity, ds2::kEntityNetworkId);
+}
+
+uint8_t slot() { return remote_player::slot(); }
+
 void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity) {
     if (!g_enabled.load()) return;
     std::lock_guard lock(g_targetMutex);

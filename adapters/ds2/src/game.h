@@ -97,6 +97,14 @@ std::vector<Cargo> vehicleCargo(uint64_t vehicle);
 // or the game refused. Any thread.
 bool addVehicleCargo(uint64_t vehicle, uint32_t type);
 
+// What one slot kind of the baggage owner `ownerKey` holds (0 = the local player, a vehicle's id, a remote body's
+// network id); empty when there is no such owner. Any thread.
+std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind);
+
+// Asks the game to create a piece of `type` in that owner's slot of `slotKind`. False when there is no such owner or
+// the game refused. Any thread.
+bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type);
+
 // Asks the game to put a piece of `type` on the ground at `at`, as the world's own cargo is spawned: it starts a
 // little above the spot and falls onto the ground. False when the game refused (e.g. its pool is full). Any thread.
 bool placeCargo(uint32_t type, const world_to_screen::Vec3& at);
