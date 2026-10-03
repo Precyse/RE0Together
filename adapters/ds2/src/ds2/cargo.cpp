@@ -20,6 +20,9 @@
 
 namespace {
 
+template <class T>
+T& ds2_field(uintptr_t object, uintptr_t offset) { return *reinterpret_cast<T*>(object + offset); }
+
 // DSBaggageManager::CreateAndAddBaggageToPlayer(u32 type, bool backpack): `mov rdx, [DSBaggageManager]` at +15.
 constexpr const char* kCreateAndAdd =
     "48 89 5C 24 08 57 48 83 EC 30 0F B6 FA 8B D9 48 8B 15 ?? ?? ?? ?? 48 8D 4C 24 20 48 81 C2 38 67 03 00";
@@ -55,6 +58,7 @@ constexpr uintptr_t kBaggageSlot = 0x98;      // the owner slot holding it, 0 wh
 constexpr uint64_t kFreeHandle = ~0ull;
 // A baggage owner.
 constexpr uintptr_t kOwnerKey = 0x18;  // 0 = the local player
+constexpr uintptr_t kOwnerActive = 0xBC;  // the menus' gather skips an owner that is not active
 constexpr uintptr_t kOwnerSlotCount = 0x28, kOwnerSlotData = 0x30;
 constexpr uintptr_t kOwnerChildCount = 0x48, kOwnerChildData = 0x50;
 constexpr size_t kSlotSize = 0x1D0;
@@ -329,6 +333,24 @@ bool addBackpackCargo(uint64_t playerKey, uint32_t type) {
     const uintptr_t owner = baggage ? backpackOwner(baggage, playerKey) : 0;
     return owner && !sharesWithLocalPlayer(baggage, playerKey, owner) &&
            createPiece(baggage, type, {}, owner, kBackpackSlotKind);
+}
+
+void setOwnerActive(uint64_t ownerKey, bool active) {
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
+    if (!owner || ownerKey == kLocalPlayerKey || sharesWithLocalPlayer(baggage, ownerKey, owner)) return;
+    // Cargo Management and the hand-over menu gather every active root owner within 12 m: a remote body's rack would
+    // be listed (and movable) as part of the local player's own.
+    std::vector<uintptr_t> tree{owner};
+    for (size_t next = 0; next < tree.size() && tree.size() < kMaxOwnerTree; ++next) {
+        ds2_field<uint8_t>(tree[next], kOwnerActive) = active ? 1 : 0;
+        const int32_t children = readCount(tree[next] + kOwnerChildCount, kMaxOwners);
+        const uintptr_t data = decima::readPointer(tree[next] + kOwnerChildData);
+        for (int32_t i = 0; data && i < children; ++i) {
+            const uintptr_t child = decima::readPointer(data + i * sizeof(uintptr_t));
+            if (child && !sharesWithLocalPlayer(baggage, ownerKey, child)) tree.push_back(child);
+        }
+    }
 }
 
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {
