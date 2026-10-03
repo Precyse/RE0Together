@@ -39,6 +39,11 @@ Each item lists what players get and its exit tests. Fake-peer tests first, then
 - **Learn:** the passenger state for the local player in a vehicle moved by the partner's reports (the local vehicle copy must stay kinematic under the passenger), the passenger camera.
 - **Exit:** fake driver drives a loop with the local player as passenger: the local Sam stays seated, the camera follows smoothly, getting out puts him beside the vehicle; then the roles swap.
 
+### 4b. Warp to the partner
+- **Players get:** a menu action that moves the local Sam next to the partner, for when the two drift far apart (the idea comes from the Clair Obscur co-op mod's "teleport to host").
+- **Learn:** a safe player teleport across unloaded areas (`Entity::PlaceOnWorldTransform` plus waiting for streaming), refused while riding, carrying a stack mid-fall or in a cutscene.
+- **Exit:** guest 2 km from the host warps beside them, lands on loaded ground, and keeps their cargo.
+
 ### 5. The partner's body as a real second player
 - **Players get:** a Sam-like body (Sam's model, or a Sam-like porter) instead of whichever NPC is nearest, present everywhere, not only where NPCs are loaded.
 - **Learn:** a body that runs the player's own animation graph and vehicle states: the player entity resource, or a porter NPC resource with the player's animation set; the spawn setup that faulted before (`DS2_NOTES.md`, "In-world remote body").
