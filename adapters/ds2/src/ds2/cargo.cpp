@@ -247,6 +247,15 @@ bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& 
 
 bool isOrderId(uint64_t id) { return (id & kOrderNumberMask) != 0 && (id & kOrderTypeMask) != 0; }
 
+// Whether a piece with this order id (and piece index) already exists in this world. Deleting an order piece deletes
+// every piece sharing its id, so a second one with the same id must never be created.
+bool orderIdExists(uintptr_t manager, uint64_t orderId) {
+    for (const PoolEntry& entry : livePool(manager)) {
+        if (entry.orderId == orderId) return true;
+    }
+    return false;
+}
+
 // The local player's backpack owner: its child owner that has a slot of the main-load kind.
 uintptr_t backpackOwner(uintptr_t manager) {
     const uintptr_t player = findOwner(manager, kLocalPlayerKey);
@@ -303,6 +312,11 @@ bool addCargo(const Cargo& piece) {
     const uintptr_t baggage = manager();
     if (!baggage) return false;
     if (isOrderId(piece.orderId) || isOrderId(piece.secondId)) {
+        if (isOrderId(piece.orderId) && orderIdExists(baggage, piece.orderId)) {
+            logger::write("cargo: refused to create order piece %llx: one with that id already exists",
+                          static_cast<unsigned long long>(piece.orderId));
+            return false;
+        }
         const uintptr_t owner = backpackOwner(baggage);
         return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece);
     }
