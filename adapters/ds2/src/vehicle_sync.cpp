@@ -6,6 +6,7 @@
 #include <map>
 #include <mutex>
 
+#include "authority_sync.h"
 #include "game.h"
 #include "log.h"
 #include "position_blend.h"
@@ -51,12 +52,15 @@ void sendLocal(NetClient& net) {
     if (!vehicle) {
         if (g_lastDriven) {
             logger::write("vehicle_sync: left vehicle %llx", static_cast<unsigned long long>(g_lastDriven));
+            authority_sync::release(g_lastDriven);
         }
         g_lastDriven = 0;
         return;
     }
-    if (vehicle->id != g_lastDriven) {  // the one that gets in second rides along
-        g_localRole = partnerDrives(vehicle->id) ? vehicle_sync::kRolePassenger : vehicle_sync::kRoleDriver;
+    if (vehicle->id != g_lastDriven) {  // the first to claim the vehicle drives it; the one that gets in second rides along
+        if (g_lastDriven) authority_sync::release(g_lastDriven);
+        const bool claimed = authority_sync::claim(vehicle->id);
+        g_localRole = claimed && !partnerDrives(vehicle->id) ? vehicle_sync::kRoleDriver : vehicle_sync::kRolePassenger;
         logger::write("vehicle_sync: %s vehicle %llx", g_localRole == vehicle_sync::kRolePassenger ? "riding" : "driving",
                       static_cast<unsigned long long>(vehicle->id));
     }
