@@ -197,6 +197,9 @@ void setStoryRole(bool host, bool guest);
 // Host: the next poll also reports every mission in progress (a joined or resynced guest). Any thread.
 void requestStorySnapshot();
 
+// Guest: the order starts the player asked for at a terminal (refused locally, the host runs them). Any thread.
+std::vector<story_wire::Event> takeStoryRequests();
+
 // Host: the story events since the last call. Any thread.
 std::vector<story_wire::Event> takeStoryEvents();
 

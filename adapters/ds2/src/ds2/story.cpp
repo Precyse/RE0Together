@@ -61,7 +61,8 @@ thread_local bool t_replaying = false;  // a host event is being replayed: its r
 
 std::mutex g_mutex;
 std::vector<story_wire::Event> g_outgoing;  // host: to send
-std::vector<story_wire::Event> g_incoming;  // guest: to replay on the simulation thread
+std::vector<story_wire::Event> g_incoming;  // guest: host events to replay; host: guests' order requests to run
+std::vector<story_wire::Event> g_requests;  // guest: order starts to forward to the host
 
 uintptr_t controller() {
     const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
@@ -87,9 +88,23 @@ story_wire::Event missionEvent(story_wire::Kind kind, uintptr_t mission, uint32_
 // Guest: the game's own story requests are refused, except the ones replaying the host.
 bool vetoed() { return g_guest.load() && !t_replaying; }
 
+// Guest: a terminal order start, refused here, is asked of the host.
+void forwardOrder(uintptr_t mission, uintptr_t args) {
+    story_wire::Event event{};
+    event.kind = static_cast<uint8_t>(story_wire::Kind::OrderRequest);
+    decima::safeRead(args, event.a);
+    decima::safeRead(args + sizeof(event.a), event.b);
+    decima::safeRead(mission + kMissionId, event.missionId);
+    std::lock_guard lock(g_mutex);
+    if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
+}
+
 uint64_t requestStartDetour(uintptr_t c, uintptr_t mission, uintptr_t args, uintptr_t section, uintptr_t reserve,
                             uintptr_t f, uintptr_t g, uintptr_t h) {
-    if (vetoed()) return 0;
+    if (vetoed()) {
+        forwardOrder(mission, args);
+        return 0;
+    }
     return g_requestStart(c, mission, args, section, reserve, f, g, h);
 }
 
@@ -239,10 +254,10 @@ void replayMission(const story_wire::Event& event) {
         return;
     }
     const uint16_t state = ds2::field<uint16_t>(mission, kMissionState);
-    const bool starts = kind == story_wire::Kind::MissionStart;
+    const bool starts = kind == story_wire::Kind::MissionStart || kind == story_wire::Kind::OrderRequest;
     if ((starts && state >= kStateProgress) || (!starts && state != kStateProgress)) return;
     if (starts) {
-        ds2::field<uint32_t>(mission, kMissionFlags) |= kCargoPreparedFlag;
+        if (kind == story_wire::Kind::MissionStart) ds2::field<uint32_t>(mission, kMissionFlags) |= kCargoPreparedFlag;
         struct StartArgs {
             uint32_t a;
             int32_t b;
@@ -340,6 +355,13 @@ std::vector<story_wire::Event> takeStoryEvents() {
 }
 
 void requestStorySnapshot() { g_snapshotRequested = true; }
+
+std::vector<story_wire::Event> takeStoryRequests() {
+    std::lock_guard lock(g_mutex);
+    std::vector<story_wire::Event> out;
+    out.swap(g_requests);
+    return out;
+}
 
 void replayStoryEvent(const story_wire::Event& event) {
     std::lock_guard lock(g_mutex);

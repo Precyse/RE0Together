@@ -10,12 +10,12 @@
 
 namespace story_wire {
 
-constexpr uint16_t kMsgStoryEvent = proto::kFirstGameType + 0x19;  // 0x0119, host to all, reliable: Event
+constexpr uint16_t kMsgStoryEvent = proto::kFirstGameType + 0x19;  // 0x0119, reliable: Event (host to all; a guest sends OrderRequest to the host)
 constexpr size_t kUuidSize = 16;
 constexpr size_t kTransformSize = 0x40;  // a WorldTransform
 
 enum class Kind : uint8_t { MissionStart = 1, MissionSuccess = 2, MissionFail = 3, SectionActive = 4, SectionInactive = 5,
-                         AreaChange = 6 };
+                         AreaChange = 6, OrderRequest = 7 };
 
 struct Event {
     uint8_t kind;
@@ -29,8 +29,11 @@ struct Event {
 };
 static_assert(sizeof(Event) == 104);
 
-inline bool isMission(Kind k) { return k == Kind::MissionStart || k == Kind::MissionSuccess || k == Kind::MissionFail; }
+inline bool isMission(Kind k) {
+    return k == Kind::MissionStart || k == Kind::MissionSuccess || k == Kind::MissionFail || k == Kind::OrderRequest;
+}
 inline bool isSection(Kind k) { return k == Kind::SectionActive || k == Kind::SectionInactive; }
+inline bool isOrderRequest(Kind k) { return k == Kind::OrderRequest; }
 inline bool isAreaChange(Kind k) { return k == Kind::AreaChange; }
 
 // False for a payload of the wrong size or an unknown kind (nothing is returned).

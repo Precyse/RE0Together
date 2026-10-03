@@ -9,6 +9,7 @@ namespace {
 
 // Net thread only.
 bool g_guest = false;
+bool g_host = false;
 bool g_requestedAtGameplay = false;
 uint8_t g_hostSlot = 0;
 size_t g_knownPeers = 0;
@@ -18,18 +19,22 @@ size_t g_knownPeers = 0;
 namespace story_sync {
 
 void onFrame(const GameFrame& frame) {
-    if (frame.type != story_wire::kMsgStoryEvent || !g_guest || frame.slot != g_hostSlot) return;
+    if (frame.type != story_wire::kMsgStoryEvent) return;
     story_wire::Event event;
-    if (story_wire::decode(frame.payload, event)) {
-        game::replayStoryEvent(event);
-    } else {
+    if (!story_wire::decode(frame.payload, event)) {
         logger::write("story_sync: dropped a malformed STORY_EVENT (%zu bytes)", frame.payload.size());
+        return;
+    }
+    const bool request = story_wire::isOrderRequest(static_cast<story_wire::Kind>(event.kind));
+    if (request ? g_host : (g_guest && frame.slot == g_hostSlot)) {
+        game::replayStoryEvent(event);
     }
 }
 
 void tick(NetClient& net, const SessionSnapshot& session) {
     const bool host = session.linked && session.localSlot == session.hostSlot;
     g_guest = session.linked && !host;
+    g_host = host;
     g_hostSlot = session.hostSlot;
     game::setStoryRole(host, g_guest);
     if (g_guest) {
@@ -37,6 +42,11 @@ void tick(NetClient& net, const SessionSnapshot& session) {
             g_requestedAtGameplay = false;
         } else if (!g_requestedAtGameplay && resync::request(net, g_hostSlot, resync::kStory)) {
             g_requestedAtGameplay = true;
+        }
+        for (const story_wire::Event& request : game::takeStoryRequests()) {
+            if (!net.send(story_wire::kMsgStoryEvent, true, g_hostSlot, proto::bytesOf(request))) {
+                logger::write("story_sync: could not send an order request");
+            }
         }
     } else {
         g_requestedAtGameplay = false;
