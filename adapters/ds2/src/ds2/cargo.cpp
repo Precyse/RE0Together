@@ -34,7 +34,8 @@ constexpr const char* kInitCreateInfo =
 // The create info (0xF0 bytes; the type-2 request builds one on its stack): +0x10 kind, +0x18 world position,
 // +0x30 rotation, +0x60 owner (none: on the ground), +0x68 slot kind.
 constexpr size_t kCreateInfoSize = 0xF0;
-constexpr uintptr_t kInfoKind = 0x10, kInfoPosition = 0x18, kInfoOwner = 0x60, kInfoSlotKind = 0x68;
+constexpr uintptr_t kInfoOrderId = 0x00, kInfoSecondId = 0x08, kInfoKind = 0x10, kInfoPosition = 0x18, kInfoOwner = 0x60,
+                    kInfoSlotKind = 0x68, kInfoCategory = 0x69, kInfoDurability = 0xB4;
 constexpr double kPlaceLiftMetres = 0.5;  // a placed piece starts this far above its spot and falls onto the ground
 
 // DSBaggageManager: the baggage pool and the baggage owners (players, vehicles, lockers, ...).
@@ -45,6 +46,10 @@ constexpr size_t kBaggageSize = 0x160;
 constexpr uintptr_t kBaggageHandle = 0x18;    // ~0 while the entry is free
 constexpr uintptr_t kBaggageItem = 0x38;      // DSGameBaggageListItem: the cargo kind
 constexpr uintptr_t kBaggagePosition = 0x40;  // world position, 3 doubles
+constexpr uintptr_t kBaggageOrderId = 0x28;   // order id (piece index in bits 52..60), 0 for plain cargo
+constexpr uintptr_t kBaggageSecondId = 0x30;  // second mission id of supply and collect style pieces
+constexpr uintptr_t kBaggageCategory = 0x82;  // mission cargo category byte
+constexpr uintptr_t kBaggageDurability = 0x84;
 constexpr uintptr_t kBaggageSlot = 0x98;      // the owner slot holding it, 0 when on the ground
 constexpr uint64_t kFreeHandle = ~0ull;
 // A baggage owner.
@@ -53,6 +58,10 @@ constexpr uintptr_t kOwnerSlotCount = 0x28, kOwnerSlotData = 0x30;
 constexpr uintptr_t kOwnerChildCount = 0x48, kOwnerChildData = 0x50;
 constexpr size_t kSlotSize = 0x1D0;
 constexpr uint64_t kLocalPlayerKey = 0;
+// An order id: a mission number in the low bits and an order type in bits 32..37; anything else is plain cargo.
+constexpr uint64_t kOrderNumberMask = 0x1FFFFFFF;
+constexpr uint64_t kOrderTypeMask = 0x3Full << 32;
+constexpr uint8_t kBackpackSlotKind = 1;  // the main load of the backpack owner
 constexpr uint8_t kBedSlotKind = 0;  // a vehicle's cargo bed (its other slots, kinds 35-37, are not mirrored)
 constexpr uint8_t kNoSlotKind = 0xFF;
 // DSGameBaggageListItem: its LocalizedTextResource name and the kind id.
@@ -168,6 +177,9 @@ struct PoolEntry {
     uintptr_t item;
     uintptr_t slot;
     world_to_screen::Vec3 position;
+    uint64_t orderId, secondId;
+    uint8_t category;
+    float durability;
 };
 
 // Every piece in the pool, from one copy of it (the game may change entries while we read).
@@ -184,6 +196,10 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
         std::memcpy(&entry.item, raw + kBaggageItem, sizeof(entry.item));
         std::memcpy(&entry.slot, raw + kBaggageSlot, sizeof(entry.slot));
         std::memcpy(&entry.position, raw + kBaggagePosition, sizeof(entry.position));
+        std::memcpy(&entry.orderId, raw + kBaggageOrderId, sizeof(entry.orderId));
+        std::memcpy(&entry.secondId, raw + kBaggageSecondId, sizeof(entry.secondId));
+        std::memcpy(&entry.category, raw + kBaggageCategory, sizeof(entry.category));
+        std::memcpy(&entry.durability, raw + kBaggageDurability, sizeof(entry.durability));
         if (entry.handle != kFreeHandle && entry.item) out.push_back(entry);
     }
     return out;
@@ -197,15 +213,17 @@ std::vector<game::Cargo> piecesIn(uintptr_t manager, const std::vector<SlotRange
     for (const PoolEntry& entry : livePool(manager)) {
         uint32_t type = 0;
         if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
-            out.push_back({entry.handle, type, itemName(entry.item)});
+            out.push_back({entry.handle, type, itemName(entry.item), entry.orderId, entry.secondId, entry.category,
+                           entry.durability});
         }
     }
     return out;
 }
 
 // The manager's own create, as world cargo is spawned: with an owner the piece goes into that owner's slot of
-// `slotKind`, without one it lies at `at`.
-bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& at, uintptr_t owner, uint8_t slotKind) {
+// `slotKind`, without one it lies at `at`. `order` (optional) carries the order link of a mission piece.
+bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& at, uintptr_t owner, uint8_t slotKind,
+                 const game::Cargo* order = nullptr) {
     if (!code().create) return false;
     alignas(16) std::array<uint8_t, kCreateInfoSize> info{};
     code().initCreateInfo(info.data());
@@ -216,9 +234,29 @@ bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& 
         std::memcpy(info.data() + kInfoOwner, &owner, sizeof(owner));
         info[kInfoSlotKind] = slotKind;
     }
+    if (order) {
+        std::memcpy(info.data() + kInfoOrderId, &order->orderId, sizeof(order->orderId));
+        std::memcpy(info.data() + kInfoSecondId, &order->secondId, sizeof(order->secondId));
+        info[kInfoCategory] = order->category;
+        if (order->durability > 0) std::memcpy(info.data() + kInfoDurability, &order->durability, sizeof(order->durability));
+    }
     uint64_t handle = kFreeHandle;
     code().create(manager, &handle, info.data());
     return handle != kFreeHandle;
+}
+
+bool isOrderId(uint64_t id) { return (id & kOrderNumberMask) != 0 && (id & kOrderTypeMask) != 0; }
+
+// The local player's backpack owner: its child owner that has a slot of the main-load kind.
+uintptr_t backpackOwner(uintptr_t manager) {
+    const uintptr_t player = findOwner(manager, kLocalPlayerKey);
+    const int32_t children = player ? readCount(player + kOwnerChildCount, kMaxOwners) : 0;
+    const uintptr_t childData = player ? decima::readPointer(player + kOwnerChildData) : 0;
+    for (int32_t i = 0; childData && i < children; ++i) {
+        const uintptr_t child = decima::readPointer(childData + i * sizeof(uintptr_t));
+        if (child && !slotsOfKind(child, kBackpackSlotKind).empty()) return child;
+    }
+    return 0;
 }
 
 }  // namespace
@@ -261,9 +299,15 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
     return out;
 }
 
-bool addCargo(uint32_t type) {
-    if (!code().createAndAdd || !manager()) return false;
-    code().createAndAdd(type, kToBackpack);
+bool addCargo(const Cargo& piece) {
+    const uintptr_t baggage = manager();
+    if (!baggage) return false;
+    if (isOrderId(piece.orderId) || isOrderId(piece.secondId)) {
+        const uintptr_t owner = backpackOwner(baggage);
+        return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece);
+    }
+    if (!code().createAndAdd) return false;
+    code().createAndAdd(piece.type, kToBackpack);
     return true;
 }
 
