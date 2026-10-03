@@ -23,6 +23,7 @@
 #include "ds2/remote_player.h"
 #include "ds2/remote_ride.h"
 #include "ds2/setdriver_guard.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -55,7 +56,6 @@ constexpr uintptr_t kSetEntityResource = 0x140752c70;  // (player, resource refe
 constexpr uintptr_t kRequestSpawn = 0x140751bc0;       // (player, spawn at the given transform, transform)
 constexpr uintptr_t kManagerAddPlayer = 8;             // vtable offset of PlayerManager::AddPlayer
 
-constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
 
 constexpr double kSpawnAhead = 2.5;  // metres in front of Sam and
 constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves the body to the partner
@@ -70,14 +70,12 @@ using CtorFn = uintptr_t (*)(uintptr_t self);
 using AddPlayerFn = void (*)(uintptr_t manager, uintptr_t player);
 using SetResourceFn = void (*)(uintptr_t player, uintptr_t reference);
 using RequestSpawnFn = void (*)(uintptr_t player, bool atTransform, const decima::WorldTransform* transform);
-using UpdateFn = uint64_t (*)(uintptr_t self, float a, float b, uint8_t flag);
 
 std::atomic<bool> g_enabled{false};
 Stage g_stage = Stage::Idle;
 uintptr_t g_netPlayer = 0;
 std::atomic<uintptr_t> g_entity{0};
 int g_waitedFrames = 0;
-UpdateFn g_update = nullptr;
 ds2::GameplayClock g_gameplay;
 uintptr_t g_samAtSpawn = 0;
 
@@ -216,11 +214,6 @@ void advance() {
     }
 }
 
-uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag) {
-    advance();
-    return g_update(self, a, b, flag);
-}
-
 }  // namespace
 
 namespace remote_player {
@@ -250,8 +243,7 @@ void installEarly() {
     remote_appearance::installEarly();
     remote_animation::installEarly();
     remote_ride::installEarly();
-    hooks::install("object list update", ds2::at(kObjectListUpdate), reinterpret_cast<void*>(&updateDetour),
-                   reinterpret_cast<void**>(&g_update));
+    sim_tick::add(&advance);
 }
 
 std::optional<uint64_t> ownerKey() {

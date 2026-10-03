@@ -12,6 +12,7 @@
 #include "cargo_transfer.h"
 #include "clock_sync.h"
 #include "debug_stats.h"
+#include "struct_sync.h"
 #include "env_sync.h"
 #include "equip_sync.h"
 #include "fact_sync.h"
@@ -110,6 +111,7 @@ void tick(NetClient& net) {
         vehicle_load::onFrame(frame);
         fact_sync::onFrame(frame);
         env_sync::onFrame(frame);
+        struct_sync::onFrame(frame);
         equip_sync::onFrame(frame);
         anim_sync::onFrame(frame);
         anim_event::onFrame(frame);
@@ -129,6 +131,7 @@ void tick(NetClient& net) {
     vehicle_load::tick(net, session);
     fact_sync::tick(net, session);
     env_sync::tick(net, session);
+    struct_sync::tick(net, session);
     equip_sync::tick(net, session);
     anim_sync::tick(net, session);
     clock_sync::tick(net, session);

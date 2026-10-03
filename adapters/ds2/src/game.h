@@ -8,6 +8,7 @@
 
 #include "env_wire.h"
 #include "fact_wire.h"
+#include "struct_wire.h"
 #include "world_to_screen.h"
 
 namespace game {
@@ -154,5 +155,17 @@ void releaseWorldEnv();
 // the host's enemies are the only ones (they appear as puppets). Needs enemy_veto::installEarly (adapter.ini
 // enemy_veto=1). Any thread.
 void vetoEnemies(bool veto);
+
+// The structure roles: the host reports what its player places and removes, a guest refuses its own player's
+// placements. Needs structures::installEarly. Any thread.
+void setStructureRole(bool host, bool guest);
+
+// Host: the structures its player placed and removed since the last call (ladders so far). Any thread.
+std::vector<struct_wire::Placed> takePlacedStructures();
+std::vector<struct_wire::Remove> takeRemovedStructures();
+
+// Guest: builds the host's structure under the host's id / removes it, on the simulation thread's next frame. Any thread.
+void buildStructure(const struct_wire::Placed& placed);
+void removeStructure(const struct_wire::Remove& removal);
 
 }  // namespace game

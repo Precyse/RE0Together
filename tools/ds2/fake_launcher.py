@@ -22,6 +22,7 @@ HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002
 ANIM_STATE = 0x010A
 EQUIP_STATE = 0x010C
 WORLD_ENV = 0x010D
+STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
 EQUIP_ENTRY = struct.Struct("<B3xI")  # hand slot kind, cargo kind (equip_sync.h)
 FLAG_RELIABLE = 1
@@ -45,6 +46,22 @@ def read_exact(sock, n):
     return buf
 
 
+LADDER_ID = 11700  # an id the save does not use
+LADDER_AHEAD = 8.0  # metres ahead of the local player (a ladder the player grabs cannot be removed under them: the game crashes)
+# The tail of the captured ladder descriptor (+0x328..+0x340), tools/ds2 out dump submit_kind10_0284
+LADDER_TAIL = bytes.fromhex("0100000000" "8b6abf" "6666" "1a41" "00000000" "ffffffff" "00020000")
+
+
+def ladder_payload(local):
+    """STRUCT_CREATE for the captured ladder, ahead of the local player and facing the way it faces."""
+    fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
+    position = struct.pack("<3d", local["x"] + fx * LADDER_AHEAD, local["y"] + fy * LADDER_AHEAD, local["z"])
+    rotation = struct.pack("<9f", 0.0, 0.0, -1.0, fx, fy, 0.0, fy, -fx, 0.0)  # as the captured ladder: its long axis is the first row (straight down), then heading, then the horizontal right
+    transform = position + rotation + bytes(4)
+    fixed = struct.pack("<BBBBI16s", 10, 3, 1, len(LADDER_TAIL), LADDER_ID, bytes(16)) + transform + struct.pack("<f", 360000.0)
+    return fixed + LADDER_TAIL
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=27980)
@@ -60,6 +77,7 @@ def main():
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--env", default="", help="HOURS[,DAY[,REGION:TYPE...]]: as the host peer, send this WORLD_ENV once a second (types from a host capture)")
+    p.add_argument("--struct", default="", help="ADD,REMOVE seconds after the first local state: replay the captured ladder 3 m ahead of the local player, then remove it")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
@@ -112,6 +130,7 @@ def serve(sock, a):
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None
     last_held, last_equip, last_env = None, 0.0, 0.0
+    struct_added = struct_removed = False
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -124,6 +143,16 @@ def serve(sock, a):
             if first:
                 start = now
                 print(f"circle centre {centre}", flush=True)
+        if a.struct and local and start is not None:
+            add_at, remove_at = map(float, a.struct.split(","))
+            if not struct_added and now - start >= add_at:
+                struct_added = True
+                sock.sendall(encode(STRUCT_CREATE, peer_slot, ladder_payload(local)))
+                print("struct: ladder replayed", flush=True)
+            if struct_added and not struct_removed and now - start >= remove_at:
+                struct_removed = True
+                sock.sendall(encode(STRUCT_REMOVE, peer_slot, struct.pack("<IBBBB", LADDER_ID, 1, 0, 0, 0)))
+                print("struct: ladder removed", flush=True)
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")
