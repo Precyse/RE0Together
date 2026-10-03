@@ -1,7 +1,7 @@
 #pragma once
 // Cargo moved between the two players' racks, decided by the host. Each machine keeps its own Sam and cargo; a
 // transfer deletes the piece on the giver's machine and creates the same kind on the receiver's with the game's own
-// requests (game::removeCargo / addCargo). Every player reports what its backpack holds (the host's menu lists the
+// requests (game::removeCargo / addCargo; an order piece is recreated with its order link). Every player reports what its backpack holds (the host's menu lists the
 // guest's, each player draws the partner's on their body); the host gives and takes through cargo_menu, and the guest
 // carries out the host's takes.
 #include <cstdint>
@@ -36,11 +36,18 @@ struct CargoTake {
 };
 static_assert(sizeof(CargoTake) == 8);
 
-// The receiver creates a piece of this kind on its own player.
+// The receiver creates a piece of this kind on its own player; order cargo keeps the order link it had (DSBaggage
+// +0x28 / +0x30), so the host's turn-in still counts a piece that went to the partner and came back.
 struct CargoAdd {
     uint32_t type;
+    uint8_t category;
+    uint8_t reserved[3];
+    float durability;
+    uint32_t reserved2;
+    uint64_t orderId;
+    uint64_t secondId;
 };
-static_assert(sizeof(CargoAdd) == 4);
+static_assert(sizeof(CargoAdd) == 32);
 
 struct Partner {
     uint8_t slot = 0;

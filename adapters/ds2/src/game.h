@@ -70,6 +70,12 @@ struct Cargo {
     uint64_t handle = 0;  // this machine's id of the piece (what removeCargo takes)
     uint32_t type = 0;    // the kind of cargo, the same on every machine (what addCargo takes)
     std::string name;     // its display name in the game's language
+    // The order the piece belongs to (DSBaggage +0x28 and +0x30, 0 for plain cargo) and what the hand-over menu and
+    // damage need. A piece handed to the partner and back is recreated with the same ids, so the order still counts it.
+    uint64_t orderId = 0;
+    uint64_t secondId = 0;
+    uint8_t category = 0;
+    float durability = 0;
 };
 
 // What the local player's backpack holds: cargo, and weapons and tools stowed in it, but not the equipped gear.
@@ -86,9 +92,10 @@ struct LooseCargo {
 // Loose pieces within `radius` metres of `around`. Any thread.
 std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius);
 
-// Asks the game to create a piece of cargo of `type` on the local player's backpack (the game's own request queue,
-// served on its next update). False when the request could not be queued. Any thread.
-bool addCargo(uint32_t type);
+// Asks the game to create `piece` (its kind, and for order cargo its order link) on the local player's backpack. Plain
+// cargo goes through the game's own request queue, order cargo through the manager's create with the link copied;
+// both are served on the game's next update. False when the request could not be made. Any thread.
+bool addCargo(const Cargo& piece);
 
 // What the bed of vehicle `vehicle` (a VehiclePose id) holds in this world; empty when it is not loaded. Any thread.
 std::vector<Cargo> vehicleCargo(uint64_t vehicle);

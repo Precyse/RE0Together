@@ -66,8 +66,13 @@ std::optional<cargo_transfer::Partner> parseList(uint8_t slot, const std::vector
     return partner;
 }
 
-void sendAdd(NetClient& net, uint8_t slot, uint32_t type) {
-    net.send(cargo_transfer::kMsgCargoAdd, true, slot, proto::bytesOf(cargo_transfer::CargoAdd{type}));
+void sendAdd(NetClient& net, uint8_t slot, const game::Cargo& piece) {
+    const cargo_transfer::CargoAdd add{piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
+    net.send(cargo_transfer::kMsgCargoAdd, true, slot, proto::bytesOf(add));
+}
+
+game::Cargo pieceOf(const cargo_transfer::CargoAdd& add) {
+    return {0, add.type, {}, add.orderId, add.secondId, add.category, add.durability};
 }
 
 // Guest: the host asked for one of our pieces. It goes only if we still carry it.
@@ -78,20 +83,20 @@ void giveUp(NetClient& net, uint8_t hostSlot, uint64_t handle) {
         logger::write("cargo: host asked for %llx, not carried", static_cast<unsigned long long>(handle));
         return;
     }
-    sendAdd(net, hostSlot, piece->type);
+    sendAdd(net, hostSlot, *piece);
     logger::write("cargo: gave %s (%u) to the host", piece->name.c_str(), piece->type);
 }
 
 // Host: one piece of the given kind arrived from the guest; only kinds we asked for are accepted.
-void received(uint32_t type) {
-    const auto awaited = std::find(g_awaited.begin(), g_awaited.end(), type);
+void received(const game::Cargo& piece) {
+    const auto awaited = std::find(g_awaited.begin(), g_awaited.end(), piece.type);
     if (awaited == g_awaited.end()) {
-        logger::write("cargo: unrequested piece %u from the guest ignored", type);
+        logger::write("cargo: unrequested piece %u from the guest ignored", piece.type);
         return;
     }
     g_awaited.erase(awaited);
-    game::addCargo(type);
-    logger::write("cargo: took %u from the guest", type);
+    game::addCargo(piece);
+    logger::write("cargo: took %u from the guest (order %llx)", piece.type, static_cast<unsigned long long>(piece.orderId));
 }
 
 void refreshLocal(const Clock::time_point now) {
@@ -155,7 +160,7 @@ void runRequests(NetClient& net) {
     for (const Request& request : requests) {
         if (request.action == Action::Give) {
             if (!game::removeCargo(request.piece.handle)) continue;
-            sendAdd(net, partnerSlot, request.piece.type);
+            sendAdd(net, partnerSlot, request.piece);
             logger::write("cargo: gave %s (%u) to the guest", request.piece.name.c_str(), request.piece.type);
         } else {
             g_awaited.push_back(request.piece.type);
@@ -185,10 +190,11 @@ void onFrame(NetClient& net, const GameFrame& frame) {
         CargoAdd add;
         std::memcpy(&add, frame.payload.data(), sizeof(add));
         if (host) {
-            received(add.type);
+            received(pieceOf(add));
         } else {
-            game::addCargo(add.type);
-            logger::write("cargo: received %u from the host", add.type);
+            game::addCargo(pieceOf(add));
+            logger::write("cargo: received %u from the host (order %llx)", add.type,
+                          static_cast<unsigned long long>(add.orderId));
         }
     }
 }

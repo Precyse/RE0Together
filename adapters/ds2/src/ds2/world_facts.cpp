@@ -65,7 +65,7 @@ bool logging() {
     const int64_t now = GetTickCount64();
     if (now - checkedAt.load() > kCheckIntervalMs) {
         checkedAt = now;
-        on = GetFileAttributesW((coopDirectory() + L"\facts_on.txt").c_str()) != INVALID_FILE_ATTRIBUTES;
+        on = GetFileAttributesW((coopDirectory() + L"\\facts_on.txt").c_str()) != INVALID_FILE_ATTRIBUTES;
         if (on) logger::write("world_facts: %llu writes seen so far", static_cast<unsigned long long>(g_calls.load()));
     }
     return on.load();
