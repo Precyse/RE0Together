@@ -38,6 +38,14 @@ int main() {
     check(decode(bytes(section), got) && isSection(static_cast<Kind>(got.kind)) && got.section[15] == 16,
           "a section event round trips");
 
+    Event area{};
+    area.kind = static_cast<uint8_t>(Kind::AreaChange);
+    area.a = 300;
+    area.b = -1;
+    area.flags = 2;
+    area.transform[kTransformSize - 1] = 9;
+    check(decode(bytes(area), got) && std::memcmp(&got, &area, sizeof(area)) == 0, "an area change round trips");
+
     std::vector<uint8_t> shorter = bytes(mission);
     shorter.pop_back();
     check(!decode(shorter, got), "a short payload is rejected");

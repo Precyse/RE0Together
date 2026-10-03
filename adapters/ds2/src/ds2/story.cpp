@@ -1,6 +1,7 @@
 // DEATH STRANDING 2: missions and story stages. Every mission transition is a request (start 0x1413ef8b0, success
 // 0x1413efc00, fail 0x1413efda0) queued on the mission system's controller and applied by one drain; a story stage
-// changes through SectionManager::RequestSectionActive 0x1413bdad0. The host polls the mission map and reports every
+// changes through SectionManager::RequestSectionActive 0x1413bdad0, a story teleport through RequestChangeArea
+// 0x140709cc0. The host polls the mission map and reports every
 // state change whichever path made it, plus the sections it switches; a guest's own requests are vetoed and the host's
 // events are replayed through the same request calls (their own conditions and side effects run), with the order
 // cargo flag preset so the guest creates no cargo (docs/DS2_NOTES.md, "Story sync").
@@ -42,9 +43,12 @@ constexpr ULONGLONG kPollIntervalMs = 500;
 constexpr uint32_t kNoRow = 0xFFFFFFFF;  // start request argument: no terminal list row
 constexpr uint32_t kCargoPreparedFlag = 1u << 18;    // order cargo already prepared: the guest creates none
 constexpr uintptr_t kSectionUuid = 0x10;             // the DSMissionSectionResource's GGUUID
+constexpr uintptr_t kRequestChangeArea = 0x140709cc0;  // (unused, u16 EDSArea, bool, WorldTransform*, i32 constructionId, bool)
+constexpr uint32_t kFlagFirstBool = 1, kFlagLastBool = 2;
 constexpr size_t kMaxQueued = 256;
 
 using Fn8 = uint64_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+Fn8 g_changeArea = nullptr;
 Fn8 g_requestStart = nullptr, g_requestSuccess = nullptr, g_requestFail = nullptr, g_requestSection = nullptr;
 
 std::atomic<bool> g_host{false};
@@ -177,6 +181,30 @@ void pollMissions() {
     baselined = true;
 }
 
+// A teleport the host makes is replayed on the guests; a guest's own is let through (voluntary fast travel stays
+// per-player).
+uint64_t changeAreaDetour(uintptr_t unused, uintptr_t area, uintptr_t first, uintptr_t transform, uintptr_t construction,
+                          uintptr_t last, uintptr_t g, uintptr_t h) {
+    if (g_host.load() && transform) {
+        story_wire::Event event{};
+        event.kind = static_cast<uint8_t>(story_wire::Kind::AreaChange);
+        event.a = static_cast<uint16_t>(area);
+        event.b = static_cast<int32_t>(construction);
+        event.flags = (static_cast<uint8_t>(first) ? kFlagFirstBool : 0) | (static_cast<uint8_t>(last) ? kFlagLastBool : 0);
+        decima::safeCopy(event.transform, transform, sizeof(event.transform));
+        report(event);
+    }
+    return g_changeArea(unused, area, first, transform, construction, last, g, h);
+}
+
+void replayAreaChange(const story_wire::Event& event) {
+    alignas(16) uint8_t transform[story_wire::kTransformSize];
+    std::memcpy(transform, event.transform, sizeof(transform));
+    reinterpret_cast<uint64_t (*)(uintptr_t, uint16_t, bool, const void*, int32_t, bool)>(ds2::at(kRequestChangeArea))(
+        0, static_cast<uint16_t>(event.a), event.flags & kFlagFirstBool, transform, event.b, event.flags & kFlagLastBool);
+    logger::write("story: replayed an area change to %u", event.a);
+}
+
 void replayMission(const story_wire::Event& event) {
     const auto kind = static_cast<story_wire::Kind>(event.kind);
     const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
@@ -236,6 +264,8 @@ void applyIncoming() {
     for (const story_wire::Event& event : events) {
         if (story_wire::isMission(static_cast<story_wire::Kind>(event.kind))) {
             replayMission(event);
+        } else if (story_wire::isAreaChange(static_cast<story_wire::Kind>(event.kind))) {
+            replayAreaChange(event);
         } else {
             replaySection(event);
         }
@@ -256,6 +286,8 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_requestFail));
     hooks::install("story request section", ds2::at(kRequestSection), reinterpret_cast<void*>(&requestSectionDetour),
                    reinterpret_cast<void**>(&g_requestSection));
+    hooks::install("story change area", ds2::at(kRequestChangeArea), reinterpret_cast<void*>(&changeAreaDetour),
+                   reinterpret_cast<void**>(&g_changeArea));
     sim_tick::add(&pollMissions);
     sim_tick::add(&applyIncoming);
 }
