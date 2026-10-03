@@ -380,6 +380,13 @@ AddResult addCargo(const Cargo& piece) {
         return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece) ? AddResult::Done
                                                                                             : AddResult::Refused;
     }
+    if (piece.durability > 0) {
+        // A damaged or partly used piece keeps its durability: it is created with the manager's own create, which takes
+        // it, instead of the request queue's create (a fresh piece).
+        const uintptr_t owner = backpackOwner(baggage);
+        return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece) ? AddResult::Done
+                                                                                            : AddResult::Refused;
+    }
     if (!code().createAndAdd) return AddResult::Refused;
     code().createAndAdd(piece.type, kToBackpack);
     return AddResult::Done;

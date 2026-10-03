@@ -86,6 +86,7 @@ def main():
     p.add_argument("--struct-kind", type=int, default=10, help="10 = the captured ladder, 11 = the captured climbing anchor")
     p.add_argument("--give-order", default="", help="SECONDS: send CARGO_ADD of the locker order piece Special Plant Seeds (order 0x1000071000018e) after that long, as the host giving it to the guest")
     p.add_argument("--host-picks-order", default="", help="SECONDS: send HOST_PICKUP of the order piece Special Plant Seeds (matched by order id at a position nowhere near it)")
+    p.add_argument("--give-plain", default="", help="SECONDS: send CARGO_ADD of a Headache Pills piece with durability 123 (a worn piece)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
@@ -142,7 +143,7 @@ def serve(sock, a):
     seq, start, last_hb, centre = 0, None, 0.0, None
     last_held, last_equip, last_env = None, 0.0, 0.0
     struct_added = struct_removed = False
-    gave = picked = False
+    gave = picked = gave_plain = False
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -173,6 +174,10 @@ def serve(sock, a):
             picked = True
             sock.sendall(encode(0x0106, peer_slot, struct.pack("<IIfffIQ", 0, 641900174, 0.0, 0.0, 0.0, 0, 0x1000071000018E)))
             print("cargo: host picked up the order piece", flush=True)
+        if a.give_plain and start is not None and not gave_plain and now - start >= float(a.give_plain):
+            gave_plain = True
+            sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(306656069, 0, 123.0, 0, 0, 0)))
+            print("cargo: gave a worn plain piece", flush=True)
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")
