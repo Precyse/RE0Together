@@ -94,10 +94,15 @@ struct LooseCargo {
 // Loose pieces within `radius` metres of `around`. Any thread.
 std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double radius);
 
+// What addCargo did: made the request, must be asked again shortly (a stale copy of an order piece was being removed
+// first), or will never work (the backpack already holds that order piece, the game refused).
+enum class AddResult { Done, Retry, Refused };
+
 // Asks the game to create `piece` (its kind, and for order cargo its order link) on the local player's backpack. Plain
 // cargo goes through the game's own request queue, order cargo through the manager's create with the link copied;
-// both are served on the game's next update. False when the request could not be made. Any thread.
-bool addCargo(const Cargo& piece);
+// both are served on the game's next update. An order piece whose id this world still holds elsewhere (a locker: both
+// worlds start from one save) has that stale copy removed first and answers Retry. Any thread.
+AddResult addCargo(const Cargo& piece);
 
 // What the bed of vehicle `vehicle` (a VehiclePose id) holds in this world; empty when it is not loaded. Any thread.
 std::vector<Cargo> vehicleCargo(uint64_t vehicle);

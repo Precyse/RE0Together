@@ -247,13 +247,25 @@ bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& 
 
 bool isOrderId(uint64_t id) { return (id & kOrderNumberMask) != 0 && (id & kOrderTypeMask) != 0; }
 
-// Whether a piece with this order id (and piece index) already exists in this world. Deleting an order piece deletes
-// every piece sharing its id, so a second one with the same id must never be created.
-bool orderIdExists(uintptr_t manager, uint64_t orderId) {
+// Where the pieces with this order id (and piece index) are in this world. Deleting an order piece deletes every
+// piece sharing its id, so a second one with the same id must never be created.
+struct OrderPieces {
+    bool carried = false;             // one is in the local backpack
+    std::vector<uint64_t> elsewhere;  // handles of the others (a locker, a shelf, the ground)
+};
+
+OrderPieces findOrderPieces(uintptr_t manager, uint64_t orderId) {
+    OrderPieces found;
+    const std::vector<SlotRange> backpack = backpackSlots(manager);
     for (const PoolEntry& entry : livePool(manager)) {
-        if (entry.orderId == orderId) return true;
+        if (entry.orderId != orderId) continue;
+        if (inSlots(backpack, entry.slot)) {
+            found.carried = true;
+        } else {
+            found.elsewhere.push_back(entry.handle);
+        }
     }
-    return false;
+    return found;
 }
 
 // The local player's backpack owner: its child owner that has a slot of the main-load kind.
@@ -308,21 +320,33 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
     return out;
 }
 
-bool addCargo(const Cargo& piece) {
+AddResult addCargo(const Cargo& piece) {
     const uintptr_t baggage = manager();
-    if (!baggage) return false;
+    if (!baggage) return AddResult::Retry;
     if (isOrderId(piece.orderId) || isOrderId(piece.secondId)) {
-        if (isOrderId(piece.orderId) && orderIdExists(baggage, piece.orderId)) {
-            logger::write("cargo: refused to create order piece %llx: one with that id already exists",
-                          static_cast<unsigned long long>(piece.orderId));
-            return false;
+        if (isOrderId(piece.orderId)) {
+            const OrderPieces existing = findOrderPieces(baggage, piece.orderId);
+            if (existing.carried) {
+                logger::write("cargo: refused to create order piece %llx: the backpack already holds it",
+                              static_cast<unsigned long long>(piece.orderId));
+                return AddResult::Refused;
+            }
+            if (!existing.elsewhere.empty()) {
+                // This world still holds the piece the partner gave away (both worlds start from one save): remove
+                // that stale copy, then create the real one once the game has served the deletion.
+                for (const uint64_t handle : existing.elsewhere) removeCargo(handle);
+                logger::write("cargo: removed %zu stale copies of order piece %llx before receiving it",
+                              existing.elsewhere.size(), static_cast<unsigned long long>(piece.orderId));
+                return AddResult::Retry;
+            }
         }
         const uintptr_t owner = backpackOwner(baggage);
-        return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece);
+        return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece) ? AddResult::Done
+                                                                                            : AddResult::Refused;
     }
-    if (!code().createAndAdd) return false;
+    if (!code().createAndAdd) return AddResult::Refused;
     code().createAndAdd(piece.type, kToBackpack);
-    return true;
+    return AddResult::Done;
 }
 
 bool placeCargo(uint32_t type, const world_to_screen::Vec3& at) {

@@ -13,6 +13,8 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kRefreshInterval = std::chrono::milliseconds(500);
+constexpr auto kAddRetryInterval = std::chrono::milliseconds(300);
+constexpr auto kAddExpiry = std::chrono::seconds(10);  // a piece that cannot be created by then is dropped
 constexpr auto kReportInterval = std::chrono::seconds(5);  // the list is re-sent this often even unchanged
 
 enum class Action { Give, Take };
@@ -30,6 +32,11 @@ std::vector<Request> g_requests;
 std::atomic<bool> g_host{false};
 std::atomic<uint8_t> g_hostSlot{0};
 std::vector<uint32_t> g_awaited;  // host, net thread: kinds asked of the guest whose CARGO_ADD has not come yet
+struct PendingAdd {
+    game::Cargo piece;
+    Clock::time_point since;
+};
+std::vector<PendingAdd> g_pendingAdds;  // net thread: pieces received whose creation must wait
 std::vector<cargo_transfer::CargoEntry> g_reported;  // net thread: the list sent last
 Clock::time_point g_lastRefresh;
 Clock::time_point g_lastReport;
@@ -87,6 +94,20 @@ void giveUp(NetClient& net, uint8_t hostSlot, uint64_t handle) {
     logger::write("cargo: gave %s (%u) to the host", piece->name.c_str(), piece->type);
 }
 
+// Receives a piece: created at once, or kept and retried while the game removes the stale copy of it.
+void receive(const game::Cargo& piece) {
+    switch (game::addCargo(piece)) {
+        case game::AddResult::Done:
+            break;
+        case game::AddResult::Retry:
+            g_pendingAdds.push_back({piece, Clock::now()});
+            break;
+        case game::AddResult::Refused:
+            logger::write("cargo: could not receive %s (%u)", piece.name.c_str(), piece.type);
+            break;
+    }
+}
+
 // Host: one piece of the given kind arrived from the guest; only kinds we asked for are accepted.
 void received(const game::Cargo& piece) {
     const auto awaited = std::find(g_awaited.begin(), g_awaited.end(), piece.type);
@@ -95,8 +116,23 @@ void received(const game::Cargo& piece) {
         return;
     }
     g_awaited.erase(awaited);
-    game::addCargo(piece);
+    receive(piece);
     logger::write("cargo: took %u from the guest (order %llx)", piece.type, static_cast<unsigned long long>(piece.orderId));
+}
+
+void retryPendingAdds(const Clock::time_point now) {
+    static Clock::time_point last;
+    if (g_pendingAdds.empty() || now - last < kAddRetryInterval) return;
+    last = now;
+    std::vector<PendingAdd> waiting;
+    for (const PendingAdd& pending : g_pendingAdds) {
+        if (now - pending.since > kAddExpiry) {
+            logger::write("cargo: gave up receiving %s (%u)", pending.piece.name.c_str(), pending.piece.type);
+        } else if (game::addCargo(pending.piece) == game::AddResult::Retry) {
+            waiting.push_back(pending);
+        }
+    }
+    g_pendingAdds = std::move(waiting);
 }
 
 void refreshLocal(const Clock::time_point now) {
@@ -192,7 +228,7 @@ void onFrame(NetClient& net, const GameFrame& frame) {
         if (host) {
             received(pieceOf(add));
         } else {
-            game::addCargo(pieceOf(add));
+            receive(pieceOf(add));
             logger::write("cargo: received %u from the host (order %llx)", add.type,
                           static_cast<unsigned long long>(add.orderId));
         }
@@ -205,6 +241,7 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_hostSlot = session.hostSlot;
     const auto now = Clock::now();
     refreshLocal(now);
+    retryPendingAdds(now);
     forgetDepartedPartner(session);
     if (!session.linked) return;
     report(net, now);
