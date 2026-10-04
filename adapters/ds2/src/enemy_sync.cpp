@@ -33,6 +33,9 @@ void sendHostReports(NetClient& net) {
         net.send(enemy_wire::kMsgEnemyGone, true, proto::kSlotAll, proto::bytesOf(gone));
     }
     sendStates(net, game::takeEnemyStates());
+    for (const enemy_wire::EnemyAnim& anim : game::takeEnemyAnims()) {
+        net.send(enemy_wire::kMsgEnemyAnim, false, proto::kSlotAll, enemy_wire::encodeAnim(anim));
+    }
 }
 
 }  // namespace
@@ -54,6 +57,9 @@ void onFrame(const GameFrame& frame) {
     } else if (frame.type == enemy_wire::kMsgEnemyGone) {
         enemy_wire::EnemyGone gone;
         if (enemy_wire::decodeOne(frame.payload, gone)) game::puppetGone(gone);
+    } else if (frame.type == enemy_wire::kMsgEnemyAnim) {
+        enemy_wire::EnemyAnim anim;
+        if (enemy_wire::decodeAnim(frame.payload, anim)) game::puppetAnim(std::move(anim));
     } else if (frame.type == enemy_wire::kMsgEnemyState) {
         std::vector<enemy_wire::EnemyState> states;
         if (enemy_wire::decodeStates(frame.payload, states)) game::puppetStates(states);

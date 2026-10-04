@@ -13,6 +13,15 @@ namespace remote_animation {
 
 void installEarly();
 
+// Any entity's animation manager (0 when it has none), and the variables of one: those that changed since `sent` (all
+// of them when `snapshot`), which `sent` then remembers; and writing a set of values into a manager. The enemy puppets
+// use these the way the remote body does. Simulation thread (the manager is read, and written before its graph
+// evaluates).
+uintptr_t managerOf(uintptr_t entity);
+std::vector<Change> sampleChanges(uintptr_t manager, VariableValues& sent, bool snapshot);
+void applyValues(uintptr_t manager, const VariableValues& values);
+void applyChanges(uintptr_t manager, const std::vector<Change>& changes);
+
 // The source the remote copies: the local player (loopback test).
 void setMirrorLocalPlayer(bool enabled);
 bool mirrorsLocalPlayer();

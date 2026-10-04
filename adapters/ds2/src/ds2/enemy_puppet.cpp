@@ -22,6 +22,7 @@
 #include "ds2/enemy_host.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/place.h"
+#include "ds2/remote_animation.h"
 #include "ds2/sim_tick.h"
 #include "enemy_wire.h"
 #include "game.h"
@@ -66,10 +67,13 @@ struct Puppet {
 };
 
 std::atomic<bool> g_adoptExisting{false};
+std::mutex g_animationMutex;  // guards g_animation: the pose evaluation reads it on other threads
+std::unordered_map<uintptr_t, remote_animation::VariableValues> g_animation;  // puppet entity -> the host's variables
 std::mutex g_mutex;  // guards the queues and the tamed table (spawn workers and the net thread fill them)
 std::vector<enemy_wire::EnemySpawn> g_spawns;
 std::vector<enemy_wire::EnemyState> g_states;
 std::vector<enemy_wire::EnemyGone> g_gone;
+std::vector<enemy_wire::EnemyAnim> g_anims;
 std::unordered_map<Uuid, Tamed, UuidHash> g_tamed;  // entity UUID -> an enemy of this world, tamed
 
 // Simulation thread only.
@@ -125,6 +129,11 @@ void bind(const enemy_wire::EnemySpawn& spawn, uintptr_t entity) {
     logger::write("enemy_puppet: enemy %u is now driven by the host (%p)", spawn.netId, reinterpret_cast<void*>(entity));
 }
 
+void forgetAnimation(uintptr_t entity) {
+    std::lock_guard lock(g_animationMutex);
+    g_animation.erase(entity);
+}
+
 void handleGone(const enemy_wire::EnemyGone& gone) {
     g_pending.erase(gone.netId);
     const auto it = g_puppets.find(gone.netId);
@@ -136,6 +145,7 @@ void handleGone(const enemy_wire::EnemyGone& gone) {
         return;
     }
     if (ds2::entityExists(puppet.uuid.data())) removeGuarded(puppet.entity);
+    forgetAnimation(puppet.entity);
     g_puppets.erase(it);
 }
 
@@ -146,6 +156,14 @@ void handleState(const enemy_wire::EnemyState& state) {
     } else if (const auto waiting = g_pending.find(state.netId); waiting != g_pending.end()) {
         waiting->second.pose = state.pose;
     }
+}
+
+void handleAnimation(const enemy_wire::EnemyAnim& anim) {
+    const auto it = g_puppets.find(anim.netId);
+    if (it == g_puppets.end()) return;
+    std::lock_guard lock(g_animationMutex);
+    remote_animation::VariableValues& values = g_animation[it->second.entity];
+    for (const remote_animation::Change& change : anim.changes) values.set(change);
 }
 
 void place(Puppet& puppet, ULONGLONG now) {
@@ -191,11 +209,13 @@ void tick() {
     std::vector<enemy_wire::EnemySpawn> spawns;
     std::vector<enemy_wire::EnemyState> states;
     std::vector<enemy_wire::EnemyGone> gone;
+    std::vector<enemy_wire::EnemyAnim> anims;
     {
         std::lock_guard lock(g_mutex);
         spawns.swap(g_spawns);
         states.swap(g_states);
         gone.swap(g_gone);
+        anims.swap(g_anims);
     }
     if (g_adoptExisting.exchange(false)) {
         for (const uintptr_t entity : enemy_host::release()) enemy_puppet::adopt(entity);
@@ -209,6 +229,7 @@ void tick() {
     }
     for (const enemy_wire::EnemyState& state : states) handleState(state);
     for (const enemy_wire::EnemyGone& event : gone) handleGone(event);
+    for (const enemy_wire::EnemyAnim& anim : anims) handleAnimation(anim);
     for (auto it = g_pending.begin(); it != g_pending.end();) {
         const uintptr_t entity = tamedFor(it->second);
         if (entity) bind(it->second, entity);
@@ -229,6 +250,7 @@ void tick() {
         Puppet& puppet = it->second;
         if (!ds2::entityExists(puppet.uuid.data())) {  // every tick: the engine frees entities of a world it unloads
             logger::write("enemy_puppet: enemy %u is gone from this world", it->first);
+            forgetAnimation(puppet.entity);
             it = g_puppets.erase(it);
             continue;
         }
@@ -242,6 +264,14 @@ void tick() {
 namespace enemy_puppet {
 
 void installEarly() { sim_tick::add(&tick); }
+
+bool animate(uintptr_t manager, uintptr_t owner) {
+    std::lock_guard lock(g_animationMutex);
+    const auto it = g_animation.find(owner);
+    if (it == g_animation.end()) return false;
+    remote_animation::applyValues(manager, it->second);
+    return true;
+}
 
 void adoptExisting() { g_adoptExisting = true; }
 
@@ -265,6 +295,11 @@ void puppetSpawn(const enemy_wire::EnemySpawn& spawn) {
 void puppetStates(const std::vector<enemy_wire::EnemyState>& states) {
     std::lock_guard lock(g_mutex);
     if (g_states.size() + states.size() <= kMaxQueued) g_states.insert(g_states.end(), states.begin(), states.end());
+}
+
+void puppetAnim(enemy_wire::EnemyAnim anim) {
+    std::lock_guard lock(g_mutex);
+    if (g_anims.size() < kMaxQueued) g_anims.push_back(std::move(anim));
 }
 
 void puppetGone(const enemy_wire::EnemyGone& gone) {

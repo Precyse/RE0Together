@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -15,6 +16,8 @@
 #include "ds2/engine.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/place.h"
+#include "ds2/remote_animation.h"
+#include "ds2/remote_player.h"
 #include "ds2/enemy_pose.h"
 #include "ds2/sim_tick.h"
 #include "enemy_wire.h"
@@ -33,6 +36,8 @@ constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 constexpr double kMinMoveMeters = 0.03;  // an enemy that moved less than this and did not turn is not reported again...
 constexpr float kMinTurn = 0.01f;
+constexpr double kAnimationRadius = 100.0;  // metres around the partner: further enemies are not animated on its side
+constexpr ULONGLONG kAnimationSnapshotMs = 2000;
 constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
 
 struct Tracked {
@@ -47,6 +52,8 @@ struct Tracked {
     ULONGLONG previousAt = 0;
     enemy_wire::Pose sentPose{};
     ULONGLONG sentAt = 0;
+    std::unique_ptr<remote_animation::VariableValues> sentVariables;  // only while the partner is near
+    ULONGLONG variablesSnapshotAt = 0;
 };
 
 std::mutex g_mutex;  // guards everything below (spawn workers add, the simulation thread samples, the net thread takes)
@@ -55,11 +62,41 @@ uint16_t g_nextNetId = 1;
 std::vector<enemy_wire::EnemySpawn> g_spawns;
 std::vector<enemy_wire::EnemyState> g_states;
 std::vector<enemy_wire::EnemyGone> g_gone;
+std::vector<enemy_wire::EnemyAnim> g_anims;
 bool g_sharing = false;
 bool g_snapshotRequested = false;
 
 void pushGone(uint16_t netId, enemy_wire::GoneReason reason) {
     if (g_gone.size() < kMaxQueued) g_gone.push_back({netId, static_cast<uint8_t>(reason), 0});
+}
+
+// The partner's body, where the enemies it should see animated are looked for; 0 when it does not exist yet.
+bool partnerPosition(decima::WorldPosition& out) {
+    decima::WorldTransform transform;
+    if (!ds2::entityTransform(remote_player::entity(), transform)) return false;
+    out = transform.position;
+    return true;
+}
+
+// The enemy's animation variables that changed since the last report, while the partner is within sight of it.
+void sampleAnimation(Tracked& enemy, const decima::WorldTransform& transform, const decima::WorldPosition* partner,
+                     ULONGLONG now) {
+    const bool inSight = partner && std::hypot(transform.position.x - partner->x, transform.position.y - partner->y) <= kAnimationRadius;
+    const uintptr_t manager = inSight ? remote_animation::managerOf(enemy.entity) : 0;
+    if (!manager) {
+        enemy.sentVariables.reset();
+        return;
+    }
+    if (!enemy.sentVariables) enemy.sentVariables = std::make_unique<remote_animation::VariableValues>();
+    const bool snapshot = now - enemy.variablesSnapshotAt >= kAnimationSnapshotMs;
+    if (snapshot) enemy.variablesSnapshotAt = now;
+    std::vector<remote_animation::Change> changes = remote_animation::sampleChanges(manager, *enemy.sentVariables, snapshot);
+    if (changes.empty() || g_anims.size() >= kMaxQueued) return;
+    enemy_wire::EnemyAnim anim;
+    anim.netId = enemy.netId;
+    anim.snapshot = snapshot;
+    anim.changes = std::move(changes);
+    g_anims.push_back(std::move(anim));
 }
 
 bool worthSending(const Tracked& enemy, const enemy_wire::Pose& pose, ULONGLONG now) {
@@ -103,6 +140,8 @@ void tick() {
         g_snapshotRequested = false;
         for (Tracked& enemy : g_tracked) enemy.announced = false;
     }
+    decima::WorldPosition partnerAt{};
+    const bool havePartner = partnerPosition(partnerAt);
     for (auto it = g_tracked.begin(); it != g_tracked.end();) {
         Tracked& enemy = *it;
         if (checkLiveness && !ds2::entityExists(enemy.entityUuid.data())) {
@@ -123,6 +162,7 @@ void tick() {
                 g_spawns.push_back(spawn);
                 enemy.announced = true;
             }
+            if (enemy.announced && !dead) sampleAnimation(enemy, transform, havePartner ? &partnerAt : nullptr, now);
             if (enemy.announced && dead && !enemy.deadReported) {
                 pushGone(enemy.netId, enemy_wire::GoneReason::Died);
                 enemy.deadReported = true;
@@ -152,7 +192,7 @@ void add(uintptr_t entity, const std::array<uint8_t, enemy_wire::kUuidSize>& res
     std::lock_guard lock(g_mutex);
     if (g_tracked.size() >= kMaxTracked) return;
     enemy.netId = g_nextNetId++;
-    g_tracked.push_back(enemy);
+    g_tracked.push_back(std::move(enemy));
 }
 
 std::vector<uintptr_t> release() {
@@ -177,6 +217,7 @@ void shareEnemies(bool host) {
         g_spawns.clear();
         g_states.clear();
         g_gone.clear();
+        g_anims.clear();
     } else {
         g_snapshotRequested = true;
     }
@@ -199,6 +240,13 @@ std::vector<enemy_wire::EnemyState> takeEnemyStates() {
     std::lock_guard lock(g_mutex);
     std::vector<enemy_wire::EnemyState> out;
     out.swap(g_states);
+    return out;
+}
+
+std::vector<enemy_wire::EnemyAnim> takeEnemyAnims() {
+    std::lock_guard lock(g_mutex);
+    std::vector<enemy_wire::EnemyAnim> out;
+    out.swap(g_anims);
     return out;
 }
 

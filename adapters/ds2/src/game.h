@@ -195,12 +195,14 @@ void requestEnemySnapshot();
 std::vector<enemy_wire::EnemySpawn> takeEnemySpawns();
 std::vector<enemy_wire::EnemyState> takeEnemyStates();
 std::vector<enemy_wire::EnemyGone> takeEnemyGone();
+std::vector<enemy_wire::EnemyAnim> takeEnemyAnims();
 
 // Guest: the host's reports, applied on the simulation thread (puppets are built from the vetoed spawn requests).
 // Any thread.
 void puppetSpawn(const enemy_wire::EnemySpawn& spawn);
 void puppetStates(const std::vector<enemy_wire::EnemyState>& states);
 void puppetGone(const enemy_wire::EnemyGone& gone);
+void puppetAnim(enemy_wire::EnemyAnim anim);
 
 // The structure roles: the host reports what its player places and removes, a guest refuses its own player's
 // placements. Needs structures::installEarly. Any thread.

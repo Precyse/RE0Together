@@ -50,7 +50,7 @@ void malformed() {
     shortFrame.payload.pop_back();
     resync::onFrame(shortFrame);
     check(reject_counters::total(resync::kMsgResync, reject_counters::Reason::Malformed) == 1, "a short request is counted as malformed");
-    resync::onFrame(request(1, 0xF0));
+    resync::onFrame(request(1, 0xE0));
     check(resync::takeRequests(resync::kAll).empty(), "unknown scope bits ask for nothing");
     GameFrame other = request(1, resync::kAll);
     other.type = 0x0200;

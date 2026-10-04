@@ -28,7 +28,7 @@ CARGO_ADD = 0x0103
 CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
-ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE = 0x011B, 0x011C, 0x011D
+ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011E
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
 EQUIP_ENTRY = struct.Struct("<B3xI")  # hand slot kind, cargo kind (equip_sync.h)
@@ -152,7 +152,7 @@ def serve(sock, a):
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
-            elif msg_type in (ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE) and a.enemy_record:
+            elif msg_type in (ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM) and a.enemy_record:
                 now = time.monotonic()
                 recorded.setdefault("first", now)
                 with open(a.enemy_record, "ab") as out:
@@ -225,7 +225,7 @@ def serve(sock, a):
                 sent_enemy[0] += 1
                 if sent_enemy[0] in (1, 2, 500, 1000):
                     print(f"enemy: sent {sent_enemy[0]} messages, last type {msg_type:#x} {len(payload)} bytes", flush=True)
-                sock.sendall(encode(msg_type, peer_slot, payload, flags=0 if msg_type == ENEMY_STATE else FLAG_RELIABLE))
+                sock.sendall(encode(msg_type, peer_slot, payload, flags=0 if msg_type in (ENEMY_STATE, ENEMY_ANIM) else FLAG_RELIABLE))
                 if not replay:
                     print("enemy: the recording has been replayed", flush=True)
         if a.env and now - last_env >= 1.0:

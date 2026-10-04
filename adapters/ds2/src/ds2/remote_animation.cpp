@@ -13,6 +13,7 @@
 #include "anim_event.h"
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/enemy_puppet.h"
 #include "ds2/remote_player.h"
 #include "hooks.h"
 #include "log.h"
@@ -36,12 +37,12 @@ constexpr uintptr_t kVariableName = 0x00;
 constexpr uintptr_t kVariableGraphId = 0x08;  // -1: not bound to the graph
 constexpr uintptr_t kVariableType = 0x0D;
 constexpr uintptr_t kVariableValue = 0x20;
+using remote_animation::kMaxVariables;
 using remote_animation::kTypeBool;
 using remote_animation::kTypeFloat;
 using remote_animation::kTypeInt;
 using remote_animation::kTypeQuat;
 constexpr size_t kNameBytes = 48;
-constexpr size_t kMaxVariables = 1024;
 constexpr auto kSampleInterval = std::chrono::milliseconds(33);
 constexpr auto kPeerStaleAfter = std::chrono::seconds(3);
 
@@ -56,25 +57,15 @@ HandlerFn g_morpheme = nullptr;
 HandlerFn g_graph = nullptr;
 
 // Sending side: the value last reported for each variable.
-struct Sent {
-    bool valid = false;
-    remote_animation::Change change{};
-};
-std::array<Sent, kMaxVariables> g_sent;
+remote_animation::VariableValues g_sent;
 Clock::time_point g_lastSample;
 std::mutex g_outboxMutex;
 std::vector<remote_animation::Change> g_outbox;
 
 // Receiving side: the partner's newest value of each variable.
-struct Peer {
-    bool valid = false;
-    remote_animation::Change change{};
-};
 std::mutex g_peerMutex;
-std::array<Peer, kMaxVariables> g_peer;
+remote_animation::VariableValues g_peer;
 Clock::time_point g_peerAt;
-
-uintptr_t managerOf(uintptr_t entity) { return ds2::componentByRecord(entity, kAnimationManagerRecord); }
 
 std::string className(uintptr_t object) {
     char name[96] = {};
@@ -153,7 +144,7 @@ remote_animation::Change readVariable(uintptr_t variable, int index) {
 }
 
 void mirrorLocalPlayer(uintptr_t remoteManager) {
-    const uintptr_t samManager = managerOf(remote_player::samEntity());
+    const uintptr_t samManager = remote_animation::managerOf(remote_player::samEntity());
     if (!samManager) return;
     static bool logged = false;
     if (!logged) {
@@ -174,11 +165,8 @@ void mirrorLocalPlayer(uintptr_t remoteManager) {
 void applyPartner(uintptr_t remoteManager) {
     std::lock_guard lock(g_peerMutex);
     if (Clock::now() - g_peerAt > kPeerStaleAfter) return;
-    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(remoteManager, kVariableCount), kMaxVariables);
-    for (int32_t i = 0; i < count; ++i) {
-        const Peer& peer = g_peer[i];
-        if (peer.valid) writeVariable(remoteManager, i, peer.change.type, peer.change.value);
-    }
+    remote_animation::applyValues(remoteManager, g_peer);
+    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(remoteManager, kVariableCount), remote_animation::kMaxVariables);
     for (const remote_animation::Change& pulse : anim_event::active(remote_player::slot())) {
         if (pulse.index < count) writeVariable(remoteManager, pulse.index, pulse.type, pulse.value);
     }
@@ -190,19 +178,7 @@ void sampleLocalPlayer(uintptr_t samManager) {
     if (now - g_lastSample < kSampleInterval) return;
     g_lastSample = now;
     const bool snapshot = g_snapshotRequested.exchange(false);
-    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(samManager, kVariableCount), kMaxVariables);
-    const uintptr_t source = decima::readPointer(samManager + kVariables);
-    std::vector<remote_animation::Change> changes;
-    for (int32_t i = 0; i < count; ++i) {
-        const uintptr_t variable = source + i * kVariableSize;
-        if (ds2::field<int32_t>(variable, kVariableGraphId) == -1) continue;
-        const remote_animation::Change change = readVariable(variable, i);
-        const size_t size = remote_animation::valueBytes(change.type);
-        Sent& sent = g_sent[i];
-        if (size == 0 || (!snapshot && sent.valid && std::memcmp(sent.change.value, change.value, size) == 0)) continue;
-        sent = {true, change};
-        changes.push_back(change);
-    }
+    const std::vector<remote_animation::Change> changes = remote_animation::sampleChanges(samManager, g_sent, snapshot);
     if (changes.empty()) return;
     std::lock_guard lock(g_outboxMutex);
     g_outbox.insert(g_outbox.end(), changes.begin(), changes.end());
@@ -232,6 +208,8 @@ void beforePose(uintptr_t component) {
         }
     } else if (g_collecting.load() && owner && owner == cachedSamEntity()) {
         sampleLocalPlayer(component);
+    } else if (owner) {
+        enemy_puppet::animate(component, owner);
     }
 }
 
@@ -248,6 +226,38 @@ void graphDetour(uintptr_t component, uintptr_t message) {
 }  // namespace
 
 namespace remote_animation {
+
+uintptr_t managerOf(uintptr_t entity) { return ds2::componentByRecord(entity, kAnimationManagerRecord); }
+
+std::vector<Change> sampleChanges(uintptr_t manager, VariableValues& sent, bool snapshot) {
+    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(manager, kVariableCount), kMaxVariables);
+    const uintptr_t source = decima::readPointer(manager + kVariables);
+    std::vector<Change> changes;
+    for (int32_t i = 0; i < count; ++i) {
+        const uintptr_t variable = source + i * kVariableSize;
+        if (ds2::field<int32_t>(variable, kVariableGraphId) == -1) continue;
+        const Change change = readVariable(variable, i);
+        const size_t size = valueBytes(change.type);
+        if (size == 0 || (!snapshot && sent.valid[i] && std::memcmp(sent.change[i].value, change.value, size) == 0)) continue;
+        sent.set(change);
+        changes.push_back(change);
+    }
+    return changes;
+}
+
+void applyValues(uintptr_t manager, const VariableValues& values) {
+    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(manager, kVariableCount), kMaxVariables);
+    for (int32_t i = 0; i < count; ++i) {
+        if (values.valid[i]) writeVariable(manager, i, values.change[i].type, values.change[i].value);
+    }
+}
+
+void applyChanges(uintptr_t manager, const std::vector<Change>& changes) {
+    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(manager, kVariableCount), kMaxVariables);
+    for (const Change& change : changes) {
+        if (change.index < count) writeVariable(manager, change.index, change.type, change.value);
+    }
+}
 
 void installEarly() {
     hooks::install("morpheme animated pose", ds2::at(kMorphemeGetAnimatedPose),
@@ -275,9 +285,8 @@ std::vector<Change> takeLocalChanges() {
 }
 
 void setPeerChange(uint8_t, const Change& change) {
-    if (change.index >= kMaxVariables) return;
     std::lock_guard lock(g_peerMutex);
-    g_peer[change.index] = {true, change};
+    g_peer.set(change);
     g_peerAt = Clock::now();
 }
 

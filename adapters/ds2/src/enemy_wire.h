@@ -7,6 +7,8 @@
 #include <span>
 #include <vector>
 
+#include "anim_change.h"
+#include "anim_wire.h"
 #include "protocol.h"
 
 namespace enemy_wire {
@@ -14,6 +16,7 @@ namespace enemy_wire {
 constexpr uint16_t kMsgEnemySpawn = proto::kFirstGameType + 0x1B;  // 0x011B, host to all, reliable: EnemySpawn
 constexpr uint16_t kMsgEnemyState = proto::kFirstGameType + 0x1C;  // 0x011C, host to all, unreliable: u16 count + EnemyState[]
 constexpr uint16_t kMsgEnemyGone = proto::kFirstGameType + 0x1D;   // 0x011D, host to all, reliable: EnemyGone
+constexpr uint16_t kMsgEnemyAnim = proto::kFirstGameType + 0x1E;   // 0x011E, host to all, unreliable: EnemyAnimHeader + anim_wire report
 constexpr size_t kUuidSize = 16;
 constexpr size_t kMaxStatesPerMessage = 16;
 
@@ -56,6 +59,40 @@ struct EnemyGone {
     uint8_t reserved;
 };
 static_assert(sizeof(EnemyGone) == 4);
+
+// The animation variables of one enemy that changed (all of them in a snapshot), for the enemies near the guest.
+struct EnemyAnim {
+    uint16_t netId = 0;
+    bool snapshot = false;
+    std::vector<remote_animation::Change> changes;
+};
+
+struct EnemyAnimHeader {
+    uint16_t netId;
+    uint16_t reserved;
+};
+static_assert(sizeof(EnemyAnimHeader) == 4);
+
+inline std::vector<uint8_t> encodeAnim(const EnemyAnim& anim) {
+    const EnemyAnimHeader header{anim.netId, 0};
+    const std::vector<uint8_t> body = anim_wire::encode(0, anim.snapshot, 0, anim.changes);
+    std::vector<uint8_t> out(sizeof(header) + body.size());
+    std::memcpy(out.data(), &header, sizeof(header));
+    std::memcpy(out.data() + sizeof(header), body.data(), body.size());
+    return out;
+}
+
+inline bool decodeAnim(std::span<const uint8_t> payload, EnemyAnim& out) {
+    EnemyAnimHeader header;
+    anim_wire::Report report;
+    if (payload.size() < sizeof(header)) return false;
+    std::memcpy(&header, payload.data(), sizeof(header));
+    if (!anim_wire::decode(payload.subspan(sizeof(header)), report)) return false;
+    out.netId = header.netId;
+    out.snapshot = (report.header.flags & anim_wire::kFlagSnapshot) != 0;
+    out.changes = std::move(report.changes);
+    return true;
+}
 
 template <class T>
 bool decodeOne(std::span<const uint8_t> payload, T& out) {

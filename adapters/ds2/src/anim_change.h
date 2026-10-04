@@ -3,6 +3,7 @@
 // machines), the engine's variable type and its value. Pure data, shared by the wire codec and the engine side.
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace remote_animation {
 
@@ -16,6 +17,21 @@ struct Change {
     uint16_t index;
     uint8_t type;
     uint8_t value[kMaxValueBytes];  // 1, 4 or 16 bytes by the type
+};
+
+constexpr size_t kMaxVariables = 1024;
+
+// The newest value of each variable of one animation manager: what was last sent for it, or what its source last
+// reported.
+struct VariableValues {
+    std::vector<Change> change = std::vector<Change>(kMaxVariables);
+    std::vector<uint8_t> valid = std::vector<uint8_t>(kMaxVariables, 0);
+
+    void set(const Change& value) {
+        if (value.index >= kMaxVariables) return;
+        change[value.index] = value;
+        valid[value.index] = 1;
+    }
 };
 
 // Bytes of a value of that type, 0 for a type that is not mirrored.

@@ -56,6 +56,21 @@ int main() {
     check(!decodeStates(encodeStates(tooMany), got), "an oversized batch is rejected");
     check(!decodeStates(std::vector<uint8_t>{1}, got), "a payload without a count is rejected");
 
+    EnemyAnim anim;
+    anim.netId = 12;
+    anim.snapshot = true;
+    remote_animation::Change change{};
+    change.index = 7;
+    change.type = remote_animation::kTypeFloat;
+    const float speed = 2.5f;
+    std::memcpy(change.value, &speed, sizeof(speed));
+    anim.changes.push_back(change);
+    EnemyAnim gotAnim;
+    check(decodeAnim(encodeAnim(anim), gotAnim) && gotAnim.netId == 12 && gotAnim.snapshot && gotAnim.changes.size() == 1 &&
+              gotAnim.changes[0].index == 7 && std::memcmp(gotAnim.changes[0].value, &speed, sizeof(speed)) == 0,
+          "an animation report round trips");
+    check(!decodeAnim(std::vector<uint8_t>{1, 0}, gotAnim), "an animation report without a body is rejected");
+
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
 }
