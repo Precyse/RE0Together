@@ -171,7 +171,7 @@ namespace remote_weapon {
 
 void installEarly(uint8_t attachMode) {
     g_attachMode = attachMode;
-    sim_tick::add(&tick);
+    sim_tick::add(&tick, "remote weapon");
 }
 
 }  // namespace remote_weapon

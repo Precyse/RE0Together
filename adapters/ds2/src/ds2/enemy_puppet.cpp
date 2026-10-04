@@ -39,6 +39,7 @@ constexpr uintptr_t kAiIndividual = 0x50, kAiActivity = 0x23;  // AIIndividual =
 constexpr uint8_t kAiAsleep = 2;  // 0 none, 2 asleep, 3 awake: the AI manager does not decide for a sleeping individual
 constexpr uintptr_t kEntityUuid = 0x10;
 constexpr ULONGLONG kPruneMs = 500;
+constexpr ULONGLONG kAsleepEveryMs = 250;  // the engine puts the AI awake only on a wake event
 constexpr ULONGLONG kMaxExtrapolationMs = 300;  // no state this long: the puppet stands where it was
 constexpr ULONGLONG kRegistrationMs = 5000;     // a built entity joins the engine's entity map a little later
 constexpr ULONGLONG kReportMs = 5000;
@@ -67,6 +68,7 @@ struct Puppet {
     Uuid uuid{};
     enemy_wire::EnemyState state{};
     ULONGLONG receivedAt = 0;
+    ULONGLONG placedFor = 0;  // the report (by its receive time) the last placement used
     bool dead = false;
     uint8_t appliedHealth = enemy_wire::kHealthUnknown;
 };
@@ -178,6 +180,9 @@ void applyHealth(Puppet& puppet) {
 }
 
 void place(Puppet& puppet, ULONGLONG now) {
+    const bool standing = puppet.state.velocity[0] == 0 && puppet.state.velocity[1] == 0 && puppet.state.velocity[2] == 0;
+    if (standing && puppet.placedFor == puppet.receivedAt) return;  // nothing moved since the last placement
+    puppet.placedFor = puppet.receivedAt;
     const ULONGLONG age = std::min(now - puppet.receivedAt, kMaxExtrapolationMs);
     const float seconds = static_cast<float>(age) / kMillisecondsPerSecond;
     decima::WorldTransform transform = enemy_pose::fromWire(puppet.state.pose);
@@ -224,7 +229,7 @@ void removeUnmatched(ULONGLONG now) {
 
 // Guest, simulation thread.
 void tick() {
-    static ULONGLONG lastPrune = 0, lastReport = 0;
+    static ULONGLONG lastPrune = 0, lastReport = 0, lastAsleep = 0;
     std::vector<enemy_wire::EnemySpawn> spawns;
     std::vector<enemy_wire::EnemyState> states;
     std::vector<enemy_wire::EnemyGone> gone;
@@ -239,7 +244,10 @@ void tick() {
     if (g_adoptExisting.exchange(false)) {
         for (const uintptr_t entity : enemy_host::release()) enemy_puppet::adopt(entity);
     }
-    keepAiAsleep();
+    if (const ULONGLONG at = GetTickCount64(); at - lastAsleep >= kAsleepEveryMs) {
+        lastAsleep = at;
+        keepAiAsleep();
+    }
     for (const enemy_wire::EnemySpawn& spawn : spawns) {
         g_pending[spawn.netId] = spawn;
         Uuid id;
@@ -286,7 +294,7 @@ void tick() {
 
 namespace enemy_puppet {
 
-void installEarly() { sim_tick::add(&tick); }
+void installEarly() { sim_tick::add(&tick, "enemy puppets"); }
 
 bool animate(uintptr_t manager, uintptr_t owner) {
     std::lock_guard lock(g_animationMutex);

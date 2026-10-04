@@ -47,6 +47,10 @@ Config loadConfig() {
             config.enemySync = value == "1";
         } else if (key == "log_facts") {
             config.logFacts = value == "1";
+        } else if (key == "test_commands") {
+            config.testCommands = value == "1";
+        } else if (key == "cutscene_log") {
+            config.cutsceneLog = value == "1";
         } else if (key == "weapon_sync") {
             config.weaponSync = value == "1";
         } else if (key == "weapon_attach_mode") {

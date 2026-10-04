@@ -99,7 +99,7 @@ void tick() {
 
 namespace warp {
 
-void installEarly() { sim_tick::add(&tick); }
+void installEarly() { sim_tick::add(&tick, "warp"); }
 
 void poll() {
     static bool wasDown = false;

@@ -330,8 +330,8 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_requestSection));
     hooks::install("story change area", ds2::at(kRequestChangeArea), reinterpret_cast<void*>(&changeAreaDetour),
                    reinterpret_cast<void**>(&g_changeArea));
-    sim_tick::add(&pollMissions);
-    sim_tick::add(&applyIncoming);
+    sim_tick::add(&pollMissions, "story poll");
+    sim_tick::add(&applyIncoming, "story replay");
 }
 
 }  // namespace story

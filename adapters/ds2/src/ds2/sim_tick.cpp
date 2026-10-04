@@ -12,6 +12,7 @@ namespace {
 
 constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
 constexpr size_t kMaxCallbacks = 16;
+constexpr double kReportMinMicros = 20.0;  // callbacks cheaper than this are not listed
 constexpr double kReportSeconds = 5.0;  // how often the frame rate and the callbacks' cost are logged
 
 // The update takes more than its first four arguments; they are passed through untouched.
@@ -19,9 +20,11 @@ using UpdateFn = uint64_t (*)(uintptr_t, float, float, uint8_t, uintptr_t, uintp
 
 UpdateFn g_update = nullptr;
 sim_tick::Callback g_callbacks[kMaxCallbacks] = {};
+const char* g_names[kMaxCallbacks] = {};
 size_t g_count = 0;  // written at start-up only
 
 int64_t g_spent = 0;  // simulation thread only: counter ticks the callbacks took in this window
+int64_t g_spentEach[kMaxCallbacks] = {};  // and each callback's share
 
 int64_t counter() {
     LARGE_INTEGER now;
@@ -43,6 +46,13 @@ void report(int64_t now) {
     if (seconds < kReportSeconds) return;
     logger::write("sim_tick: %.1f frames/s, callbacks %.0f us/frame", frames / seconds,
                   frames ? 1e6 * static_cast<double>(g_spent) / frequency / frames : 0.0);
+    for (size_t i = 0; i < g_count; ++i) {
+        const double micros = frames ? 1e6 * static_cast<double>(g_spentEach[i]) / frequency / frames : 0.0;
+        if (micros >= kReportMinMicros) {
+            logger::write("sim_tick:   %s %.0f us/frame", g_names[i], micros);
+        }
+        g_spentEach[i] = 0;
+    }
     windowStart = now;
     g_spent = 0;
     frames = 0;
@@ -51,7 +61,11 @@ void report(int64_t now) {
 uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t s5, uintptr_t s6, uintptr_t s7,
                       uintptr_t s8) {
     const int64_t start = counter();
-    for (size_t i = 0; i < g_count; ++i) g_callbacks[i]();
+    for (size_t i = 0; i < g_count; ++i) {
+        const int64_t before = counter();
+        g_callbacks[i]();
+        g_spentEach[i] += counter() - before;
+    }
     g_spent += counter() - start;
     report(start);
     return g_update(self, a, b, flag, s5, s6, s7, s8);
@@ -67,8 +81,9 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_update));
 }
 
-void add(Callback callback) {
+void add(Callback callback, const char* name) {
     if (g_count < kMaxCallbacks) {
+        g_names[g_count] = name;
         g_callbacks[g_count++] = callback;
     } else {
         logger::write("sim_tick: more than %zu callbacks, one was not registered", kMaxCallbacks);

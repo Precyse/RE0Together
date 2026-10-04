@@ -292,7 +292,7 @@ void installEarly() {
     remote_appearance::installEarly();
     remote_animation::installEarly();
     remote_ride::installEarly();
-    sim_tick::add(&advance);
+    sim_tick::add(&advance, "remote body");
 }
 
 std::optional<uint64_t> ownerKey() {

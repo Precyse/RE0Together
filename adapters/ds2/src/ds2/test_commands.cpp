@@ -1,0 +1,145 @@
+// DEATH STRANDING 2: test commands for live checks on a session copy (adapter.ini test_commands=1, off by default).
+// Each command is a small text file dropped in <game>\coop; the simulation tick reads it, runs it and deletes it:
+//   tp.txt         "x y z"    teleport the local player there ("0 0 0" only logs the position)
+//   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
+//   addweapon.txt  "id"       DSPlayerSystem AddWeapon (-1 lists the weapon config ids)
+//   bt.txt         "r on"     SetBtActiveRegion(region, on)
+// A vectored exception handler also logs the address of every access violation inside the game's image, which names the
+// code behind a crash the adapter's own guards swallow.
+#include "ds2/test_commands.h"
+
+#include <windows.h>
+
+#include <cstdio>
+#include <string>
+
+#include "decima/safe_read.h"
+#include "ds2/engine.h"
+#include "ds2/place.h"
+#include "ds2/remote_player.h"
+#include "ds2/sim_tick.h"
+#include "log.h"
+#include "paths.h"
+
+namespace {
+
+constexpr uintptr_t kChangeArea = 0x140709cc0;        // RequestChangeArea(unused, u16 area, bool, transform*, i32, bool)
+constexpr uintptr_t kAddWeapon = 0x140d9bbc0;         // DSPlayerSystem_sExportedAddWeapon(u16 weapon id)
+constexpr uintptr_t kSetBtRegion = 0x141f09920;       // SetBtActiveRegion(u8 region, u8 active)
+constexpr uintptr_t kWeaponConfigList = 0x14623FA50;  // +0x30 count, +0x38 entry pointers, entry +0x20 u16 id
+constexpr uintptr_t kWeaponCount = 0x30, kWeaponEntries = 0x38, kWeaponId = 0x20;
+constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: the player's current area
+constexpr int kMaxListedConfigs = 40;
+constexpr size_t kMaxFaultsLogged = 30;
+constexpr ULONGLONG kPollMs = 500;
+constexpr uintptr_t kImageSpan = 0x20000000;
+constexpr DWORD kFaultCodes[] = {EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ILLEGAL_INSTRUCTION, EXCEPTION_STACK_OVERFLOW};
+
+// The text of a command file, deleted on the way; empty when there is none.
+std::string takeCommand(const wchar_t* name) {
+    const std::wstring path = coopDirectory() + L"\\" + name;
+    FILE* file = _wfopen(path.c_str(), L"r");
+    if (!file) return {};
+    char text[128] = {};
+    fread(text, 1, sizeof(text) - 1, file);
+    fclose(file);
+    DeleteFileW(path.c_str());
+    return text;
+}
+
+bool guardedCall(void (*call)(const int*), const int* args) {
+    __try {
+        call(args);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void teleport(const std::string& text) {
+    double x = 0, y = 0, z = 0;
+    decima::WorldTransform where{};
+    const uintptr_t sam = remote_player::samEntity();
+    if (sscanf(text.c_str(), "%lf %lf %lf", &x, &y, &z) != 3 || !ds2::entityTransform(sam, where)) return;
+    logger::write("test_commands: the player is at %.1f %.1f %.1f", where.position.x, where.position.y, where.position.z);
+    if (x == 0 && y == 0) return;
+    where.position = {x, y, z};
+    logger::write("test_commands: teleport to %.1f %.1f %.1f %s", x, y, z, ds2::teleportEntity(sam, where) ? "done" : "faulted");
+}
+
+void changeArea(const std::string& text) {
+    int area = 0;
+    if (sscanf(text.c_str(), "%d", &area) != 1) return;
+    decima::WorldTransform where{};
+    if (!ds2::entityTransform(remote_player::samEntity(), where)) return;
+    bool ok = false;
+    __try {
+        ok = reinterpret_cast<bool (*)(uintptr_t, uint16_t, bool, const void*, int32_t, bool)>(ds2::at(kChangeArea))(
+            0, static_cast<uint16_t>(area), true, &where, -1, false);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        logger::write("test_commands: RequestChangeArea faulted");
+    }
+    logger::write("test_commands: RequestChangeArea(%d) -> %d", area, ok);
+}
+
+void addWeapon(const std::string& text) {
+    int id = 0;
+    if (sscanf(text.c_str(), "%d", &id) != 1) return;
+    if (id < 0) {
+        const uintptr_t list = decima::readPointer(ds2::at(kWeaponConfigList));
+        const int32_t count = list ? ds2::field<int32_t>(list, kWeaponCount) : 0;
+        const uintptr_t entries = list ? decima::readPointer(list + kWeaponEntries) : 0;
+        logger::write("test_commands: %d weapon configs", count);
+        for (int32_t i = 0; entries && i < count && i < kMaxListedConfigs; ++i) {
+            const uintptr_t entry = decima::readPointer(entries + i * sizeof(uintptr_t));
+            logger::write("test_commands: config %d id %u", i, entry ? ds2::field<uint16_t>(entry, kWeaponId) : 0);
+        }
+        return;
+    }
+    const bool ok = guardedCall([](const int* a) { reinterpret_cast<void (*)(uint16_t)>(ds2::at(kAddWeapon))(static_cast<uint16_t>(*a)); }, &id);
+    logger::write("test_commands: AddWeapon(%d) %s", id, ok ? "done" : "faulted");
+}
+
+void setBtRegion(const std::string& text) {
+    int args[2] = {0, 0};
+    if (sscanf(text.c_str(), "%d %d", &args[0], &args[1]) != 2) return;
+    const bool ok = guardedCall([](const int* a) { reinterpret_cast<void (*)(uint8_t, uint8_t)>(ds2::at(kSetBtRegion))(static_cast<uint8_t>(a[0]), static_cast<uint8_t>(a[1])); }, args);
+    logger::write("test_commands: SetBtActiveRegion(%d, %d) %s", args[0], args[1], ok ? "done" : "faulted");
+}
+
+void tick() {
+    static ULONGLONG last = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last < kPollMs) return;
+    last = now;
+    if (const std::string text = takeCommand(L"tp.txt"); !text.empty()) teleport(text);
+    if (const std::string text = takeCommand(L"area.txt"); !text.empty()) changeArea(text);
+    if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
+    if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
+}
+
+LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
+    static size_t logged = 0;
+    const uintptr_t at = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
+    const uintptr_t base = ds2::at(ds2::kImageBase);
+    if (at < base || at - base > kImageSpan || logged >= kMaxFaultsLogged) return EXCEPTION_CONTINUE_SEARCH;
+    for (const DWORD code : kFaultCodes) {
+        if (info->ExceptionRecord->ExceptionCode != code) continue;
+        ++logged;
+        const ULONG_PTR target = info->ExceptionRecord->NumberParameters >= 2 ? info->ExceptionRecord->ExceptionInformation[1] : 0;
+        logger::write("test_commands: fault %08lx in the game at file va %p, address %p", code,
+                      reinterpret_cast<void*>(at - base + ds2::kImageBase), reinterpret_cast<void*>(target));
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+}  // namespace
+
+namespace test_commands {
+
+void installEarly() {
+    AddVectoredExceptionHandler(1, faultLogger);
+    sim_tick::add(&tick, "test commands");
+}
+
+}  // namespace test_commands

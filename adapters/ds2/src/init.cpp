@@ -15,6 +15,7 @@
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/camp_alert.h"
+#include "ds2/cutscene_log.h"
 #include "ds2/enemy_host.h"
 #include "ds2/enemy_puppet.h"
 #include "ds2/damage_veto.h"
@@ -24,6 +25,7 @@
 #include "ds2/sim_tick.h"
 #include "ds2/partner_cargo.h"
 #include "ds2/story.h"
+#include "ds2/test_commands.h"
 #include "ds2/warp.h"
 #include "ds2/structures.h"
 #include "ds2/bt_events.h"
@@ -83,6 +85,8 @@ DWORD WINAPI initThread(LPVOID) {
     }
     story::installEarly();
     warp::installEarly();
+    if (config.testCommands) test_commands::installEarly();
+    if (config.cutsceneLog) cutscene_log::installEarly();
     partner_cargo::installEarly();
     structures::installEarly();
     sim_tick::installEarly();

@@ -216,8 +216,8 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_territory));
     hooks::install("catcher tar activation", ds2::at(kTarActivate), reinterpret_cast<void*>(&tarDetour),
                    reinterpret_cast<void**>(&g_tar));
-    sim_tick::add(&applyRegions);
-    sim_tick::add(&applyCatcherEvents);
+    sim_tick::add(&applyRegions, "bt regions");
+    sim_tick::add(&applyCatcherEvents, "bt catcher");
 }
 
 void setRole(bool host, bool guest) {

@@ -10,6 +10,7 @@ using Callback = void (*)();
 void installEarly();
 
 // Registers a function to run every frame on the simulation thread (call from start-up code, not from a callback).
-void add(Callback callback);
+// `name` shows in the per-callback cost log.
+void add(Callback callback, const char* name);
 
 }  // namespace sim_tick
