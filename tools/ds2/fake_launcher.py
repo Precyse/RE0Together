@@ -69,6 +69,22 @@ def load_enemy_recording(path):
     return out
 
 
+# Every player-buildable kind with its own-field tail length (adapters/ds2/src/struct_wire.h kKinds), for --struct-all.
+STRUCT_KINDS = {2: 0x00, 3: 0x00, 4: 0x08, 5: 0x18, 6: 0x00, 7: 0x00, 9: 0x08, 10: 0x18, 11: 0x08, 12: 0x08, 14: 0x28, 15: 0x08,
+                16: 0x08, 20: 0x00, 21: 0x18, 22: 0x28, 23: 0x30, 26: 0x10, 32: 0x28, 33: 0x28, 34: 0x10}
+SUBKIND_DEFAULT = 14  # EDSConstructionPointSubCategory Invalid: the category's own config
+
+
+def kind_payload(local, kind, index):
+    """STRUCT_CREATE of one kind with a zero tail, ahead of the local player on a fan (index spreads them 5 m apart)."""
+    fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
+    side = (index - len(STRUCT_KINDS) / 2) * 5.0
+    position = struct.pack("<3d", local["x"] + fx * 12.0 + fy * side, local["y"] + fy * 12.0 - fx * side, local["z"])
+    rotation = struct.pack("<9f", fy, -fx, 0.0, fx, fy, 0.0, 0.0, 0.0, 1.0)
+    fixed = struct.pack("<BBBBI16s", kind, SUBKIND_DEFAULT, 1, STRUCT_KINDS[kind], LADDER_ID + 100 + index, bytes(16)) + position + rotation + bytes(4) + struct.pack("<f", 360000.0)
+    return fixed + bytes(STRUCT_KINDS[kind])
+
+
 LADDER_ID = 11700  # an id the save does not use
 ANCHOR_TAIL = bytes.fromhex("0000000047 7a5541".replace(" ", ""))  # the captured climbing anchor: its rope length
 LADDER_AHEAD = 8.0  # metres ahead of the local player (a ladder the player grabs cannot be removed under them: the game crashes)
@@ -114,6 +130,7 @@ def main():
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
     p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s until the host reports a death (ENEMY_DEATH, printed)")
     p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
+    p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--echo-weapon", action="store_true", help="send the local player's WEAPON_STATE and WEAPON_FIRE back as the peer's (weapon_sync=1: the body holds and fires Sam's weapon)")
@@ -198,6 +215,7 @@ def serve(sock, a):
     replay_start = None
     sent_enemy = [0]
     last_hit = 0.0
+    struct_sent = 0
     last_bt = 0.0
     while True:
         now = time.monotonic()
@@ -260,6 +278,12 @@ def serve(sock, a):
         if a.bt_regions and now - last_bt >= 1.0:
             last_bt = now
             sock.sendall(encode(0x0128, peer_slot, struct.pack("<Q", int(a.bt_regions, 16))))
+        if a.struct_all and local and start is not None and now - start >= a.struct_all + 8.0 * struct_sent:
+            if struct_sent < len(STRUCT_KINDS):
+                kind = sorted(STRUCT_KINDS)[struct_sent]
+                sock.sendall(encode(STRUCT_CREATE, peer_slot, kind_payload(local, kind, struct_sent)))
+                print(f"struct: kind {kind} sent", flush=True)
+                struct_sent += 1
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")

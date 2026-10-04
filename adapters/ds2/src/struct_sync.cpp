@@ -1,7 +1,10 @@
 #include "struct_sync.h"
 
+#include <map>
+
 #include "game.h"
 #include "log.h"
+#include "resync.h"
 #include "struct_wire.h"
 
 namespace {
@@ -9,6 +12,15 @@ namespace {
 // Net thread only.
 bool g_guest = false;
 uint8_t g_hostSlot = 0;
+bool g_requestedAtGameplay = false;
+size_t g_knownPeers = 0;
+std::map<uint32_t, struct_wire::Placed> g_live;  // host: the structures it placed this session, by construction id
+
+void sendCreate(NetClient& net, const struct_wire::Placed& placed) {
+    if (!net.send(struct_wire::kMsgStructCreate, true, proto::kSlotAll, struct_wire::encode(placed))) {
+        logger::write("struct_sync: could not send structure %u", placed.create.id);
+    }
+}
 
 }  // namespace
 
@@ -38,13 +50,31 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_guest = session.linked && !host;
     g_hostSlot = session.hostSlot;
     game::setStructureRole(host, g_guest);
-    if (!host) return;
-    for (const struct_wire::Placed& placed : game::takePlacedStructures()) {
-        if (!net.send(struct_wire::kMsgStructCreate, true, proto::kSlotAll, struct_wire::encode(placed))) {
-            logger::write("struct_sync: could not send structure %u", placed.create.id);
+    if (g_guest) {
+        if (!game::gameplaySettled()) {
+            g_requestedAtGameplay = false;
+        } else if (!g_requestedAtGameplay && resync::request(net, g_hostSlot, resync::kStructures)) {
+            g_requestedAtGameplay = true;
+            logger::write("struct_sync: gameplay started, asked the host for the structures it placed");
         }
+    } else {
+        g_requestedAtGameplay = false;
+    }
+    if (!host) {
+        g_live.clear();
+        return;
+    }
+    // A peer that joined, or asked, gets every structure placed so far (a guest skips the ones it already has).
+    if (session.peers.size() > g_knownPeers || !resync::takeRequests(resync::kStructures).empty()) {
+        for (const auto& [id, placed] : g_live) sendCreate(net, placed);
+    }
+    g_knownPeers = session.peers.size();
+    for (const struct_wire::Placed& placed : game::takePlacedStructures()) {
+        g_live[placed.create.id] = placed;
+        sendCreate(net, placed);
     }
     for (const struct_wire::Remove& removal : game::takeRemovedStructures()) {
+        g_live.erase(removal.id);
         net.send(struct_wire::kMsgStructRemove, true, proto::kSlotAll, proto::bytesOf(removal));
     }
 }
