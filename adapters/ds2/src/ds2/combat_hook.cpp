@@ -228,7 +228,6 @@ constexpr size_t kDescriptorSize = 0x40;  // the weak node (32 bytes) sits at +0
 constexpr uintptr_t kDescKind = 0x08, kDescWeak = 0x10;
 constexpr uintptr_t kParamsPosition = 0x98, kParamsHitFlag = 0xB0;
 constexpr uintptr_t kContextData = 0x120, kContextResource = 0x18, kContextType = 0x0C, kEventParent = 0x38;
-constexpr uintptr_t kLinkContext = 0x38;
 constexpr uint32_t kFlagKind1 = 1u << 3, kFlagKind2 = 1u << 1;  // EDamageFlags bits of the hit kind
 constexpr uint16_t kRefusedTypes[] = {0x023B, 0x0095};            // attack types the MULE damage gate refuses outright
 constexpr ULONGLONG kWaitingMs = 30000;
@@ -240,6 +239,9 @@ struct DamageTypeArg {
 };
 
 std::atomic<uintptr_t> g_realResource{0};  // the attack resource of the last real hit on the local player
+constexpr size_t kContextBlockCopy = 0xA0;  // the data block bytes borrowed from the real context (id and source are kept fresh)
+alignas(16) uint8_t g_realBlock[kContextBlockCopy];
+std::mutex g_blockMutex;
 struct Waiting {
     combat_wire::EnemyHit hit;
     ULONGLONG since;
@@ -258,10 +260,15 @@ void learnResource(uintptr_t params) {
     const uintptr_t parent = parentContextOf(params);
     if (!parent) return;
     const uint16_t type = ds2::field<uint16_t>(parent + kContextData, kContextType);
+    if (type == 0) return;  // an attack of no kind (environment): its resource carries no weapon damage either
     for (const uint16_t refused : kRefusedTypes) {
         if (type == refused) return;
     }
-    if (const uintptr_t resource = decima::readPointer(parent + kContextData + kContextResource)) g_realResource = resource;
+    if (const uintptr_t resource = decima::readPointer(parent + kContextData + kContextResource)) {
+        std::lock_guard lock(g_blockMutex);
+        decima::safeCopy(g_realBlock, parent + kContextData, sizeof(g_realBlock));
+        g_realResource = resource;
+    }
 }
 
 void unlinkGuarded(uintptr_t node) {
@@ -271,8 +278,20 @@ void unlinkGuarded(uintptr_t node) {
     }
 }
 
+// Copies the real context's data block into a fresh one, keeping the fresh attack id and "no source".
+void borrowBlock(uintptr_t block) {
+    constexpr uintptr_t kId = 0x08, kSource = 0x20;
+    const uint64_t id = ds2::field<uint64_t>(block, kId), source = ds2::field<uint64_t>(block, kSource);
+    {
+        std::lock_guard lock(g_blockMutex);
+        std::memcpy(reinterpret_cast<void*>(block), g_realBlock, sizeof(g_realBlock));
+    }
+    ds2::field<uint64_t>(block, kId) = id;
+    ds2::field<uint64_t>(block, kSource) = source;
+}
+
 // Builds and queues one hit on `victim`. False when the engine faulted.
-bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit, uintptr_t resource) {
+bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit) {
     decima::WorldTransform where;
     if (!ds2::entityTransform(victim, where)) return false;
     alignas(16) uint8_t descriptor[kDescriptorSize] = {};
@@ -294,10 +313,9 @@ bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields
         reinterpret_cast<NodeFn>(ds2::at(kWeakLink))(node);
         linked = true;
         const uintptr_t link = reinterpret_cast<uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t)>(ds2::at(kMakeAttackLink))(0, 0, 0, desc);
-        const uintptr_t contextWeak = link ? decima::readPointer(link + kLinkContext) : 0;
-        if (contextWeak) ds2::field<uintptr_t>(contextWeak - kEntityWeakTarget + kContextData, kContextResource) = resource;
         reinterpret_cast<void (*)(uintptr_t, uintptr_t, const void*, float, const float*, float, uint32_t)>(ds2::at(kInitDamageParams))(
             paramsAt, link, &type, hit.amount, direction, 0.0f, static_cast<uint32_t>(std::max(hit.partIndex, 0)));
+        if (const uintptr_t context = parentContextOf(paramsAt)) borrowBlock(context + kContextData);
         std::memcpy(params + kParamsPosition, position, sizeof(position));
         params[kParamsHitFlag] = 1;
         if (hit.flags & kFlagKind1) ds2::field<uint32_t>(paramsAt, kParamsFlags) |= 8;
@@ -325,7 +343,7 @@ void runForwarded() {
         const uintptr_t enemy = ds2::entityByUuid(waiting.hit.enemy.uuid);
         if (!enemy || ds2::entityIsDead(enemy)) return true;
         const remote_apply::Scope applying;
-        const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit, resource);
+        const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit);
         logger::write("enemy_combat: forwarded hit on enemy %u: %s", waiting.hit.enemy.netId, ok ? "queued" : "faulted");
         return true;
     });

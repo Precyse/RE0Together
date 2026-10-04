@@ -205,12 +205,26 @@ void unlistPlayer() {
     logger::write("remote_body: player unlisted from the player manager");
 }
 
+constexpr uintptr_t kRemoveEntity = 0x14014ba20;  // Entity::Remove(entity, immediate)
 constexpr uintptr_t kEntityFlags = 0x98;
 constexpr uint64_t kDeadFlag = uint64_t{1} << 8;  // Entity::IsDead
 constexpr auto kDeadRespawnDelay = std::chrono::seconds(3);
 
-void forgetBody(const char* why) {
+// Takes the body's entity out of the world, so a world that goes on (a fast travel, a dead body) has no entity left whose
+// camera and player data are gone.
+void removeBodyEntity(uintptr_t entity) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, bool)>(ds2::at(kRemoveEntity))(entity, true);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        logger::write("remote_body: removing the body's entity faulted");
+    }
+}
+
+// `removeEntity`: the world stays (a fast travel, a body that died), so the entity is removed too; when the world itself
+// is going (return to title) the engine destroys it.
+void forgetBody(const char* why, bool removeEntity = false) {
     logger::write("remote_body: %s, body forgotten", why);
+    if (removeEntity && g_entity.load()) removeBodyEntity(g_entity.load());
     unlistPlayer();
     g_entity = 0;
     g_netPlayer = 0;
@@ -252,7 +266,7 @@ void advance() {
             if (Clock::now() - g_liveSince < kMarkerRepairWindow) remote_marker::repair();
             remote_ride::tick();
             if (diedLongAgo()) {
-                forgetBody("the body died (the engine's own damage, e.g. drowning) and stays down");
+                forgetBody("the body died (the engine's own damage, e.g. drowning) and stays down", true);
                 break;
             }
             if (!remote_ride::holdsBody()) follow();
@@ -278,7 +292,7 @@ uint8_t slot() {
 bool isLive() { return g_stage == Stage::Live; }
 
 void leave(const char* why) {
-    if (g_stage != Stage::Idle) forgetBody(why);
+    if (g_stage != Stage::Idle) forgetBody(why, true);
 }
 
 }  // namespace remote_player

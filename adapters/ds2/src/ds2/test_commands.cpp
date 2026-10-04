@@ -138,7 +138,9 @@ void fastTravel(const std::string& text) {
     if (sscanf(text.c_str(), "%lf %lf %lf", &x, &y, &z) != 3 || !ds2::entityTransform(remote_player::samEntity(), where)) return;
     where.position = {x, y, z};
     const uintptr_t module = decima::readPointer(ds2::at(kGameModuleGlobal));
-    const uintptr_t system = module ? module + kFastTravelSystem : 0;
+    const uintptr_t pointed = module ? decima::readPointer(module + kFastTravelSystem) : 0;
+    const uintptr_t system = pointed ? pointed : module + kFastTravelSystem;  // the system is a pointer field of the game module
+    logger::write("test_commands: fast travel system %p (field value %p)", reinterpret_cast<void*>(system), reinterpret_cast<void*>(pointed));
     remote_player::leave("fast travel");
     bool ok = false;
     __try {
