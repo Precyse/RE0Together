@@ -14,6 +14,7 @@
 #include "player_sync.h"
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
+#include "ds2/camp_alert.h"
 #include "ds2/enemy_host.h"
 #include "ds2/enemy_puppet.h"
 #include "ds2/damage_veto.h"
@@ -68,6 +69,7 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.enemySync) {
         enemy_spawn::installEarly();
         enemy_host::installEarly();
+        camp_alert::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
     }

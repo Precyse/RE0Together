@@ -9,6 +9,7 @@
 #include "combat_wire.h"
 #include "env_wire.h"
 #include "fact_wire.h"
+#include "camp_wire.h"
 #include "enemy_wire.h"
 #include "story_wire.h"
 #include "struct_wire.h"
@@ -186,6 +187,12 @@ void releaseWorldEnv();
 // as they are built, and the host's reports (enemy_wire.h) move them: they are the puppets of the host's enemies. Needs
 // enemy_spawn::installEarly (adapter.ini enemy_sync=1). Any thread.
 void tameEnemies(bool tame);
+
+// Host: report the alert phase of the enemy camps. `takeCampPhases` returns the camps whose phase changed since the last
+// call, or all of them when `all`. A guest sets the received phases on its own camps. Any thread.
+void shareCamps(bool host);
+std::vector<camp_wire::CampPhase> takeCampPhases(bool all);
+void applyCampPhases(const std::vector<camp_wire::CampPhase>& camps);
 
 // Host: report the enemies the game spawns (needs the enemy hook, adapter.ini enemy_sync=1). Any thread.
 void shareEnemies(bool host);

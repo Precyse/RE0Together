@@ -63,6 +63,8 @@ add_library(ds2_adapter SHARED
     src/struct_sync.cpp
     src/story_sync.cpp
     src/enemy_sync.cpp
+    src/camp_sync.cpp
+    src/ds2/camp_alert.cpp
     src/enemy_combat.cpp
     src/enemy_directory.cpp
     src/ds2/combat_hook.cpp
