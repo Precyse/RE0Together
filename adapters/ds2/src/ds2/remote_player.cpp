@@ -205,8 +205,12 @@ void unlistPlayer() {
     logger::write("remote_body: player unlisted from the player manager");
 }
 
-void forgetBody() {
-    logger::write("remote_body: gameplay ended, body forgotten");
+constexpr uintptr_t kEntityFlags = 0x98;
+constexpr uint64_t kDeadFlag = uint64_t{1} << 8;  // Entity::IsDead
+constexpr auto kDeadRespawnDelay = std::chrono::seconds(3);
+
+void forgetBody(const char* why) {
+    logger::write("remote_body: %s, body forgotten", why);
     unlistPlayer();
     g_entity = 0;
     g_netPlayer = 0;
@@ -215,9 +219,24 @@ void forgetBody() {
     g_stage = Stage::Idle;
 }
 
+// The body is a real player entity: the engine's own environment damage (drowning, falls) can kill it, and nothing
+// revives it. A body that stays dead is dropped and built again.
+bool diedLongAgo() {
+    static Clock::time_point deadSince;
+    static bool wasDead = false;
+    const bool dead = (ds2::field<uint64_t>(g_entity.load(), kEntityFlags) & kDeadFlag) != 0;
+    if (!dead) {
+        wasDead = false;
+        return false;
+    }
+    if (!wasDead) deadSince = Clock::now();
+    wasDead = true;
+    return Clock::now() - deadSince > kDeadRespawnDelay;
+}
+
 void advance() {
     g_gameplay.update(samEntity());
-    if (g_stage != Stage::Idle && (!g_gameplay.active() || samEntity() != g_samAtSpawn)) forgetBody();
+    if (g_stage != Stage::Idle && (!g_gameplay.active() || samEntity() != g_samAtSpawn)) forgetBody("gameplay ended");
     switch (g_stage) {
         case Stage::Idle:
             if (g_enabled.load() && g_gameplay.settled() && targetFresh()) {
@@ -232,6 +251,10 @@ void advance() {
         case Stage::Live:
             if (Clock::now() - g_liveSince < kMarkerRepairWindow) remote_marker::repair();
             remote_ride::tick();
+            if (diedLongAgo()) {
+                forgetBody("the body died (the engine's own damage, e.g. drowning) and stays down");
+                break;
+            }
             if (!remote_ride::holdsBody()) follow();
             break;
         case Stage::Failed:
