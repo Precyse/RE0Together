@@ -232,7 +232,7 @@ bool dealDamage(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFiel
     const uint8_t kind = (hit.flags & kFlagKind1) ? 1 : (hit.flags & kFlagKind2) ? 2 : kHitKindNone;
     const uintptr_t type = decima::readPointer(ds2::at(kDefaultDamageType));
     __try {
-        reinterpret_cast<DealDamageFn>(ds2::at(kDealDamage))(victim, 0, 0, attacker, static_cast<uint32_t>(hit.partIndex), type,
+        reinterpret_cast<DealDamageFn>(ds2::at(kDealDamage))(victim, attacker, 0, attacker, static_cast<uint32_t>(std::max(hit.partIndex, 0)), type,
                                                              hit.amount, 0.0f, kImpulseScale, kind, position, direction, 0);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
