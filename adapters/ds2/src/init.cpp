@@ -15,6 +15,7 @@
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/camp_alert.h"
+#include "ds2/cargo_defer.h"
 #include "ds2/cutscene_log.h"
 #include "ds2/enemy_host.h"
 #include "ds2/enemy_puppet.h"
@@ -86,6 +87,7 @@ DWORD WINAPI initThread(LPVOID) {
     }
     story::installEarly();
     warp::installEarly();
+    cargo_defer::installEarly();
     world_pause::installEarly();
     if (config.testCommands) test_commands::installEarly();
     if (config.cutsceneLog) cutscene_log::installEarly();

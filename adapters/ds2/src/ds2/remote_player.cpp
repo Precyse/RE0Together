@@ -277,6 +277,10 @@ uint8_t slot() {
 
 bool isLive() { return g_stage == Stage::Live; }
 
+void leave(const char* why) {
+    if (g_stage != Stage::Idle) forgetBody(why);
+}
+
 }  // namespace remote_player
 
 namespace remote_body {

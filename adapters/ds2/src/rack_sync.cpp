@@ -14,6 +14,7 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kCheckInterval = std::chrono::milliseconds(500);
+constexpr int kMaxChangesPerRound = 6;  // a burst (a cargo theft on the partner) is spread over several rounds
 constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and delete requests on its next update
 
 // Net thread only.
@@ -38,10 +39,15 @@ void follow(uint64_t ownerKey, const std::vector<game::Cargo>& wanted, Clock::ti
     g_lastChange = now;
     int removed = 0, added = 0;
     for (const auto& [type, handles] : have) {
-        for (size_t i = want[type]; i < handles.size(); ++i) removed += game::removeCargo(handles[i]);
+        for (size_t i = want[type]; i < handles.size() && removed + added < kMaxChangesPerRound; ++i) {
+            game::removeCargoLater(handles[i]);
+            ++removed;
+        }
     }
     for (const auto& [type, count] : want) {
-        for (size_t i = have[type].size(); i < count; ++i) added += game::addBackpackCargo(ownerKey, type);
+        for (size_t i = have[type].size(); i < count && removed + added < kMaxChangesPerRound; ++i) {
+            added += game::addBackpackCargo(ownerKey, type);
+        }
     }
     logger::write("rack_sync: the body's rack: %d pieces removed, %d added (%zu wanted)", removed, added, wanted.size());
 }

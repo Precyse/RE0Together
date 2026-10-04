@@ -153,6 +153,10 @@ bool placeCargo(uint32_t type, const world_to_screen::Vec3& at);
 // Asks the game to delete a piece, carried or on the ground. Any thread.
 bool removeCargo(uint64_t handle);
 
+// Queues the deletion for the simulation thread, a few per frame (the partner body's pieces: a burst from the net thread
+// crashed the engine's equipment code). Any thread.
+void removeCargoLater(uint64_t handle);
+
 // While `on` (the host), the story, order and progress facts the game changes during gameplay are queued, last value
 // per fact; loading and the title screen are never queued. Any thread. Needs world_facts::installEarly.
 void shareFactWrites(bool on);

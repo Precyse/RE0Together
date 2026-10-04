@@ -15,4 +15,9 @@ uint8_t slot();
 // Whether the remote has its controller and camera mode (the spawn has finished).
 bool isLive();
 
+// The local player is about to leave the world (a fast travel, an area change): the body is taken down the way a return to
+// the title takes it (unlisted, camera and markers released); it is built again once gameplay settles in the new place.
+// Simulation thread.
+void leave(const char* why);
+
 }  // namespace remote_player

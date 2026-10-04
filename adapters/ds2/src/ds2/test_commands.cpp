@@ -2,8 +2,9 @@
 // Each command is a small text file dropped in <game>\coop; the simulation tick reads it, runs it and deletes it:
 //   tp.txt         "x y z"    teleport the local player there ("0 0 0" only logs the position)
 //   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
-//   addweapon.txt  "id"       DSPlayerSystem AddWeapon (-1 lists the weapon config ids)
+//   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
+//   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
 #include "ds2/test_commands.h"
@@ -18,6 +19,7 @@
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
+#include "game.h"
 #include "log.h"
 #include "paths.h"
 
@@ -25,9 +27,14 @@ namespace {
 
 constexpr uintptr_t kChangeArea = 0x140709cc0;        // RequestChangeArea(unused, u16 area, bool, transform*, i32, bool)
 constexpr uintptr_t kAddWeapon = 0x140d9bbc0;         // DSPlayerSystem_sExportedAddWeapon(u16 weapon id)
+constexpr uintptr_t kFastTravel = 0x140703280;        // (FastTravelSystem*, const WorldTransform*, const GGUUID*, bool)
+constexpr uintptr_t kNullUuid = 0x142d91fd0;
+constexpr uintptr_t kGameModuleGlobal = 0x14623E338, kFastTravelSystem = 0x5A0;
 constexpr uintptr_t kSetBtRegion = 0x141f09920;       // SetBtActiveRegion(u8 region, u8 active)
 constexpr uintptr_t kWeaponConfigList = 0x14623FA50;  // +0x30 count, +0x38 entry pointers, entry +0x20 u16 id
-constexpr uintptr_t kWeaponCount = 0x30, kWeaponEntries = 0x38, kWeaponId = 0x20;
+constexpr uintptr_t kWeaponCount = 0x30, kWeaponEntries = 0x38, kWeaponId = 0x20, kWeaponListItem = 0x28;
+constexpr uintptr_t kBaggageCatalogue = 0x14623E540;  // +0x18 count, +0x20 the DSGameBaggageListItem pointers
+constexpr uintptr_t kCatalogueCount = 0x18, kCatalogueItems = 0x20, kItemContents = 0x50, kItemKind = 0x44;
 constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: the player's current area
 constexpr int kMaxListedConfigs = 40;
 constexpr size_t kMaxFaultsLogged = 30;
@@ -98,8 +105,48 @@ void addWeapon(const std::string& text) {
         }
         return;
     }
-    const bool ok = guardedCall([](const int* a) { reinterpret_cast<void (*)(uint16_t)>(ds2::at(kAddWeapon))(static_cast<uint16_t>(*a)); }, &id);
-    logger::write("test_commands: AddWeapon(%d) %s", id, ok ? "done" : "faulted");
+    // A weapon is a cargo piece: its baggage kind is the catalogue item whose contents are the weapon config's list item;
+    // creating that piece makes the player's weapon table (and the wheel) list the weapon. AddWeapon itself only refreshes a
+    // weapon the player already has.
+    const uintptr_t list = decima::readPointer(ds2::at(kWeaponConfigList));
+    const int32_t configs = list ? ds2::field<int32_t>(list, kWeaponCount) : 0;
+    const uintptr_t entries = list ? decima::readPointer(list + kWeaponEntries) : 0;
+    uintptr_t listItem = 0;
+    for (int32_t i = 0; entries && i < configs && !listItem; ++i) {
+        const uintptr_t entry = decima::readPointer(entries + i * sizeof(uintptr_t));
+        if (entry && ds2::field<uint16_t>(entry, kWeaponId) == id) listItem = decima::readPointer(entry + kWeaponListItem);
+    }
+    const uintptr_t catalogue = decima::readPointer(ds2::at(kBaggageCatalogue));
+    const int32_t items = catalogue ? ds2::field<int32_t>(catalogue, kCatalogueCount) : 0;
+    const uintptr_t itemArray = catalogue ? decima::readPointer(catalogue + kCatalogueItems) : 0;
+    uint32_t kind = 0;
+    for (int32_t i = 0; listItem && itemArray && i < items && !kind; ++i) {
+        const uintptr_t item = decima::readPointer(itemArray + i * sizeof(uintptr_t));
+        if (item && decima::readPointer(item + kItemContents) == listItem) kind = ds2::field<uint32_t>(item, kItemKind);
+    }
+    logger::write("test_commands: weapon %d: list item %p, baggage kind %u", id, reinterpret_cast<void*>(listItem), kind);
+    if (!kind) return;
+    game::Cargo piece;
+    piece.type = kind;
+    logger::write("test_commands: AddWeapon(%d) as cargo %s", id, game::addCargo(piece) == game::AddResult::Done ? "requested" : "not done");
+    guardedCall([](const int* a) { reinterpret_cast<void (*)(uint16_t)>(ds2::at(kAddWeapon))(static_cast<uint16_t>(*a)); }, &id);
+}
+
+void fastTravel(const std::string& text) {
+    double x = 0, y = 0, z = 0;
+    decima::WorldTransform where{};
+    if (sscanf(text.c_str(), "%lf %lf %lf", &x, &y, &z) != 3 || !ds2::entityTransform(remote_player::samEntity(), where)) return;
+    where.position = {x, y, z};
+    const uintptr_t module = decima::readPointer(ds2::at(kGameModuleGlobal));
+    const uintptr_t system = module ? module + kFastTravelSystem : 0;
+    remote_player::leave("fast travel");
+    bool ok = false;
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, const void*, const void*, bool)>(ds2::at(kFastTravel))(system, &where, reinterpret_cast<const void*>(ds2::at(kNullUuid)), true);
+        ok = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    logger::write("test_commands: fast travel to %.1f %.1f %.1f %s", x, y, z, ok ? "requested" : "faulted");
 }
 
 void setBtRegion(const std::string& text) {
@@ -118,6 +165,7 @@ void tick() {
     if (const std::string text = takeCommand(L"area.txt"); !text.empty()) changeArea(text);
     if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
+    if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.

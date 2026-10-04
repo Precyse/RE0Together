@@ -16,6 +16,7 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kCheckInterval = std::chrono::milliseconds(500);
+constexpr int kMaxChangesPerRound = 6;  // a burst (a cargo theft on the partner) is spread over several rounds
 constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and delete requests on its next update
 
 // Net thread only.
@@ -83,12 +84,15 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
                                             [&](const equip_sync::Held& m) { return m.type == piece.type; });
             if (match != missing.end()) {
                 missing.erase(match);
-            } else if (!g_protected.contains(piece.handle)) {
-                game::removeCargo(piece.handle);
+            } else if (changes < kMaxChangesPerRound && !g_protected.contains(piece.handle)) {
+                game::removeCargoLater(piece.handle);
                 ++changes;
             }
         }
-        for (const equip_sync::Held& want : missing) changes += game::addSlotPiece(ownerKey, slot, want.type);
+        for (const equip_sync::Held& want : missing) {
+            if (changes >= kMaxChangesPerRound) break;
+            changes += game::addSlotPiece(ownerKey, slot, want.type);
+        }
     }
     if (changes) logger::write("equip_sync: the body's slots now follow %zu carried pieces (%d changes)", wanted.size(), changes);
 }
