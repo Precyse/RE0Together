@@ -113,6 +113,7 @@ def main():
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
     p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s until the host reports a death (ENEMY_DEATH, printed)")
+    p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--echo-weapon", action="store_true", help="send the local player's WEAPON_STATE and WEAPON_FIRE back as the peer's (weapon_sync=1: the body holds and fires Sam's weapon)")
@@ -197,6 +198,7 @@ def serve(sock, a):
     replay_start = None
     sent_enemy = [0]
     last_hit = 0.0
+    last_bt = 0.0
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -255,6 +257,9 @@ def serve(sock, a):
             amount = float(a.enemy_hit.split(":")[1])
             sock.sendall(encode(ENEMY_HIT, peer_slot, ENEMY_HIT_FORMAT.pack(net_id, 0, uuid, amount, 0, -1, 0, *([0.0] * 12))))
             print(f"enemy: hit enemy {net_id} for {amount}", flush=True)
+        if a.bt_regions and now - last_bt >= 1.0:
+            last_bt = now
+            sock.sendall(encode(0x0128, peer_slot, struct.pack("<Q", int(a.bt_regions, 16))))
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")

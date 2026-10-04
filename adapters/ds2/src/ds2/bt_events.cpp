@@ -174,6 +174,12 @@ void applyRegions() {
     for (int region = 0; changed && region < bt_wire::kRegionCount; ++region) {
         if (bt_wire::isActive(changed, region)) g_setRegion(static_cast<uint8_t>(region), bt_wire::isActive(wanted, region));
     }
+    static uint64_t logged = ~uint64_t{0};  // the engine may undo a flag and it is set again: logged once per host set
+    if (changed && wanted != logged) {
+        logged = wanted;
+        logger::write("bt: followed the host's regions %016llx (flags now %016llx)", static_cast<unsigned long long>(wanted),
+                      static_cast<unsigned long long>(readMask(manager)));
+    }
 }
 
 // Guest, simulation thread: the host's activations whose locator is loaded here; the rest wait, then expire.
