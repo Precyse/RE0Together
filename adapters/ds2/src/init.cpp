@@ -24,6 +24,7 @@
 #include "ds2/sim_tick.h"
 #include "ds2/partner_cargo.h"
 #include "ds2/story.h"
+#include "ds2/warp.h"
 #include "ds2/structures.h"
 #include "ds2/bt_events.h"
 #include "ds2/world_env.h"
@@ -47,6 +48,7 @@ void simulationTick() {
 void drawOverlay(float width, float height) {
     marker_overlay::draw(width, height);
     cargo_menu::draw(width, height);
+    warp::poll();
 }
 
 }  // namespace
@@ -80,6 +82,7 @@ DWORD WINAPI initThread(LPVOID) {
         damage_veto::installEarly();
     }
     story::installEarly();
+    warp::installEarly();
     partner_cargo::installEarly();
     structures::installEarly();
     sim_tick::installEarly();
