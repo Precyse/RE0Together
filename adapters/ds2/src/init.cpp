@@ -27,6 +27,7 @@
 #include "ds2/story.h"
 #include "ds2/test_commands.h"
 #include "ds2/warp.h"
+#include "ds2/world_pause.h"
 #include "ds2/structures.h"
 #include "ds2/bt_events.h"
 #include "ds2/world_env.h"
@@ -85,6 +86,7 @@ DWORD WINAPI initThread(LPVOID) {
     }
     story::installEarly();
     warp::installEarly();
+    world_pause::installEarly();
     if (config.testCommands) test_commands::installEarly();
     if (config.cutsceneLog) cutscene_log::installEarly();
     partner_cargo::installEarly();

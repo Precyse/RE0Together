@@ -185,6 +185,7 @@ void releaseWorldEnv();
 
 // While linked the whole world keeps running under the game's own pauses (menus, weapon wheel, pause menu). Any thread.
 void keepWorldClockRunning(bool linked);
+void keepWorldRunning(bool linked);
 
 // Guest: while `tame` is true the enemies the game spawns (BTs, MULEs, armed humans, catchers, hunters) are put to sleep
 // as they are built, and the host's reports (enemy_wire.h) move them: they are the puppets of the host's enemies. Needs

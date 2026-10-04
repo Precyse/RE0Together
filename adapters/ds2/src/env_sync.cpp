@@ -47,6 +47,7 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     const bool host = session.linked && session.localSlot == session.hostSlot;
     const bool guest = session.linked && !host;
     game::keepWorldClockRunning(session.linked);
+    game::keepWorldRunning(session.linked);
     if (g_guest && !guest) game::releaseWorldEnv();
     g_guest = guest;
     g_hostSlot = session.hostSlot;
