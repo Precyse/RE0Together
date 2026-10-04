@@ -141,9 +141,12 @@ bool divertEnemyHit(uintptr_t victim, uintptr_t params) {
     return true;  // a puppet never takes damage here, whatever the hit was
 }
 
-bool divertPlayerHit(uintptr_t victim, uintptr_t params) {
+// The remote body stands for the partner: its own game decides what hurts the partner, so nothing may hurt the body here.
+// On the host, hits from enemies are forwarded to the partner; any other hit (drowning, a fall, timefall) is only dropped.
+bool divertPlayerHit(uintptr_t victim, uintptr_t params, bool forward) {
     const uintptr_t remote = remote_player::entity();
     if (!remote || victim != remote) return false;
+    if (!forward) return true;
     game::PlayerHitOut out{remote_player::slot(), {}};
     out.hit.attacker = refOf(attackerOf(params));
     if (readFields(params, out.hit.hit) && combat_wire::validHit(out.hit.hit)) {
@@ -157,9 +160,8 @@ void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
     if (params && victim && !remote_apply::active()) {
         rememberParams(params);
         const game::CombatRole role = g_role;
-        const bool diverted = role == game::CombatRole::Guest  ? divertEnemyHit(victim, params)
-                              : role == game::CombatRole::Host ? divertPlayerHit(victim, params)
-                                                               : false;
+        const bool diverted = (role == game::CombatRole::Guest && divertEnemyHit(victim, params)) ||
+                              divertPlayerHit(victim, params, role == game::CombatRole::Host);
         if (diverted) return;
     }
     g_apply(manager, victim, params);
