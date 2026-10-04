@@ -30,6 +30,8 @@ CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, res
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011E
+ENEMY_HIT, ENEMY_DEATH = 0x0120, 0x0122
+ENEMY_HIT_FORMAT = struct.Struct("<HH16sfIiI12f")  # enemy ref {net id, reserved, uuid} + hit fields (combat_wire.h)
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
 EQUIP_ENTRY = struct.Struct("<B3xI")  # hand slot kind, cargo kind (equip_sync.h)
@@ -110,6 +112,7 @@ def main():
     p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
+    p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s until the host reports a death (ENEMY_DEATH, printed)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--echo-weapon", action="store_true", help="send the local player's WEAPON_STATE and WEAPON_FIRE back as the peer's (weapon_sync=1: the body holds and fires Sam's weapon)")
@@ -140,6 +143,14 @@ def serve(sock, a):
     print("adapter linked", flush=True)
     local = {}
     recorded = {}
+    announced = {}
+    deaths = []
+
+    def record(body):
+        now = time.monotonic()
+        recorded.setdefault("first", now)
+        with open(a.enemy_record, "ab") as out:
+            out.write(ENEMY_RECORD.pack(now - recorded["first"], struct.unpack_from("<H", body)[0], len(body) - 4) + body[4:])
 
     def receive():
         last_print = 0.0
@@ -154,11 +165,16 @@ def serve(sock, a):
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
-            elif msg_type in (ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM) and a.enemy_record:
-                now = time.monotonic()
-                recorded.setdefault("first", now)
-                with open(a.enemy_record, "ab") as out:
-                    out.write(ENEMY_RECORD.pack(now - recorded["first"], msg_type, len(body) - 4) + body[4:])
+            elif msg_type == ENEMY_SPAWN:
+                net_id, _, uuid = struct.unpack_from("<HH16s", body, 4)
+                announced[net_id] = (uuid, struct.unpack_from("<3d", body, 4 + 40))
+                if a.enemy_record:
+                    record(body)
+            elif msg_type == ENEMY_DEATH:
+                deaths.append(struct.unpack_from('<H', body, 4)[0])
+                print(f"enemy: ENEMY_DEATH for net id {deaths[-1]}", flush=True)
+            elif msg_type in (ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM) and a.enemy_record:
+                record(body)
             elif msg_type == CARGO_LIST and a.echo_cargo:
                 sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == EQUIP_STATE and a.echo_equip:
@@ -180,6 +196,7 @@ def serve(sock, a):
     replay = load_enemy_recording(a.enemy_replay) if a.enemy_replay else []
     replay_start = None
     sent_enemy = [0]
+    last_hit = 0.0
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -232,6 +249,12 @@ def serve(sock, a):
                 sock.sendall(encode(msg_type, peer_slot, payload, flags=0 if msg_type in (ENEMY_STATE, ENEMY_ANIM) else FLAG_RELIABLE))
                 if not replay:
                     print("enemy: the recording has been replayed", flush=True)
+        if a.enemy_hit and start is not None and not deaths and announced and now - start >= float(a.enemy_hit.split(":")[0]) and now - last_hit >= 10.0:
+            last_hit = now
+            net_id, (uuid, _) = min(announced.items(), key=lambda e: (e[1][1][0] - local["x"]) ** 2 + (e[1][1][1] - local["y"]) ** 2)
+            amount = float(a.enemy_hit.split(":")[1])
+            sock.sendall(encode(ENEMY_HIT, peer_slot, ENEMY_HIT_FORMAT.pack(net_id, 0, uuid, amount, 0, -1, 0, *([0.0] * 12))))
+            print(f"enemy: hit enemy {net_id} for {amount}", flush=True)
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")
