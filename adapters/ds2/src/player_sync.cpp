@@ -29,6 +29,7 @@
 #include "toast_queue.h"
 #include "vehicle_load.h"
 #include "vehicle_sync.h"
+#include "weapon_sync.h"
 
 namespace {
 
@@ -120,6 +121,7 @@ void tick(NetClient& net) {
         enemy_sync::onFrame(frame);
         partner_cargo_sync::onFrame(frame);
         equip_sync::onFrame(frame);
+        weapon_sync::onFrame(frame);
         anim_sync::onFrame(frame);
         anim_event::onFrame(frame);
         clock_sync::onFrame(net, frame);
@@ -143,6 +145,7 @@ void tick(NetClient& net) {
     enemy_sync::tick(net, session);
     partner_cargo_sync::tick(net, session);
     equip_sync::tick(net, session);
+    weapon_sync::tick(net, session);
     rack_sync::tick(net, session);
     anim_sync::tick(net, session);
     clock_sync::tick(net, session);
