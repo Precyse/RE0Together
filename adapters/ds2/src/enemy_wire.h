@@ -44,7 +44,8 @@ struct EnemyState {
     uint16_t netId;
     uint8_t healthRatio;  // 0-254, kHealthUnknown when not reported
     uint8_t flags;        // kStateDead
-    uint32_t reserved;
+    uint8_t alert;        // the enemy's alert level, 0 when not reported
+    uint8_t reserved[3];
     Pose pose;
     float velocity[3];
     uint32_t reserved2;

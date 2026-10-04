@@ -37,8 +37,8 @@ constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 constexpr double kMinMoveMeters = 0.03;  // an enemy that moved less than this and did not turn is not reported again...
 constexpr float kMinTurn = 0.01f;
-constexpr double kAnimationRadius = 100.0;  // metres around the partner: further enemies are not animated on its side
-constexpr ULONGLONG kAnimationSnapshotMs = 2000;
+constexpr double kAnimationRadius = 50.0;  // metres around the partner: further enemies are not animated on its side
+constexpr ULONGLONG kAnimationSnapshotMs = 10000;  // a new enemy in range and a requested snapshot send one at once
 constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
 
 struct Tracked {
@@ -140,7 +140,10 @@ void tick() {
     if (!g_sharing) return;
     if (g_snapshotRequested) {
         g_snapshotRequested = false;
-        for (Tracked& enemy : g_tracked) enemy.announced = false;
+        for (Tracked& enemy : g_tracked) {
+            enemy.announced = false;
+            enemy.variablesSnapshotAt = 0;
+        }
     }
     decima::WorldPosition partnerAt{};
     const bool havePartner = partnerPosition(partnerAt);
