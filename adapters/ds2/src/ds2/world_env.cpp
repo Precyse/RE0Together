@@ -68,13 +68,14 @@ uintptr_t regionEntry(uintptr_t manager, int slot, int region) {
     return manager + kRegionTable + (static_cast<uintptr_t>(slot) * env_wire::kRegionCount + region) * kRegionEntrySize;
 }
 
-// Measures how fast the game's clock runs, per wall millisecond, from the hours before and after its own update.
+// Measures how fast the game's clock runs (only updates that moved it count), per wall millisecond, from the hours before and after its own update.
 void noteTimeUpdate(uintptr_t state, float hoursBefore) {
     const ULONGLONG now = GetTickCount64();
-    const ULONGLONG gap = now - g_lastUpdateMs.exchange(now);
     float after = hoursBefore;
     decima::safeRead(state + kTimeHours, after);
     const float advanced = after - hoursBefore;
+    if (advanced <= 0) return;  // the update ran and did nothing (the game's own state check): not a running clock
+    const ULONGLONG gap = now - g_lastUpdateMs.exchange(now);
     if (gap > 0 && gap <= kMaxRateGapMs && advanced > 0) g_hoursPerMs = static_cast<double>(advanced) / static_cast<double>(gap);
 }
 

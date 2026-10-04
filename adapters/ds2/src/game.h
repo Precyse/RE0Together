@@ -183,7 +183,7 @@ void followWorldEnv(const env_wire::WorldEnv& env);
 // Stops following: the world runs its own clock and forecast again. Any thread.
 void releaseWorldEnv();
 
-// While linked the world clock keeps running under the game's own pauses (menus, weapon wheel). Any thread.
+// While linked the whole world keeps running under the game's own pauses (menus, weapon wheel, pause menu). Any thread.
 void keepWorldClockRunning(bool linked);
 
 // Guest: while `tame` is true the enemies the game spawns (BTs, MULEs, armed humans, catchers, hunters) are put to sleep
