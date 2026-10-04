@@ -15,6 +15,7 @@
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/entity_lookup.h"
+#include "enemy_directory.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
 #include "ds2/remote_player.h"
@@ -67,6 +68,7 @@ bool g_sharing = false;
 bool g_snapshotRequested = false;
 
 void pushGone(uint16_t netId, enemy_wire::GoneReason reason) {
+    enemy_directory::forget(netId);
     if (g_gone.size() < kMaxQueued) g_gone.push_back({netId, static_cast<uint8_t>(reason), 0});
 }
 
@@ -161,6 +163,7 @@ void tick() {
                 spawn.pose = enemy_pose::toWire(transform);
                 g_spawns.push_back(spawn);
                 enemy.announced = true;
+                enemy_directory::set(enemy.netId, enemy.entityUuid);
             }
             if (enemy.announced && !dead) sampleAnimation(enemy, transform, havePartner ? &partnerAt : nullptr, now);
             if (enemy.announced && dead && !enemy.deadReported) {
