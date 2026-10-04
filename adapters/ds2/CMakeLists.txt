@@ -58,6 +58,7 @@ add_library(ds2_adapter SHARED
     src/equip_sync.cpp
     src/rack_sync.cpp
     src/env_sync.cpp
+    src/bt_sync.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
     src/enemy_sync.cpp
@@ -100,6 +101,7 @@ add_library(ds2_adapter SHARED
     src/ds2/order_gate.cpp
     src/ds2/world_facts.cpp
     src/ds2/world_env.cpp
+    src/ds2/bt_events.cpp
     src/ds2/enemy_spawn.cpp
     src/ds2/structures.cpp
     src/ds2/story.cpp
@@ -158,3 +160,4 @@ add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
+add_unit_test(bt_wire_test)

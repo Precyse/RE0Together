@@ -16,6 +16,7 @@
 #include "story_sync.h"
 #include "rack_sync.h"
 #include "struct_sync.h"
+#include "bt_sync.h"
 #include "env_sync.h"
 #include "enemy_sync.h"
 #include "equip_sync.h"
@@ -115,6 +116,7 @@ void tick(NetClient& net) {
         vehicle_load::onFrame(frame);
         fact_sync::onFrame(frame);
         env_sync::onFrame(frame);
+        bt_sync::onFrame(frame);
         struct_sync::onFrame(frame);
         story_sync::onFrame(frame);
         enemy_sync::onFrame(frame);
@@ -138,6 +140,7 @@ void tick(NetClient& net) {
     vehicle_load::tick(net, session);
     fact_sync::tick(net, session);
     env_sync::tick(net, session);
+    bt_sync::tick(net, session);
     struct_sync::tick(net, session);
     story_sync::tick(net, session);
     enemy_sync::tick(net, session);
