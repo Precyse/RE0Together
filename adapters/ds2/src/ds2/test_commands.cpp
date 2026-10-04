@@ -31,6 +31,8 @@ constexpr uintptr_t kWeaponCount = 0x30, kWeaponEntries = 0x38, kWeaponId = 0x20
 constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: the player's current area
 constexpr int kMaxListedConfigs = 40;
 constexpr size_t kMaxFaultsLogged = 30;
+constexpr size_t kStackWordsScanned = 96;
+constexpr int kReturnsLogged = 10;
 constexpr ULONGLONG kPollMs = 500;
 constexpr uintptr_t kImageSpan = 0x20000000;
 constexpr DWORD kFaultCodes[] = {EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ILLEGAL_INSTRUCTION, EXCEPTION_STACK_OVERFLOW};
@@ -118,6 +120,22 @@ void tick() {
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
 }
 
+// The values on the stack that point into the game's image: the likely return addresses, nearest first.
+void logStackReturns(uintptr_t stack, uintptr_t base) {
+    std::string line;
+    int found = 0;
+    for (size_t i = 0; i < kStackWordsScanned && found < kReturnsLogged; ++i) {
+        uintptr_t value = 0;
+        if (!decima::safeRead(stack + i * sizeof(uintptr_t), value)) break;
+        if (value < base || value - base > kImageSpan) continue;
+        char text[32];
+        snprintf(text, sizeof(text), " %llx", static_cast<unsigned long long>(value - base + ds2::kImageBase));
+        line += text;
+        ++found;
+    }
+    logger::write("test_commands:   stack returns:%s", line.c_str());
+}
+
 LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
     static size_t logged = 0;
     const uintptr_t at = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
@@ -129,6 +147,7 @@ LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
         const ULONG_PTR target = info->ExceptionRecord->NumberParameters >= 2 ? info->ExceptionRecord->ExceptionInformation[1] : 0;
         logger::write("test_commands: fault %08lx in the game at file va %p, address %p", code,
                       reinterpret_cast<void*>(at - base + ds2::kImageBase), reinterpret_cast<void*>(target));
+        logStackReturns(info->ContextRecord->Rsp, base);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
