@@ -28,6 +28,7 @@ const char* name(Reason reason) {
         case Reason::Malformed: return "malformed";
         case Reason::Expired: return "expired";
         case Reason::Overflow: return "overflow";
+        case Reason::RateLimited: return "rate_limited";
         case Reason::Count: break;
     }
     return "?";

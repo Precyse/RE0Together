@@ -13,6 +13,7 @@
 #include "net_client.h"
 #include "player_sync.h"
 #include "ds2/remote_animation.h"
+#include "ds2/combat_hook.h"
 #include "ds2/enemy_host.h"
 #include "ds2/enemy_puppet.h"
 #include "ds2/enemy_spawn.h"
@@ -64,6 +65,7 @@ DWORD WINAPI initThread(LPVOID) {
         enemy_spawn::installEarly();
         enemy_host::installEarly();
         enemy_puppet::installEarly();
+        combat_hook::installEarly();
     }
     story::installEarly();
     partner_cargo::installEarly();

@@ -17,6 +17,7 @@ enum class Reason : uint8_t {
     Malformed,      // the payload does not parse
     Expired,        // held for an object that never appeared
     Overflow,       // a bounded queue was full and the message was dropped
+    RateLimited,    // more of this kind than the receiver accepts per second
     Count
 };
 

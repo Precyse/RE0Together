@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "combat_wire.h"
 #include "env_wire.h"
 #include "fact_wire.h"
 #include "enemy_wire.h"
@@ -203,6 +204,33 @@ void puppetSpawn(const enemy_wire::EnemySpawn& spawn);
 void puppetStates(const std::vector<enemy_wire::EnemyState>& states);
 void puppetGone(const enemy_wire::EnemyGone& gone);
 void puppetAnim(enemy_wire::EnemyAnim anim);
+
+// Enemy combat (combat_wire.h; needs combat_hook::installEarly, adapter.ini enemy_sync=1). The role decides what the
+// engine's damage function does: a guest sends damage to puppets instead of applying it, the host sends damage to the
+// partner's body to that partner. Any thread.
+enum class CombatRole : uint8_t { None, Host, Guest };
+void setCombatRole(CombatRole role);
+
+// Guest: the hits on puppets that were not applied here since the last call.
+std::vector<combat_wire::EnemyHit> takeEnemyHits();
+
+// Host: the hits on the partner's body since the last call, with the slot of the partner they belong to.
+struct PlayerHitOut {
+    uint8_t slot;
+    combat_wire::PlayerHit hit;
+};
+std::vector<PlayerHitOut> takePlayerHits();
+
+// Host: the enemies of the directory (enemy_directory.h) that died since the last call.
+std::vector<combat_wire::EnemyDeath> takeEnemyDeaths();
+
+// Host: whether the engine has this enemy and it is alive. A guest's hit is only accepted for such an enemy.
+bool enemyAlive(const uint8_t (&uuid)[enemy_wire::kUuidSize]);
+
+// Applied on the simulation thread's next frame, through the engine's damage function with the applying flag set.
+void applyEnemyHit(const combat_wire::EnemyHit& hit);    // host: the guest's hit on its enemy
+void applyPlayerHit(const combat_wire::PlayerHit& hit);  // guest: an enemy's hit on the local player
+void killEnemy(const combat_wire::EnemyDeath& death);    // guest: the engine's own kill, a dead enemy is left alone
 
 // The structure roles: the host reports what its player places and removes, a guest refuses its own player's
 // placements. Needs structures::installEarly. Any thread.
