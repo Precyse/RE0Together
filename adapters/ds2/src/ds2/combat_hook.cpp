@@ -157,6 +157,8 @@ bool divertPlayerHit(uintptr_t victim, uintptr_t params, bool forward) {
     return true;
 }
 
+void runForwarded(uintptr_t params);
+
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
     if (params && victim && !remote_apply::active()) {
         rememberParams(params);
@@ -166,6 +168,7 @@ void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
         if (diverted) return;
     }
     g_apply(manager, victim, params);
+    if (params && victim == remote_player::samEntity() && !remote_apply::active()) runForwarded(params);
 }
 
 // Links the attacker's weak pointer, applies, unlinks. False when the engine call faulted.
@@ -222,7 +225,7 @@ using DealDamageFn = void (*)(uintptr_t victim, uintptr_t source, uint8_t byte, 
                               uintptr_t damageType, float amount, float amount2, float scale, uint8_t kind,
                               const double* position, const float* direction, uint64_t zero);
 
-bool dealDamage(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit) {
+bool dealDamage(uintptr_t victim, uintptr_t context, uintptr_t attacker, const combat_wire::HitFields& hit) {
     decima::WorldTransform where;
     if (!ds2::entityTransform(victim, where)) return false;
     const double position[3] = {where.position.x, where.position.y, where.position.z};
@@ -232,7 +235,7 @@ bool dealDamage(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFiel
     const uint8_t kind = (hit.flags & kFlagKind1) ? 1 : (hit.flags & kFlagKind2) ? 2 : kHitKindNone;
     const uintptr_t type = decima::readPointer(ds2::at(kDefaultDamageType));
     __try {
-        reinterpret_cast<DealDamageFn>(ds2::at(kDealDamage))(victim, attacker, 0, attacker, static_cast<uint32_t>(std::max(hit.partIndex, 0)), type,
+        reinterpret_cast<DealDamageFn>(ds2::at(kDealDamage))(victim, context, 0, attacker, static_cast<uint32_t>(std::max(hit.partIndex, 0)), type,
                                                              hit.amount, 0.0f, kImpulseScale, kind, position, direction, 0);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -240,11 +243,48 @@ bool dealDamage(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFiel
     }
 }
 
+// DealDamage's second argument is the attack context the damage gates read (attack id, type, source, cooldown), so a hit
+// needs a context of a real attack. Forwarded hits wait here until the engine applies a real hit to the local player
+// (an enemy attack), whose parent context is borrowed for the moment with its source set to "none" (allowed by the faction
+// gate) and put back.
+std::vector<combat_wire::EnemyHit> g_forwardWaiting;  // simulation thread only
+constexpr uintptr_t kContextData = 0x120, kContextSource = 0x20, kContextType = 0x0C, kEventParent = 0x38;
+constexpr uint64_t kNoSource = ~uint64_t{0};
+constexpr uint16_t kRefusedTypes[] = {0x023B, 0x0095};  // attack types the MULE damage gate refuses outright
+
+uintptr_t parentContextOf(uintptr_t params) {
+    const uintptr_t weak = decima::readPointer(params + kParamsAttacker);
+    const uintptr_t event = weak ? weak - kEntityWeakTarget : 0;
+    const uintptr_t parentWeak = event ? decima::readPointer(event + kEventParent) : 0;
+    return parentWeak ? parentWeak - kEntityWeakTarget : 0;
+}
+
 void applyEnemyHitNow(const combat_wire::EnemyHit& hit) {
-    const uintptr_t enemy = ds2::entityByUuid(hit.enemy.uuid);
-    if (!enemy || ds2::entityIsDead(enemy)) return;
-    const remote_apply::Scope applying;
-    if (!dealDamage(enemy, remote_player::samEntity(), hit.hit)) logger::write("enemy_combat: could not apply a hit on enemy %u", hit.enemy.netId);
+    if (g_forwardWaiting.size() < kMaxQueued) g_forwardWaiting.push_back(hit);
+}
+
+// Called from the ApplyDamage detour once a real hit on the local player has been applied: runs the waiting forwarded hits
+// on the enemies through that hit's parent context.
+void runForwarded(uintptr_t params) {
+    if (g_forwardWaiting.empty()) return;
+    const uintptr_t parent = parentContextOf(params);
+    if (!parent) return;
+    const uint16_t type = ds2::field<uint16_t>(parent + kContextData, kContextType);
+    for (const uint16_t refused : kRefusedTypes) {
+        if (type == refused) return;
+    }
+    const uint64_t source = ds2::field<uint64_t>(parent + kContextData, kContextSource);
+    ds2::field<uint64_t>(parent + kContextData, kContextSource) = kNoSource;
+    for (const combat_wire::EnemyHit& hit : g_forwardWaiting) {
+        const uintptr_t enemy = ds2::entityByUuid(hit.enemy.uuid);
+        if (!enemy || ds2::entityIsDead(enemy)) continue;
+        const remote_apply::Scope applying;
+        const bool ok = dealDamage(enemy, parent, remote_player::entity(), hit.hit);
+        logger::write("enemy_combat: forwarded hit on enemy %u through a real context (attack type %04x): %s", hit.enemy.netId, type,
+                      ok ? "queued" : "faulted");
+    }
+    g_forwardWaiting.clear();
+    ds2::field<uint64_t>(parent + kContextData, kContextSource) = source;
 }
 
 void applyPlayerHitNow(const combat_wire::PlayerHit& hit) {
