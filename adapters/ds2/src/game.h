@@ -8,6 +8,7 @@
 
 #include "env_wire.h"
 #include "fact_wire.h"
+#include "enemy_wire.h"
 #include "story_wire.h"
 #include "struct_wire.h"
 #include "world_to_screen.h"
@@ -179,10 +180,27 @@ void followWorldEnv(const env_wire::WorldEnv& env);
 // Stops following: the world runs its own clock and forecast again. Any thread.
 void releaseWorldEnv();
 
-// Guest: while `veto` is true the game's own spawns of enemies (BTs, MULEs, armed humans, catchers, hunters) fail, so
-// the host's enemies are the only ones (they appear as puppets). Needs enemy_veto::installEarly (adapter.ini
-// enemy_veto=1). Any thread.
-void vetoEnemies(bool veto);
+// Guest: while `tame` is true the enemies the game spawns (BTs, MULEs, armed humans, catchers, hunters) are put to sleep
+// as they are built, and the host's reports (enemy_wire.h) move them: they are the puppets of the host's enemies. Needs
+// enemy_spawn::installEarly (adapter.ini enemy_sync=1). Any thread.
+void tameEnemies(bool tame);
+
+// Host: report the enemies the game spawns (needs the enemy hook, adapter.ini enemy_sync=1). Any thread.
+void shareEnemies(bool host);
+
+// Host: the next report announces every live enemy again (a joined or resyncing guest). Any thread.
+void requestEnemySnapshot();
+
+// Host: what to send since the last call. Any thread.
+std::vector<enemy_wire::EnemySpawn> takeEnemySpawns();
+std::vector<enemy_wire::EnemyState> takeEnemyStates();
+std::vector<enemy_wire::EnemyGone> takeEnemyGone();
+
+// Guest: the host's reports, applied on the simulation thread (puppets are built from the vetoed spawn requests).
+// Any thread.
+void puppetSpawn(const enemy_wire::EnemySpawn& spawn);
+void puppetStates(const std::vector<enemy_wire::EnemyState>& states);
+void puppetGone(const enemy_wire::EnemyGone& gone);
 
 // The structure roles: the host reports what its player places and removes, a guest refuses its own player's
 // placements. Needs structures::installEarly. Any thread.

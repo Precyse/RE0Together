@@ -17,7 +17,8 @@ enum Scope : uint32_t {
     kAuthority = 2,  // the claims the peer owns (authority_sync)
     kAnim = 4,       // a full ANIM_STATE snapshot (anim_sync)
     kStory = 8,      // every mission in progress (story_sync)
-    kAll = kFacts | kAuthority | kAnim | kStory
+    kEnemies = 16,   // every live enemy announced again (enemy_sync)
+    kAll = kFacts | kAuthority | kAnim | kStory | kEnemies
 };
 
 struct ResyncRequest {

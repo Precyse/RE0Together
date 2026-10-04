@@ -28,6 +28,8 @@ CARGO_ADD = 0x0103
 CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
+ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE = 0x011B, 0x011C, 0x011D
+ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
 EQUIP_ENTRY = struct.Struct("<B3xI")  # hand slot kind, cargo kind (equip_sync.h)
 FLAG_RELIABLE = 1
@@ -49,6 +51,19 @@ def read_exact(sock, n):
             raise ConnectionError("closed")
         buf += chunk
     return buf
+
+
+def load_enemy_recording(path):
+    """The messages of an --enemy-record file as (seconds, type, payload)."""
+    data = open(path, "rb").read()
+    out, at = [], 0
+    while at < len(data):
+        seconds, msg_type, size = ENEMY_RECORD.unpack_from(data, at)
+        at += ENEMY_RECORD.size
+        out.append((seconds, msg_type, data[at:at + size]))
+        at += size
+    print(f"enemy: loaded {len(out)} recorded messages", flush=True)
+    return out
 
 
 LADDER_ID = 11700  # an id the save does not use
@@ -92,6 +107,9 @@ def main():
     p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
     p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
+    p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
+    p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
+    p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
@@ -119,6 +137,7 @@ def serve(sock, a):
     sock.sendall(encode(PEER_UP, HOST_SLOT, struct.pack("<BQB", HOST_SLOT if a.guest else PEER_SLOT, 0x1100001DEADBEEF, len(name)) + name))
     print("adapter linked", flush=True)
     local = {}
+    recorded = {}
 
     def receive():
         last_print = 0.0
@@ -133,6 +152,11 @@ def serve(sock, a):
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
+            elif msg_type in (ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE) and a.enemy_record:
+                now = time.monotonic()
+                recorded.setdefault("first", now)
+                with open(a.enemy_record, "ab") as out:
+                    out.write(ENEMY_RECORD.pack(now - recorded["first"], msg_type, len(body) - 4) + body[4:])
             elif msg_type == CARGO_LIST and a.echo_cargo:
                 sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == EQUIP_STATE and a.echo_equip:
@@ -149,6 +173,9 @@ def serve(sock, a):
     struct_added = struct_removed = False
     gave = picked = gave_plain = told_story = False
     last_load = 0.0
+    replay = load_enemy_recording(a.enemy_replay) if a.enemy_replay else []
+    replay_start = None
+    sent_enemy = [0]
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -189,6 +216,18 @@ def serve(sock, a):
                 told_story = True
                 sock.sendall(encode(0x0119, peer_slot, struct.pack("<B3xIiIQ16s", int(kind), 0, -1, 0, int(mission, 16), bytes(16))))
                 print("story: event sent", flush=True)
+        if replay and start is not None and now - start >= a.enemy_delay:
+            if replay_start is None:
+                replay_start = now
+                print("enemy: replay started", flush=True)
+            while replay and replay[0][0] <= now - replay_start:
+                _, msg_type, payload = replay.pop(0)
+                sent_enemy[0] += 1
+                if sent_enemy[0] in (1, 2, 500, 1000):
+                    print(f"enemy: sent {sent_enemy[0]} messages, last type {msg_type:#x} {len(payload)} bytes", flush=True)
+                sock.sendall(encode(msg_type, peer_slot, payload, flags=0 if msg_type == ENEMY_STATE else FLAG_RELIABLE))
+                if not replay:
+                    print("enemy: the recording has been replayed", flush=True)
         if a.env and now - last_env >= 1.0:
             last_env = now
             fields = a.env.split(",")

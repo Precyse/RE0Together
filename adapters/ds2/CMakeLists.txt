@@ -60,6 +60,10 @@ add_library(ds2_adapter SHARED
     src/env_sync.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
+    src/enemy_sync.cpp
+    src/ds2/enemy_host.cpp
+    src/ds2/enemy_puppet.cpp
+    src/ds2/entity_lookup.cpp
     src/partner_cargo_sync.cpp
     src/ds2/partner_cargo.cpp
     src/authority.cpp
@@ -96,7 +100,7 @@ add_library(ds2_adapter SHARED
     src/ds2/order_gate.cpp
     src/ds2/world_facts.cpp
     src/ds2/world_env.cpp
-    src/ds2/enemy_veto.cpp
+    src/ds2/enemy_spawn.cpp
     src/ds2/structures.cpp
     src/ds2/story.cpp
     src/ds2/sim_tick.cpp
@@ -120,6 +124,8 @@ target_include_directories(env_wire_test PRIVATE src ${SHARED_DIR})
 add_executable(struct_wire_test tests/struct_wire_test.cpp)
 target_include_directories(struct_wire_test PRIVATE src ${SHARED_DIR})
 
+add_executable(enemy_wire_test tests/enemy_wire_test.cpp)
+target_include_directories(enemy_wire_test PRIVATE src ${SHARED_DIR})
 add_executable(story_wire_test tests/story_wire_test.cpp)
 target_include_directories(story_wire_test PRIVATE src ${SHARED_DIR})
 
@@ -130,7 +136,7 @@ target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d
 add_executable(proxy_load_test tests/proxy_load_test.cpp)
 add_dependencies(proxy_load_test ds2_adapter)
 
-foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test env_wire_test struct_wire_test story_wire_test proxy_load_test overlay_test)
+foreach(target ds2_adapter world_to_screen_test load_shape_test fact_wire_test env_wire_test struct_wire_test story_wire_test enemy_wire_test proxy_load_test overlay_test)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()
 

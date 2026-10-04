@@ -13,7 +13,9 @@
 #include "net_client.h"
 #include "player_sync.h"
 #include "ds2/remote_animation.h"
-#include "ds2/enemy_veto.h"
+#include "ds2/enemy_host.h"
+#include "ds2/enemy_puppet.h"
+#include "ds2/enemy_spawn.h"
 #include "ds2/sim_tick.h"
 #include "ds2/partner_cargo.h"
 #include "ds2/story.h"
@@ -56,7 +58,11 @@ DWORD WINAPI initThread(LPVOID) {
     game::watchOrders();
     world_facts::installEarly(config.logFacts);
     world_env::installEarly();
-    if (config.enemyVeto) enemy_veto::installEarly();
+    if (config.enemySync) {
+        enemy_spawn::installEarly();
+        enemy_host::installEarly();
+        enemy_puppet::installEarly();
+    }
     story::installEarly();
     partner_cargo::installEarly();
     structures::installEarly();
