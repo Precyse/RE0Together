@@ -61,6 +61,9 @@ add_library(ds2_adapter SHARED
     src/struct_sync.cpp
     src/story_sync.cpp
     src/enemy_sync.cpp
+    src/enemy_combat.cpp
+    src/enemy_directory.cpp
+    src/ds2/combat_hook.cpp
     src/ds2/enemy_host.cpp
     src/ds2/enemy_puppet.cpp
     src/ds2/entity_lookup.cpp
@@ -158,3 +161,4 @@ add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
+add_unit_test(combat_wire_test src/enemy_directory.cpp)
