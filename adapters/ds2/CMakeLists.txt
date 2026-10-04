@@ -107,6 +107,7 @@ add_library(ds2_adapter SHARED
     src/ds2/world_env.cpp
     src/ds2/bt_events.cpp
     src/ds2/enemy_spawn.cpp
+    src/ds2/enemy_vitals.cpp
     src/ds2/structures.cpp
     src/ds2/story.cpp
     src/ds2/sim_tick.cpp

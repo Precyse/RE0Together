@@ -14,6 +14,7 @@
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "enemy_directory.h"
 #include "ds2/place.h"
@@ -55,6 +56,7 @@ struct Tracked {
     ULONGLONG sentAt = 0;
     std::unique_ptr<remote_animation::VariableValues> sentVariables;  // only while the partner is near
     ULONGLONG variablesSnapshotAt = 0;
+    uint8_t sentHealth = enemy_wire::kHealthUnknown;
 };
 
 std::mutex g_mutex;  // guards everything below (spawn workers add, the simulation thread samples, the net thread takes)
@@ -101,8 +103,9 @@ void sampleAnimation(Tracked& enemy, const decima::WorldTransform& transform, co
     g_anims.push_back(std::move(anim));
 }
 
-bool worthSending(const Tracked& enemy, const enemy_wire::Pose& pose, ULONGLONG now) {
-    if (now - enemy.sentAt >= kKeepaliveMs) return true;
+bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
+    const enemy_wire::Pose& pose = state.pose;
+    if (now - enemy.sentAt >= kKeepaliveMs || state.healthRatio != enemy.sentHealth) return true;
     const double dx = pose.position[0] - enemy.sentPose.position[0];
     const double dy = pose.position[1] - enemy.sentPose.position[1];
     const double dz = pose.position[2] - enemy.sentPose.position[2];
@@ -113,7 +116,7 @@ bool worthSending(const Tracked& enemy, const enemy_wire::Pose& pose, ULONGLONG 
 enemy_wire::EnemyState sample(Tracked& enemy, const decima::WorldTransform& transform, bool dead, ULONGLONG now) {
     enemy_wire::EnemyState state{};
     state.netId = enemy.netId;
-    state.healthRatio = enemy_wire::kHealthUnknown;
+    state.healthRatio = enemy_vitals::readHealth(enemy.entity);
     state.flags = dead ? enemy_wire::kStateDead : 0;
     state.pose = enemy_pose::toWire(transform);
     if (enemy.havePrevious && now > enemy.previousAt) {
@@ -175,8 +178,9 @@ void tick() {
             }
             if (enemy.announced && !dead && g_states.size() < kMaxQueued) {
                 const enemy_wire::EnemyState state = sample(enemy, transform, false, now);
-                if (worthSending(enemy, state.pose, now)) {
+                if (worthSending(enemy, state, now)) {
                     enemy.sentPose = state.pose;
+                    enemy.sentHealth = state.healthRatio;
                     enemy.sentAt = now;
                     g_states.push_back(state);
                 }

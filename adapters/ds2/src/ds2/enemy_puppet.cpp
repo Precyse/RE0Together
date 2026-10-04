@@ -21,6 +21,7 @@
 #include "ds2/enemy_pose.h"
 #include "ds2/engine.h"
 #include "ds2/enemy_host.h"
+#include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
@@ -67,6 +68,7 @@ struct Puppet {
     enemy_wire::EnemyState state{};
     ULONGLONG receivedAt = 0;
     bool dead = false;
+    uint8_t appliedHealth = enemy_wire::kHealthUnknown;
 };
 
 std::atomic<bool> g_adoptExisting{false};
@@ -126,6 +128,7 @@ void bind(const enemy_wire::EnemySpawn& spawn, uintptr_t entity) {
     std::copy(spawn.entityUuid, spawn.entityUuid + puppet.uuid.size(), puppet.uuid.begin());
     puppet.state.netId = spawn.netId;
     puppet.state.pose = spawn.pose;
+    puppet.state.healthRatio = enemy_wire::kHealthUnknown;
     puppet.receivedAt = GetTickCount64();
     g_puppets[spawn.netId] = puppet;
     logger::write("enemy_puppet: enemy %u is now driven by the host (%p)", spawn.netId, reinterpret_cast<void*>(entity));
@@ -166,6 +169,12 @@ void handleAnimation(const enemy_wire::EnemyAnim& anim) {
     std::lock_guard lock(g_animationMutex);
     remote_animation::VariableValues& values = g_animation[it->second.entity];
     for (const remote_animation::Change& change : anim.changes) values.set(change);
+}
+
+void applyHealth(Puppet& puppet) {
+    if (puppet.state.healthRatio == puppet.appliedHealth) return;
+    enemy_vitals::applyHealth(puppet.entity, puppet.state.healthRatio);
+    puppet.appliedHealth = puppet.state.healthRatio;
 }
 
 void place(Puppet& puppet, ULONGLONG now) {
@@ -265,7 +274,10 @@ void tick() {
             it = g_puppets.erase(it);
             continue;
         }
-        if (!puppet.dead) place(puppet, now);
+        if (!puppet.dead) {
+            place(puppet, now);
+            applyHealth(puppet);
+        }
         ++it;
     }
 }
