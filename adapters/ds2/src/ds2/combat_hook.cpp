@@ -22,6 +22,7 @@
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/entity_lookup.h"
+#include "ds2/place.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
@@ -209,10 +210,41 @@ bool killGuarded(uintptr_t entity) {
     }
 }
 
+// The engine's own script damage builder (Entity::DealDamage) makes the attack event and the parameters itself, so a
+// hit needs no earlier real hit on this machine to copy from.
+constexpr uintptr_t kDealDamage = 0x14013b470;
+constexpr uintptr_t kDefaultDamageType = 0x14627E4D8;  // DamageTypeResourceSettings.DefaultDamageTypeResource
+constexpr uint8_t kHitKindNone = 0;
+constexpr uint32_t kFlagKind1 = 1u << 3, kFlagKind2 = 1u << 1;  // EDamageFlags bits the hit kind maps to
+constexpr float kImpulseScale = 1.0f;
+
+using DealDamageFn = void (*)(uintptr_t victim, uintptr_t source, uint8_t byte, uintptr_t attacker, uint32_t part,
+                              uintptr_t damageType, float amount, float amount2, float scale, uint8_t kind,
+                              const double* position, const float* direction, uint64_t zero);
+
+bool dealDamage(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit) {
+    decima::WorldTransform where;
+    if (!ds2::entityTransform(victim, where)) return false;
+    const double position[3] = {where.position.x, where.position.y, where.position.z};
+    alignas(16) float direction[4];
+    std::memcpy(direction, hit.impulse, sizeof(direction));
+    if (direction[0] == 0 && direction[1] == 0 && direction[2] == 0) direction[1] = 1.0f;  // the engine multiplies it in: never null
+    const uint8_t kind = (hit.flags & kFlagKind1) ? 1 : (hit.flags & kFlagKind2) ? 2 : kHitKindNone;
+    const uintptr_t type = decima::readPointer(ds2::at(kDefaultDamageType));
+    __try {
+        reinterpret_cast<DealDamageFn>(ds2::at(kDealDamage))(victim, 0, 0, attacker, static_cast<uint32_t>(hit.partIndex), type,
+                                                             hit.amount, 0.0f, kImpulseScale, kind, position, direction, 0);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 void applyEnemyHitNow(const combat_wire::EnemyHit& hit) {
     const uintptr_t enemy = ds2::entityByUuid(hit.enemy.uuid);
     if (!enemy || ds2::entityIsDead(enemy)) return;
-    if (!applyHit(enemy, remote_player::entity(), hit.hit)) logger::write("enemy_combat: could not apply a hit on enemy %u", hit.enemy.netId);
+    const remote_apply::Scope applying;
+    if (!dealDamage(enemy, remote_player::samEntity(), hit.hit)) logger::write("enemy_combat: could not apply a hit on enemy %u", hit.enemy.netId);
 }
 
 void applyPlayerHitNow(const combat_wire::PlayerHit& hit) {
