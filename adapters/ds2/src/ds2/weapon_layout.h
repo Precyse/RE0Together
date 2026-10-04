@@ -1,0 +1,58 @@
+#pragma once
+// DS2-internal: how the engine lays out a player's weapons, shared by the local side (reading what Sam holds, hooking his
+// shots) and the remote side (the partner's weapon). Static analysis only (tools/ds2/out/analysis/WEAPONS.md); every
+// offset marked "live" is still to be confirmed in the running game.
+#include <cstddef>
+#include <cstdint>
+
+#include "weapon_wire.h"
+
+namespace ds2::weapon {
+
+// The weapon table: DSPlayerEntity +0x56D0 is a component of the player (+0x48 = the entity) that owns 0x60 entries of
+// 0x40 bytes from +0xC0, and the index of the current entry at +0x18C0.
+constexpr uintptr_t kEntityTable = 0x56D0;
+constexpr uintptr_t kTableOwner = 0x48;
+constexpr uintptr_t kTableFirstEntry = 0xC0;
+constexpr uintptr_t kTableCurrentIndex = 0x18C0;
+constexpr uint32_t kTableEntries = 0x60;
+constexpr size_t kEntrySize = 0x40;
+constexpr uintptr_t kEntryFlags = 0x10;   // 7 bytes of state; live: byte +0x11 is non-zero while the weapon is drawn
+constexpr size_t kEntryFlagBytes = 7;
+constexpr uintptr_t kEntryDrawn = 0x11;
+constexpr uintptr_t kEntryWeapon = 0x20;  // the DSWeaponEntity, 0 when the entry holds none
+constexpr uintptr_t kEntryTable = 0x38;   // the table component the weapon's events report to
+
+// DSWeaponEntity.
+constexpr uintptr_t kWeaponId = 0x2188;    // u16 EDSWeaponId
+constexpr uintptr_t kWeaponOwner = 0x338;  // weak pointer to the owner entity
+
+// A weapon's behavior component (DSWeaponBehaviorComponent and its subclasses).
+constexpr uintptr_t kBehaviorWeapon = 0x50;        // the DSWeaponEntity it belongs to
+constexpr uintptr_t kBehaviorPellets = 0x5BC;      // u32, Gun and ShotGun
+constexpr uintptr_t kBehaviorFireRequest = 0x4D1;  // byte: the update runs the shot when it is set, then clears it
+constexpr size_t kCreateAttackSlot = 46;           // CreateAttackRequest(float), the shot of every behavior class
+
+// The CreateAttackRequest of each behavior class that makes a shot or a throw (file VAs).
+struct ShotFunction {
+    uintptr_t address;
+    weapon_wire::Kind kind;
+};
+inline constexpr ShotFunction kShotFunctions[] = {
+    {0x14201e800, weapon_wire::Kind::Gun},
+    {0x141ff4370, weapon_wire::Kind::ShotGun},
+    {0x142007250, weapon_wire::Kind::BolaGun},
+    {0x141ff7d00, weapon_wire::Kind::StickyGun},
+    {0x14201ded0, weapon_wire::Kind::GrenadeLauncher},
+    {0x14201f260, weapon_wire::Kind::HandGrenade},
+    {0x141ff6120, weapon_wire::Kind::SingleShotBeam},
+};
+
+// Reads of a DSWeaponEntity (kHolstered / 0 when unreadable).
+uint16_t weaponId(uintptr_t weapon);
+uintptr_t weaponOwner(uintptr_t weapon);
+
+// The weapon's behavior component that makes shots (one whose slot 46 is in kShotFunctions), or 0.
+uintptr_t shotBehavior(uintptr_t weapon);
+
+}  // namespace ds2::weapon

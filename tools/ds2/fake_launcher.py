@@ -21,6 +21,7 @@ import time
 HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002, 0x0003, 0x0020, 0x0100, 0x0108
 ANIM_STATE = 0x010A
 EQUIP_STATE = 0x010C
+WEAPON_STATE, WEAPON_FIRE = 0x0124, 0x0125
 CARGO_LIST = 0x0101
 VEHICLE_LOAD = 0x0109
 VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
@@ -111,6 +112,7 @@ def main():
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
+    p.add_argument("--echo-weapon", action="store_true", help="send the local player's WEAPON_STATE and WEAPON_FIRE back as the peer's (weapon_sync=1: the body holds and fires Sam's weapon)")
     p.add_argument("--equip", default="", help="SLOT:KIND[,SLOT:KIND] hand pieces the peer holds (holster slot kinds 4 right arm, 5 left arm, 6 right waist, 7 left waist; kind = cargo kind id)")
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
@@ -161,6 +163,8 @@ def serve(sock, a):
                 sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == EQUIP_STATE and a.echo_equip:
                 sock.sendall(encode(EQUIP_STATE, peer_slot, body[4:]))
+            elif msg_type in (WEAPON_STATE, WEAPON_FIRE) and a.echo_weapon:
+                sock.sendall(encode(msg_type, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
                 if time.monotonic() - last_print > 5:

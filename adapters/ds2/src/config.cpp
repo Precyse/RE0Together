@@ -47,6 +47,10 @@ Config loadConfig() {
             config.enemySync = value == "1";
         } else if (key == "log_facts") {
             config.logFacts = value == "1";
+        } else if (key == "weapon_sync") {
+            config.weaponSync = value == "1";
+        } else if (key == "weapon_attach_mode") {
+            config.weaponAttachMode = static_cast<uint8_t>(std::strtoul(value.c_str(), nullptr, kDecimalBase));
         } else if (key == "remote_body") {
             config.remoteBody = value == "1";
         }

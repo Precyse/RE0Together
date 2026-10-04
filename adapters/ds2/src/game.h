@@ -12,6 +12,7 @@
 #include "enemy_wire.h"
 #include "story_wire.h"
 #include "struct_wire.h"
+#include "weapon_wire.h"
 #include "world_to_screen.h"
 
 namespace game {
@@ -259,5 +260,17 @@ std::vector<story_wire::Event> takeStoryEvents();
 
 // Guest: replays the host's event on the simulation thread's next frame. Any thread.
 void replayStoryEvent(const story_wire::Event& event);
+
+// The weapon the local player has drawn (the engine's weapon table of his entity), or nothing until he exists. Needs
+// local_weapon::installEarly for shots. Any thread.
+std::optional<weapon_wire::WeaponState> localWeaponState();
+
+// The shots and throws the local player made since the last call, oldest first. Any thread.
+std::vector<weapon_wire::WeaponFire> takeLocalFires();
+
+// The weapon the partner's body should hold (kHolstered: none), made on the simulation thread's next frame; and one of
+// its shots, played by the body's weapon on that frame. Needs remote_weapon::installEarly. Any thread.
+void setPartnerWeapon(const weapon_wire::WeaponState& state);
+void partnerFire(const weapon_wire::WeaponFire& fire);
 
 }  // namespace game

@@ -26,6 +26,14 @@ constexpr uintptr_t kEntityParent = 0x80;       // the entity it is attached to,
 constexpr uintptr_t kEntityHandlerList = 0x2D0;
 constexpr uintptr_t kEntityNetworkId = 0x320;   // the id vehicles and drivers are keyed by
 constexpr uintptr_t kEntityController = 0x5658; // DSPlayerController
+constexpr uintptr_t kEntityUuid = 0x10;         // ObjectUUID, 16 bytes
+constexpr uintptr_t kEntityWeakTarget = 0x20;   // a weak pointer to an entity points at entity + 0x20
+
+// The entity the weak pointer stored at `slot` refers to, or 0.
+inline uintptr_t weakEntity(uintptr_t slot) {
+    const uintptr_t target = decima::readPointer(slot);
+    return target ? target - kEntityWeakTarget : 0;
+}
 
 // A component of an entity by its Decima type record (file VA).
 inline uintptr_t componentByRecord(uintptr_t entity, uintptr_t recordFileVa) {

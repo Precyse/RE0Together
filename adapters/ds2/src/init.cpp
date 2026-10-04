@@ -16,7 +16,10 @@
 #include "ds2/combat_hook.h"
 #include "ds2/enemy_host.h"
 #include "ds2/enemy_puppet.h"
+#include "ds2/damage_veto.h"
 #include "ds2/enemy_spawn.h"
+#include "ds2/local_weapon.h"
+#include "ds2/remote_weapon.h"
 #include "ds2/sim_tick.h"
 #include "ds2/partner_cargo.h"
 #include "ds2/story.h"
@@ -26,6 +29,7 @@
 #include "ds2/world_facts.h"
 #include "remote_body.h"
 #include "vehicle_sync.h"
+#include "weapon_sync.h"
 
 namespace {
 
@@ -66,6 +70,12 @@ DWORD WINAPI initThread(LPVOID) {
         enemy_host::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
+    }
+    weapon_sync::setEnabled(config.weaponSync);
+    if (config.weaponSync) {
+        local_weapon::installEarly();
+        remote_weapon::installEarly(config.weaponAttachMode);
+        damage_veto::installEarly();
     }
     story::installEarly();
     partner_cargo::installEarly();

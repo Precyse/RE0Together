@@ -56,6 +56,7 @@ add_library(ds2_adapter SHARED
     src/vehicle_load.cpp
     src/fact_sync.cpp
     src/equip_sync.cpp
+    src/weapon_sync.cpp
     src/rack_sync.cpp
     src/env_sync.cpp
     src/bt_sync.cpp
@@ -109,7 +110,11 @@ add_library(ds2_adapter SHARED
     src/ds2/structures.cpp
     src/ds2/story.cpp
     src/ds2/sim_tick.cpp
-    src/ds2/cargo.cpp)
+    src/ds2/cargo.cpp
+    src/ds2/weapon_layout.cpp
+    src/ds2/local_weapon.cpp
+    src/ds2/remote_weapon.cpp
+    src/ds2/damage_veto.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
 target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)
@@ -165,3 +170,4 @@ add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
 add_unit_test(bt_wire_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
+add_unit_test(weapon_wire_test)
