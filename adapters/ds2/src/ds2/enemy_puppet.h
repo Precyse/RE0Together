@@ -7,7 +7,7 @@ namespace enemy_puppet {
 // Start-up: the simulation tick that binds, places and removes the puppets.
 void installEarly();
 
-// Puts an enemy entity to sleep (the engine stops updating it) and remembers it by UUID (called by the spawn hook as the
+// Puts an enemy's AI to sleep and remembers the entity by UUID (called by the spawn hook as the
 // entity is built). Any thread.
 void adopt(uintptr_t entity);
 

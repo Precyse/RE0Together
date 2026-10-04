@@ -1,7 +1,8 @@
 // DEATH STRANDING 2: the guest's puppets of the host's enemies (docs/DS2_NOTES.md, "Enemy puppets"). The guest's own
-// enemies are built by the engine as usual and tamed at once (`adopt`): put to sleep, so the engine stops updating them
-// (no AI, no animation) while their camp and spawn setup keep their bookkeeping (cutting the components off from the
-// entity messages instead broke the camp's cleanup when its tile unloaded and crashed the game). The host's ENEMY_SPAWN names an enemy by its entity
+// enemies are built by the engine as usual and tamed at once (`adopt`): their AI put to sleep (the byte the engine's own entity sleep sets), while the entity stays awake: it
+// is drawn and animated, its camp and spawn setup keep their bookkeeping (cutting the components off from the entity
+// messages instead broke the camp's cleanup when its tile unloaded and crashed the game, and putting the whole entity
+// to sleep makes it invisible and stops its animation). The host's ENEMY_SPAWN names an enemy by its entity
 // UUID, which is the same on both machines for the same spawnpoint; the puppet is the tamed enemy with that UUID, and
 // from then on only the host's reports move it. Death and removal use the engine's own calls.
 #include "ds2/enemy_puppet.h"
@@ -32,7 +33,9 @@ namespace {
 
 constexpr uintptr_t kKill = 0x14013bef0;    // Entity::Kill(entity, attacker, params)
 constexpr uintptr_t kRemove = 0x14014ba20;  // Entity::Remove(entity, immediate)
-constexpr uintptr_t kSleep = 0x140131200;   // Entity::SetSleeping(entity, true): the engine stops updating it
+constexpr uintptr_t kAiComponentRecord = 0x1442A1160;  // AIIndividualComponent
+constexpr uintptr_t kAiIndividual = 0x50, kAiActivity = 0x23;  // AIIndividual = component + 0x50; its activity byte
+constexpr uint8_t kAiAsleep = 2;  // 0 none, 2 asleep, 3 awake: the AI manager does not decide for a sleeping individual
 constexpr uintptr_t kEntityUuid = 0x10;
 constexpr ULONGLONG kPruneMs = 500;
 constexpr ULONGLONG kMaxExtrapolationMs = 300;  // no state this long: the puppet stands where it was
@@ -91,13 +94,12 @@ bool killGuarded(uintptr_t entity) {
     }
 }
 
-bool sleepGuarded(uintptr_t entity) {
-    __try {
-        reinterpret_cast<void (*)(uintptr_t, bool)>(ds2::at(kSleep))(entity, true);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
+// Puts the enemy's AI to sleep the way the engine's own entity sleep does, while the entity stays awake: it is drawn,
+// animated and moved, and decides nothing. The engine sets the byte back to awake when it wakes the entity, so this is
+// repeated every tick.
+void sleepAi(uintptr_t entity) {
+    const uintptr_t component = ds2::componentByRecord(entity, kAiComponentRecord);
+    if (component) ds2::field<uint8_t>(component + kAiIndividual, kAiActivity) = kAiAsleep;
 }
 
 bool removeGuarded(uintptr_t entity) {
@@ -177,6 +179,14 @@ void place(Puppet& puppet, ULONGLONG now) {
                      {puppet.state.velocity[0], puppet.state.velocity[1], puppet.state.velocity[2]});
 }
 
+// Keeps every tamed enemy's AI asleep.
+void keepAiAsleep() {
+    std::lock_guard lock(g_mutex);
+    for (const auto& [id, tamed] : g_tamed) {
+        if (ds2::entityExists(id.data())) sleepAi(tamed.entity);
+    }
+}
+
 // Forgets tamed enemies the engine no longer has.
 void pruneTamed(ULONGLONG now) {
     std::lock_guard lock(g_mutex);
@@ -220,6 +230,7 @@ void tick() {
     if (g_adoptExisting.exchange(false)) {
         for (const uintptr_t entity : enemy_host::release()) enemy_puppet::adopt(entity);
     }
+    keepAiAsleep();
     for (const enemy_wire::EnemySpawn& spawn : spawns) {
         g_pending[spawn.netId] = spawn;
         Uuid id;
@@ -276,7 +287,7 @@ bool animate(uintptr_t manager, uintptr_t owner) {
 void adoptExisting() { g_adoptExisting = true; }
 
 void adopt(uintptr_t entity) {
-    sleepGuarded(entity);
+    sleepAi(entity);
     Uuid id{};
     decima::safeCopy(id.data(), entity + kEntityUuid, id.size());
     std::lock_guard lock(g_mutex);

@@ -11,7 +11,7 @@
 namespace {
 
 constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
-constexpr size_t kMaxCallbacks = 8;
+constexpr size_t kMaxCallbacks = 16;
 constexpr double kReportSeconds = 5.0;  // how often the frame rate and the callbacks' cost are logged
 
 // The update takes more than its first four arguments; they are passed through untouched.
@@ -68,7 +68,11 @@ void installEarly() {
 }
 
 void add(Callback callback) {
-    if (g_count < kMaxCallbacks) g_callbacks[g_count++] = callback;
+    if (g_count < kMaxCallbacks) {
+        g_callbacks[g_count++] = callback;
+    } else {
+        logger::write("sim_tick: more than %zu callbacks, one was not registered", kMaxCallbacks);
+    }
 }
 
 }  // namespace sim_tick
