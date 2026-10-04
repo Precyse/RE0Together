@@ -13,6 +13,7 @@
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "decima/safe_read.h"
@@ -36,6 +37,8 @@ constexpr ULONGLONG kPruneMs = 500;
 constexpr ULONGLONG kMaxExtrapolationMs = 300;  // no state this long: the puppet stands where it was
 constexpr ULONGLONG kRegistrationMs = 5000;     // a built entity joins the engine's entity map a little later
 constexpr ULONGLONG kReportMs = 5000;
+constexpr ULONGLONG kAnnouncementsSettledMs = 3000;  // no new announcement this long: the host's snapshot is complete
+constexpr ULONGLONG kUnmatchedMs = 20000;            // a tamed enemy the host never announced is removed after this long
 constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 
@@ -72,6 +75,8 @@ std::unordered_map<Uuid, Tamed, UuidHash> g_tamed;  // entity UUID -> an enemy o
 // Simulation thread only.
 std::unordered_map<uint16_t, enemy_wire::EnemySpawn> g_pending;  // announced, no tamed enemy of this world to be it yet
 std::unordered_map<uint16_t, Puppet> g_puppets;
+std::unordered_set<Uuid, UuidHash> g_announced;  // every entity UUID the host has announced
+ULONGLONG g_lastAnnouncementAt = 0;
 
 bool killGuarded(uintptr_t entity) {
     __try {
@@ -162,6 +167,24 @@ void pruneTamed(ULONGLONG now) {
     });
 }
 
+// Removes the tamed enemies the host's complete snapshot does not have: the host's world has no such enemy, so the guest
+// must not show a frozen one.
+void removeUnmatched(ULONGLONG now) {
+    if (!g_lastAnnouncementAt || now - g_lastAnnouncementAt < kAnnouncementsSettledMs) return;
+    std::lock_guard lock(g_mutex);
+    int removed = 0;
+    for (auto it = g_tamed.begin(); it != g_tamed.end();) {
+        if (now - it->second.at < kUnmatchedMs || g_announced.contains(it->first)) {
+            ++it;
+            continue;
+        }
+        if (ds2::entityExists(it->first.data())) removeGuarded(it->second.entity);
+        it = g_tamed.erase(it);
+        ++removed;
+    }
+    if (removed) logger::write("enemy_puppet: removed %d enemies of this world that the host does not have", removed);
+}
+
 // Guest, simulation thread.
 void tick() {
     static ULONGLONG lastPrune = 0, lastReport = 0;
@@ -177,7 +200,13 @@ void tick() {
     if (g_adoptExisting.exchange(false)) {
         for (const uintptr_t entity : enemy_host::release()) enemy_puppet::adopt(entity);
     }
-    for (const enemy_wire::EnemySpawn& spawn : spawns) g_pending[spawn.netId] = spawn;
+    for (const enemy_wire::EnemySpawn& spawn : spawns) {
+        g_pending[spawn.netId] = spawn;
+        Uuid id;
+        std::copy(spawn.entityUuid, spawn.entityUuid + id.size(), id.begin());
+        g_announced.insert(id);
+        g_lastAnnouncementAt = GetTickCount64();
+    }
     for (const enemy_wire::EnemyState& state : states) handleState(state);
     for (const enemy_wire::EnemyGone& event : gone) handleGone(event);
     for (auto it = g_pending.begin(); it != g_pending.end();) {
@@ -194,6 +223,7 @@ void tick() {
     if (now - lastPrune >= kPruneMs) {
         lastPrune = now;
         pruneTamed(now);
+        removeUnmatched(now);
     }
     for (auto it = g_puppets.begin(); it != g_puppets.end();) {
         Puppet& puppet = it->second;
