@@ -267,13 +267,27 @@ public sealed class App
 
     private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? SteamLibrary.FindGameDir(profile.SteamAppId);
 
-    /// <summary>Crash recovery and cleanup: every profile with save sync goes back to coop=0 and loses its session folder.</summary>
+    /// <summary>Crash recovery and cleanup: every profile with save sync goes back to coop=0 and loses its session folder.
+    /// A game that is running keeps both: its session folder holds the saves it is playing from.</summary>
     private void ResetAdapterSettings()
     {
         foreach (var id in GameProfile.ListIds())
         {
             var profile = GameProfile.Load(id);
-            if (profile.SaveSync is { } config && ResolveGameDir(profile) is { } gameDir) AdapterSettings.Reset(gameDir, config);
+            if (profile.SaveSync is not { } config || ResolveGameDir(profile) is not { } gameDir) continue;
+            if (GameLauncher.IsRunning(profile))
+            {
+                Log.Info($"{profile.Name} is running, its co-op settings are left as they are");
+                continue;
+            }
+            try
+            {
+                AdapterSettings.Reset(gameDir, config);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Info($"Could not reset {profile.Name}'s co-op settings: {e.Message}");
+            }
         }
     }
 }

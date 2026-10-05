@@ -29,6 +29,7 @@ jobs:
           dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
           New-Item -ItemType Directory -Force pkg/launcher/games | Out-Null
           Copy-Item launcher/games/*.json pkg/launcher/games/
+          Remove-Item pkg/launcher/app/update.json
           Compress-Archive -Path pkg/* -DestinationPath Launcher-Preview.zip
 
       - name: Publish preview release

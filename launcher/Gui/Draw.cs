@@ -20,6 +20,17 @@ internal static class Draw
 
     public static int Width(string text, Font font) => TextRenderer.MeasureText(text, font).Width;
 
+    private const TextFormatFlags Wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak
+        | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
+
+    /// <summary>Text wrapped to the width, top-aligned in the bounds.</summary>
+    public static void Wrapped(Graphics g, string text, Font font, Color color, Rectangle bounds) =>
+        TextRenderer.DrawText(g, text, font, bounds, color, Wrap);
+
+    /// <summary>The height of the text wrapped to the width, capped at the given number of lines.</summary>
+    public static int WrappedHeight(string text, Font font, int width, int maxLines) =>
+        Math.Min(TextRenderer.MeasureText(text, font, new Size(width, int.MaxValue), Wrap).Height, font.Height * maxLines);
+
     /// <summary>A section or status label: small bold caps.</summary>
     public static void Caption(Graphics g, string text, Color color, Point at) =>
         TextRenderer.DrawText(g, text.ToUpperInvariant(), Theme.Label, at, color, TextFormatFlags.NoPrefix);

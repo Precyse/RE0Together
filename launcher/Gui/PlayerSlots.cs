@@ -58,8 +58,15 @@ internal sealed class PlayerSlots : Control
         var metaWidth = Math.Max(Draw.Width(role, Theme.Small), Draw.Width(detail, Theme.Small));
         var metaX = cell.Right - PadX - metaWidth;
         var metaColor = player != null ? Theme.Muted : Theme.Dim;
-        Draw.TextRight(g, role, Theme.Small, metaColor, new Rectangle(metaX, middle - MetaLineHeight, metaWidth, MetaLineHeight));
-        Draw.TextRight(g, detail, Theme.Small, metaColor, new Rectangle(metaX, middle, metaWidth, MetaLineHeight));
+        if (detail.Length == 0)
+        {
+            Draw.TextRight(g, role, Theme.Small, metaColor, new Rectangle(metaX, cell.Y, metaWidth, cell.Height));
+        }
+        else
+        {
+            Draw.TextRight(g, role, Theme.Small, metaColor, new Rectangle(metaX, middle - MetaLineHeight, metaWidth, MetaLineHeight));
+            Draw.TextRight(g, detail, Theme.Small, metaColor, new Rectangle(metaX, middle, metaWidth, MetaLineHeight));
+        }
 
         var name = player?.Name ?? OpenSeat;
         Draw.Text(g, name, Theme.Strong, player != null ? Theme.Text : Theme.Dim,

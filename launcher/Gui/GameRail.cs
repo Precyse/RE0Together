@@ -10,8 +10,8 @@ internal sealed class GameRail : Control
     private const int RowHeight = 76;
     private const int ArtWidth = 40;
     private const int ArtHeight = 60;
-    private const int NameOffsetY = -9;
-    private const int SubOffsetY = 10;
+    private const int NameMaxLines = 2;
+    private const int NameSubGap = 2;
 
     private readonly List<(GameProfile Profile, SteamArt Art)> _games = new();
     private int _selected = -1;
@@ -98,9 +98,11 @@ internal sealed class GameRail : Control
 
         var textX = artBox.Right + 12;
         var textWidth = row.Right - textX - PadX;
-        var middle = row.Y + row.Height / 2;
         var sub = profile.Id == _runningId ? "Running" : $"{profile.MaxPlayers} players";
-        Draw.Text(g, profile.Name, Theme.Strong, faded ? Theme.Dim : Theme.Text, new Rectangle(textX, middle + NameOffsetY - 10, textWidth, 20));
-        Draw.Text(g, sub, Theme.Small, selected ? Theme.Muted : Theme.Dim, new Rectangle(textX, middle + SubOffsetY - 8, textWidth, 16));
+        var nameHeight = Draw.WrappedHeight(profile.Name, Theme.Strong, textWidth, NameMaxLines);
+        var blockTop = row.Y + (row.Height - nameHeight - NameSubGap - Theme.Small.Height) / 2;
+        Draw.Wrapped(g, profile.Name, Theme.Strong, faded ? Theme.Dim : Theme.Text, new Rectangle(textX, blockTop, textWidth, nameHeight));
+        Draw.Wrapped(g, sub, Theme.Small, selected ? Theme.Muted : Theme.Dim,
+            new Rectangle(textX, blockTop + nameHeight + NameSubGap, textWidth, Theme.Small.Height));
     }
 }
