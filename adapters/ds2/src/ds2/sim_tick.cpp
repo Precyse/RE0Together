@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <vector>
 
 #include "ds2/engine.h"
 #include "ds2/player.h"
@@ -13,7 +14,6 @@
 namespace {
 
 constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
-constexpr size_t kMaxCallbacks = 32;
 constexpr double kReportMinMicros = 20.0;  // callbacks cheaper than this are not listed
 constexpr double kReportSeconds = 5.0;  // how often the frame rate and the callbacks' cost are logged
 
@@ -21,14 +21,17 @@ constexpr double kReportSeconds = 5.0;  // how often the frame rate and the call
 using UpdateFn = uint64_t (*)(uintptr_t, float, float, uint8_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 
 UpdateFn g_update = nullptr;
-sim_tick::Callback g_callbacks[kMaxCallbacks] = {};
-const char* g_names[kMaxCallbacks] = {};
-sim_tick::Gate g_gates[kMaxCallbacks] = {};
+struct Entry {
+    sim_tick::Callback callback;
+    const char* name;
+    sim_tick::Gate gate;
+    int64_t spent;  // simulation thread only: counter ticks this callback took in the report window
+};
+
+std::vector<Entry> g_entries;  // written at start-up only
 ds2::GameplayClock g_gameplay;  // simulation thread: the local player's state machine running
-size_t g_count = 0;  // written at start-up only
 
 int64_t g_spent = 0;  // simulation thread only: counter ticks the callbacks took in this window
-int64_t g_spentEach[kMaxCallbacks] = {};  // and each callback's share
 
 int64_t counter() {
     LARGE_INTEGER now;
@@ -50,12 +53,12 @@ void report(int64_t now) {
     if (seconds < kReportSeconds) return;
     logger::write("sim_tick: %.1f frames/s, callbacks %.0f us/frame", frames / seconds,
                   frames ? 1e6 * static_cast<double>(g_spent) / frequency / frames : 0.0);
-    for (size_t i = 0; i < g_count; ++i) {
-        const double micros = frames ? 1e6 * static_cast<double>(g_spentEach[i]) / frequency / frames : 0.0;
+    for (Entry& entry : g_entries) {
+        const double micros = frames ? 1e6 * static_cast<double>(entry.spent) / frequency / frames : 0.0;
         if (micros >= kReportMinMicros) {
-            logger::write("sim_tick:   %s %.0f us/frame", g_names[i], micros);
+            logger::write("sim_tick:   %s %.0f us/frame", entry.name, micros);
         }
-        g_spentEach[i] = 0;
+        entry.spent = 0;
     }
     windowStart = now;
     g_spent = 0;
@@ -66,11 +69,11 @@ uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t 
                       uintptr_t s8) {
     const int64_t start = counter();
     g_gameplay.update(ds2::localPlayerEntity());
-    for (size_t i = 0; i < g_count; ++i) {
-        if (g_gates[i] == sim_tick::Gate::Gameplay && !g_gameplay.active()) continue;
+    for (Entry& entry : g_entries) {
+        if (entry.gate == sim_tick::Gate::Gameplay && !g_gameplay.active()) continue;
         const int64_t before = counter();
-        g_callbacks[i]();
-        g_spentEach[i] += counter() - before;
+        entry.callback();
+        entry.spent += counter() - before;
     }
     g_spent += counter() - start;
     report(start);
@@ -87,14 +90,6 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_update));
 }
 
-void add(Callback callback, const char* name, Gate gate) {
-    if (g_count < kMaxCallbacks) {
-        g_names[g_count] = name;
-        g_gates[g_count] = gate;
-        g_callbacks[g_count++] = callback;
-    } else {
-        logger::write("sim_tick: more than %zu callbacks, one was not registered", kMaxCallbacks);
-    }
-}
+void add(Callback callback, const char* name, Gate gate) { g_entries.push_back({callback, name, gate, 0}); }
 
 }  // namespace sim_tick
