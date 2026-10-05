@@ -1,5 +1,4 @@
 #pragma once
-#include <chrono>
 #include <cstdint>
 #include <optional>
 
@@ -24,13 +23,5 @@ void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3
 // is live. Any thread.
 std::optional<uint64_t> ownerKey();
 uint8_t slot();
-
-// The body's backpack owner and its marker come up some time after the body itself: until then a piece created for
-// it has no slot to land in and is dropped on the ground.
-constexpr std::chrono::seconds kBackpackReadyAfter{20};
-
-// How long the body has been live (empty until it is), and where the partner's pose puts it. Any thread.
-std::optional<std::chrono::steady_clock::duration> liveFor();
-std::optional<world_to_screen::Vec3> position();
 
 }  // namespace remote_body

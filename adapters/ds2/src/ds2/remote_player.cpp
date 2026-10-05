@@ -66,6 +66,7 @@ constexpr double kSpawnAhead = 2.5;  // metres in front of Sam and
 constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves the body to the partner
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
+constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
 constexpr auto kPeerGoneAfter = std::chrono::seconds(5);  // no pose from the peer for this long: it left, the body goes
 // The loading screen can outlast the player's state machine coming back on; a body built while the world still streams in
 // stalls the load, so none is built until the screen has been gone for this long.
@@ -86,7 +87,7 @@ Stage g_stage = Stage::Idle;
 uintptr_t g_netPlayer = 0;
 std::atomic<uintptr_t> g_entity{0};
 int g_waitedFrames = 0;
-std::atomic<Clock::rep> g_liveSince{0};  // steady-clock ticks when the body went live, 0 while it is not
+Clock::time_point g_liveSince;
 std::atomic<const char*> g_leaveReason{nullptr};  // set from any thread: the world is about to be left (travel, area change)
 uintptr_t g_samAtSpawn = 0;
 
@@ -156,7 +157,7 @@ void spawn() {
 void finishSpawn() {
     if (ds2::field<uintptr_t>(g_entity.load(), ds2::kEntityController)) {
         g_stage = remote_camera::give() ? Stage::Live : Stage::Failed;
-        g_liveSince = Clock::now().time_since_epoch().count();
+        g_liveSince = Clock::now();
         remote_marker::repair();
 
         logger::write("remote_body: %s", g_stage == Stage::Live ? "live" : "no camera, off");
@@ -270,7 +271,6 @@ void forgetBody(const char* why, bool removeEntity = false) {
     g_netPlayer = 0;
     g_samAtSpawn = 0;
     remote_ride::reset();
-    g_liveSince = 0;
     g_stage = Stage::Idle;
 }
 
@@ -321,11 +321,11 @@ void advance() {
             break;
         case Stage::Live:
             g_bodyOwnerKey = ds2::field<uint64_t>(g_entity.load(), ds2::kEntityNetworkId);
-            if (!g_looseLoggedLive && remote_body::liveFor().value_or(std::chrono::seconds(0)) > kLooseLogAfterLive) {
+            if (!g_looseLoggedLive && Clock::now() - g_liveSince > kLooseLogAfterLive) {
                 g_looseLoggedLive = true;
                 logLooseCargo("after the body has been live a while");
             }
-            if (remote_body::liveFor() < remote_body::kBackpackReadyAfter) remote_marker::repair();
+            if (Clock::now() - g_liveSince < kMarkerRepairWindow) remote_marker::repair();
             remote_ride::tick();
             if (diedLongAgo()) {
                 forgetBody("the body died (the engine's own damage, e.g. drowning) and stays down", true);
@@ -382,18 +382,6 @@ std::optional<uint64_t> ownerKey() {
 }
 
 uint8_t slot() { return remote_player::slot(); }
-
-std::optional<std::chrono::steady_clock::duration> liveFor() {
-    const Clock::rep since = g_liveSince.load();
-    if (!since) return std::nullopt;
-    return Clock::now() - Clock::time_point(Clock::duration(since));
-}
-
-std::optional<world_to_screen::Vec3> position() {
-    std::lock_guard lock(g_targetMutex);
-    if (g_slot == kNoSlot) return std::nullopt;
-    return g_target.position;
-}
 
 void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity) {
     if (!g_enabled.load()) return;
