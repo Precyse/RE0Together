@@ -207,7 +207,6 @@ void pollMissions() {
 // per-player).
 uint64_t changeAreaDetour(uintptr_t unused, uintptr_t area, uintptr_t first, uintptr_t transform, uintptr_t construction,
                           uintptr_t last, uintptr_t g, uintptr_t h) {
-    remote_player::requestLeave("area change");
     if (g_host.load() && transform) {
         story_wire::Event event{};
         event.kind = static_cast<uint8_t>(story_wire::Kind::AreaChange);
@@ -217,7 +216,10 @@ uint64_t changeAreaDetour(uintptr_t unused, uintptr_t area, uintptr_t first, uin
         decima::safeCopy(event.transform, transform, sizeof(event.transform));
         report(event);
     }
-    return g_changeArea(unused, area, first, transform, construction, last, g, h);
+    const uint64_t result = g_changeArea(unused, area, first, transform, construction, last, g, h);
+    // Only an accepted request leaves the world (the body's entity must not be removed while the world carries on).
+    if (static_cast<uint8_t>(result)) remote_player::requestLeave("area change");
+    return result;
 }
 
 bool blockingStateUp() {

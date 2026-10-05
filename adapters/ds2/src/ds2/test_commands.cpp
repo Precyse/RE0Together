@@ -5,6 +5,8 @@
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
+//   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes them)
+//   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -24,9 +26,11 @@
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
+#include "equip_sync.h"
 #include "game.h"
 #include "log.h"
 #include "paths.h"
+#include "remote_body.h"
 
 namespace {
 
@@ -144,8 +148,12 @@ void fastTravel(const std::string& text) {
     where.position = {x, y, z};
     const uintptr_t module = decima::readPointer(ds2::at(kGameModuleGlobal));
     const uintptr_t pointed = module ? decima::readPointer(module + kFastTravelSystem) : 0;
-    const uintptr_t system = pointed ? pointed : module + kFastTravelSystem;  // the system is a pointer field of the game module
-    logger::write("test_commands: fast travel system %p (field value %p)", reinterpret_cast<void*>(system), reinterpret_cast<void*>(pointed));
+    if (!pointed) {  // the game module's field holds the system once it exists; the game's own wrappers do nothing without it
+        logger::write("test_commands: no fast travel system yet");
+        return;
+    }
+    const uintptr_t system = pointed;
+    logger::write("test_commands: fast travel system %p", reinterpret_cast<void*>(system));
     remote_player::leave("fast travel");
     bool ok = false;
     __try {
@@ -177,6 +185,33 @@ void watchHealth(const std::string& text) {
     logger::write("test_commands: no enemy %d in the directory", netId);
 }
 
+void logLoose(const std::string& text) {
+    double radius = 0;
+    char remove = 0;
+    decima::WorldTransform where{};
+    if (sscanf(text.c_str(), "%lf %c", &radius, &remove) < 1 || !ds2::entityTransform(remote_player::samEntity(), where)) return;
+    const auto pieces = game::looseCargo({where.position.x, where.position.y, where.position.z}, radius);
+    logger::write("test_commands: %zu loose pieces within %.0f m%s", pieces.size(), radius, remove ? ", deleting them" : "");
+    for (const game::LooseCargo& piece : pieces) {
+        if (remove) game::removeCargoLater(piece.handle);
+        logger::write("test_commands: loose piece %llx kind %u at %.1f %.1f %.1f", static_cast<unsigned long long>(piece.handle),
+                      piece.type, piece.position.x, piece.position.y, piece.position.z);
+    }
+}
+
+void logBodyPieces() {
+    const auto owner = remote_body::ownerKey();
+    if (!owner) {
+        logger::write("test_commands: no remote body");
+        return;
+    }
+    for (const uint8_t slot : equip_sync::kMirroredSlots) {
+        for (const game::Cargo& piece : game::slotPieces(*owner, slot)) {
+            logger::write("test_commands: body slot %u piece %llx kind %u", slot, static_cast<unsigned long long>(piece.handle), piece.type);
+        }
+    }
+}
+
 void tick() {
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
@@ -188,6 +223,8 @@ void tick() {
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
+    if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
+    if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.
