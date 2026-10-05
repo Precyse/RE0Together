@@ -76,6 +76,7 @@ add_library(ds2_adapter SHARED
     src/ds2/enemy_host.cpp
     src/ds2/enemy_puppet.cpp
     src/ds2/entity_lookup.cpp
+    src/ds2/entity_wake.cpp
     src/partner_cargo_sync.cpp
     src/ds2/partner_cargo.cpp
     src/authority.cpp

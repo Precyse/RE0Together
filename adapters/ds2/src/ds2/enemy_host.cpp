@@ -16,6 +16,7 @@
 #include "ds2/engine.h"
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
+#include "ds2/entity_wake.h"
 #include "enemy_directory.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
@@ -33,6 +34,10 @@ constexpr uintptr_t kEntityFlags = 0x98;
 constexpr uint64_t kDeadFlag = uint64_t{1} << 8;
 constexpr ULONGLONG kSampleMs = 100;
 constexpr size_t kMaxTracked = 512;
+// The host's streaming sleeps enemies far from the HOST's player; an enemy within this range of the partner's body is kept awake
+// (re-asked at most this often per enemy), so it can fight the partner and take its hits.
+constexpr double kKeepAwakeMetres = 80.0;
+constexpr ULONGLONG kWakeRetryMs = 1000;
 constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 constexpr double kMinMoveMeters = 0.03;  // an enemy that moved less than this and did not turn is not reported again...
@@ -56,6 +61,7 @@ struct Tracked {
     std::unique_ptr<remote_animation::VariableValues> sentVariables;  // only while the partner is near
     ULONGLONG variablesSnapshotAt = 0;
     uint8_t sentHealth = enemy_wire::kHealthUnknown;
+    ULONGLONG wakeAskedAt = 0;
 };
 
 std::mutex g_mutex;  // guards everything below (spawn workers add, the simulation thread samples, the net thread takes)
@@ -100,6 +106,17 @@ void sampleAnimation(Tracked& enemy, const decima::WorldTransform& transform, co
     anim.snapshot = snapshot;
     anim.changes = std::move(changes);
     g_anims.push_back(std::move(anim));
+}
+
+// Keeps an enemy near the partner's body awake: the engine sleeps it by the distance to the host's own player only.
+void keepAwake(Tracked& enemy, const decima::WorldTransform& transform, const decima::WorldPosition& partner, ULONGLONG now) {
+    const double dx = transform.position.x - partner.x, dy = transform.position.y - partner.y, dz = transform.position.z - partner.z;
+    if (dx * dx + dy * dy + dz * dz > kKeepAwakeMetres * kKeepAwakeMetres || now - enemy.wakeAskedAt < kWakeRetryMs ||
+        !ds2::entityAsleep(enemy.entity)) {
+        return;
+    }
+    enemy.wakeAskedAt = now;
+    ds2::wakeEntity(enemy.entity);
 }
 
 bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
@@ -158,6 +175,7 @@ void tick() {
         uint64_t flags = 0;
         if (ds2::entityTransform(enemy.entity, transform) && decima::safeRead(enemy.entity + kEntityFlags, flags)) {
             const bool dead = (flags & kDeadFlag) != 0;
+            if (havePartner && !dead) keepAwake(enemy, transform, partnerAt, now);
             if (!enemy.announced && g_spawns.size() < kMaxQueued) {
                 enemy_wire::EnemySpawn spawn{};
                 spawn.netId = enemy.netId;
