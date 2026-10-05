@@ -9,8 +9,12 @@ using Callback = void (*)();
 // Start-up, before the world loads: installs the detour. Safe to call once; modules may `add` before or after.
 void installEarly();
 
+// When a callback runs. `Gameplay` callbacks walk engine lists (camps, structures, missions, the clock) that are freed
+// and rebuilt by a load, so they are skipped from the moment the local player's state machine stops until it runs again.
+enum class Gate { Always, Gameplay };
+
 // Registers a function to run every frame on the simulation thread (call from start-up code, not from a callback).
 // `name` shows in the per-callback cost log.
-void add(Callback callback, const char* name);
+void add(Callback callback, const char* name, Gate gate = Gate::Always);
 
 }  // namespace sim_tick

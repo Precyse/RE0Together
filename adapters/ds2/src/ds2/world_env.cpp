@@ -148,7 +148,7 @@ void weatherDetour(uintptr_t manager, float dt) {
 namespace world_env {
 
 void installEarly() {
-    sim_tick::add(&keepClockRunning, "world clock");
+    sim_tick::add(&keepClockRunning, "world clock", sim_tick::Gate::Gameplay);
     hooks::install("time of day update", ds2::at(kTimeUpdate), reinterpret_cast<void*>(&timeDetour),
                    reinterpret_cast<void**>(&g_timeUpdate));
     hooks::install("weather update", ds2::at(kWeatherUpdate), reinterpret_cast<void*>(&weatherDetour),

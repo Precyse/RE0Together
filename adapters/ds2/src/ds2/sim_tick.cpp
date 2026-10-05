@@ -5,13 +5,15 @@
 #include <cstdio>
 
 #include "ds2/engine.h"
+#include "ds2/player.h"
+#include "ds2/player_state.h"
 #include "hooks.h"
 #include "log.h"
 
 namespace {
 
 constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
-constexpr size_t kMaxCallbacks = 16;
+constexpr size_t kMaxCallbacks = 32;
 constexpr double kReportMinMicros = 20.0;  // callbacks cheaper than this are not listed
 constexpr double kReportSeconds = 5.0;  // how often the frame rate and the callbacks' cost are logged
 
@@ -21,6 +23,8 @@ using UpdateFn = uint64_t (*)(uintptr_t, float, float, uint8_t, uintptr_t, uintp
 UpdateFn g_update = nullptr;
 sim_tick::Callback g_callbacks[kMaxCallbacks] = {};
 const char* g_names[kMaxCallbacks] = {};
+sim_tick::Gate g_gates[kMaxCallbacks] = {};
+ds2::GameplayClock g_gameplay;  // simulation thread: the local player's state machine running
 size_t g_count = 0;  // written at start-up only
 
 int64_t g_spent = 0;  // simulation thread only: counter ticks the callbacks took in this window
@@ -61,7 +65,9 @@ void report(int64_t now) {
 uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t s5, uintptr_t s6, uintptr_t s7,
                       uintptr_t s8) {
     const int64_t start = counter();
+    g_gameplay.update(ds2::localPlayerEntity());
     for (size_t i = 0; i < g_count; ++i) {
+        if (g_gates[i] == sim_tick::Gate::Gameplay && !g_gameplay.active()) continue;
         const int64_t before = counter();
         g_callbacks[i]();
         g_spentEach[i] += counter() - before;
@@ -81,9 +87,10 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_update));
 }
 
-void add(Callback callback, const char* name) {
+void add(Callback callback, const char* name, Gate gate) {
     if (g_count < kMaxCallbacks) {
         g_names[g_count] = name;
+        g_gates[g_count] = gate;
         g_callbacks[g_count++] = callback;
     } else {
         logger::write("sim_tick: more than %zu callbacks, one was not registered", kMaxCallbacks);

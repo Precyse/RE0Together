@@ -241,7 +241,7 @@ void installEarly() {
                    reinterpret_cast<void**>(&Override<1>::original));
     hooks::install("safety house request remove", ds2::at(kSafetyHouseRequestRemove),
                    reinterpret_cast<void*>(&Override<2>::detour), reinterpret_cast<void**>(&Override<2>::original));
-    sim_tick::add(&applyPending, "structures");
+    sim_tick::add(&applyPending, "structures", sim_tick::Gate::Gameplay);
 }
 
 }  // namespace structures

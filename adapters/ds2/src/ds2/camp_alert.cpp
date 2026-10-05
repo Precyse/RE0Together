@@ -148,7 +148,7 @@ void tick() {
 
 namespace camp_alert {
 
-void installEarly() { sim_tick::add(&tick, "camp alert"); }
+void installEarly() { sim_tick::add(&tick, "camp alert", sim_tick::Gate::Gameplay); }
 
 }  // namespace camp_alert
 
