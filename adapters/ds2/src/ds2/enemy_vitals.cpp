@@ -8,6 +8,7 @@
 #include "decima/entity.h"
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/entity_lookup.h"
 #include "enemy_wire.h"
 #include "msvc_rtti.h"
 
@@ -46,6 +47,8 @@ uint8_t readHealth(uintptr_t entity) {
     if (maximum <= 0) return enemy_wire::kHealthUnknown;
     return static_cast<uint8_t>(std::clamp(slotValue(entity, kGetHealthSlot) / maximum, 0.0f, 1.0f) * kHealthFull);
 }
+
+bool isDead(uintptr_t entity) { return ds2::entityIsDead(entity) || readHealth(entity) == 0; }
 
 uintptr_t healthAddress(uintptr_t entity) {
     const uintptr_t block = lifeBlock(entity);

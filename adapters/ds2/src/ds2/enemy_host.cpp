@@ -31,7 +31,6 @@ namespace {
 
 constexpr uintptr_t kEntityUuid = 0x10;
 constexpr uintptr_t kEntityFlags = 0x98;
-constexpr uint64_t kDeadFlag = uint64_t{1} << 8;
 constexpr ULONGLONG kSampleMs = 100;
 constexpr size_t kMaxTracked = 512;
 // The host's streaming sleeps enemies far from the HOST's player; an enemy within this range of the partner's body is kept awake
@@ -174,7 +173,7 @@ void tick() {
         decima::WorldTransform transform;
         uint64_t flags = 0;
         if (ds2::entityTransform(enemy.entity, transform) && decima::safeRead(enemy.entity + kEntityFlags, flags)) {
-            const bool dead = (flags & kDeadFlag) != 0;
+            const bool dead = enemy_vitals::isDead(enemy.entity);
             if (havePartner && !dead) keepAwake(enemy, transform, partnerAt, now);
             if (!enemy.announced && g_spawns.size() < kMaxQueued) {
                 enemy_wire::EnemySpawn spawn{};

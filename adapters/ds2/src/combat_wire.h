@@ -36,7 +36,8 @@ struct HitFields {
     float amount;       // +0x78
     uint32_t flags;     // +0x08, EDamageFlags
     int32_t partIndex;  // +0x68, kNoPart when the hit is on no part
-    uint32_t reserved;
+    uint16_t attackType;  // the attack context's type (context data +0x0C) of the attack that made the hit, 0 when it had none
+    uint16_t reserved;
     float origin[4];    // +0x00, 16-byte vector
     float impulse[4];   // +0x10, the hit's direction and force (MsgDamage Impulse)
     float normal[4];    // +0x50, the surface normal (MsgDamage Normal)

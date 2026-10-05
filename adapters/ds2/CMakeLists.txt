@@ -77,6 +77,7 @@ add_library(ds2_adapter SHARED
     src/ds2/entity_lookup.cpp
     src/ds2/entity_wake.cpp
     src/partner_cargo_sync.cpp
+    src/ds2/orders_diag.cpp
     src/ds2/partner_cargo.cpp
     src/authority.cpp
     src/authority_sync.cpp

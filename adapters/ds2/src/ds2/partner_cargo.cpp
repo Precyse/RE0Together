@@ -7,6 +7,7 @@
 #include "ds2/partner_cargo.h"
 
 #include <windows.h>
+#include <intrin.h>
 
 #include <mutex>
 #include <unordered_map>
@@ -14,6 +15,7 @@
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/orders_diag.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -77,7 +79,9 @@ uint32_t carriedDetour(uintptr_t manager, uintptr_t collector) {
     const uintptr_t owner = remoteOwner();
     if (!owner) return count;
     reinterpret_cast<WalkFn>(ds2::at(kWalkOwner))(owner, collector, reinterpret_cast<const void*>(ds2::at(kCarriedFilter)));
-    return ds2::field<uint32_t>(collector, kCollectorCount);
+    const uint32_t total = ds2::field<uint32_t>(collector, kCollectorCount);
+    orders_diag::noteCarriedSet(_ReturnAddress(), total - count);
+    return total;
 }
 
 void removeDetour(uintptr_t slot, uintptr_t piece) {

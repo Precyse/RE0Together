@@ -88,6 +88,9 @@ combat_wire::EnemyRef refOf(uintptr_t entity) {
 bool readFields(uintptr_t params, combat_wire::HitFields& out) {
     out = {};
     out.amount = ds2::damage::amountOf(params);
+    if (const uintptr_t context = ds2::damage::contextOf(params)) {
+        decima::safeRead(context + ds2::damage::kContextData + ds2::damage::kDataType, out.attackType);
+    }
     return decima::safeCopy(&out.flags, params + kParamsFlags, sizeof(out.flags)) &&
            decima::safeCopy(&out.partIndex, params + kParamsPart, sizeof(out.partIndex)) &&
            decima::safeCopy(out.origin, params + kParamsOrigin, kVectorSize) &&
@@ -137,10 +140,8 @@ constexpr uint8_t kDescriptorSourceKind = 7;
 constexpr size_t kDescriptorSize = 0x40;  // the weak node (32 bytes) sits at +0x10
 constexpr uintptr_t kDescKind = 0x08, kDescWeak = 0x10;
 constexpr uintptr_t kParamsPosition = 0x98, kParamsHitFlag = 0xB0;
-constexpr uintptr_t kContextData = ds2::damage::kContextData, kContextResource = ds2::damage::kDataResource,
-                    kContextType = ds2::damage::kDataType;
+constexpr uintptr_t kContextData = ds2::damage::kContextData, kContextType = ds2::damage::kDataType;
 constexpr uint32_t kFlagKind1 = 1u << 3, kFlagKind2 = 1u << 1;  // EDamageFlags bits of the hit kind
-constexpr uint16_t kRefusedTypes[] = {0x023B, 0x0095};            // attack types the MULE damage gate refuses outright
 constexpr ULONGLONG kWaitingMs = 30000;
 
 struct DamageTypeArg {
@@ -156,38 +157,12 @@ struct DamageTypeArg {
 constexpr uintptr_t kSetAttackType = 0x141fb2cc0;  // (data block*, u16 type): sets +0x0C and the resource at +0x18
 constexpr uintptr_t kBulletIdClassWord = 0x0E;
 constexpr uint16_t kBulletIdClass = 0x0B;
-constexpr size_t kContextBlockCopy = 0xA0;  // the data block bytes borrowed from a real context
-constexpr uint64_t kAttackIdCounterMask = 0xFFFFFF;  // the low 24 bits of an attack id count up (1d023b000002c6: type 0x23b above, counter 0x2c6); the rest names the attack
-
-// The data block of a real attack context and its resource, kept to build the same kind of hit.
-struct LearnedAttack {
-    mutable std::mutex mutex;
-    alignas(16) uint8_t block[kContextBlockCopy] = {};
-    std::atomic<uintptr_t> resource{0};
-};
-LearnedAttack g_onPlayer;  // an enemy's blow on the local player: the template for hits on the local player
 struct Waiting {
     combat_wire::EnemyHit hit;
     ULONGLONG since;
     bool wakeRequested = false;
 };
 std::vector<Waiting> g_forwardWaiting;  // simulation thread only
-
-// Remembers the context data block of a real hit (called from the ApplyDamage detour).
-void learn(LearnedAttack& into, uintptr_t params) {
-    const uintptr_t parent = ds2::damage::contextOf(params);
-    if (!parent) return;
-    const uint16_t type = ds2::field<uint16_t>(parent + kContextData, kContextType);
-    if (type == 0) return;  // an attack of no kind (environment): its resource carries no weapon damage either
-    for (const uint16_t refused : kRefusedTypes) {
-        if (type == refused) return;
-    }
-    if (const uintptr_t resource = decima::readPointer(parent + kContextData + kContextResource)) {
-        std::lock_guard lock(into.mutex);
-        decima::safeCopy(into.block, parent + kContextData, sizeof(into.block));
-        into.resource = resource;
-    }
-}
 
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
     const combat_log::Snapshot snapshot = combat_log::before(victim, params);
@@ -202,8 +177,6 @@ void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
     }
     g_apply(manager, victim, params);
     combat_log::after(snapshot, victim, params, "applied");
-    if (!params || remote_apply::active()) return;
-    if (victim == remote_player::samEntity()) learn(g_onPlayer, params);
 }
 
 void unlinkGuarded(uintptr_t node) {
@@ -211,21 +184,6 @@ void unlinkGuarded(uintptr_t node) {
         reinterpret_cast<NodeFn>(ds2::at(kWeakUnlink))(node);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
-}
-
-// Copies the learned context data block of an enemy's blow into a fresh one with a fresh attack id (the learned id's
-// upper bits and the fresh counter: an id seen twice within the cooldown is refused), keeping the fresh "no source".
-void borrowBlock(const LearnedAttack& from, uintptr_t block) {
-    constexpr uintptr_t kId = 0x08, kSource = 0x20;
-    const uint64_t freshId = ds2::field<uint64_t>(block, kId), freshSource = ds2::field<uint64_t>(block, kSource);
-    uint64_t learnedId = 0;
-    {
-        std::lock_guard lock(from.mutex);
-        std::memcpy(reinterpret_cast<void*>(block), from.block, sizeof(from.block));
-        std::memcpy(&learnedId, from.block + kId, sizeof(learnedId));
-    }
-    ds2::field<uint64_t>(block, kId) = (learnedId & ~kAttackIdCounterMask) | (freshId & kAttackIdCounterMask);
-    ds2::field<uint64_t>(block, kSource) = freshSource;
 }
 
 // Makes the context a weapon's damage hit of the given bullet attack type.
@@ -236,8 +194,16 @@ void makeBulletContext(uintptr_t block, uint16_t attackType) {
     ds2::field<uint64_t>(block, kSource) = 0;
 }
 
+// Makes the context an enemy's attack of the given type on the local player; its source is the attacking puppet's id (the id the
+// engine's attack gates resolve), or nobody's.
+void makeEnemyContext(uintptr_t block, uint16_t attackType, uintptr_t attacker) {
+    constexpr uintptr_t kSource = 0x20;
+    reinterpret_cast<void (*)(uintptr_t, uint16_t)>(ds2::at(kSetAttackType))(block, attackType);
+    if (attacker) ds2::field<uint64_t>(block, kSource) = ds2::field<uint64_t>(attacker, ds2::kEntityNetworkId);
+}
+
 // Builds and queues one hit on `victim`. False when the engine faulted.
-// A hit on the local player is built from an enemy's learned blow; any other victim takes a weapon's bullet damage hit with
+// A hit on the local player is built as the enemy's attack of the type it was sent with; any other victim takes a weapon's bullet damage hit with
 // bulletType.
 bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit, uint16_t bulletType = 0) {
     const bool onPlayer = victim == remote_player::samEntity();
@@ -273,8 +239,8 @@ bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields
         if (const uintptr_t context = ds2::damage::contextOf(paramsAt)) {
             if (!onPlayer) {
                 makeBulletContext(context + kContextData, bulletType);
-            } else if (g_onPlayer.resource.load()) {
-                borrowBlock(g_onPlayer, context + kContextData);
+            } else if (hit.attackType) {
+                makeEnemyContext(context + kContextData, hit.attackType, attacker);
             }
         }
         std::memcpy(params + kParamsPosition, position, sizeof(position));
@@ -302,7 +268,7 @@ void runForwarded() {
     std::erase_if(g_forwardWaiting, [&](Waiting& waiting) {
         if (!attackType) return now - waiting.since > kWaitingMs;  // the body's weapon may still be on its way
         const uintptr_t enemy = ds2::entityByUuid(waiting.hit.enemy.uuid);
-        if (!enemy || ds2::entityIsDead(enemy)) return true;
+        if (!enemy || enemy_vitals::isDead(enemy)) return true;
         if (ds2::entityAsleep(enemy)) {
             if (!waiting.wakeRequested) {
                 waiting.wakeRequested = true;
@@ -392,7 +358,7 @@ std::vector<PlayerHitOut> takePlayerHits() { return take(g_playerHitsOut); }
 
 bool enemyAlive(const uint8_t (&uuid)[enemy_wire::kUuidSize]) {
     const uintptr_t enemy = ds2::entityByUuid(uuid);
-    return enemy && !ds2::entityIsDead(enemy);
+    return enemy && !enemy_vitals::isDead(enemy);
 }
 
 void applyEnemyHit(const combat_wire::EnemyHit& hit) {

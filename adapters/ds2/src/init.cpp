@@ -15,6 +15,7 @@
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/health_watch.h"
+#include "ds2/orders_diag.h"
 #include "ds2/camp_alert.h"
 #include "ds2/cargo_defer.h"
 #include "ds2/loading_screen.h"
@@ -91,6 +92,7 @@ DWORD WINAPI initThread(LPVOID) {
     story::installEarly();
     warp::installEarly();
     cargo_defer::installEarly();
+    if (config.ordersDiagnostics) orders_diag::installEarly();
     world_pause::installEarly();
     loading_screen::installEarly();
     if (config.testCommands) test_commands::installEarly();

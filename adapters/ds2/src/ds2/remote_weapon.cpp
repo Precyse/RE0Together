@@ -23,6 +23,7 @@
 #include "ds2/sim_tick.h"
 #include "ds2/weapon_layout.h"
 #include "game.h"
+#include "hooks.h"
 #include "log.h"
 
 namespace {
@@ -35,6 +36,8 @@ constexpr ULONGLONG kRetryDelayMs = 1000;          // before a weapon the engine
 constexpr ULONGLONG kProbeDelayMs = 1000;          // after the weapon is made: where it is and whether it is still there
 constexpr size_t kMaxQueuedFires = 64;
 constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
+constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorComponent slot 41(behavior, dt): runs the shot when +0x4D1 is set
+constexpr uintptr_t kBehaviorShotReady = 0x730;       // byte: the Shotgun/Sniper update (0x1420121d0) calls the gate only when it is set
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
 constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: whether the weapon's update took it
 constexpr uintptr_t kBulletSystemGlobal = 0x14623fa48;  // the bullet pool (0x141fb5c70 adds a bullet per pellet)
@@ -52,6 +55,14 @@ weapon_wire::WeaponState g_wanted{weapon_wire::kHolstered, 0, 0};
 std::vector<weapon_wire::WeaponFire> g_fires;
 std::atomic<uintptr_t> g_madeWeapon{0};  // the weapon entity made for the body, for the shot detours on other threads
 std::atomic<uint32_t> g_engineShots{0};
+std::atomic<uint32_t> g_gateRuns{0};  // the engine's update gate called for the weapon made for the body
+void (*g_originalGate)(uintptr_t behavior, float dt) = nullptr;
+
+void gateDetour(uintptr_t behavior, float dt) {
+    const uintptr_t made = g_madeWeapon.load();
+    if (made && decima::readPointer(behavior + ds2::weapon::kBehaviorWeapon) == made) ++g_gateRuns;
+    g_originalGate(behavior, dt);
+}
 
 uint32_t bulletsMade() {
     const uintptr_t pool = decima::readPointer(ds2::at(kBulletSystemGlobal));
@@ -213,9 +224,16 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
     if (g_held.fireCheckAt && now >= g_held.fireCheckAt) {
         g_held.fireCheckAt = 0;
         const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
+        const bool taken = !(behavior && ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest));
         logger::write("remote_weapon: the first fire request was %s after %llu ms, the engine ran %u shots of it and made %u bullets",
-                      behavior && ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) ? "NOT taken" : "taken",
-                      static_cast<unsigned long long>(kFireCheckDelayMs), g_engineShots.load(), bulletsMade() - g_held.bulletsAtFire);
+                      taken ? "taken" : "NOT taken", static_cast<unsigned long long>(kFireCheckDelayMs), g_engineShots.load(),
+                      bulletsMade() - g_held.bulletsAtFire);
+        if (behavior) {
+            logger::write("remote_weapon: the update gate ran %u times for the body's weapon; behavior +0x730 %u, pellets %u, weapon flags %llx",
+                          g_gateRuns.load(), ds2::field<uint8_t>(behavior, kBehaviorShotReady),
+                          ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorPellets),
+                          static_cast<unsigned long long>(ds2::field<uint64_t>(g_held.weapon, kEntityFlags)));
+        }
     }
     if (g_held.probeAt && now >= g_held.probeAt) {
         g_held.probeAt = 0;
@@ -288,6 +306,8 @@ uint16_t attackType() {
 
 void installEarly(uint8_t attachMode) {
     g_attachMode = attachMode;
+    hooks::install("weapon update gate", ds2::at(kWeaponUpdateGate), reinterpret_cast<void*>(&gateDetour),
+                   reinterpret_cast<void**>(&g_originalGate));
     sim_tick::add(&tick, "remote weapon", sim_tick::Gate::Gameplay);
 }
 
