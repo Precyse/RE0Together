@@ -46,15 +46,17 @@ struct Camp {
 std::vector<Camp> readCamps() {
     std::vector<Camp> camps;
     const uintptr_t manager = decima::readPointer(ds2::at(kCampManagerGlobal));
-    const int32_t count = manager ? ds2::field<int32_t>(manager, kCampCount) : 0;
+    int32_t count = 0;
+    decima::safeRead(manager + kCampCount, count);
     const uintptr_t array = manager ? decima::readPointer(manager + kCampArray) : 0;
     for (int32_t i = 0; array && i < count && i < kMaxCampCount; ++i) {
         const uintptr_t record = decima::readPointer(array + i * sizeof(uintptr_t));
         const uintptr_t object = record ? decima::readPointer(record + kRecordObject) : 0;
         if (!object) continue;
         Camp camp{};
-        decima::safeCopy(camp.phase.uuid, record + kRecordUuid, camp_wire::kUuidSize);
-        camp.phase.phase = ds2::field<int32_t>(object, kObjectPhase);
+        if (!decima::safeCopy(camp.phase.uuid, record + kRecordUuid, camp_wire::kUuidSize) ||
+            !decima::safeRead(object + kObjectPhase, camp.phase.phase))
+            continue;
         camp.object = object;
         camps.push_back(camp);
     }
