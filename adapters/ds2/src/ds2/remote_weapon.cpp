@@ -70,7 +70,6 @@ struct Held {
     ULONGLONG fireCheckAt = 0;  // when the first fire request is looked at again, 0 when none is pending
     uint32_t bulletsAtFire = 0;
     bool shotLogged = false;
-    bool indexTakenLogged = false;
 };
 Held g_held;
 
@@ -80,21 +79,18 @@ uint32_t indexOf(uintptr_t table, uintptr_t entry) {
     return static_cast<uint32_t>((entry - table - ds2::weapon::kTableFirstEntry) / ds2::weapon::kEntrySize);
 }
 
-// Where the weapon is against the body's hand, who it hangs from and its entity flags (+0x98), to tell a hidden or
-// misplaced weapon from a removed one.
+// The weapon's entity flags (+0x98), its parent and the table's two indices, to tell a holstered weapon (flag bit 0x2 clear)
+// from a drawn one (the weapon's transform field is not its world position while it is attached, so none is logged).
 void logWeaponState(const char* when, uintptr_t body) {
-    decima::WorldTransform weaponAt{}, bodyAt{};
     uint64_t flags = 0;
-    uint32_t current = 0;
-    const bool placed = ds2::entityTransform(g_held.weapon, weaponAt) && ds2::entityTransform(body, bodyAt);
+    uint32_t current = 0, requested = 0;
     decima::safeRead(g_held.weapon + kEntityFlags, flags);
     decima::safeRead(g_held.table + ds2::weapon::kTableCurrentIndex, current);
-    logger::write("remote_weapon: %s: weapon %u alive %d, table index %u (entry %u), parent %p (body %p), flags %llx, weapon at (%.2f, %.2f, %.2f), body at (%.2f, %.2f, %.2f)",
-                  when, g_held.id, weaponAlive(), current, indexOf(g_held.table, g_held.entry),
-                  reinterpret_cast<void*>(decima::readPointer(g_held.weapon + kEntityParent)),
-                  reinterpret_cast<void*>(body), static_cast<unsigned long long>(flags), placed ? weaponAt.position.x : 0.0,
-                  placed ? weaponAt.position.y : 0.0, placed ? weaponAt.position.z : 0.0, placed ? bodyAt.position.x : 0.0,
-                  placed ? bodyAt.position.y : 0.0, placed ? bodyAt.position.z : 0.0);
+    decima::safeRead(g_held.table + ds2::weapon::kTableRequestedIndex, requested);
+    logger::write("remote_weapon: %s: weapon %u alive %d, table index %u / requested %u (entry %u), parent %p (body %p), flags %llx",
+                  when, g_held.id, weaponAlive(), current, requested, indexOf(g_held.table, g_held.entry),
+                  reinterpret_cast<void*>(decima::readPointer(g_held.weapon + kEntityParent)), reinterpret_cast<void*>(body),
+                  static_cast<unsigned long long>(flags));
 }
 
 // The body's table is the real one, so its own update draws, holsters and attaches the weapon like Sam's: the weapon is
@@ -187,7 +183,6 @@ void createWeapon(uintptr_t body, uint16_t id) {
     g_held.table = table;
     g_held.entry = entry;
     g_held.shotLogged = false;
-    g_held.indexTakenLogged = false;
     g_madeWeapon = weapon;
     if (g_attachMode != kEngineAttachMode && !reattachGuarded(weapon, body, g_attachMode)) {
         logger::write("remote_weapon: attaching with mode %u faulted", g_attachMode);
@@ -196,20 +191,6 @@ void createWeapon(uintptr_t body, uint16_t id) {
     logger::write("remote_weapon: the body holds weapon %u in table entry %u (attach mode %u)", id, indexOf(table, entry), g_attachMode);
     logWeaponState("made", body);
     g_held.probeAt = GetTickCount64() + kProbeDelayMs;
-}
-
-// The partner's drawn weapon is the truth for the body: when the body's own table logic moves the current index off
-// our entry (it holsters a body that has no draw input of its own), the index is put back so the table keeps the
-// weapon drawn and in the hand.
-void keepDrawn() {
-    if (!weaponAlive()) return;
-    const uint32_t ours = indexOf(g_held.table, g_held.entry);
-    uint32_t current = 0;
-    if (!decima::safeRead(g_held.table + ds2::weapon::kTableCurrentIndex, current) || current == ours) return;
-    ds2::field<uint32_t>(g_held.table, ds2::weapon::kTableCurrentIndex) = ours;
-    if (g_held.indexTakenLogged) return;
-    g_held.indexTakenLogged = true;
-    logger::write("remote_weapon: the body's table index moved to %u, set back to the weapon's entry %u", current, ours);
 }
 
 // Brings the body's weapon to the one the partner has drawn.
@@ -236,11 +217,7 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
         g_held.probeAt = 0;
         if (g_held.weapon) logWeaponState("after 1 s", body);
     }
-    if (g_held.id == wanted.weaponId) {
-        keepDrawn();
-        return;
-    }
-    if (now < g_held.retryAt) return;
+    if (g_held.id == wanted.weaponId || now < g_held.retryAt) return;
     dropWeapon(body);
     g_held.id = wanted.weaponId;
     if (wanted.weaponId != weapon_wire::kHolstered) createWeapon(body, wanted.weaponId);
