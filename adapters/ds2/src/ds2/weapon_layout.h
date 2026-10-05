@@ -28,13 +28,14 @@ constexpr uintptr_t kEntryTable = 0x38;   // the table component the weapon's ev
 constexpr uintptr_t kWeaponId = 0x2188;    // u16 EDSWeaponId
 constexpr uintptr_t kWeaponOwner = 0x338;  // weak pointer to the owner entity
 // The ammo a Gun-family behavior shoots with: [behavior +0x5B0] points at three objects (at +0x8, +0x10 and +0x18) that each
-// have a u16 id at +0x20. The shot request carries the ids at +0x72, +0x74 and +0x76 (slot 84, 0x14201e910) and the bullet's
-// attack type, the type of the damage hit it makes on impact (0x141fe49da), is the third. Static; check live against the
-// attack types the combat log shows.
+// have a u16 id at +0x20; the ids are attack types of the engine's attack-type table ([0x14623FA50] +0x20/+0x28, entry +0x20
+// = the type, which also names the type's resource). The shot request carries them at +0x72, +0x74 and +0x76 (slot 84,
+// 0x14201e910). Live (rifle 11: ids 0xAD, 0x8A, 0x96): a forwarded hit of the SECOND type does the damage (damage 423, the
+// enemy died in four hits), the third only staggers (damage 0, stagger 154) and the first does neither.
 constexpr uintptr_t kBehaviorAmmoSet = 0x5B0;
 constexpr uintptr_t kAmmoSetEntries[3] = {0x8, 0x10, 0x18};
 constexpr uintptr_t kAmmoId = 0x20;
-constexpr size_t kBulletTypeEntry = 2;  // the entry whose id is the bullet's attack type
+constexpr size_t kBulletTypeEntry = 1;  // the entry whose id is the attack type of the bullet's damage hit
 constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and bit 16 differ between a drawn and a holstered weapon
 
 // A weapon's behavior component (DSWeaponBehaviorComponent and its subclasses).

@@ -193,7 +193,7 @@ void createWeapon(uintptr_t body, uint16_t id) {
     logWeaponState("made", body);
     uint16_t ids[3] = {};
     if (const uintptr_t behavior = ds2::weapon::shotBehavior(weapon)) ds2::weapon::ammoIds(behavior, ids);
-    logger::write("remote_weapon: weapon %u ammo ids %x %x %x (the third is the bullet attack type)", id, ids[0], ids[1], ids[2]);
+    logger::write("remote_weapon: weapon %u ammo ids %x %x %x (the second is the bullet's damage attack type)", id, ids[0], ids[1], ids[2]);
     g_held.probeAt = GetTickCount64() + kProbeDelayMs;
 }
 

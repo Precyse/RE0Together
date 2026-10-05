@@ -97,7 +97,7 @@ void logAmmo(uintptr_t behavior, uint16_t weaponId) {
     }
     uint16_t ids[3];
     ds2::weapon::ammoIds(behavior, ids);
-    logger::write("local_weapon: weapon %u ammo ids %x %x %x (the third is the bullet attack type)", weaponId, ids[0], ids[1], ids[2]);
+    logger::write("local_weapon: weapon %u ammo ids %x %x %x (the second is the bullet's damage attack type)", weaponId, ids[0], ids[1], ids[2]);
 }
 
 void recordShot(uintptr_t behavior, weapon_wire::Kind kind) {
