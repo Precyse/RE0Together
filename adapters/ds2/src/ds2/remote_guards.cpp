@@ -47,6 +47,13 @@ constexpr uint32_t kStartMask = 0x3FFF;
 constexpr int kCountShift = 14;
 constexpr uint32_t kCountMask = 0x3FF;
 
+// DSPlayerComponent's per-frame update handler (message 0x14FF, the stance and state update of a player). Run for the remote
+// it flickers Sam's bottom-left prompts (found by clearing the component's handler entries one at a time: with this one
+// cleared 0 of 60 screenshots lost the "Activate Terminal" prompt, against about 1 in 8 without). The body's pose and
+// animation come from the adapter, so the update is not needed.
+constexpr uintptr_t kPlayerComponentUpdate = 0x14080ade0;
+constexpr const char* kPlayerComponent = "DSPlayerComponent";
+
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
 using PartToggleFn = void (*)(uintptr_t holder, uint8_t id);
 InitTableFn g_initTable = nullptr;
@@ -75,8 +82,9 @@ void partToggleDetour(uintptr_t holder, uint8_t id) {
     if (index >= 0 && index < count) g_partToggle(holder, id);
 }
 
-// Clears the component's entries in the entity's handler list; the dispatcher drops cleared entries itself.
-void silence(uintptr_t entity, uintptr_t component) {
+// Clears the component's entries in the entity's handler list (all of them, or only those that call `onlyFunction`); the
+// dispatcher drops cleared entries itself.
+void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0) {
     const uintptr_t list = entity + ds2::kEntityHandlerList;
     const int32_t types = ds2::field<int32_t>(list, 0);
     const uintptr_t table = decima::readPointer(list + kTypeTable);
@@ -87,7 +95,8 @@ void silence(uintptr_t entity, uintptr_t component) {
         const uint32_t count = (packed >> kCountShift) & kCountMask;
         for (uint32_t i = first; i < first + count; ++i) {
             auto& entry = ds2::field<uintptr_t>(handlers + i * kHandlerSize, 0);
-            if ((entry & ~uintptr_t{1}) == component) entry &= 1;  // keeps the low flag bit
+            const uintptr_t function = ds2::field<uintptr_t>(handlers + i * kHandlerSize, sizeof(uintptr_t));
+            if ((entry & ~uintptr_t{1}) == component && (!onlyFunction || function == onlyFunction)) entry &= 1;  // keeps the low flag bit
         }
     }
 }
@@ -108,6 +117,7 @@ void silenceRemote() {
     for (const char* name : kSilencedComponents) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(name)));
     }
+    silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(kPlayerComponent)), ds2::at(kPlayerComponentUpdate));
 }
 
 }  // namespace remote_guards

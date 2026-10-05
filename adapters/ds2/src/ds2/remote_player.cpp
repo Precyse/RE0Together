@@ -67,7 +67,6 @@ constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves 
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
 constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
-constexpr auto kPeerGoneAfter = std::chrono::seconds(5);  // no pose from the peer for this long: it left, the body goes
 // The loading screen can outlast the player's state machine coming back on; a body built while the world still streams in
 // stalls the load, so none is built until the screen has been gone for this long.
 constexpr auto kAfterLoadingScreen = std::chrono::seconds(3);
@@ -289,11 +288,6 @@ bool diedLongAgo() {
     return Clock::now() - deadSince > kDeadRespawnDelay;
 }
 
-bool peerGone() {
-    std::lock_guard lock(g_targetMutex);
-    return Clock::now() - g_targetAt > kPeerGoneAfter;
-}
-
 // The world is left: `entityAlive` is whether the body's entity still exists (a travel starts with the world intact; a
 // load has freed it already).
 void worldLeft(const char* why, bool entityAlive) {
@@ -303,7 +297,6 @@ void worldLeft(const char* why, bool entityAlive) {
 void advance() {
     if (const char* why = g_leaveReason.exchange(nullptr)) worldLeft(why, true);
     if (g_stage != Stage::Idle && (!sim_tick::gameplayActive() || samEntity() != g_samAtSpawn)) worldLeft("gameplay ended", false);
-    if (g_stage != Stage::Idle && peerGone()) forgetBody("the peer left", true);
     switch (g_stage) {
         case Stage::Idle:
             if (!g_looseLoggedAtStart && sim_tick::gameplaySettled()) {
