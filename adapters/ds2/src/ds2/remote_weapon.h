@@ -17,8 +17,8 @@ void installEarly(uint8_t attachMode);
 // the engine runs a shot of the weapon this module made for the body. Any thread.
 void noteEngineShot(uintptr_t behavior);
 
-// The bullet attack resource of the weapon the body holds (what a damage hit of a shot from it names), 0 when the body
-// holds none. Simulation thread.
-uintptr_t attackResource();
+// The attack type of the damage hit the bullets of the weapon the body holds make (the ammo's own, so Rubber and Normal
+// differ), 0 when the body holds none or it is unknown. Simulation thread.
+uint16_t attackType();
 
 }  // namespace remote_weapon

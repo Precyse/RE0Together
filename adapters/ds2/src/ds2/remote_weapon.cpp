@@ -191,6 +191,9 @@ void createWeapon(uintptr_t body, uint16_t id) {
     setTableIndex(table, indexOf(table, entry));
     logger::write("remote_weapon: the body holds weapon %u in table entry %u (attach mode %u)", id, indexOf(table, entry), g_attachMode);
     logWeaponState("made", body);
+    uint16_t ids[3] = {};
+    if (const uintptr_t behavior = ds2::weapon::shotBehavior(weapon)) ds2::weapon::ammoIds(behavior, ids);
+    logger::write("remote_weapon: weapon %u ammo ids %x %x %x (the third is the bullet attack type)", id, ids[0], ids[1], ids[2]);
     g_held.probeAt = GetTickCount64() + kProbeDelayMs;
 }
 
@@ -278,14 +281,9 @@ void noteEngineShot(uintptr_t behavior) {
     if (g_engineShots.fetch_add(1) == 0) logger::write("remote_weapon: the engine runs a shot of the body's weapon");
 }
 
-uintptr_t attackResource() {
-    if (!weaponAlive()) return 0;
-    uintptr_t object = g_held.weapon;
-    for (const uintptr_t offset : ds2::weapon::kWeaponAttackChain) {
-        object = decima::readPointer(object + offset);
-        if (!object) return 0;
-    }
-    return decima::readPointer(object + ds2::weapon::kAttackResourceField);
+uint16_t attackType() {
+    const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
+    return behavior ? ds2::weapon::bulletAttackType(behavior) : 0;
 }
 
 void installEarly(uint8_t attachMode) {

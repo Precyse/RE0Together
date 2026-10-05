@@ -7,6 +7,7 @@
 
 #include <cstring>
 #include <mutex>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -85,9 +86,24 @@ bool describeShot(uintptr_t behavior, weapon_wire::Kind kind, weapon_wire::Weapo
     return out.weaponId != weapon_wire::kHolstered;
 }
 
+// Logs the ammo ids of the weapons the local player fires (once each): the bullet attack type of each, to compare with the
+// attack types of the hits it makes.
+void logAmmo(uintptr_t behavior, uint16_t weaponId) {
+    static std::set<uint16_t> logged;
+    static std::mutex loggedMutex;
+    {
+        std::lock_guard lock(loggedMutex);
+        if (!logged.insert(weaponId).second) return;
+    }
+    uint16_t ids[3];
+    ds2::weapon::ammoIds(behavior, ids);
+    logger::write("local_weapon: weapon %u ammo ids %x %x %x (the third is the bullet attack type)", weaponId, ids[0], ids[1], ids[2]);
+}
+
 void recordShot(uintptr_t behavior, weapon_wire::Kind kind) {
     weapon_wire::WeaponFire fire;
     if (!describeShot(behavior, kind, fire)) return;
+    logAmmo(behavior, fire.weaponId);
     std::lock_guard lock(g_mutex);
     if (g_fires.size() < kMaxQueuedFires) g_fires.push_back(fire);
 }

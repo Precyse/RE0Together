@@ -16,6 +16,7 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
+#include "ds2/loading_screen.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
 #include "ds2/remote_appearance.h"
@@ -66,9 +67,9 @@ constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves 
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
 constexpr auto kPeerGoneAfter = std::chrono::seconds(5);  // no pose from the peer for this long: it left, the body goes
-// After a load or travel the loading screen can outlast the player's state machine coming back on; a body built while
-// the world still streams in stalls the load, so none is built for this long after the world was left.
-constexpr auto kWorldLeftHold = std::chrono::seconds(60);
+// The loading screen can outlast the player's state machine coming back on; a body built while the world still streams in
+// stalls the load, so none is built until the screen has been gone for this long.
+constexpr auto kAfterLoadingScreen = std::chrono::seconds(3);
 constexpr uint8_t kNoSlot = 0xFF;
 constexpr uintptr_t kRemovePlayer = 0x1407549f0;  // PlayerManagerGame::RemovePlayer(manager, player): out of the lists, player-left
 
@@ -87,7 +88,6 @@ std::atomic<uintptr_t> g_entity{0};
 int g_waitedFrames = 0;
 std::atomic<Clock::rep> g_liveSince{0};  // steady-clock ticks when the body went live, 0 while it is not
 std::atomic<const char*> g_leaveReason{nullptr};  // set from any thread: the world is about to be left (travel, area change)
-Clock::time_point g_spawnNotBefore;                // simulation thread: no body is built before this time
 uintptr_t g_samAtSpawn = 0;
 
 // The partner's pose from the render thread, applied on the update thread.
@@ -298,7 +298,6 @@ bool peerGone() {
 // load has freed it already).
 void worldLeft(const char* why, bool entityAlive) {
     if (g_stage != Stage::Idle) forgetBody(why, entityAlive);
-    g_spawnNotBefore = Clock::now() + kWorldLeftHold;
 }
 
 void advance() {
@@ -311,7 +310,7 @@ void advance() {
                 g_looseLoggedAtStart = true;
                 logLooseCargo("at the start of gameplay, before the body");
             }
-            if (g_enabled.load() && sim_tick::gameplaySettled() && Clock::now() >= g_spawnNotBefore && targetFresh()) {
+            if (g_enabled.load() && sim_tick::gameplaySettled() && loading_screen::goneFor(kAfterLoadingScreen) && targetFresh()) {
                 g_samAtSpawn = samEntity();
                 spawn();
                 finishSpawn();  // the camera must exist before the engine updates the remote for the first time

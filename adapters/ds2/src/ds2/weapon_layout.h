@@ -27,10 +27,14 @@ constexpr uintptr_t kEntryTable = 0x38;   // the table component the weapon's ev
 // DSWeaponEntity.
 constexpr uintptr_t kWeaponId = 0x2188;    // u16 EDSWeaponId
 constexpr uintptr_t kWeaponOwner = 0x338;  // weak pointer to the owner entity
-// A weapon's bullet attack resource, the one a damage hit of type 0xd names (live: weapon entity +0x1E60 -> +0x8 -> +0x330,
-// resource pointer at +0x80; a different resource per weapon).
-constexpr uintptr_t kWeaponAttackChain[] = {0x1E60, 0x8, 0x330};
-constexpr uintptr_t kAttackResourceField = 0x80;
+// The ammo a Gun-family behavior shoots with: [behavior +0x5B0] points at three objects (at +0x8, +0x10 and +0x18) that each
+// have a u16 id at +0x20. The shot request carries the ids at +0x72, +0x74 and +0x76 (slot 84, 0x14201e910) and the bullet's
+// attack type, the type of the damage hit it makes on impact (0x141fe49da), is the third. Static; check live against the
+// attack types the combat log shows.
+constexpr uintptr_t kBehaviorAmmoSet = 0x5B0;
+constexpr uintptr_t kAmmoSetEntries[3] = {0x8, 0x10, 0x18};
+constexpr uintptr_t kAmmoId = 0x20;
+constexpr size_t kBulletTypeEntry = 2;  // the entry whose id is the bullet's attack type
 constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and bit 16 differ between a drawn and a holstered weapon
 
 // A weapon's behavior component (DSWeaponBehaviorComponent and its subclasses).
@@ -63,6 +67,12 @@ inline constexpr ShotFunction kShotFunctions[] = {
 // Reads of a DSWeaponEntity (kHolstered / 0 when unreadable).
 uint16_t weaponId(uintptr_t weapon);
 uintptr_t weaponOwner(uintptr_t weapon);
+
+// The three ammo ids of a shot behavior (0 where an object is missing).
+void ammoIds(uintptr_t behavior, uint16_t (&ids)[3]);
+
+// The attack type of the damage hit the behavior's bullets make (0 when unknown).
+uint16_t bulletAttackType(uintptr_t behavior);
 
 // The weapon's behavior component that makes shots (one whose slot 46 is in kShotFunctions), or 0.
 uintptr_t shotBehavior(uintptr_t weapon);

@@ -17,7 +17,7 @@ bool isLive();
 
 // The local player is about to leave the world (a fast travel, an area change): the body is taken down the way a return to
 // the title takes it (unlisted, camera and markers released); it is built again once gameplay settles in the new place.
-// Simulation thread. No body is built again for a minute: the load screen can outlast the player's state machine.
+// Simulation thread. No body is built again until the loading screen is gone and the world has settled.
 void leave(const char* why);
 
 // The same from any thread; the sim tick takes the body down. `why` must outlive the call (a literal).

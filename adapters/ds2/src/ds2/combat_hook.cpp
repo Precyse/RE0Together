@@ -149,12 +149,13 @@ struct DamageTypeArg {
     uint32_t reserved;
 };
 
-// A weapon's bullet reaches an enemy as two hits, an impact of type 0x23b and a damage hit of type 0xd (live: only the
-// second changes the enemy's health), so the partner's hits on enemies are built as the second: type 0xd, the weapon's
-// bullet attack resource, source 0 and an id of the real form (0xb000d in the bits above 32, a counter below).
-constexpr uint16_t kBulletAttackType = 0x0D;
-constexpr uint64_t kBulletAttackIdPrefix = 0x0B000D;
-constexpr uint64_t kAttackIdCounterBits = 32;
+// A weapon's bullet reaches an enemy as two hits, an impact of type 0x23b and a damage hit of another type (0xd for the
+// rifle checked live; the bullet's attack type, from the weapon's ammo, ds2/weapon_layout.h), so the partner's hits on
+// enemies are built as the second: the weapon's bullet attack type (the engine's SetAttackType 0x141fb2cc0 sets the type
+// and looks up its resource), source 0 and an id of the real form (a class word 0xb above the type, a counter below).
+constexpr uintptr_t kSetAttackType = 0x141fb2cc0;  // (data block*, u16 type): sets +0x0C and the resource at +0x18
+constexpr uintptr_t kBulletIdClassWord = 0x0E;
+constexpr uint16_t kBulletIdClass = 0x0B;
 constexpr size_t kContextBlockCopy = 0xA0;  // the data block bytes borrowed from a real context
 constexpr uint64_t kAttackIdCounterMask = 0xFFFFFF;  // the low 24 bits of an attack id count up (1d023b000002c6: type 0x23b above, counter 0x2c6); the rest names the attack
 
@@ -227,20 +228,18 @@ void borrowBlock(const LearnedAttack& from, uintptr_t block) {
     ds2::field<uint64_t>(block, kSource) = freshSource;
 }
 
-// Makes the context a weapon's damage hit of the given bullet attack resource (see kBulletAttackType).
-void makeBulletContext(uintptr_t block, uintptr_t resource) {
-    constexpr uintptr_t kId = 0x08, kSource = 0x20;
-    const uint64_t counter = ds2::field<uint64_t>(block, kId) & ((1ull << kAttackIdCounterBits) - 1);
-    ds2::field<uint64_t>(block, kId) = (kBulletAttackIdPrefix << kAttackIdCounterBits) | counter;
-    ds2::field<uint16_t>(block, kContextType) = kBulletAttackType;
-    ds2::field<uint64_t>(block, kContextResource) = resource;
+// Makes the context a weapon's damage hit of the given bullet attack type.
+void makeBulletContext(uintptr_t block, uint16_t attackType) {
+    constexpr uintptr_t kSource = 0x20;
+    reinterpret_cast<void (*)(uintptr_t, uint16_t)>(ds2::at(kSetAttackType))(block, attackType);
+    ds2::field<uint16_t>(block, kBulletIdClassWord) = kBulletIdClass;
     ds2::field<uint64_t>(block, kSource) = 0;
 }
 
 // Builds and queues one hit on `victim`. False when the engine faulted.
 // A hit on the local player is built from an enemy's learned blow; any other victim takes a weapon's bullet damage hit with
-// bulletResource.
-bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit, uintptr_t bulletResource = 0) {
+// bulletType.
+bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields& hit, uint16_t bulletType = 0) {
     const bool onPlayer = victim == remote_player::samEntity();
     // A real weapon hit carries no amount in its parameters (the engine works it out from the attack's resource), so a
     // hit on an enemy is built the same way; a hit on the local player keeps the amount it was sent with.
@@ -273,7 +272,7 @@ bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields
         if (onPlayer) std::memcpy(params + kParamsAmount, &amount, sizeof(amount));
         if (const uintptr_t context = ds2::damage::contextOf(paramsAt)) {
             if (!onPlayer) {
-                makeBulletContext(context + kContextData, bulletResource);
+                makeBulletContext(context + kContextData, bulletType);
             } else if (g_onPlayer.resource.load()) {
                 borrowBlock(g_onPlayer, context + kContextData);
             }
@@ -296,12 +295,12 @@ void applyEnemyHitNow(const combat_wire::EnemyHit& hit) {
     if (g_forwardWaiting.size() < kMaxQueued) g_forwardWaiting.push_back({hit, GetTickCount64()});
 }
 
-// Simulation thread: the partner's hits on enemies, built with the bullet attack resource of the weapon the body holds.
+// Simulation thread: the partner's hits on enemies, built with the bullet attack type of the weapon the body holds.
 void runForwarded() {
-    const uintptr_t resource = remote_weapon::attackResource();
+    const uint16_t attackType = remote_weapon::attackType();
     const ULONGLONG now = GetTickCount64();
     std::erase_if(g_forwardWaiting, [&](Waiting& waiting) {
-        if (!resource) return now - waiting.since > kWaitingMs;  // the body's weapon may still be on its way
+        if (!attackType) return now - waiting.since > kWaitingMs;  // the body's weapon may still be on its way
         const uintptr_t enemy = ds2::entityByUuid(waiting.hit.enemy.uuid);
         if (!enemy || ds2::entityIsDead(enemy)) return true;
         if (ds2::entityAsleep(enemy)) {
@@ -313,10 +312,10 @@ void runForwarded() {
             return now - waiting.since > kWaitingMs;  // the hit waits while the engine wakes the enemy
         }
         const remote_apply::Scope applying;
-        const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit, resource);
-        logger::write("enemy_combat: forwarded hit on enemy %u (entity %p, health %u of 254, attack resource %p): %s",
-                      waiting.hit.enemy.netId, reinterpret_cast<void*>(enemy), enemy_vitals::readHealth(enemy),
-                      reinterpret_cast<void*>(resource), ok ? "queued" : "faulted");
+        const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit, attackType);
+        logger::write("enemy_combat: forwarded hit on enemy %u (entity %p, health %u of 254, attack type %x): %s",
+                      waiting.hit.enemy.netId, reinterpret_cast<void*>(enemy), enemy_vitals::readHealth(enemy), attackType,
+                      ok ? "queued" : "faulted");
         return true;
     });
 }
