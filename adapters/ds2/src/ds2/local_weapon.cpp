@@ -15,6 +15,7 @@
 #include "ds2/engine.h"
 #include "ds2/place.h"
 #include "ds2/player.h"
+#include "ds2/remote_weapon.h"
 #include "ds2/weapon_layout.h"
 #include "game.h"
 #include "hooks.h"
@@ -93,6 +94,7 @@ void recordShot(uintptr_t behavior, weapon_wire::Kind kind) {
 
 template <size_t I>
 void shotDetour(uintptr_t behavior, float amount) {
+    remote_weapon::noteEngineShot(behavior);
     recordShot(behavior, kShotFunctions[I].kind);
     g_original[I](behavior, amount);
 }

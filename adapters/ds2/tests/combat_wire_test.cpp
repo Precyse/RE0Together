@@ -56,15 +56,7 @@ void wireRoundTrips() {
     check(decode(bytes(playerHit), gotPlayer) && isNone(gotPlayer.attacker),
           "a player hit with no enemy behind it is accepted");
 
-    EnemyDeath death{};
-    death.enemy = hit.enemy;
-    EnemyDeath gotDeath{};
-    check(decode(bytes(death), gotDeath) && gotDeath.enemy.uuid[15] == 0xCD, "an enemy death round trips");
-    death.enemy.netId = kNoEnemy;
-    check(!decode(bytes(death), gotDeath), "a death of no enemy is rejected");
-    check(combat_wire::kMsgEnemyHit == 0x0120 && combat_wire::kMsgPlayerHit == 0x0121 &&
-              combat_wire::kMsgEnemyDeath == 0x0122,
-          "the message ids are 0x0120 to 0x0122");
+    check(combat_wire::kMsgEnemyHit == 0x0120 && combat_wire::kMsgPlayerHit == 0x0121, "the message ids are 0x0120 and 0x0121");
 }
 
 void hitValidation() {
@@ -122,17 +114,6 @@ void hitLimit() {
     check(flood.allow(2, now - 1), "a clock that went back opens a new window");
 }
 
-void deathIsHandledOnce() {
-    combat_rules::DeathLedger ledger;
-    check(ledger.markFirst(5), "the first report of a death is handled");
-    check(!ledger.markFirst(5), "a repeat is ignored");
-    check(ledger.markFirst(6), "another enemy is handled");
-    ledger.clear();
-    check(ledger.markFirst(5), "after a reset it is handled again");
-    for (uint16_t id = 1; id <= combat_rules::DeathLedger::kMaxEntries + 1; ++id) ledger.markFirst(id);
-    check(ledger.markFirst(1), "the ledger stays bounded: a full one starts again");
-}
-
 void directory() {
     enemy_directory::Uuid a{}, b{};
     a[0] = 1;
@@ -156,7 +137,6 @@ int main() {
     wireRoundTrips();
     hitValidation();
     hitLimit();
-    deathIsHandledOnce();
     directory();
     if (g_failures) {
         std::printf("%d FAILED\n", g_failures);

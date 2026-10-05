@@ -25,7 +25,6 @@ game::CombatRole g_role = game::CombatRole::None;
 uint8_t g_localSlot = 0;
 uint8_t g_hostSlot = 0;
 std::map<uint8_t, combat_rules::HitLimiter> g_limiters;  // per sending slot (host) or the host (guest)
-combat_rules::DeathLedger g_handledDeaths;
 
 uint64_t enemyObjectId(uint16_t netId) { return kEnemyObjectTag | netId; }
 
@@ -55,13 +54,6 @@ void onPlayerHit(const GameFrame& frame) {
     game::applyPlayerHit(hit);
 }
 
-// Guest: an enemy of the host died. Handled once per enemy, however often it is reported.
-void onEnemyDeath(const GameFrame& frame) {
-    combat_wire::EnemyDeath death;
-    if (!combat_wire::decode(frame.payload, death)) return reject(frame.type, Reason::Malformed);
-    if (g_handledDeaths.markFirst(death.enemy.netId)) game::killEnemy(death);
-}
-
 // Guest: the host's announcements name the enemies a hit on a puppet is sent for.
 void onEnemyAnnouncement(const GameFrame& frame) {
     if (frame.type == enemy_wire::kMsgEnemySpawn) {
@@ -81,7 +73,6 @@ void setRole(game::CombatRole role) {
     if (role == game::CombatRole::Guest || g_role == game::CombatRole::Guest) enemy_directory::clear();
     g_role = role;
     g_limiters.clear();
-    g_handledDeaths.clear();
     game::setCombatRole(role);
 }
 
@@ -93,9 +84,6 @@ void sendOutgoing(NetClient& net) {
         logger::write("enemy_combat: PLAYER_HIT sent to slot %u: attacker enemy %u, amount %.1f", out.slot, out.hit.attacker.netId,
                       out.hit.hit.amount);
         net.send(combat_wire::kMsgPlayerHit, true, out.slot, proto::bytesOf(out.hit));
-    }
-    for (const combat_wire::EnemyDeath& death : game::takeEnemyDeaths()) {
-        net.send(combat_wire::kMsgEnemyDeath, true, proto::kSlotAll, proto::bytesOf(death));
     }
 }
 
@@ -111,8 +99,6 @@ void onFrame(const GameFrame& frame) {
     if (g_role != game::CombatRole::Guest || frame.slot != g_hostSlot) return;
     if (frame.type == combat_wire::kMsgPlayerHit) {
         onPlayerHit(frame);
-    } else if (frame.type == combat_wire::kMsgEnemyDeath) {
-        onEnemyDeath(frame);
     } else if (frame.type == enemy_wire::kMsgEnemySpawn || frame.type == enemy_wire::kMsgEnemyGone) {
         onEnemyAnnouncement(frame);
     }

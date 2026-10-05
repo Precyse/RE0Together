@@ -1,10 +1,10 @@
 #pragma once
-// ENEMY_HIT / PLAYER_HIT / ENEMY_DEATH: combat between a guest and the host's enemies (docs/DS2_NOTES.md, "Enemy
+// ENEMY_HIT / PLAYER_HIT: combat between a guest and the host's enemies (docs/DS2_NOTES.md, "Enemy
 // combat"). The host owns every enemy, so a guest's damage to a puppet is sent to the host instead of being applied, a
-// host enemy's damage to the partner's body is sent to the guest to apply on its own player, and the host says when an
-// enemy died. A hit carries the plain fields of the engine's DamageParams; the receiver builds the engine's own
+// host enemy's damage to the partner's body is sent to the guest to apply on its own player (an enemy's death is
+// ENEMY_GONE(Died), enemy_wire.h). A hit carries the plain fields of the engine's DamageParams; the receiver builds the engine's own
 // parameters from them. An enemy is named by its net id (the host's ENEMY_SPAWN) and its entity UUID (the same on both
-// machines), so a hit or a death still finds its enemy when a table is behind.
+// machines), so a hit still finds its enemy when a table is behind.
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -17,7 +17,6 @@ namespace combat_wire {
 
 constexpr uint16_t kMsgEnemyHit = proto::kFirstGameType + 0x20;    // 0x0120, guest to host, reliable: EnemyHit
 constexpr uint16_t kMsgPlayerHit = proto::kFirstGameType + 0x21;   // 0x0121, host to one guest, reliable: PlayerHit
-constexpr uint16_t kMsgEnemyDeath = proto::kFirstGameType + 0x22;  // 0x0122, host to all, reliable: EnemyDeath
 
 constexpr float kMaxHitAmount = 10000.0f;   // damage of one hit above this is refused (the strongest hits are in the hundreds)
 constexpr float kMaxVectorComponent = 1.0e6f;
@@ -55,11 +54,6 @@ struct PlayerHit {
     HitFields hit;
 };
 static_assert(sizeof(PlayerHit) == 84);
-
-struct EnemyDeath {
-    EnemyRef enemy;
-};
-static_assert(sizeof(EnemyDeath) == 20);
 
 inline bool isNone(const EnemyRef& ref) {
     for (const uint8_t byte : ref.uuid) {
@@ -100,10 +94,6 @@ inline bool decode(std::span<const uint8_t> payload, EnemyHit& out) {
 // The attacker may be unnamed (none, or an enemy the host does not track).
 inline bool decode(std::span<const uint8_t> payload, PlayerHit& out) {
     return decodeOne(payload, out) && validHit(out.hit);
-}
-
-inline bool decode(std::span<const uint8_t> payload, EnemyDeath& out) {
-    return decodeOne(payload, out) && validEnemy(out.enemy);
 }
 
 }  // namespace combat_wire

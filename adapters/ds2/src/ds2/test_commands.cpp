@@ -4,6 +4,7 @@
 //   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
+//   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -16,9 +17,13 @@
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/enemy_vitals.h"
+#include "ds2/entity_lookup.h"
+#include "ds2/health_watch.h"
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
+#include "enemy_directory.h"
 #include "game.h"
 #include "log.h"
 #include "paths.h"
@@ -158,6 +163,20 @@ void setBtRegion(const std::string& text) {
     logger::write("test_commands: SetBtActiveRegion(%d, %d) %s", args[0], args[1], ok ? "done" : "faulted");
 }
 
+void watchHealth(const std::string& text) {
+    if (text.compare(0, 3, "off") == 0) return health_watch::disarm();
+    const int netId = atoi(text.c_str());
+    for (const enemy_directory::Entry& entry : enemy_directory::all()) {
+        if (entry.netId != netId) continue;
+        const uintptr_t entity = ds2::entityByUuid(entry.uuid.data());
+        const uintptr_t address = entity ? enemy_vitals::healthAddress(entity) : 0;
+        logger::write("test_commands: watch health of enemy %d: entity %p, health at %p", netId, reinterpret_cast<void*>(entity),
+                      reinterpret_cast<void*>(address));
+        return health_watch::arm(address);
+    }
+    logger::write("test_commands: no enemy %d in the directory", netId);
+}
+
 void tick() {
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
@@ -167,6 +186,7 @@ void tick() {
     if (const std::string text = takeCommand(L"area.txt"); !text.empty()) changeArea(text);
     if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
+    if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
 }
 

@@ -68,6 +68,8 @@ void report(NetClient& net) {
     logger::write("equip_sync: reported %zu carried pieces", held.size());
 }
 
+bool isGear(uint8_t slot) { return std::find(std::begin(equip_sync::kGearSlots), std::end(equip_sync::kGearSlots), slot) != std::end(equip_sync::kGearSlots); }
+
 int seenCount(const std::vector<game::Cargo>& pieces, uint32_t type) {
     return static_cast<int>(std::count_if(pieces.begin(), pieces.end(), [&](const game::Cargo& piece) { return piece.type == type; }));
 }
@@ -95,8 +97,7 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
     g_lastWanted = wanted;
     if (!steady || now - g_lastChange < kSettle) return;
     if (ownerKey != g_protectedOwner) {
-        // The pieces the body is born with (its shoes, skeleton and so on): deleting one crashed the player entity's
-        // equipment code, so they are never deleted, only added to.
+        // The pieces the body is born with stay: deleting one crashed the player entity's equipment code.
         g_protectedOwner = ownerKey;
         g_requestedAdds.clear();
         g_requestedDeletes.clear();
@@ -126,7 +127,7 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
                                             [&](const equip_sync::Held& m) { return m.type == piece.type; });
             if (match != missing.end()) {
                 missing.erase(match);
-            } else if (changes < kMaxChangesPerRound && !g_protected.contains(piece.handle)) {
+            } else if (changes < kMaxChangesPerRound && !g_protected.contains(piece.handle) && !isGear(slot)) {
                 game::removeCargoLater(piece.handle);
                 g_requestedDeletes.insert(piece.handle);
                 plan += " -" + std::to_string(slot) + ":" + std::to_string(piece.type);

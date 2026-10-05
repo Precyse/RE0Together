@@ -238,7 +238,6 @@ struct PlayerHitOut {
 std::vector<PlayerHitOut> takePlayerHits();
 
 // Host: the enemies of the directory (enemy_directory.h) that died since the last call.
-std::vector<combat_wire::EnemyDeath> takeEnemyDeaths();
 
 // Host: whether the engine has this enemy and it is alive. A guest's hit is only accepted for such an enemy.
 bool enemyAlive(const uint8_t (&uuid)[enemy_wire::kUuidSize]);
@@ -246,7 +245,6 @@ bool enemyAlive(const uint8_t (&uuid)[enemy_wire::kUuidSize]);
 // Applied on the simulation thread's next frame, through the engine's damage function with the applying flag set.
 void applyEnemyHit(const combat_wire::EnemyHit& hit);    // host: the guest's hit on its enemy
 void applyPlayerHit(const combat_wire::PlayerHit& hit);  // guest: an enemy's hit on the local player
-void killEnemy(const combat_wire::EnemyDeath& death);    // guest: the engine's own kill, a dead enemy is left alone
 
 // The structure roles: the host reports what its player places and removes, a guest refuses its own player's
 // placements. Needs structures::installEarly. Any thread.

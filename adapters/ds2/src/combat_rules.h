@@ -36,21 +36,4 @@ private:
     std::unordered_map<uint16_t, uint32_t> perEnemy_;
 };
 
-// Enemy deaths seen so far, by net id: a death is handled once however often it is reported.
-class DeathLedger {
-public:
-    static constexpr size_t kMaxEntries = 4096;
-
-    // True the first time `netId` is marked; false for every repeat.
-    bool markFirst(uint16_t netId) {
-        if (dead_.size() >= kMaxEntries) dead_.clear();
-        return dead_.insert(netId).second;
-    }
-
-    void clear() { dead_.clear(); }
-
-private:
-    std::unordered_set<uint16_t> dead_;
-};
-
 }  // namespace combat_rules

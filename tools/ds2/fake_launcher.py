@@ -30,7 +30,8 @@ CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, res
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011E
-ENEMY_HIT, ENEMY_DEATH = 0x0120, 0x0122
+ENEMY_HIT = 0x0120
+ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_HIT_FORMAT = struct.Struct("<HH16sfIiI12f")  # enemy ref {net id, reserved, uuid} + hit fields (combat_wire.h)
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
@@ -128,7 +129,8 @@ def main():
     p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
-    p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s until the host reports a death (ENEMY_DEATH, printed)")
+    p.add_argument("--enemy-id", type=int, default=0, help="the net id --enemy-hit keeps hitting while it exists (default: the nearest enemy)")
+    p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s; an enemy the host reports gone (died or despawned) is not hit again, and a death is printed")
     p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
@@ -162,7 +164,6 @@ def serve(sock, a):
     local = {}
     recorded = {}
     announced = {}
-    deaths = []
 
     def record(body):
         now = time.monotonic()
@@ -187,9 +188,13 @@ def serve(sock, a):
                 announced[net_id] = (uuid, struct.unpack_from("<3d", body, 4 + 40))
                 if a.enemy_record:
                     record(body)
-            elif msg_type == ENEMY_DEATH:
-                deaths.append(struct.unpack_from('<H', body, 4)[0])
-                print(f"enemy: ENEMY_DEATH for net id {deaths[-1]}", flush=True)
+            elif msg_type == ENEMY_GONE and a.enemy_hit:
+                gone_id = struct.unpack_from('<H', body, 4)[0]
+                announced.pop(gone_id, None)  # a dead or despawned enemy is not hit again
+                if body[6] == ENEMY_GONE_DIED:
+                    print(f"enemy: ENEMY_GONE(Died) for net id {gone_id}", flush=True)
+                if a.enemy_record:
+                    record(body)
             elif msg_type in (ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM) and a.enemy_record:
                 record(body)
             elif msg_type == CARGO_LIST and a.echo_cargo:
@@ -204,6 +209,8 @@ def serve(sock, a):
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None
     last_held, last_equip, last_env = None, 0.0, 0.0
+    hit_target = None  # the net id --enemy-hit keeps hitting
+    enemies_listed = False
     struct_added = struct_removed = False
     gave = picked = gave_plain = told_story = False
     last_load = 0.0
@@ -265,12 +272,22 @@ def serve(sock, a):
                 sock.sendall(encode(msg_type, peer_slot, payload, flags=0 if msg_type in (ENEMY_STATE, ENEMY_ANIM) else FLAG_RELIABLE))
                 if not replay:
                     print("enemy: the recording has been replayed", flush=True)
-        if a.enemy_hit and start is not None and not deaths and announced and now - start >= float(a.enemy_hit.split(":")[0]) and now - last_hit >= 10.0:
+        if a.enemy_hit and start is not None and announced and now - start >= float(a.enemy_hit.split(":")[0]) and now - last_hit >= 10.0:
             last_hit = now
-            net_id, (uuid, _) = min(announced.items(), key=lambda e: (e[1][1][0] - local["x"]) ** 2 + (e[1][1][1] - local["y"]) ** 2)
+            if not enemies_listed:
+                enemies_listed = True
+                for n in sorted(announced, key=lambda n: sum((announced[n][1][i] - local[axis]) ** 2 for i, axis in enumerate("xyz")))[:8]:
+                    at = announced[n][1]
+                    print(f"enemy: {n} at {at[0] - local['x']:+.1f} east, {at[1] - local['y']:+.1f} north, {at[2] - local['z']:+.1f} up", flush=True)
+            if a.enemy_id in announced:
+                hit_target = a.enemy_id
+            elif hit_target not in announced:  # stay on one enemy until it is gone, then take the nearest
+                hit_target = min(announced, key=lambda n: sum((announced[n][1][i] - local[axis]) ** 2 for i, axis in enumerate("xyz")))
+            net_id, (uuid, _) = hit_target, announced[hit_target]
             amount = float(a.enemy_hit.split(":")[1])
             sock.sendall(encode(ENEMY_HIT, peer_slot, ENEMY_HIT_FORMAT.pack(net_id, 0, uuid, amount, 0, -1, 0, *([0.0] * 12))))
-            print(f"enemy: hit enemy {net_id} for {amount}", flush=True)
+            at = announced[net_id][1]
+            print(f"enemy: hit enemy {net_id} for {amount}: {at[0] - local['x']:+.1f} m east, {at[1] - local['y']:+.1f} m north, {at[2] - local['z']:+.1f} m up of the local player", flush=True)
         if a.bt_regions and now - last_bt >= 1.0:
             last_bt = now
             sock.sendall(encode(0x0128, peer_slot, struct.pack("<Q", int(a.bt_regions, 16))))

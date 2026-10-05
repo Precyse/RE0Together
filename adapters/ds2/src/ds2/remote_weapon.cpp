@@ -10,6 +10,7 @@
 #include <windows.h>
 
 #include <array>
+#include <atomic>
 #include <mutex>
 #include <vector>
 
@@ -34,6 +35,9 @@ constexpr ULONGLONG kRetryDelayMs = 1000;          // before a weapon the engine
 constexpr ULONGLONG kProbeDelayMs = 1000;          // after the weapon is made: where it is and whether it is still there
 constexpr size_t kMaxQueuedFires = 64;
 constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
+constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: whether the weapon's update took it
+constexpr uintptr_t kBulletSystemGlobal = 0x14623fa48;  // the bullet pool (0x141fb5c70 adds a bullet per pellet)
+constexpr uintptr_t kBulletsMade = 0x299f28;            // u32: bullets created so far
 
 using CreateFn = void (*)(uintptr_t entry, uint16_t weaponId);
 using ResetFn = void (*)(uintptr_t entry);
@@ -45,6 +49,14 @@ uint8_t g_attachMode = kEngineAttachMode;
 std::mutex g_mutex;  // the net thread hands over, the simulation thread takes
 weapon_wire::WeaponState g_wanted{weapon_wire::kHolstered, 0, 0};
 std::vector<weapon_wire::WeaponFire> g_fires;
+std::atomic<uintptr_t> g_madeWeapon{0};  // the weapon entity made for the body, for the shot detours on other threads
+std::atomic<uint32_t> g_engineShots{0};
+
+uint32_t bulletsMade() {
+    const uintptr_t pool = decima::readPointer(ds2::at(kBulletSystemGlobal));
+    uint32_t made = 0;
+    return pool && decima::safeRead(pool + kBulletsMade, made) ? made : 0;
+}
 
 struct Held {
     uintptr_t owner = 0;   // the body the weapon was made for
@@ -55,21 +67,31 @@ struct Held {
     Uuid uuid{};
     ULONGLONG retryAt = 0;
     ULONGLONG probeAt = 0;  // when the weapon's state is logged a second time, 0 when it is not pending
+    ULONGLONG fireCheckAt = 0;  // when the first fire request is looked at again, 0 when none is pending
+    uint32_t bulletsAtFire = 0;
     bool shotLogged = false;
+    bool indexTakenLogged = false;
 };
 Held g_held;
 
 bool weaponAlive() { return g_held.weapon && ds2::entityExists(g_held.uuid.data()); }
+
+uint32_t indexOf(uintptr_t table, uintptr_t entry) {
+    return static_cast<uint32_t>((entry - table - ds2::weapon::kTableFirstEntry) / ds2::weapon::kEntrySize);
+}
 
 // Where the weapon is against the body's hand, who it hangs from and its entity flags (+0x98), to tell a hidden or
 // misplaced weapon from a removed one.
 void logWeaponState(const char* when, uintptr_t body) {
     decima::WorldTransform weaponAt{}, bodyAt{};
     uint64_t flags = 0;
+    uint32_t current = 0;
     const bool placed = ds2::entityTransform(g_held.weapon, weaponAt) && ds2::entityTransform(body, bodyAt);
     decima::safeRead(g_held.weapon + kEntityFlags, flags);
-    logger::write("remote_weapon: %s: weapon %u alive %d, parent %p (body %p), flags %llx, weapon at (%.2f, %.2f, %.2f), body at (%.2f, %.2f, %.2f)",
-                  when, g_held.id, weaponAlive(), reinterpret_cast<void*>(decima::readPointer(g_held.weapon + kEntityParent)),
+    decima::safeRead(g_held.table + ds2::weapon::kTableCurrentIndex, current);
+    logger::write("remote_weapon: %s: weapon %u alive %d, table index %u (entry %u), parent %p (body %p), flags %llx, weapon at (%.2f, %.2f, %.2f), body at (%.2f, %.2f, %.2f)",
+                  when, g_held.id, weaponAlive(), current, indexOf(g_held.table, g_held.entry),
+                  reinterpret_cast<void*>(decima::readPointer(g_held.weapon + kEntityParent)),
                   reinterpret_cast<void*>(body), static_cast<unsigned long long>(flags), placed ? weaponAt.position.x : 0.0,
                   placed ? weaponAt.position.y : 0.0, placed ? weaponAt.position.z : 0.0, placed ? bodyAt.position.x : 0.0,
                   placed ? bodyAt.position.y : 0.0, placed ? bodyAt.position.z : 0.0);
@@ -86,10 +108,6 @@ uintptr_t freeEntry(uintptr_t table) {
         }
     }
     return 0;
-}
-
-uint32_t indexOf(uintptr_t table, uintptr_t entry) {
-    return static_cast<uint32_t>((entry - table - ds2::weapon::kTableFirstEntry) / ds2::weapon::kEntrySize);
 }
 
 // Engine calls: no C++ objects with destructors in functions that hold __try.
@@ -120,13 +138,20 @@ bool reattachGuarded(uintptr_t weapon, uintptr_t owner, uint32_t mode) {
     }
 }
 
+// The table draws the entry it is told to move to (+0x18C4) and holsters the one it leaves; Sam's table keeps both
+// indices equal while a weapon is drawn, so both are written.
+void setTableIndex(uintptr_t table, uint32_t index) {
+    ds2::field<uint32_t>(table, ds2::weapon::kTableCurrentIndex) = index;
+    ds2::field<uint32_t>(table, ds2::weapon::kTableRequestedIndex) = index;
+}
+
 // Gives the weapon's entry back to the table: holstered (index 0), weapon removed, entry free again. Only for a body
 // that still exists; `body`'s table memory is read and written here.
 void dropWeapon(uintptr_t body) {
     if (g_held.entry && decima::readPointer(body + ds2::weapon::kEntityTable) == g_held.table) {
         uint32_t current = 0;
         if (decima::safeRead(g_held.table + ds2::weapon::kTableCurrentIndex, current) && current == indexOf(g_held.table, g_held.entry)) {
-            ds2::field<uint32_t>(g_held.table, ds2::weapon::kTableCurrentIndex) = 0;
+            setTableIndex(g_held.table, 0);
         }
         if (weaponAlive()) {
             if (removeGuarded(g_held.entry)) {
@@ -139,6 +164,7 @@ void dropWeapon(uintptr_t body) {
     }
     g_held.weapon = 0;
     g_held.entry = 0;
+    g_madeWeapon = 0;
 }
 
 void createWeapon(uintptr_t body, uint16_t id) {
@@ -161,13 +187,29 @@ void createWeapon(uintptr_t body, uint16_t id) {
     g_held.table = table;
     g_held.entry = entry;
     g_held.shotLogged = false;
+    g_held.indexTakenLogged = false;
+    g_madeWeapon = weapon;
     if (g_attachMode != kEngineAttachMode && !reattachGuarded(weapon, body, g_attachMode)) {
         logger::write("remote_weapon: attaching with mode %u faulted", g_attachMode);
     }
-    ds2::field<uint32_t>(table, ds2::weapon::kTableCurrentIndex) = indexOf(table, entry);
+    setTableIndex(table, indexOf(table, entry));
     logger::write("remote_weapon: the body holds weapon %u in table entry %u (attach mode %u)", id, indexOf(table, entry), g_attachMode);
     logWeaponState("made", body);
     g_held.probeAt = GetTickCount64() + kProbeDelayMs;
+}
+
+// The partner's drawn weapon is the truth for the body: when the body's own table logic moves the current index off
+// our entry (it holsters a body that has no draw input of its own), the index is put back so the table keeps the
+// weapon drawn and in the hand.
+void keepDrawn() {
+    if (!weaponAlive()) return;
+    const uint32_t ours = indexOf(g_held.table, g_held.entry);
+    uint32_t current = 0;
+    if (!decima::safeRead(g_held.table + ds2::weapon::kTableCurrentIndex, current) || current == ours) return;
+    ds2::field<uint32_t>(g_held.table, ds2::weapon::kTableCurrentIndex) = ours;
+    if (g_held.indexTakenLogged) return;
+    g_held.indexTakenLogged = true;
+    logger::write("remote_weapon: the body's table index moved to %u, set back to the weapon's entry %u", current, ours);
 }
 
 // Brings the body's weapon to the one the partner has drawn.
@@ -183,11 +225,22 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
         g_held.id = weapon_wire::kHolstered;
         g_held.retryAt = now + kRetryDelayMs;
     }
+    if (g_held.fireCheckAt && now >= g_held.fireCheckAt) {
+        g_held.fireCheckAt = 0;
+        const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
+        logger::write("remote_weapon: the first fire request was %s after %llu ms, the engine ran %u shots of it and made %u bullets",
+                      behavior && ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) ? "NOT taken" : "taken",
+                      static_cast<unsigned long long>(kFireCheckDelayMs), g_engineShots.load(), bulletsMade() - g_held.bulletsAtFire);
+    }
     if (g_held.probeAt && now >= g_held.probeAt) {
         g_held.probeAt = 0;
         if (g_held.weapon) logWeaponState("after 1 s", body);
     }
-    if (g_held.id == wanted.weaponId || now < g_held.retryAt) return;
+    if (g_held.id == wanted.weaponId) {
+        keepDrawn();
+        return;
+    }
+    if (now < g_held.retryAt) return;
     dropWeapon(body);
     g_held.id = wanted.weaponId;
     if (wanted.weaponId != weapon_wire::kHolstered) createWeapon(body, wanted.weaponId);
@@ -200,6 +253,8 @@ void playShot(const weapon_wire::WeaponFire& fire) {
     ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) = 1;
     if (g_held.shotLogged) return;
     g_held.shotLogged = true;
+    g_held.fireCheckAt = GetTickCount64() + kFireCheckDelayMs;
+    g_held.bulletsAtFire = bulletsMade();
     logger::write("remote_weapon: first shot of weapon %u: origin (%.2f, %.2f, %.2f) direction (%.2f, %.2f, %.2f) pellets %u",
                   fire.weaponId, fire.origin[0], fire.origin[1], fire.origin[2], fire.direction[0], fire.direction[1],
                   fire.direction[2], fire.pellets);
@@ -226,6 +281,22 @@ void tick() {
 }  // namespace
 
 namespace remote_weapon {
+
+void noteEngineShot(uintptr_t behavior) {
+    const uintptr_t made = g_madeWeapon.load();
+    if (!made || decima::readPointer(behavior + ds2::weapon::kBehaviorWeapon) != made) return;
+    if (g_engineShots.fetch_add(1) == 0) logger::write("remote_weapon: the engine runs a shot of the body's weapon");
+}
+
+uintptr_t attackResource() {
+    if (!weaponAlive()) return 0;
+    uintptr_t object = g_held.weapon;
+    for (const uintptr_t offset : ds2::weapon::kWeaponAttackChain) {
+        object = decima::readPointer(object + offset);
+        if (!object) return 0;
+    }
+    return decima::readPointer(object + ds2::weapon::kAttackResourceField);
+}
 
 void installEarly(uint8_t attachMode) {
     g_attachMode = attachMode;

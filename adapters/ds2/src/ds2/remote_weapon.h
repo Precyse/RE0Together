@@ -13,4 +13,12 @@ namespace remote_weapon {
 // attached with; the engine's own creation uses ds2/remote_weapon.cpp kEngineAttachMode and nothing is redone for it.
 void installEarly(uint8_t attachMode);
 
+// Called by the shot detours (ds2/local_weapon.cpp) before the engine makes a shot with `behavior`: logs the first time
+// the engine runs a shot of the weapon this module made for the body. Any thread.
+void noteEngineShot(uintptr_t behavior);
+
+// The bullet attack resource of the weapon the body holds (what a damage hit of a shot from it names), 0 when the body
+// holds none. Simulation thread.
+uintptr_t attackResource();
+
 }  // namespace remote_weapon

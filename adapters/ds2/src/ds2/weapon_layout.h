@@ -15,6 +15,7 @@ constexpr uintptr_t kEntityTable = 0x56D0;
 constexpr uintptr_t kTableOwner = 0x48;
 constexpr uintptr_t kTableFirstEntry = 0xC0;
 constexpr uintptr_t kTableCurrentIndex = 0x18C0;
+constexpr uintptr_t kTableRequestedIndex = 0x18C4;  // the entry the table is moving to; live: equal to the current one while a weapon stays drawn
 constexpr uint32_t kTableEntries = 0x60;
 constexpr size_t kEntrySize = 0x40;
 constexpr uintptr_t kEntryFlags = 0x10;   // 7 bytes of state; live: byte +0x11 is non-zero while the weapon is drawn
@@ -26,6 +27,10 @@ constexpr uintptr_t kEntryTable = 0x38;   // the table component the weapon's ev
 // DSWeaponEntity.
 constexpr uintptr_t kWeaponId = 0x2188;    // u16 EDSWeaponId
 constexpr uintptr_t kWeaponOwner = 0x338;  // weak pointer to the owner entity
+// A weapon's bullet attack resource, the one a damage hit of type 0xd names (live: weapon entity +0x1E60 -> +0x8 -> +0x330,
+// resource pointer at +0x80; a different resource per weapon).
+constexpr uintptr_t kWeaponAttackChain[] = {0x1E60, 0x8, 0x330};
+constexpr uintptr_t kAttackResourceField = 0x80;
 constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and bit 16 differ between a drawn and a holstered weapon
 
 // A weapon's behavior component (DSWeaponBehaviorComponent and its subclasses).

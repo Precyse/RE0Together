@@ -170,6 +170,8 @@ void tick() {
             }
             if (enemy.announced && !dead) sampleAnimation(enemy, transform, havePartner ? &partnerAt : nullptr, now);
             if (enemy.announced && dead && !enemy.deadReported) {
+                logger::write("enemy_host: enemy %u (entity %p) died, ENEMY_GONE(Died) queued", enemy.netId,
+                              reinterpret_cast<void*>(enemy.entity));
                 pushGone(enemy.netId, enemy_wire::GoneReason::Died);
                 enemy.deadReported = true;
             }

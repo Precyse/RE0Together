@@ -15,6 +15,9 @@ namespace equip_sync {
 
 constexpr uint16_t kMsgEquipState = proto::kFirstGameType + 12;  // 0x010C, to all, reliable: EquipHeader, then entries
 constexpr uint8_t kMirroredSlots[] = {4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19};
+// Worn gear (shoes, skeleton, glove, mask): deleting a piece from these slots crashed the player entity's equipment
+// code (live), so the body's gear is only ever added to.
+constexpr uint8_t kGearSlots[] = {14, 17, 18, 19};
 constexpr uint32_t kMaxHeld = 24;
 
 struct EquipHeader {

@@ -47,6 +47,11 @@ uint8_t readHealth(uintptr_t entity) {
     return static_cast<uint8_t>(std::clamp(slotValue(entity, kGetHealthSlot) / maximum, 0.0f, 1.0f) * kHealthFull);
 }
 
+uintptr_t healthAddress(uintptr_t entity) {
+    const uintptr_t block = lifeBlock(entity);
+    return block ? block + kLifeCurrent : 0;
+}
+
 void applyHealth(uintptr_t entity, uint8_t health) {
     if (health == enemy_wire::kHealthUnknown) return;
     const uintptr_t block = lifeBlock(entity);
