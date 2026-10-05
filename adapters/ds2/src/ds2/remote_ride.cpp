@@ -55,7 +55,8 @@ enum class Stage { OnFoot, Boarding, Riding, Leaving };
 Stage g_stage = Stage::OnFoot;
 Clock::time_point g_boardedAt;
 Clock::time_point g_samBoardedAt;  // the last update that seated the local player
-bool g_passenger = false;  // the local player drives the same vehicle: the remote rides along
+bool g_passenger = false;     // the peer reports a passenger seat: the remote sits in the second pod
+bool g_followsLocal = false;  // the local player drives the same vehicle: the remote rides only while he does
 uint64_t g_vehicleId = 0;
 
 using ClearParentFn = void (*)(uintptr_t entity);
@@ -161,6 +162,7 @@ namespace remote_ride {
 void reset() {
     g_stage = Stage::OnFoot;
     g_passenger = false;
+    g_followsLocal = false;
     g_vehicleId = 0;
 }
 
@@ -208,7 +210,8 @@ void tick() {
         case Stage::OnFoot:
             if (const uintptr_t vehicle = driven ? ds2::loadedVehicle(*driven) : 0) {
                 g_vehicleId = *driven;
-                g_passenger = localDrives(g_vehicleId);
+                g_followsLocal = localDrives(g_vehicleId);
+                g_passenger = g_followsLocal || riding->role == vehicle_sync::kRolePassenger;
                 requestBoarding(plugin, vehicle);
                 g_stage = Stage::Boarding;
                 logger::write("remote_ride: boarding vehicle %llx as %s", static_cast<unsigned long long>(g_vehicleId),
@@ -230,7 +233,7 @@ void tick() {
         case Stage::Riding:
             if (phase == kPhaseOnFoot) {  // the engine ended the ride itself
                 releaseVehicle();
-            } else if (!driven || (g_passenger && !localDrives(g_vehicleId))) {
+            } else if (!driven || (g_followsLocal && !localDrives(g_vehicleId))) {
                 ds2::field<uint8_t>(plugin, kPluginRequestedPhase) = kPhaseRideOff;
                 g_stage = Stage::Leaving;
                 logger::write("remote_ride: leaving");
