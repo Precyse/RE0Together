@@ -32,7 +32,6 @@ constexpr uintptr_t kEntityUuid = 0x10;
 constexpr uintptr_t kEntityFlags = 0x98;
 constexpr uint64_t kDeadFlag = uint64_t{1} << 8;
 constexpr ULONGLONG kSampleMs = 100;
-constexpr ULONGLONG kLivenessMs = 500;
 constexpr size_t kMaxTracked = 512;
 constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
@@ -133,12 +132,10 @@ enemy_wire::EnemyState sample(Tracked& enemy, const decima::WorldTransform& tran
 
 // Host, simulation thread.
 void tick() {
-    static ULONGLONG lastSample = 0, lastLiveness = 0;
+    static ULONGLONG lastSample = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - lastSample < kSampleMs) return;
     lastSample = now;
-    const bool checkLiveness = now - lastLiveness >= kLivenessMs;
-    if (checkLiveness) lastLiveness = now;
     std::lock_guard lock(g_mutex);
     if (!g_sharing) return;
     if (g_snapshotRequested) {
@@ -152,7 +149,7 @@ void tick() {
     const bool havePartner = partnerPosition(partnerAt);
     for (auto it = g_tracked.begin(); it != g_tracked.end();) {
         Tracked& enemy = *it;
-        if (checkLiveness && !ds2::entityExists(enemy.entityUuid.data())) {
+        if (!ds2::entityExists(enemy.entityUuid.data())) {
             if (enemy.announced) pushGone(enemy.netId, enemy_wire::GoneReason::Despawned);
             it = g_tracked.erase(it);
             continue;

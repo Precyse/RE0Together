@@ -73,7 +73,9 @@ void hostTick() {
     for (const Camp& camp : camps) {
         bool changed = true;
         for (const camp_wire::CampPhase& known : g_known) {
-            if (sameUuid(known, camp.phase)) changed = known.phase != camp.phase.phase;
+            if (!sameUuid(known, camp.phase)) continue;
+            changed = known.phase != camp.phase.phase;
+            if (changed) logger::write("camp_alert: camp phase %d -> %d, CAMP_ALERT queued", known.phase, camp.phase.phase);
         }
         if ((changed || all) && g_outgoing.size() < camp_wire::kMaxCamps) g_outgoing.push_back(camp.phase);
     }

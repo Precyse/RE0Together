@@ -171,7 +171,6 @@ def serve(sock, a):
             out.write(ENEMY_RECORD.pack(now - recorded["first"], struct.unpack_from("<H", body)[0], len(body) - 4) + body[4:])
 
     def receive():
-        last_print = 0.0
         while True:
             (n,) = struct.unpack("<I", read_exact(sock, 4))
             body = read_exact(sock, n)
@@ -201,9 +200,6 @@ def serve(sock, a):
                 sock.sendall(encode(msg_type, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
-                if time.monotonic() - last_print > 5:
-                    last_print = time.monotonic()
-                    print(f"local ({x:.2f}, {y:.2f}, {z:.2f}) yaw {yaw:.2f}", flush=True)
 
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None

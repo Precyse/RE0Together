@@ -42,16 +42,21 @@ struct TableLog {
     uint32_t index = UINT32_MAX;
     uint8_t flags[ds2::weapon::kEntryFlagBytes] = {};
     uint16_t id = 0;
+    uint64_t weaponFlags = 0;
 };
 TableLog g_logged;
 
-void logTableChange(uint32_t index, const uint8_t (&flags)[ds2::weapon::kEntryFlagBytes], uint16_t id) {
-    if (index == g_logged.index && id == g_logged.id && std::memcmp(flags, g_logged.flags, sizeof(flags)) == 0) return;
-    g_logged.index = index;
-    g_logged.id = id;
-    std::memcpy(g_logged.flags, flags, sizeof(flags));
-    logger::write("local_weapon: table entry %u, weapon %u, flags %02x %02x %02x %02x %02x %02x %02x", index, id, flags[0],
-                  flags[1], flags[2], flags[3], flags[4], flags[5], flags[6]);
+// Logs the current table index with the entry's flag bytes and the weapon entity's flags (+0x98) whenever any of them
+// changes: the holster is one of these changes.
+void logTableChange(const TableLog& now) {
+    if (now.index == g_logged.index && now.id == g_logged.id && now.weaponFlags == g_logged.weaponFlags &&
+        std::memcmp(now.flags, g_logged.flags, sizeof(now.flags)) == 0) {
+        return;
+    }
+    g_logged = now;
+    logger::write("local_weapon: table index %u, weapon %u, entry flags %02x %02x %02x %02x %02x %02x %02x, weapon entity flags %llx",
+                  now.index, now.id, now.flags[0], now.flags[1], now.flags[2], now.flags[3], now.flags[4], now.flags[5],
+                  now.flags[6], static_cast<unsigned long long>(now.weaponFlags));
 }
 
 bool pelletsCounted(weapon_wire::Kind kind) {
@@ -115,15 +120,23 @@ std::optional<weapon_wire::WeaponState> localWeaponState() {
     const uintptr_t table = sam ? decima::readPointer(sam + kEntityTable) : 0;
     uint32_t index = 0;
     if (!table || !decima::safeRead(table + kTableCurrentIndex, index)) return std::nullopt;
-    if (index >= kTableEntries) return kHolsteredState;
+    TableLog now;
+    now.index = index;
+    if (index >= kTableEntries) {
+        logTableChange(now);
+        return kHolsteredState;
+    }
     const uintptr_t entry = table + kTableFirstEntry + index * kEntrySize;
-    uint8_t flags[kEntryFlagBytes] = {};
     const uintptr_t weapon = decima::readPointer(entry + kEntryWeapon);
-    if (!weapon || !decima::safeCopy(flags, entry + kEntryFlags, sizeof(flags))) return kHolsteredState;
-    const uint16_t id = weaponId(weapon);
-    logTableChange(index, flags, id);
-    const bool drawn = flags[kEntryDrawn - kEntryFlags] != 0;
-    return drawn ? weapon_wire::WeaponState{id, static_cast<uint8_t>(kHeldHand), 0} : kHolsteredState;
+    if (!weapon || !decima::safeCopy(now.flags, entry + kEntryFlags, sizeof(now.flags))) {
+        logTableChange(now);
+        return kHolsteredState;
+    }
+    now.id = weaponId(weapon);
+    decima::safeRead(weapon + kWeaponEntityFlags, now.weaponFlags);
+    logTableChange(now);
+    const bool drawn = now.flags[kEntryDrawn - kEntryFlags] != 0;
+    return drawn ? weapon_wire::WeaponState{now.id, static_cast<uint8_t>(kHeldHand), 0} : kHolsteredState;
 }
 
 std::vector<weapon_wire::WeaponFire> takeLocalFires() {

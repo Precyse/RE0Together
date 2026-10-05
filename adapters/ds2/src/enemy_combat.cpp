@@ -10,6 +10,7 @@
 #include "enemy_directory.h"
 #include "enemy_wire.h"
 #include "game.h"
+#include "log.h"
 #include "reject_counters.h"
 #include "time_us.h"
 
@@ -89,6 +90,8 @@ void sendOutgoing(NetClient& net) {
         net.send(combat_wire::kMsgEnemyHit, true, g_hostSlot, proto::bytesOf(hit));
     }
     for (const game::PlayerHitOut& out : game::takePlayerHits()) {
+        logger::write("enemy_combat: PLAYER_HIT sent to slot %u: attacker enemy %u, amount %.1f", out.slot, out.hit.attacker.netId,
+                      out.hit.hit.amount);
         net.send(combat_wire::kMsgPlayerHit, true, out.slot, proto::bytesOf(out.hit));
     }
     for (const combat_wire::EnemyDeath& death : game::takeEnemyDeaths()) {

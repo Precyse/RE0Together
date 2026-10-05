@@ -20,7 +20,9 @@
 #include "combat_rules.h"
 #include "combat_wire.h"
 #include "decima/safe_read.h"
+#include "ds2/combat_log.h"
 #include "ds2/engine.h"
+#include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
@@ -160,14 +162,19 @@ bool divertPlayerHit(uintptr_t victim, uintptr_t params, bool forward) {
 void learnResource(uintptr_t params);
 
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
+    const combat_log::Snapshot snapshot = combat_log::before(victim, params);
     if (params && victim && !remote_apply::active()) {
         rememberParams(params);
         const game::CombatRole role = g_role;
         const bool diverted = (role == game::CombatRole::Guest && divertEnemyHit(victim, params)) ||
                               divertPlayerHit(victim, params, role == game::CombatRole::Host);
-        if (diverted) return;
+        if (diverted) {
+            combat_log::after(snapshot, victim, params, "diverted, not applied here");
+            return;
+        }
     }
     g_apply(manager, victim, params);
+    combat_log::after(snapshot, victim, params, "applied");
     if (params && victim == remote_player::samEntity() && !remote_apply::active()) learnResource(params);
 }
 
@@ -315,6 +322,7 @@ bool buildHit(uintptr_t victim, uintptr_t attacker, const combat_wire::HitFields
         const uintptr_t link = reinterpret_cast<uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t)>(ds2::at(kMakeAttackLink))(0, 0, 0, desc);
         reinterpret_cast<void (*)(uintptr_t, uintptr_t, const void*, float, const float*, float, uint32_t)>(ds2::at(kInitDamageParams))(
             paramsAt, link, &type, hit.amount, direction, 0.0f, static_cast<uint32_t>(std::max(hit.partIndex, 0)));
+        std::memcpy(params + kParamsAmount, &hit.amount, sizeof(hit.amount));
         if (const uintptr_t context = parentContextOf(paramsAt)) borrowBlock(context + kContextData);
         std::memcpy(params + kParamsPosition, position, sizeof(position));
         params[kParamsHitFlag] = 1;
@@ -344,7 +352,8 @@ void runForwarded() {
         if (!enemy || ds2::entityIsDead(enemy)) return true;
         const remote_apply::Scope applying;
         const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit);
-        logger::write("enemy_combat: forwarded hit on enemy %u: %s", waiting.hit.enemy.netId, ok ? "queued" : "faulted");
+        logger::write("enemy_combat: forwarded hit on enemy %u (entity %p, health %u of 254): %s", waiting.hit.enemy.netId,
+                      reinterpret_cast<void*>(enemy), enemy_vitals::readHealth(enemy), ok ? "queued" : "faulted");
         return true;
     });
 }
@@ -372,6 +381,7 @@ void reportDeaths() {
         combat_wire::EnemyDeath death{};
         death.enemy.netId = entry.netId;
         std::copy(entry.uuid.begin(), entry.uuid.end(), death.enemy.uuid);
+        logger::write("enemy_combat: enemy %u (entity %p) is dead, ENEMY_DEATH queued", entry.netId, reinterpret_cast<void*>(enemy));
         std::lock_guard lock(g_mutex);
         push(g_deathsOut, death);
     }

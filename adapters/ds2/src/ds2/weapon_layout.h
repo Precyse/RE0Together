@@ -26,6 +26,7 @@ constexpr uintptr_t kEntryTable = 0x38;   // the table component the weapon's ev
 // DSWeaponEntity.
 constexpr uintptr_t kWeaponId = 0x2188;    // u16 EDSWeaponId
 constexpr uintptr_t kWeaponOwner = 0x338;  // weak pointer to the owner entity
+constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and bit 16 differ between a drawn and a holstered weapon
 
 // A weapon's behavior component (DSWeaponBehaviorComponent and its subclasses).
 constexpr uintptr_t kBehaviorWeapon = 0x50;        // the DSWeaponEntity it belongs to
