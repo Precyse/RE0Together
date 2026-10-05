@@ -32,6 +32,7 @@ STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011E
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
+ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
 ENEMY_HIT_FORMAT = struct.Struct("<HH16sfIiI12f")  # enemy ref {net id, reserved, uuid} + hit fields (combat_wire.h)
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
@@ -211,6 +212,10 @@ def serve(sock, a):
     last_held, last_equip, last_env = None, 0.0, 0.0
     hit_target = None  # the net id --enemy-hit keeps hitting
     enemies_listed = False
+
+    def far(net_id):
+        at = announced[net_id][1]
+        return sum((at[i] - local[axis]) ** 2 for i, axis in enumerate("xyz")) > ENEMY_REACH_METRES ** 2
     struct_added = struct_removed = False
     gave = picked = gave_plain = told_story = False
     last_load = 0.0
@@ -281,7 +286,7 @@ def serve(sock, a):
                     print(f"enemy: {n} at {at[0] - local['x']:+.1f} east, {at[1] - local['y']:+.1f} north, {at[2] - local['z']:+.1f} up", flush=True)
             if a.enemy_id in announced:
                 hit_target = a.enemy_id
-            elif hit_target not in announced:  # stay on one enemy until it is gone, then take the nearest
+            elif hit_target not in announced or far(hit_target):  # stay on one enemy until it is gone or out of reach
                 hit_target = min(announced, key=lambda n: sum((announced[n][1][i] - local[axis]) ** 2 for i, axis in enumerate("xyz")))
             net_id, (uuid, _) = hit_target, announced[hit_target]
             amount = float(a.enemy_hit.split(":")[1])
