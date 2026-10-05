@@ -387,7 +387,7 @@ namespace combat_hook {
 void installEarly() {
     hooks::install("combat damage", ds2::at(kApplyDamage), reinterpret_cast<void*>(&applyDetour),
                    reinterpret_cast<void**>(&g_apply));
-    sim_tick::add(&tick, "combat");
+    sim_tick::add(&tick, "combat", sim_tick::Gate::Gameplay);
 }
 
 }  // namespace combat_hook

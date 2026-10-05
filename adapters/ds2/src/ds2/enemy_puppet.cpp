@@ -294,7 +294,7 @@ void tick() {
 
 namespace enemy_puppet {
 
-void installEarly() { sim_tick::add(&tick, "enemy puppets"); }
+void installEarly() { sim_tick::add(&tick, "enemy puppets", sim_tick::Gate::Gameplay); }
 
 bool animate(uintptr_t manager, uintptr_t owner) {
     std::lock_guard lock(g_animationMutex);

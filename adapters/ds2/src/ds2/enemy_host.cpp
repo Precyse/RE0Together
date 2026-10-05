@@ -270,6 +270,6 @@ std::vector<enemy_wire::EnemyGone> takeEnemyGone() {
 
 namespace enemy_host {
 
-void installEarly() { sim_tick::add(&tick, "enemy host"); }
+void installEarly() { sim_tick::add(&tick, "enemy host", sim_tick::Gate::Gameplay); }
 
 }  // namespace enemy_host

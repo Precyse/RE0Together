@@ -35,6 +35,7 @@ constexpr ULONGLONG kRetryDelayMs = 1000;          // before a weapon the engine
 constexpr ULONGLONG kProbeDelayMs = 1000;          // after the weapon is made: where it is and whether it is still there
 constexpr size_t kMaxQueuedFires = 64;
 constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
+constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
 constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: whether the weapon's update took it
 constexpr uintptr_t kBulletSystemGlobal = 0x14623fa48;  // the bullet pool (0x141fb5c70 adds a bullet per pellet)
 constexpr uintptr_t kBulletsMade = 0x299f28;            // u32: bullets created so far
@@ -223,10 +224,22 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
     if (wanted.weaponId != weapon_wire::kHolstered) createWeapon(body, wanted.weaponId);
 }
 
+// Points the weapon's aim target along the partner's shot, so the shot request aims where the partner did.
+void aimAlong(uintptr_t behavior, const weapon_wire::WeaponFire& fire) {
+    const uintptr_t aim = decima::readPointer(behavior + ds2::weapon::kBehaviorAimTarget);
+    if (!aim) return;
+    for (size_t axis = 0; axis < 3; ++axis) {
+        ds2::field<double>(aim, ds2::weapon::kAimPosition + axis * sizeof(double)) =
+            static_cast<double>(fire.origin[axis]) + static_cast<double>(fire.direction[axis]) * kAimDistanceMetres;
+    }
+    ds2::field<uint8_t>(aim, ds2::weapon::kAimFlags) |= 1;
+}
+
 void playShot(const weapon_wire::WeaponFire& fire) {
     if (!weaponAlive() || fire.weaponId != g_held.id) return;
     const uintptr_t behavior = ds2::weapon::shotBehavior(g_held.weapon);
     if (!behavior) return;
+    aimAlong(behavior, fire);
     ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) = 1;
     if (g_held.shotLogged) return;
     g_held.shotLogged = true;
@@ -277,7 +290,7 @@ uintptr_t attackResource() {
 
 void installEarly(uint8_t attachMode) {
     g_attachMode = attachMode;
-    sim_tick::add(&tick, "remote weapon");
+    sim_tick::add(&tick, "remote weapon", sim_tick::Gate::Gameplay);
 }
 
 }  // namespace remote_weapon

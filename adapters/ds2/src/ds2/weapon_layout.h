@@ -37,6 +37,12 @@ constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and
 constexpr uintptr_t kBehaviorWeapon = 0x50;        // the DSWeaponEntity it belongs to
 constexpr uintptr_t kBehaviorPellets = 0x5BC;      // u32, Gun and ShotGun
 constexpr uintptr_t kBehaviorFireRequest = 0x4D1;  // byte: the update runs the shot when it is set, then clears it
+// The aim target a Gun behavior's shot request reads (slot 84, 0x14201e910): [behavior +0x390] points at a struct whose
+// byte +0 bit 0 says a target is set and whose doubles at +0x8, +0x10 and +0x18 are the target's world position; the shot
+// goes from the muzzle toward it, and from the muzzle's own forward axis when no target is set (static: the body's owner
+// sets none).
+constexpr uintptr_t kBehaviorAimTarget = 0x390;
+constexpr uintptr_t kAimFlags = 0x00, kAimPosition = 0x08;
 constexpr size_t kCreateAttackSlot = 46;           // CreateAttackRequest(float), the shot of every behavior class
 
 // The CreateAttackRequest of each behavior class that makes a shot or a throw (file VAs).
