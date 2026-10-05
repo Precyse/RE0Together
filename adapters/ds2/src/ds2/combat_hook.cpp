@@ -141,6 +141,12 @@ constexpr uintptr_t kContextData = ds2::damage::kContextData, kContextResource =
 constexpr uint32_t kFlagKind1 = 1u << 3, kFlagKind2 = 1u << 1;  // EDamageFlags bits of the hit kind
 constexpr uint16_t kRefusedTypes[] = {0x023B, 0x0095};            // attack types the MULE damage gate refuses outright
 constexpr ULONGLONG kWaitingMs = 30000;
+// An enemy the host's streaming has put to sleep (entity flags +0x98 bit 9) is sent no messages, so a hit on it never reaches its
+// damage component; the partner can be fighting it while the host's own player is far away, so the hit waits while the
+// enemy is woken (Entity wake 0x1401312b0(entity, 0, 0) sets a wake request, flags +0x98 bit 36, that the engine serves on
+// a later update and which clears bit 9).
+constexpr uintptr_t kEntityFlags = 0x98, kWakeEntity = 0x1401312b0;
+constexpr unsigned kAsleepBit = 9;
 
 struct DamageTypeArg {
     uint64_t type;
@@ -167,6 +173,7 @@ LearnedAttack g_onPlayer;  // an enemy's blow on the local player: the template 
 struct Waiting {
     combat_wire::EnemyHit hit;
     ULONGLONG since;
+    bool wakeRequested = false;
 };
 std::vector<Waiting> g_forwardWaiting;  // simulation thread only
 
@@ -294,14 +301,33 @@ void applyEnemyHitNow(const combat_wire::EnemyHit& hit) {
     if (g_forwardWaiting.size() < kMaxQueued) g_forwardWaiting.push_back({hit, GetTickCount64()});
 }
 
+bool isAsleep(uintptr_t entity) { return (ds2::field<uint64_t>(entity, kEntityFlags) >> kAsleepBit) & 1; }
+
+bool wakeGuarded(uintptr_t entity) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, uintptr_t, uintptr_t)>(ds2::at(kWakeEntity))(entity, 0, 0);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 // Simulation thread: the partner's hits on enemies, built with the bullet attack resource of the weapon the body holds.
 void runForwarded() {
     const uintptr_t resource = remote_weapon::attackResource();
     const ULONGLONG now = GetTickCount64();
-    std::erase_if(g_forwardWaiting, [&](const Waiting& waiting) {
+    std::erase_if(g_forwardWaiting, [&](Waiting& waiting) {
         if (!resource) return now - waiting.since > kWaitingMs;  // the body's weapon may still be on its way
         const uintptr_t enemy = ds2::entityByUuid(waiting.hit.enemy.uuid);
         if (!enemy || ds2::entityIsDead(enemy)) return true;
+        if (isAsleep(enemy)) {
+            if (!waiting.wakeRequested) {
+                waiting.wakeRequested = true;
+                logger::write("enemy_combat: enemy %u is asleep on the host, wake %s", waiting.hit.enemy.netId,
+                              wakeGuarded(enemy) ? "requested for the partner's hit" : "faulted");
+            }
+            return now - waiting.since > kWaitingMs;  // the hit waits while the engine wakes the enemy
+        }
         const remote_apply::Scope applying;
         const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit, resource);
         logger::write("enemy_combat: forwarded hit on enemy %u (entity %p, health %u of 254, attack resource %p): %s",
