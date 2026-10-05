@@ -15,6 +15,11 @@ void installEarly();
 // keeps a baseline of engine state compares it to know the baseline is from before a load.
 uint32_t gameplayEpoch();
 
+// The one "in gameplay" signal (the local player's state machine runs). `Settled` also needs it to have stayed on for
+// `kGameplaySettle` (the engine turns it on while the world still loads); building anything in the world waits for that.
+bool gameplayActive();
+bool gameplaySettled();
+
 // When a callback runs. `Gameplay` callbacks walk engine lists (camps, structures, missions, the clock) that are freed
 // and rebuilt by a load, so they are skipped from the moment the local player's state machine stops until it runs again.
 enum class Gate { Always, Gameplay };

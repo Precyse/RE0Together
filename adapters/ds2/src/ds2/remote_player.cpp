@@ -14,7 +14,6 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
-#include "ds2/player_state.h"
 #include "ds2/remote_animation.h"
 #include "ds2/remote_appearance.h"
 #include "ds2/remote_camera.h"
@@ -63,9 +62,12 @@ constexpr double kSpawnAhead = 2.5;  // metres in front of Sam and
 constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves the body to the partner
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
+constexpr auto kPeerGoneAfter = std::chrono::seconds(5);  // no pose from the peer for this long: it left, the body goes
+// After a load or travel the loading screen can outlast the player's state machine coming back on; a body built while
+// the world still streams in stalls the load, so none is built for this long after the world was left.
+constexpr auto kWorldLeftHold = std::chrono::seconds(60);
 constexpr uint8_t kNoSlot = 0xFF;
 constexpr uintptr_t kRemovePlayer = 0x1407549f0;  // PlayerManagerGame::RemovePlayer(manager, player): out of the lists, player-left
-constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
 
 enum class Stage { Idle, WaitController, Live, Failed };
 
@@ -80,8 +82,9 @@ Stage g_stage = Stage::Idle;
 uintptr_t g_netPlayer = 0;
 std::atomic<uintptr_t> g_entity{0};
 int g_waitedFrames = 0;
-Clock::time_point g_liveSince;
-ds2::GameplayClock g_gameplay;
+std::atomic<Clock::rep> g_liveSince{0};  // steady-clock ticks when the body went live, 0 while it is not
+std::atomic<const char*> g_leaveReason{nullptr};  // set from any thread: the world is about to be left (travel, area change)
+Clock::time_point g_spawnNotBefore;                // simulation thread: no body is built before this time
 uintptr_t g_samAtSpawn = 0;
 
 // The partner's pose from the render thread, applied on the update thread.
@@ -150,7 +153,7 @@ void spawn() {
 void finishSpawn() {
     if (ds2::field<uintptr_t>(g_entity.load(), ds2::kEntityController)) {
         g_stage = remote_camera::give() ? Stage::Live : Stage::Failed;
-        g_liveSince = Clock::now();
+        g_liveSince = Clock::now().time_since_epoch().count();
         remote_marker::repair();
 
         logger::write("remote_body: %s", g_stage == Stage::Live ? "live" : "no camera, off");
@@ -230,6 +233,7 @@ void forgetBody(const char* why, bool removeEntity = false) {
     g_netPlayer = 0;
     g_samAtSpawn = 0;
     remote_ride::reset();
+    g_liveSince = 0;
     g_stage = Stage::Idle;
 }
 
@@ -248,12 +252,25 @@ bool diedLongAgo() {
     return Clock::now() - deadSince > kDeadRespawnDelay;
 }
 
+bool peerGone() {
+    std::lock_guard lock(g_targetMutex);
+    return Clock::now() - g_targetAt > kPeerGoneAfter;
+}
+
+// The world is left: `entityAlive` is whether the body's entity still exists (a travel starts with the world intact; a
+// load has freed it already).
+void worldLeft(const char* why, bool entityAlive) {
+    if (g_stage != Stage::Idle) forgetBody(why, entityAlive);
+    g_spawnNotBefore = Clock::now() + kWorldLeftHold;
+}
+
 void advance() {
-    g_gameplay.update(samEntity());
-    if (g_stage != Stage::Idle && (!g_gameplay.active() || samEntity() != g_samAtSpawn)) forgetBody("gameplay ended");
+    if (const char* why = g_leaveReason.exchange(nullptr)) worldLeft(why, true);
+    if (g_stage != Stage::Idle && (!sim_tick::gameplayActive() || samEntity() != g_samAtSpawn)) worldLeft("gameplay ended", false);
+    if (g_stage != Stage::Idle && peerGone()) forgetBody("the peer left", true);
     switch (g_stage) {
         case Stage::Idle:
-            if (g_enabled.load() && g_gameplay.settled() && targetFresh()) {
+            if (g_enabled.load() && sim_tick::gameplaySettled() && Clock::now() >= g_spawnNotBefore && targetFresh()) {
                 g_samAtSpawn = samEntity();
                 spawn();
                 finishSpawn();  // the camera must exist before the engine updates the remote for the first time
@@ -263,7 +280,7 @@ void advance() {
             finishSpawn();
             break;
         case Stage::Live:
-            if (Clock::now() - g_liveSince < kMarkerRepairWindow) remote_marker::repair();
+            if (remote_body::liveFor() < remote_body::kBackpackReadyAfter) remote_marker::repair();
             remote_ride::tick();
             if (diedLongAgo()) {
                 forgetBody("the body died (the engine's own damage, e.g. drowning) and stays down", true);
@@ -291,9 +308,9 @@ uint8_t slot() {
 
 bool isLive() { return g_stage == Stage::Live; }
 
-void leave(const char* why) {
-    if (g_stage != Stage::Idle) forgetBody(why, true);
-}
+void leave(const char* why) { worldLeft(why, true); }
+
+void requestLeave(const char* why) { g_leaveReason = why; }
 
 }  // namespace remote_player
 
@@ -320,6 +337,18 @@ std::optional<uint64_t> ownerKey() {
 }
 
 uint8_t slot() { return remote_player::slot(); }
+
+std::optional<std::chrono::steady_clock::duration> liveFor() {
+    const Clock::rep since = g_liveSince.load();
+    if (!since) return std::nullopt;
+    return Clock::now() - Clock::time_point(Clock::duration(since));
+}
+
+std::optional<world_to_screen::Vec3> position() {
+    std::lock_guard lock(g_targetMutex);
+    if (g_slot == kNoSlot) return std::nullopt;
+    return g_target.position;
+}
 
 void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity) {
     if (!g_enabled.load()) return;

@@ -96,6 +96,10 @@ void installEarly() {
 
 uint32_t gameplayEpoch() { return g_epoch.load(); }
 
+bool gameplayActive() { return g_gameplay.active(); }
+
+bool gameplaySettled() { return g_gameplay.settled(); }
+
 void add(Callback callback, const char* name, Gate gate) { g_entries.push_back({callback, name, gate, 0}); }
 
 }  // namespace sim_tick

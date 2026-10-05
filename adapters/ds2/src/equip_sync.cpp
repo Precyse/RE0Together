@@ -22,6 +22,10 @@ constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and
 // A request the game has not served is never repeated (pieces requested twice are both made, and the surplus lies on
 // the ground); it is only forgotten after this, in case the game dropped it.
 constexpr auto kRequestBackstop = std::chrono::seconds(120);
+// A piece created for the body that finds no slot to land in is dropped on the ground beside it: for this long after a
+// creation was asked for, a new loose piece of a kind we asked for, near the body, is ours and is deleted again.
+constexpr auto kStrayWatch = std::chrono::seconds(15);
+constexpr double kStrayRadiusMetres = 12.0;
 
 // Net thread only.
 Clock::time_point g_lastCheck;
@@ -41,6 +45,9 @@ std::set<uint64_t> g_requestedDeletes;  // handles whose deletion was asked for 
 uint64_t g_protectedOwner = 0;
 std::set<uint64_t> g_protected;  // handles of the pieces the body was born with
 std::map<uint8_t, std::vector<equip_sync::Held>> g_peerHeld;  // by source slot
+std::set<uint64_t> g_looseBefore;  // handles of the pieces on the ground near the body when a creation was first asked for
+std::set<uint32_t> g_strayKinds;   // the kinds asked for since then
+Clock::time_point g_strayWatchUntil;
 
 bool lessHeld(const equip_sync::Held& a, const equip_sync::Held& b) {
     return a.slot != b.slot ? a.slot < b.slot : a.type < b.type;
@@ -86,6 +93,32 @@ int outstandingAdds(uint8_t slot, uint32_t type, const std::vector<game::Cargo>&
         return 0;
     }
     return left;
+}
+
+// Starts (or extends) the watch for pieces that missed the body's slots: remembers what already lies near the body.
+void watchStrays(uint32_t type, Clock::time_point now) {
+    if (now >= g_strayWatchUntil) {
+        g_looseBefore.clear();
+        g_strayKinds.clear();
+        if (const auto at = remote_body::position()) {
+            for (const game::LooseCargo& loose : game::looseCargo(*at, kStrayRadiusMetres)) g_looseBefore.insert(loose.handle);
+        }
+    }
+    g_strayKinds.insert(type);
+    g_strayWatchUntil = now + kStrayWatch;
+}
+
+// Deletes the pieces we created that were dropped on the ground instead of landing in the body's slots (item duplication).
+void removeStrays(Clock::time_point now) {
+    if (now >= g_strayWatchUntil) return;
+    const auto at = remote_body::position();
+    if (!at) return;
+    for (const game::LooseCargo& loose : game::looseCargo(*at, kStrayRadiusMetres)) {
+        if (g_looseBefore.contains(loose.handle) || !g_strayKinds.contains(loose.type)) continue;
+        g_looseBefore.insert(loose.handle);
+        game::removeCargoLater(loose.handle);
+        logger::write("equip_sync: removed a piece of kind %u that was dropped instead of landing in the body's slots", loose.type);
+    }
 }
 
 // Brings the body's slots to what its partner carries: extra pieces deleted, missing kinds created. Requests the game
@@ -139,6 +172,7 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
         for (const auto& [type, count] : needed) {
             const int toAsk = count - outstandingAdds(slot, type, inSlot, now);
             for (int i = 0; i < toAsk && changes < kMaxChangesPerRound; ++i) {
+                watchStrays(type, now);
                 if (!game::addSlotPiece(ownerKey, slot, type)) continue;
                 Requested& requested = g_requestedAdds[{slot, type}];
                 if (requested.count == 0) {
@@ -178,8 +212,16 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_lastCheck = now;
     report(net);
     const std::optional<uint64_t> body = remote_body::ownerKey();
+    if (!body) {
+        g_protectedOwner = 0;  // the next body starts from a clean state
+        g_lastWanted.clear();
+        g_strayWatchUntil = {};
+        return;
+    }
+    removeStrays(now);
     const auto peer = g_peerHeld.find(remote_body::slot());
-    if (body && peer != g_peerHeld.end()) follow(*body, peer->second, now);
+    const auto live = remote_body::liveFor();
+    if (peer != g_peerHeld.end() && live && *live >= remote_body::kBackpackReadyAfter) follow(*body, peer->second, now);
 }
 
 }  // namespace equip_sync

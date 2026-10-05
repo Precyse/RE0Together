@@ -17,6 +17,7 @@
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
 #include "game.h"
 #include "hooks.h"
@@ -206,6 +207,7 @@ void pollMissions() {
 // per-player).
 uint64_t changeAreaDetour(uintptr_t unused, uintptr_t area, uintptr_t first, uintptr_t transform, uintptr_t construction,
                           uintptr_t last, uintptr_t g, uintptr_t h) {
+    remote_player::requestLeave("area change");
     if (g_host.load() && transform) {
         story_wire::Event event{};
         event.kind = static_cast<uint8_t>(story_wire::Kind::AreaChange);
