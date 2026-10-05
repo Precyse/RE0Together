@@ -40,6 +40,7 @@ constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorCompone
 constexpr uintptr_t kBehaviorShotReady = 0x730;       // byte: the Shotgun/Sniper update (0x1420121d0) calls the gate only when it is set
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
 constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: whether the weapon's update took it
+constexpr ULONGLONG kShotLogWarmupMs = 4000;  // a shot sooner after the weapon is made is not the one logged (its behavior is not set up yet)
 constexpr uintptr_t kBulletSystemGlobal = 0x14623fa48;  // the bullet pool (0x141fb5c70 adds a bullet per pellet)
 constexpr uintptr_t kBulletsMade = 0x299f28;            // u32: bullets created so far
 
@@ -78,6 +79,7 @@ struct Held {
     uintptr_t entry = 0;
     Uuid uuid{};
     ULONGLONG retryAt = 0;
+    ULONGLONG madeAt = 0;
     ULONGLONG probeAt = 0;  // when the weapon's state is logged a second time, 0 when it is not pending
     ULONGLONG fireCheckAt = 0;  // when the first fire request is looked at again, 0 when none is pending
     uint32_t bulletsAtFire = 0;
@@ -205,7 +207,8 @@ void createWeapon(uintptr_t body, uint16_t id) {
     uint16_t ids[3] = {};
     if (const uintptr_t behavior = ds2::weapon::shotBehavior(weapon)) ds2::weapon::ammoIds(behavior, ids);
     logger::write("remote_weapon: weapon %u ammo ids %x %x %x (the second is the bullet's damage attack type)", id, ids[0], ids[1], ids[2]);
-    g_held.probeAt = GetTickCount64() + kProbeDelayMs;
+    g_held.madeAt = GetTickCount64();
+    g_held.probeAt = g_held.madeAt + kProbeDelayMs;
 }
 
 // Brings the body's weapon to the one the partner has drawn.
@@ -262,7 +265,7 @@ void playShot(const weapon_wire::WeaponFire& fire) {
     if (!behavior) return;
     aimAlong(behavior, fire);
     ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) = 1;
-    if (g_held.shotLogged) return;
+    if (g_held.shotLogged || GetTickCount64() - g_held.madeAt < kShotLogWarmupMs) return;
     g_held.shotLogged = true;
     g_held.fireCheckAt = GetTickCount64() + kFireCheckDelayMs;
     g_held.bulletsAtFire = bulletsMade();
