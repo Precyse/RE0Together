@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <cstdio>
 #include <vector>
 
@@ -29,6 +30,7 @@ struct Entry {
 };
 
 std::vector<Entry> g_entries;  // written at start-up only
+std::atomic<uint32_t> g_epoch{0};
 ds2::GameplayClock g_gameplay;  // simulation thread: the local player's state machine running
 
 int64_t g_spent = 0;  // simulation thread only: counter ticks the callbacks took in this window
@@ -68,7 +70,9 @@ void report(int64_t now) {
 uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t s5, uintptr_t s6, uintptr_t s7,
                       uintptr_t s8) {
     const int64_t start = counter();
+    const bool wasActive = g_gameplay.active();
     g_gameplay.update(ds2::localPlayerEntity());
+    if (!wasActive && g_gameplay.active()) ++g_epoch;
     for (Entry& entry : g_entries) {
         if (entry.gate == sim_tick::Gate::Gameplay && !g_gameplay.active()) continue;
         const int64_t before = counter();
@@ -89,6 +93,8 @@ void installEarly() {
     hooks::install("object list update", ds2::at(kObjectListUpdate), reinterpret_cast<void*>(&updateDetour),
                    reinterpret_cast<void**>(&g_update));
 }
+
+uint32_t gameplayEpoch() { return g_epoch.load(); }
 
 void add(Callback callback, const char* name, Gate gate) { g_entries.push_back({callback, name, gate, 0}); }
 

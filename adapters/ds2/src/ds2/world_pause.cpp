@@ -2,14 +2,17 @@
 // the main loop 0x14070f190 asks GameModule::IsPaused 0x140709c60 and, when it answers yes, takes the branch that calls the
 // frame tick in mode 0 (no entity update, no world clock). IsPaused answers yes for any state of type 5..19 in the module's
 // state list (+0x340 count, +0x348 array, type at state +0x10), or when the system pause flag [0x146266968] is set and
-// 0x1426e7190() agrees. While linked, only the system part is kept: the menus stay pushed and usable, the world runs on
-// (docs/DS2_NOTES.md, "World clock under menus"). Loading screens and cutscenes keep their pause through their own states.
+// 0x1426e7190() agrees. While linked and the local player is in gameplay, only the system part is kept: the menus stay
+// pushed and usable, the world runs on (docs/DS2_NOTES.md, "World clock under menus"). Outside gameplay (a load, the title
+// screen) and in cutscenes the game keeps its pause.
 #include "ds2/world_pause.h"
 
 #include <atomic>
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/player.h"
+#include "ds2/player_state.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -42,6 +45,9 @@ bool menuStateUp(uintptr_t module) {
 bool isPausedDetour(uintptr_t module) {
     const bool paused = g_isPaused(module);
     if (!paused || !g_linked.load() || !menuStateUp(module)) return paused;
+    // A menu pushed while a load runs (or before gameplay has started) must pause the world: the engine updates half-built
+    // or half-freed objects otherwise.
+    if (!ds2::inGameplay(ds2::localPlayerEntity())) return paused;
     // Paused only because of a menu state: the system part decides.
     const bool system = decima::readPointer(ds2::at(kSystemPauseFlag)) != 0 &&
                         reinterpret_cast<bool (*)()>(ds2::at(kSystemPauseAgrees))();

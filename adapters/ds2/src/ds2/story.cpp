@@ -180,10 +180,12 @@ void pollMissions() {
     static std::unordered_map<uint64_t, uint16_t> known;
     static ULONGLONG lastPoll = 0;
     static bool baselined = false;
-    if (!g_host.load()) {
+    static uint32_t epoch = 0;
+    if (!g_host.load() || epoch != sim_tick::gameplayEpoch()) {  // a load replaces every mission: not a change to report
         known.clear();
         baselined = false;
-        return;
+        epoch = sim_tick::gameplayEpoch();
+        if (!g_host.load()) return;
     }
     const ULONGLONG now = GetTickCount64();
     if (now - lastPoll < kPollIntervalMs) return;
