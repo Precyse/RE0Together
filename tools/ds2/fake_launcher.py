@@ -37,6 +37,8 @@ ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
+PLAYER_HIT = 0x0121
+PLAYER_HIT_FORMAT = struct.Struct("<HH16sfIiHH12f")  # attacker ref (none: all zero), amount, flags, part, attack type, reserved, 3 vectors
 ENEMY_HIT_FORMAT = struct.Struct("<HH16sfIiI12f")  # enemy ref {net id, reserved, uuid} + hit fields (combat_wire.h)
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
 ENV = struct.Struct("<BBfifF64B".replace("F", "f"))  # flags, slot, hours, day, forecast clock, next threshold, 64 region types
@@ -139,6 +141,8 @@ def main():
                     "so the body made for it has a weapon without a human drawing one")
     p.add_argument("--fire", type=float, default=0.0, help="SECONDS: with --weapon, the peer fires it this often (WEAPON_FIRE) toward the enemy --enemy-hit "
                     "targets, else straight ahead")
+    p.add_argument("--player-hit", default="", help="SECONDS:AMOUNT:TYPE: as the host (use --guest), send the guest a PLAYER_HIT (an enemy's blow on "
+                    "it) of this amount and attack type every 10 s")
     p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s; an enemy the host reports gone (died or despawned) is not hit again, and a death is printed")
     p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
@@ -231,7 +235,7 @@ def serve(sock, a):
     replay_start = None
     sent_enemy = [0]
     last_hit = 0.0
-    last_weapon = last_fire = 0.0
+    last_weapon = last_fire = last_player_hit = 0.0
     struct_sent = 0
     last_bt = 0.0
     while True:
@@ -302,6 +306,12 @@ def serve(sock, a):
             sock.sendall(encode(ENEMY_HIT, peer_slot, ENEMY_HIT_FORMAT.pack(net_id, 0, uuid, amount, 0, -1, 0, *([0.0] * 12))))
             at = announced[net_id][1]
             print(f"enemy: hit enemy {net_id} for {amount}: {at[0] - local['x']:+.1f} m east, {at[1] - local['y']:+.1f} m north, {at[2] - local['z']:+.1f} m up of the local player", flush=True)
+        if a.player_hit and a.guest and start is not None and now - start >= float(a.player_hit.split(":")[0]) and now - last_player_hit >= 10.0:
+            last_player_hit = now
+            _, amount, attack_type = a.player_hit.split(":")
+            sock.sendall(encode(PLAYER_HIT, peer_slot, PLAYER_HIT_FORMAT.pack(0, 0, bytes(16), float(amount), 0, -1, int(attack_type, 0), 0,
+                                                                              *([0.0] * 4), 0.0, 0.0, 1.0, 0.0, *([0.0] * 4))))
+            print(f"player: hit the local player for {amount} (attack type {attack_type})", flush=True)
         if a.weapon and local and start is not None:
             weapon_id, weapon_kind, pellets = (int(v) for v in a.weapon.split(":"))
             if now - last_weapon >= WEAPON_RESEND_SECONDS:
