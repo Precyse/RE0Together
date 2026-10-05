@@ -6,13 +6,9 @@
 // the remote's owner a new identifier, and its backpack a new parent hash that names it.
 #include "ds2/remote_baggage.h"
 
-#include <windows.h>
-
-#include <atomic>
-
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
-#include "ds2/remote_player.h"
+#include "ds2/remote_camera.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -28,12 +24,10 @@ constexpr uintptr_t kBaggageManagerGlobal = 0x14623EA48;
 constexpr uintptr_t kManagerLocalOwner = 0x24288;  // the local player's baggage owner
 constexpr uintptr_t kOwnerIdentifier = 0x20;
 constexpr uint32_t kRemoteHash = 0x5EE70001;  // an identifier no resource carries
-constexpr ULONGLONG kWindowMs = 15000;        // how long after the spawn starts the remote's carriers are created
 
 using HandlerFn = void (*)(uintptr_t component, uintptr_t message);
 
 HandlerFn g_original = nullptr;
-std::atomic<ULONGLONG> g_windowEnd{0};
 
 uint32_t localIdentifier() {
     const uintptr_t manager = decima::readPointer(ds2::at(kBaggageManagerGlobal));
@@ -43,7 +37,7 @@ uint32_t localIdentifier() {
 }
 
 void carrierAdded(uintptr_t component, uintptr_t message) {
-    if (GetTickCount64() < g_windowEnd.load()) {
+    if (remote_camera::spawning()) {  // the carriers the engine builds while this thread spawns the remote are the remote's
         const uintptr_t resource = decima::readPointer(component + kComponentResource);
         const uint32_t local = localIdentifier();
         uint32_t identifier = 0, parent = 0, ownId = 0, parentId = 0;
@@ -70,7 +64,5 @@ void installEarly() {
     hooks::install("baggage carrier registration", ds2::at(kCarrierAdded), reinterpret_cast<void*>(&carrierAdded),
                    reinterpret_cast<void**>(&g_original));
 }
-
-void beginSpawn() { g_windowEnd = GetTickCount64() + kWindowMs; }
 
 }  // namespace remote_baggage

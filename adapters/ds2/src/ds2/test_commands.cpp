@@ -222,6 +222,12 @@ void logBodyPieces() {
     }
 }
 
+
+void watchAddress(const std::string& text) {
+    unsigned long long address = 0;
+    if (sscanf(text.c_str(), "%llx", &address) == 1) health_watch::arm(static_cast<uintptr_t>(address));
+}
+
 void tick() {
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
@@ -235,6 +241,7 @@ void tick() {
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
+    if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.

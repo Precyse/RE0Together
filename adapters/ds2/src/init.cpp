@@ -18,6 +18,7 @@
 #include "ds2/orders_diag.h"
 #include "ds2/camp_alert.h"
 #include "ds2/cargo_defer.h"
+#include "equip_sync.h"
 #include "ds2/loading_screen.h"
 #include "ds2/cutscene_log.h"
 #include "ds2/enemy_host.h"
@@ -92,6 +93,7 @@ DWORD WINAPI initThread(LPVOID) {
     story::installEarly();
     warp::installEarly();
     cargo_defer::installEarly();
+    equip_sync::installEarly();
     if (config.ordersDiagnostics) orders_diag::installEarly();
     world_pause::installEarly();
     loading_screen::installEarly();

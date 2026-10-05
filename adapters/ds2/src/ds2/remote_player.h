@@ -23,4 +23,5 @@ void leave(const char* why);
 // The same from any thread; the sim tick takes the body down. `why` must outlive the call (a literal).
 void requestLeave(const char* why);
 
+
 }  // namespace remote_player

@@ -142,6 +142,17 @@ std::vector<Cargo> takeDeliveredByPartner();
 // network id); empty when there is no such owner. Any thread.
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind);
 
+// One piece in one of an owner's slots, without the display name (cheap to read).
+struct SlotPiece {
+    uint8_t slot = 0;
+    uint64_t handle = 0;
+    uint32_t type = 0;
+};
+
+// What an owner holds in its own slots of the given kinds (0 = the local player, a vehicle's id, a remote body's network
+// id), in one pass over the pool; empty when there is no such owner. Any thread.
+std::vector<SlotPiece> slotPiecesOfKinds(uint64_t ownerKey, const uint8_t* kinds, size_t count);
+
 // Every piece an owner other than the local player's holds, in its own slots and in those of its child owners (the
 // backpack). Empty for the local player's tree.
 std::vector<Cargo> ownedCargo(uint64_t ownerKey);

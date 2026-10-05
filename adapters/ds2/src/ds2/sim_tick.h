@@ -15,10 +15,17 @@ void installEarly();
 // keeps a baseline of engine state compares it to know the baseline is from before a load.
 uint32_t gameplayEpoch();
 
-// The one "in gameplay" signal (the local player's state machine runs). `Settled` also needs it to have stayed on for
-// `kGameplaySettle` (the engine turns it on while the world still loads); building anything in the world waits for that.
+// The one world signal. The local player's state machine comes back on while a load or travel still shows its loading
+// screen, so "in gameplay" alone does not mean the world is there. `inWorld`: the state machine runs and no loading screen
+// is up (what the engine's lists can be read under). `worldReady`: that, for long enough that the world has settled
+// (what building anything in the world waits for). `gameplayActive` is the state machine alone: it stops when the world
+// is torn down, not while a loading screen covers a world that stays (a teleport). Any thread.
 bool gameplayActive();
-bool gameplaySettled();
+bool inWorld();
+// The world is built (the loading screen has been gone a moment) but not yet settled: what must be done to the world
+// before the remote body is built in it (sweeping the pieces a load dropped) runs here.
+bool worldBuilt();
+bool worldReady();
 
 // When a callback runs. `Gameplay` callbacks walk engine lists (camps, structures, missions, the clock) that are freed
 // and rebuilt by a load, so they are skipped from the moment the local player's state machine stops until it runs again.

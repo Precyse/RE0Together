@@ -17,6 +17,9 @@ public:
     ~SpawnScope();
 };
 
+// Whether this thread is inside a SpawnScope: what it creates now is the remote's.
+bool spawning();
+
 // Adds the camera component and builds the remote's mode. False when Sam's camera is not readable yet.
 bool give();
 

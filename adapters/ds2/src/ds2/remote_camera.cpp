@@ -120,6 +120,8 @@ bool initModeForRemote(uintptr_t mode) {
 
 namespace remote_camera {
 
+bool spawning() { return t_spawning; }
+
 SpawnScope::SpawnScope() { t_spawning = true; }
 
 SpawnScope::~SpawnScope() { t_spawning = false; }
