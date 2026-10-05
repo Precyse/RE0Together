@@ -58,6 +58,7 @@ Clock::time_point g_samBoardedAt;  // the last update that seated the local play
 bool g_passenger = false;     // the peer reports a passenger seat: the remote sits in the second pod
 bool g_followsLocal = false;  // the local player drives the same vehicle: the remote rides only while he does
 uint64_t g_vehicleId = 0;
+uint64_t g_localPassengerSeen = 0;  // the vehicle the local player was last seated in as a passenger
 
 using ClearParentFn = void (*)(uintptr_t entity);
 
@@ -109,9 +110,8 @@ bool passengerSeat(uintptr_t vehicle, decima::WorldTransform& seat) {
 // to the second pod right after his mover wrote the driver's seat, and let go when his ride states have ended.
 void seatLocalPassenger() {
     const uint64_t vehicleId = setdriver_guard::localPassengerVehicle();
-    static uint64_t seenId = 0;
-    if (vehicleId != seenId) {
-        seenId = vehicleId;
+    if (vehicleId != g_localPassengerSeen) {
+        g_localPassengerSeen = vehicleId;
         g_samBoardedAt = Clock::now();  // the ride states take a moment to leave the on-foot phase
     }
     if (!vehicleId) return;
@@ -164,6 +164,7 @@ void reset() {
     g_passenger = false;
     g_followsLocal = false;
     g_vehicleId = 0;
+    g_localPassengerSeen = 0;
 }
 
 bool holdsBody() { return g_stage != Stage::OnFoot; }

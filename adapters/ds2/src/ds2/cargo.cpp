@@ -239,6 +239,36 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
     return out;
 }
 
+// The head of a pool entry (handle .. slot): what a scan needs to pick entries without copying the whole pool.
+constexpr uintptr_t kEntryHead = kBaggageHandle;
+constexpr size_t kEntryHeadSize = kBaggageSlot + sizeof(uintptr_t) - kBaggageHandle;
+
+struct EntryHead {
+    uint64_t handle;
+    uintptr_t item;
+    float durability;
+    uintptr_t slot;
+};
+
+// Calls visit(entryAddress, head) for every used entry, reading only each entry's head (the pool is megabytes; this runs on
+// the simulation thread).
+template <class Visit>
+void scanPool(uintptr_t manager, Visit visit) {
+    const int32_t count = readCount(manager + kPoolCount, kMaxPool);
+    const uintptr_t pool = decima::readPointer(manager + kPoolData);
+    for (int32_t i = 0; pool && i < count; ++i) {
+        const uintptr_t entry = pool + static_cast<uintptr_t>(i) * kBaggageSize;
+        uint8_t raw[kEntryHeadSize];
+        if (!decima::safeCopy(raw, entry + kEntryHead, sizeof(raw))) continue;
+        EntryHead head;
+        std::memcpy(&head.handle, raw + kBaggageHandle - kEntryHead, sizeof(head.handle));
+        std::memcpy(&head.item, raw + kBaggageItem - kEntryHead, sizeof(head.item));
+        std::memcpy(&head.durability, raw + kBaggageDurability - kEntryHead, sizeof(head.durability));
+        std::memcpy(&head.slot, raw + kBaggageSlot - kEntryHead, sizeof(head.slot));
+        if (head.handle != kFreeHandle && head.item) visit(entry, head);
+    }
+}
+
 std::string itemName(uintptr_t item) { return decima::localizedText(decima::readPointer(item + kItemName)); }
 
 std::vector<game::Cargo> piecesIn(uintptr_t manager, const std::vector<SlotRange>& slots) {
@@ -368,6 +398,25 @@ std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {
                                                                      : std::vector<Cargo>{};
 }
 
+std::vector<SlotPiece> slotPiecesOfKinds(uint64_t ownerKey, const uint8_t* kinds, size_t count) {
+    std::vector<SlotPiece> out;
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
+    if (!owner || sharesWithLocalPlayer(baggage, ownerKey, owner)) return out;
+    std::vector<std::pair<uint8_t, std::vector<SlotRange>>> byKind;
+    for (size_t i = 0; i < count; ++i) byKind.emplace_back(kinds[i], slotsOfKind(owner, kinds[i]));
+    scanPool(baggage, [&](uintptr_t, const EntryHead& head) {
+        for (const auto& [kind, slots] : byKind) {
+            uint32_t type = 0;
+            if (inSlots(slots, head.slot) && decima::safeRead(head.item + kItemType, type)) {
+                out.push_back({kind, head.handle, type});
+                return;
+            }
+        }
+    });
+    return out;
+}
+
 std::vector<Cargo> ownedCargo(uint64_t ownerKey) {
     const uintptr_t baggage = manager();
     const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
@@ -388,27 +437,22 @@ bool writeFloat(uintptr_t address, float value) {
 
 void markOwnedCargo(uint64_t ownerKey) {
     const uintptr_t baggage = manager();
-    if (!baggage) return;
-    const std::vector<Cargo> pieces = ownedCargo(ownerKey);
-    if (pieces.empty()) return;
-    const int32_t count = readCount(baggage + kPoolCount, kMaxPool);
-    const uintptr_t pool = decima::readPointer(baggage + kPoolData);
-    for (int32_t i = 0; pool && i < count; ++i) {
-        const uintptr_t entry = pool + static_cast<uintptr_t>(i) * kBaggageSize;
-        uint64_t handle = kFreeHandle;
-        if (!decima::safeRead(entry + kBaggageHandle, handle)) continue;
-        const bool ours = std::any_of(pieces.begin(), pieces.end(), [&](const Cargo& piece) { return piece.handle == handle; });
-        if (ours) writeFloat(entry + kBaggageDurability, kBodyPieceMark);
-    }
+    const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
+    if (!owner || ownerKey == kLocalPlayerKey || sharesWithLocalPlayer(baggage, ownerKey, owner)) return;
+    std::vector<SlotRange> slots;
+    collectSlots(owner, true, 0, slots);
+    scanPool(baggage, [&](uintptr_t entry, const EntryHead& head) {
+        if (inSlots(slots, head.slot) && head.durability != kBodyPieceMark) writeFloat(entry + kBaggageDurability, kBodyPieceMark);
+    });
 }
 
 std::vector<uint64_t> markedLooseCargo() {
     std::vector<uint64_t> handles;
     const uintptr_t baggage = manager();
     if (!baggage) return handles;
-    for (const PoolEntry& entry : livePool(baggage)) {
-        if (!entry.slot && entry.durability == kBodyPieceMark) handles.push_back(entry.handle);
-    }
+    scanPool(baggage, [&](uintptr_t, const EntryHead& head) {
+        if (!head.slot && head.durability == kBodyPieceMark) handles.push_back(head.handle);
+    });
     return handles;
 }
 

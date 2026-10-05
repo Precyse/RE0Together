@@ -11,8 +11,7 @@
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
-#include "ds2/player.h"
-#include "ds2/player_state.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -47,7 +46,7 @@ bool isPausedDetour(uintptr_t module) {
     if (!paused || !g_linked.load() || !menuStateUp(module)) return paused;
     // A menu pushed while a load runs (or before gameplay has started) must pause the world: the engine updates half-built
     // or half-freed objects otherwise.
-    if (!ds2::inGameplay(ds2::localPlayerEntity())) return paused;
+    if (!sim_tick::inWorld()) return paused;
     // Paused only because of a menu state: the system part decides.
     const bool system = decima::readPointer(ds2::at(kSystemPauseFlag)) != 0 &&
                         reinterpret_cast<bool (*)()>(ds2::at(kSystemPauseAgrees))();

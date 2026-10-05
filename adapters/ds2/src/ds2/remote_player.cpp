@@ -16,7 +16,6 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
-#include "ds2/loading_screen.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
 #include "ds2/remote_appearance.h"
@@ -67,9 +66,6 @@ constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves 
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
 constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
-// The loading screen can outlast the player's state machine coming back on; a body built while the world still streams in
-// stalls the load, so none is built until the screen has been gone for this long.
-constexpr auto kAfterLoadingScreen = std::chrono::seconds(3);
 constexpr uint8_t kNoSlot = 0xFF;
 constexpr uintptr_t kRemovePlayer = 0x1407549f0;  // PlayerManagerGame::RemovePlayer(manager, player): out of the lists, player-left
 
@@ -138,7 +134,6 @@ void spawn() {
     at.position.x += forward[0] * kSpawnAhead + right[0] * kSpawnRight;
     at.position.y += forward[1] * kSpawnAhead + right[1] * kSpawnRight;
     remote_appearance::onSpawned();
-    remote_baggage::beginSpawn();
     remote_marker::snapshot();
     {
         remote_camera::SpawnScope scope;
@@ -218,11 +213,28 @@ constexpr auto kDeadRespawnDelay = std::chrono::seconds(3);
 
 // Takes the body's entity out of the world, so a world that goes on (a fast travel, a dead body) has no entity left whose
 // camera and player data are gone.
+// DSPlayerSystem keeps a table of per-player pointers (+0x226520, one per player slot). Removing a player entity clears the
+// whole table, and the system's next update dereferences Sam's entry (file va 0x140D93A06): the entries are put back,
+// all but the removed body's (found by watching the table while an entity was removed).
+constexpr uintptr_t kPlayerSystemGlobal = 0x14623E9C8;
+constexpr uintptr_t kPlayerSlotTable = 0x226520;
+constexpr size_t kPlayerSlots = 4;
+constexpr size_t kRemoteSlot = 1;
+
 void removeBodyEntity(uintptr_t entity) {
+    const uintptr_t system = decima::readPointer(ds2::at(kPlayerSystemGlobal));
+    uintptr_t table[kPlayerSlots] = {};
+    const bool saved = system && decima::safeCopy(table, system + kPlayerSlotTable, sizeof(table));
     __try {
         reinterpret_cast<void (*)(uintptr_t, bool)>(ds2::at(kRemoveEntity))(entity, true);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logger::write("remote_body: removing the body's entity faulted");
+    }
+    Sleep(40);  // TEMP experiment: let the engine's own jobs finish the removal before the next update
+    for (size_t slot = 0; saved && slot < kPlayerSlots; ++slot) {
+        if (slot != kRemoteSlot && !decima::readPointer(system + kPlayerSlotTable + slot * sizeof(uintptr_t))) {
+            ds2::field<uintptr_t>(system, kPlayerSlotTable + slot * sizeof(uintptr_t)) = table[slot];
+        }
     }
 }
 
@@ -299,11 +311,11 @@ void advance() {
     if (g_stage != Stage::Idle && (!sim_tick::gameplayActive() || samEntity() != g_samAtSpawn)) worldLeft("gameplay ended", false);
     switch (g_stage) {
         case Stage::Idle:
-            if (!g_looseLoggedAtStart && sim_tick::gameplaySettled()) {
+            if (!g_looseLoggedAtStart && sim_tick::worldReady()) {
                 g_looseLoggedAtStart = true;
                 logLooseCargo("at the start of gameplay, before the body");
             }
-            if (g_enabled.load() && sim_tick::gameplaySettled() && loading_screen::goneFor(kAfterLoadingScreen) && targetFresh()) {
+            if (g_enabled.load() && sim_tick::worldReady() && targetFresh()) {
                 g_samAtSpawn = samEntity();
                 spawn();
                 finishSpawn();  // the camera must exist before the engine updates the remote for the first time

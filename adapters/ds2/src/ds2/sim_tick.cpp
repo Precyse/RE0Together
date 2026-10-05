@@ -3,10 +3,12 @@
 #include <windows.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <vector>
 
 #include "ds2/engine.h"
+#include "ds2/loading_screen.h"
 #include "ds2/player.h"
 #include "ds2/player_state.h"
 #include "hooks.h"
@@ -15,6 +17,10 @@
 namespace {
 
 constexpr uintptr_t kObjectListUpdate = 0x140215460;  // the engine's per-frame update of live objects
+// The loading screen has to have been gone this long before the world counts as ready: the engine finishes streaming and
+// registering objects a moment after it goes.
+constexpr std::chrono::milliseconds kAfterLoadingScreen{3000};
+constexpr std::chrono::milliseconds kBuiltAfterLoadingScreen{1000};
 constexpr double kReportMinMicros = 20.0;  // callbacks cheaper than this are not listed
 constexpr double kReportSeconds = 5.0;  // how often the frame rate and the callbacks' cost are logged
 
@@ -74,7 +80,7 @@ uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t 
     g_gameplay.update(ds2::localPlayerEntity());
     if (!wasActive && g_gameplay.active()) ++g_epoch;
     for (Entry& entry : g_entries) {
-        if (entry.gate == sim_tick::Gate::Gameplay && !g_gameplay.active()) continue;
+        if (entry.gate == sim_tick::Gate::Gameplay && !sim_tick::inWorld()) continue;
         const int64_t before = counter();
         entry.callback();
         entry.spent += counter() - before;
@@ -98,7 +104,11 @@ uint32_t gameplayEpoch() { return g_epoch.load(); }
 
 bool gameplayActive() { return g_gameplay.active(); }
 
-bool gameplaySettled() { return g_gameplay.settled(); }
+bool worldBuilt() { return g_gameplay.active() && loading_screen::goneFor(kBuiltAfterLoadingScreen); }
+
+bool inWorld() { return g_gameplay.active() && !loading_screen::shown(); }
+
+bool worldReady() { return g_gameplay.settled() && loading_screen::goneFor(kAfterLoadingScreen); }
 
 void add(Callback callback, const char* name, Gate gate) { g_entries.push_back({callback, name, gate, 0}); }
 
