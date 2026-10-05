@@ -22,6 +22,10 @@ HELLO, WELCOME, PEER_UP, HEARTBEAT, PLAYER_STATE, VEHICLE_STATE = 0x0001, 0x0002
 ANIM_STATE = 0x010A
 EQUIP_STATE = 0x010C
 WEAPON_STATE, WEAPON_FIRE = 0x0124, 0x0125
+WEAPON_STATE_FORMAT = struct.Struct("<HBB")  # weapon id, hand (1 = right), reserved (weapon_wire.h)
+WEAPON_FIRE_FORMAT = struct.Struct("<HBBI3f3f")  # weapon id, kind, reserved, pellets, origin, direction (weapon_wire.h)
+WEAPON_RESEND_SECONDS = 5.0  # the peer repeats its weapon state, so a joining adapter sees it
+MUZZLE_HEIGHT_METRES = 1.0  # a shot leaves this far above the peer's feet
 CARGO_LIST = 0x0101
 VEHICLE_LOAD = 0x0109
 VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
@@ -131,6 +135,10 @@ def main():
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
     p.add_argument("--enemy-id", type=int, default=0, help="the net id --enemy-hit keeps hitting while it exists (default: the nearest enemy)")
+    p.add_argument("--weapon", default="", help="ID:KIND:PELLETS: the peer holds this weapon (WEAPON_STATE; kind 1 Gun, 2 ShotGun, ...), "
+                    "so the body made for it has a weapon without a human drawing one")
+    p.add_argument("--fire", type=float, default=0.0, help="SECONDS: with --weapon, the peer fires it this often (WEAPON_FIRE) toward the enemy --enemy-hit "
+                    "targets, else straight ahead")
     p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s; an enemy the host reports gone (died or despawned) is not hit again, and a death is printed")
     p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
@@ -223,6 +231,7 @@ def serve(sock, a):
     replay_start = None
     sent_enemy = [0]
     last_hit = 0.0
+    last_weapon = last_fire = 0.0
     struct_sent = 0
     last_bt = 0.0
     while True:
@@ -293,6 +302,22 @@ def serve(sock, a):
             sock.sendall(encode(ENEMY_HIT, peer_slot, ENEMY_HIT_FORMAT.pack(net_id, 0, uuid, amount, 0, -1, 0, *([0.0] * 12))))
             at = announced[net_id][1]
             print(f"enemy: hit enemy {net_id} for {amount}: {at[0] - local['x']:+.1f} m east, {at[1] - local['y']:+.1f} m north, {at[2] - local['z']:+.1f} m up of the local player", flush=True)
+        if a.weapon and local and start is not None:
+            weapon_id, weapon_kind, pellets = (int(v) for v in a.weapon.split(":"))
+            if now - last_weapon >= WEAPON_RESEND_SECONDS:
+                last_weapon = now
+                sock.sendall(encode(WEAPON_STATE, peer_slot, WEAPON_STATE_FORMAT.pack(weapon_id, 1, 0)))
+            if a.fire > 0 and now - last_fire >= a.fire:
+                last_fire = now
+                origin = (local["x"], local["y"], local["z"] + MUZZLE_HEIGHT_METRES)
+                aim = (1.0, 0.0, 0.0)
+                if hit_target in announced:
+                    at = announced[hit_target][1]
+                    delta = (at[0] - origin[0], at[1] - origin[1], at[2] - origin[2])
+                    length = max(sum(c * c for c in delta) ** 0.5, 1e-6)
+                    aim = tuple(c / length for c in delta)
+                sock.sendall(encode(WEAPON_FIRE, peer_slot, WEAPON_FIRE_FORMAT.pack(weapon_id, weapon_kind, 0, pellets, *origin, *aim)))
+                print(f"weapon: fired {weapon_id} toward {aim[0]:+.2f} {aim[1]:+.2f} {aim[2]:+.2f}", flush=True)
         if a.bt_regions and now - last_bt >= 1.0:
             last_bt = now
             sock.sendall(encode(0x0128, peer_slot, struct.pack("<Q", int(a.bt_regions, 16))))
