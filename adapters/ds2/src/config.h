@@ -8,6 +8,7 @@ struct Config {
     bool mirrorAnimation = false;  // loopback test: the partner body copies the local player animation
     bool logFacts = false;         // log every FactDatabase write (mapping which facts an action changes)
     bool enemySync = false;    // enemies: the host reports them, a guest tames its own and the host's reports drive them
+    bool diagnostics = false;  // log-only damage and weapon instruments (ds2/damage_diag.h, remote_weapon's comparison with Sam's weapon); never on in a shipped config
     bool ordersDiagnostics = false;  // log-only instruments for the partner-cargo checks (ds2/orders_diag.h); never on in a shipped config
     bool testCommands = false;  // command files in the coop folder for live checks (teleport, area, weapon, BT region)
     bool cutsceneLog = false;   // log every cutscene (Sequence) start and game-state change

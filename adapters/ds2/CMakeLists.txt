@@ -71,6 +71,7 @@ add_library(ds2_adapter SHARED
     src/enemy_directory.cpp
     src/ds2/combat_hook.cpp
     src/ds2/combat_log.cpp
+    src/ds2/damage_diag.cpp
     src/ds2/damage_params.cpp
     src/ds2/enemy_host.cpp
     src/ds2/enemy_puppet.cpp

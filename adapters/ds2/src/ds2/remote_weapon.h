@@ -10,8 +10,8 @@
 namespace remote_weapon {
 
 // Start-up: registers the per-frame work on the simulation thread. `attachMode` is the SetParent mode the weapon is
-// attached with; the engine's own creation uses ds2/remote_weapon.cpp kEngineAttachMode and nothing is redone for it.
-void installEarly(uint8_t attachMode);
+// attached with; `diagnostics` makes it log how the body's weapon differs from Sam's weapon of the same id once it is made; the engine's own creation uses ds2/remote_weapon.cpp kEngineAttachMode and nothing is redone for it.
+void installEarly(uint8_t attachMode, bool diagnostics);
 
 // Called by the shot detours (ds2/local_weapon.cpp) before the engine makes a shot with `behavior`: logs the first time
 // the engine runs a shot of the weapon this module made for the body. Any thread.

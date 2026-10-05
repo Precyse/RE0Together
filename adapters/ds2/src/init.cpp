@@ -14,6 +14,7 @@
 #include "player_sync.h"
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
+#include "ds2/damage_diag.h"
 #include "ds2/health_watch.h"
 #include "ds2/orders_diag.h"
 #include "ds2/camp_alert.h"
@@ -82,12 +83,13 @@ DWORD WINAPI initThread(LPVOID) {
         camp_alert::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
+        if (config.diagnostics) damage_diag::installEarly();
         health_watch::installEarly();
     }
     weapon_sync::setEnabled(config.weaponSync);
     if (config.weaponSync) {
         local_weapon::installEarly();
-        remote_weapon::installEarly(config.weaponAttachMode);
+        remote_weapon::installEarly(config.weaponAttachMode, config.diagnostics);
         damage_veto::installEarly();
     }
     story::installEarly();

@@ -47,6 +47,8 @@ Config loadConfig() {
             config.enemySync = value == "1";
         } else if (key == "log_facts") {
             config.logFacts = value == "1";
+        } else if (key == "diagnostics") {
+            config.diagnostics = value == "1";
         } else if (key == "orders_diagnostics") {
             config.ordersDiagnostics = value == "1";
         } else if (key == "test_commands") {

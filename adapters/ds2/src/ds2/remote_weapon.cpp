@@ -50,6 +50,7 @@ using SetParentFn = void (*)(uintptr_t entity, uintptr_t parent, uint32_t mode);
 using Uuid = std::array<uint8_t, 16>;
 
 uint8_t g_attachMode = kEngineAttachMode;
+bool g_diagnostics = false;
 
 std::mutex g_mutex;  // the net thread hands over, the simulation thread takes
 weapon_wire::WeaponState g_wanted{weapon_wire::kHolstered, 0, 0};
@@ -155,6 +156,41 @@ void setTableIndex(uintptr_t table, uint32_t index) {
     ds2::field<uint32_t>(table, ds2::weapon::kTableRequestedIndex) = index;
 }
 
+// Diagnostics: the body's weapon against Sam's weapon of the same id (his holstered copy), entity and shot behavior, listing the
+// qwords that differ and are not both pointers. A drawn and initialized weapon differs from the body's in the fields that make the
+// engine update it.
+constexpr size_t kCompareEntityBytes = 0x800, kCompareBehaviorBytes = 0x900, kMaxDifferencesLogged = 40;
+
+bool pointerLike(uint64_t value) { return value > 0x10000 && value < 0x7FFFFFFF0000ull; }
+
+void logDifferences(const char* what, uintptr_t sam, uintptr_t body, size_t bytes) {
+    size_t logged = 0;
+    for (size_t offset = 0; offset < bytes && logged < kMaxDifferencesLogged; offset += sizeof(uint64_t)) {
+        uint64_t a = 0, b = 0;
+        if (!decima::safeRead(sam + offset, a) || !decima::safeRead(body + offset, b) || a == b || (pointerLike(a) && pointerLike(b))) continue;
+        logger::write("remote_weapon: %s +0x%zx: Sam's %llx, the body's %llx", what, offset, static_cast<unsigned long long>(a),
+                      static_cast<unsigned long long>(b));
+        ++logged;
+    }
+}
+
+void compareWithSam() {
+    const uintptr_t sam = remote_player::samEntity();
+    const uintptr_t table = sam ? decima::readPointer(sam + ds2::weapon::kEntityTable) : 0;
+    uintptr_t samWeapon = 0;
+    for (uint32_t i = 1; table && i < ds2::weapon::kTableEntries && !samWeapon; ++i) {
+        const uintptr_t weapon = decima::readPointer(table + ds2::weapon::kTableFirstEntry + i * ds2::weapon::kEntrySize + ds2::weapon::kEntryWeapon);
+        if (weapon && ds2::weapon::weaponId(weapon) == g_held.id) samWeapon = weapon;
+    }
+    if (!samWeapon) {
+        logger::write("remote_weapon: Sam has no weapon %u to compare with", g_held.id);
+        return;
+    }
+    logDifferences("entity", samWeapon, g_held.weapon, kCompareEntityBytes);
+    const uintptr_t samBehavior = ds2::weapon::shotBehavior(samWeapon), bodyBehavior = ds2::weapon::shotBehavior(g_held.weapon);
+    if (samBehavior && bodyBehavior) logDifferences("behavior", samBehavior, bodyBehavior, kCompareBehaviorBytes);
+}
+
 // Gives the weapon's entry back to the table: holstered (index 0), weapon removed, entry free again. Only for a body
 // that still exists; `body`'s table memory is read and written here.
 void dropWeapon(uintptr_t body) {
@@ -240,7 +276,10 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
     }
     if (g_held.probeAt && now >= g_held.probeAt) {
         g_held.probeAt = 0;
-        if (g_held.weapon) logWeaponState("after 1 s", body);
+        if (g_held.weapon) {
+            logWeaponState("after 1 s", body);
+            if (g_diagnostics) compareWithSam();
+        }
     }
     if (g_held.id == wanted.weaponId || now < g_held.retryAt) return;
     dropWeapon(body);
@@ -307,8 +346,9 @@ uint16_t attackType() {
     return behavior ? ds2::weapon::bulletAttackType(behavior) : 0;
 }
 
-void installEarly(uint8_t attachMode) {
+void installEarly(uint8_t attachMode, bool diagnostics) {
     g_attachMode = attachMode;
+    g_diagnostics = diagnostics;
     hooks::install("weapon update gate", ds2::at(kWeaponUpdateGate), reinterpret_cast<void*>(&gateDetour),
                    reinterpret_cast<void**>(&g_originalGate));
     sim_tick::add(&tick, "remote weapon", sim_tick::Gate::Gameplay);
