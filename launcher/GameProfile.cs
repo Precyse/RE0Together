@@ -13,7 +13,8 @@ public sealed record SaveSyncProfile(
 
 public sealed record GameProfile(
     string Id, string Name, int SteamAppId, string Exe, int MaxPlayers, int Port,
-    List<AdapterFile> AdapterFiles, SaveSyncProfile? SaveSync = null, string? AdapterLog = null)
+    List<AdapterFile> AdapterFiles, SaveSyncProfile? SaveSync = null, string? AdapterLog = null,
+    List<string>? Characters = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

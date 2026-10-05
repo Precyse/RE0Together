@@ -256,8 +256,14 @@ public sealed class App
             : _bridge?.IsReady == true ? AppState.GameRunning
             : _lobby.OwnerId == _transport!.LocalId ? AppState.Hosting
             : AppState.Joined;
-        return new AppStatus(state, _lobby.Id, _session?.RttMs);
+        return new AppStatus(state, _lobby.Id, _session?.RttMs) { Players = PlayerSlots(_lobby) };
     }
+
+    private IReadOnlyList<PlayerSlot> PlayerSlots(ILobby lobby) =>
+        lobby.Members
+            .OrderByDescending(member => member.Id == lobby.OwnerId)
+            .Select(member => new PlayerSlot(member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId))
+            .ToList();
 
     private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? SteamLibrary.FindGameDir(profile.SteamAppId);
 
