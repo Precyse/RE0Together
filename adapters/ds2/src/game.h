@@ -142,6 +142,10 @@ std::vector<Cargo> takeDeliveredByPartner();
 // network id); empty when there is no such owner. Any thread.
 std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind);
 
+// Every piece an owner other than the local player's holds, in its own slots and in those of its child owners (the
+// backpack). Empty for the local player's tree.
+std::vector<Cargo> ownedCargo(uint64_t ownerKey);
+
 // Asks the game to create a piece of `type` in that owner's slot of `slotKind`. False when there is no such owner or
 // the game refused. Any thread.
 bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type);

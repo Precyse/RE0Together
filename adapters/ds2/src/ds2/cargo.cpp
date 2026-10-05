@@ -365,6 +365,15 @@ std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind) {
                                                                      : std::vector<Cargo>{};
 }
 
+std::vector<Cargo> ownedCargo(uint64_t ownerKey) {
+    const uintptr_t baggage = manager();
+    const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
+    if (!owner || ownerKey == kLocalPlayerKey || sharesWithLocalPlayer(baggage, ownerKey, owner)) return {};
+    std::vector<SlotRange> slots;
+    collectSlots(owner, true, 0, slots);
+    return piecesIn(baggage, slots);
+}
+
 bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type) {
     const uintptr_t baggage = manager();
     const uintptr_t owner = baggage ? findOwner(baggage, ownerKey) : 0;
