@@ -7,6 +7,8 @@
 // manager's lock and is served by the game on its next update, so any thread may ask. A piece on the ground is made
 // the same way the game spawns world cargo: a create info (kind, world position, no owner) handed to the manager's
 // create, which reserves the piece under the manager's lock and builds it on its update (docs/DS2_NOTES.md, "Cargo").
+#include <windows.h>
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -56,6 +58,7 @@ constexpr uintptr_t kBaggageCategory = 0x82;  // mission cargo category byte
 constexpr uintptr_t kBaggageDurability = 0x84;
 constexpr uintptr_t kBaggageSlot = 0x98;      // the owner slot holding it, 0 when on the ground
 constexpr uint64_t kFreeHandle = ~0ull;
+constexpr float kBodyPieceMark = 0.98765f;  // a durability no piece of the world has: the remote body's pieces carry it
 // A baggage owner.
 constexpr uintptr_t kOwnerKey = 0x18;  // 0 = the local player
 constexpr uintptr_t kOwnerActive = 0xBC;  // the menus' gather skips an owner that is not active
@@ -372,6 +375,41 @@ std::vector<Cargo> ownedCargo(uint64_t ownerKey) {
     std::vector<SlotRange> slots;
     collectSlots(owner, true, 0, slots);
     return piecesIn(baggage, slots);
+}
+
+bool writeFloat(uintptr_t address, float value) {
+    __try {
+        *reinterpret_cast<float*>(address) = value;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void markOwnedCargo(uint64_t ownerKey) {
+    const uintptr_t baggage = manager();
+    if (!baggage) return;
+    const std::vector<Cargo> pieces = ownedCargo(ownerKey);
+    if (pieces.empty()) return;
+    const int32_t count = readCount(baggage + kPoolCount, kMaxPool);
+    const uintptr_t pool = decima::readPointer(baggage + kPoolData);
+    for (int32_t i = 0; pool && i < count; ++i) {
+        const uintptr_t entry = pool + static_cast<uintptr_t>(i) * kBaggageSize;
+        uint64_t handle = kFreeHandle;
+        if (!decima::safeRead(entry + kBaggageHandle, handle)) continue;
+        const bool ours = std::any_of(pieces.begin(), pieces.end(), [&](const Cargo& piece) { return piece.handle == handle; });
+        if (ours) writeFloat(entry + kBaggageDurability, kBodyPieceMark);
+    }
+}
+
+std::vector<uint64_t> markedLooseCargo() {
+    std::vector<uint64_t> handles;
+    const uintptr_t baggage = manager();
+    if (!baggage) return handles;
+    for (const PoolEntry& entry : livePool(baggage)) {
+        if (!entry.slot && entry.durability == kBodyPieceMark) handles.push_back(entry.handle);
+    }
+    return handles;
 }
 
 bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type) {

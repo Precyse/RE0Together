@@ -146,6 +146,12 @@ std::vector<Cargo> slotPieces(uint64_t ownerKey, uint8_t slotKind);
 // backpack). Empty for the local player's tree.
 std::vector<Cargo> ownedCargo(uint64_t ownerKey);
 
+// The remote body's pieces are baggage in the world's pool, so a save writes them, and the next load drops them on the
+// ground as orphans. Each piece the body holds carries a mark in its durability (it survives the save); a loose piece with
+// the mark is one of the body's, whichever machine loaded the save. Any thread.
+void markOwnedCargo(uint64_t ownerKey);
+std::vector<uint64_t> markedLooseCargo();
+
 // Asks the game to create a piece of `type` in that owner's slot of `slotKind`. False when there is no such owner or
 // the game refused. Any thread.
 bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type);

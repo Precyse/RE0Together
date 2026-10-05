@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "log.h"
 #include "remote_body.h"
@@ -46,6 +47,7 @@ uint64_t g_protectedOwner = 0;
 std::set<uint64_t> g_protected;  // handles of the pieces the body was born with
 std::map<uint8_t, std::vector<equip_sync::Held>> g_peerHeld;  // by source slot
 std::set<uint64_t> g_looseBefore;  // handles of the pieces on the ground near the body when a creation was first asked for
+bool g_awaitingMatch = false;      // follow changed the body's slots and they have not matched the partner's since
 std::set<uint32_t> g_strayKinds;   // the kinds asked for since then
 Clock::time_point g_strayWatchUntil;
 
@@ -63,8 +65,7 @@ std::vector<equip_sync::Held> heldBy(uint64_t ownerKey) {
     return held;
 }
 
-void report(NetClient& net) {
-    const std::vector<equip_sync::Held> held = heldBy(0);
+void report(NetClient& net, const std::vector<equip_sync::Held>& held) {
     if (held == g_reported) return;
     const equip_sync::EquipHeader header{static_cast<uint32_t>(held.size()), 0};
     std::vector<uint8_t> payload(sizeof(header) + held.size() * sizeof(equip_sync::Held));
@@ -95,6 +96,17 @@ int outstandingAdds(uint8_t slot, uint32_t type, const std::vector<game::Cargo>&
     return left;
 }
 
+// The body's pieces by slot, for the log: "slot:kind" per piece.
+std::string describeSlots(uint64_t ownerKey) {
+    std::string text;
+    for (const uint8_t slot : equip_sync::kMirroredSlots) {
+        for (const game::Cargo& piece : game::slotPieces(ownerKey, slot)) {
+            text += " " + std::to_string(slot) + ":" + std::to_string(piece.type);
+        }
+    }
+    return text.empty() ? " none" : text;
+}
+
 // Starts (or extends) the watch for pieces that missed the body's slots: remembers what already lies near the body.
 void watchStrays(uint32_t type, Clock::time_point now) {
     if (now >= g_strayWatchUntil) {
@@ -121,6 +133,23 @@ void removeStrays(Clock::time_point now) {
     }
 }
 
+// Deletes the body's pieces that a load dropped on the ground: they carry the mark the body's pieces get (game.h).
+void removeOrphans() {
+    for (const uint64_t handle : game::markedLooseCargo()) {
+        game::removeCargoLater(handle);
+        logger::write("equip_sync: removed a piece of the body's dropped by a load (%llx)", static_cast<unsigned long long>(handle));
+    }
+}
+
+// A load drops the pieces its save held for the body at the start of gameplay; the pieces of a world being torn down look
+// loose for a moment too, so the sweep runs once per gameplay, after the world has settled.
+void removeOrphansOncePerGameplay() {
+    static uint32_t sweptEpoch = 0;
+    if (!sim_tick::gameplaySettled() || sweptEpoch == sim_tick::gameplayEpoch()) return;
+    sweptEpoch = sim_tick::gameplayEpoch();
+    removeOrphans();
+}
+
 // Brings the body's slots to what its partner carries: extra pieces deleted, missing kinds created. Requests the game
 // has not served yet count as done.
 void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Clock::time_point now) {
@@ -142,8 +171,11 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
     if (heldBy(ownerKey) == wanted) {
         g_requestedAdds.clear();
         g_requestedDeletes.clear();
+        if (g_awaitingMatch) logger::write("equip_sync: the body's slots now match the partner's:%s", describeSlots(ownerKey).c_str());
+        g_awaitingMatch = false;
         return;
     }
+    const std::string before = describeSlots(ownerKey);
     int changes = 0;
     std::string plan;
     std::set<uint64_t> present;
@@ -168,7 +200,10 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
             }
         }
         std::map<uint32_t, int> needed;  // kind -> how many are missing in this slot
-        for (const equip_sync::Held& want : missing) ++needed[want.type];
+        // A worn-gear slot holds one piece and the body is born with some: never add to one that is not empty.
+        if (!isGear(slot) || inSlot.empty()) {
+            for (const equip_sync::Held& want : missing) ++needed[want.type];
+        }
         for (const auto& [type, count] : needed) {
             const int toAsk = count - outstandingAdds(slot, type, inSlot, now);
             for (int i = 0; i < toAsk && changes < kMaxChangesPerRound; ++i) {
@@ -188,7 +223,9 @@ void follow(uint64_t ownerKey, const std::vector<equip_sync::Held>& wanted, Cloc
     std::erase_if(g_requestedDeletes, [&](uint64_t handle) { return !present.contains(handle); });
     if (!changes) return;
     g_lastChange = now;
-    logger::write("equip_sync: the body's slots now follow %zu carried pieces (%d changes:%s)", wanted.size(), changes, plan.c_str());
+    g_awaitingMatch = true;
+    logger::write("equip_sync: the body's slots now follow %zu carried pieces (%d changes:%s), before:%s", wanted.size(), changes,
+                  plan.c_str(), before.c_str());
 }
 
 }  // namespace
@@ -210,14 +247,18 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     const auto now = Clock::now();
     if (!session.linked || now - g_lastCheck < kCheckInterval) return;
     g_lastCheck = now;
-    report(net);
+    const std::vector<equip_sync::Held> local = heldBy(0);
+    report(net, local);
     const std::optional<uint64_t> body = remote_body::ownerKey();
+    removeOrphansOncePerGameplay();
     if (!body) {
         g_protectedOwner = 0;  // the next body starts from a clean state
         g_lastWanted.clear();
         g_strayWatchUntil = {};
         return;
     }
+    if (local.empty()) return;  // the local player's own slots empty out as a load starts: the world is going away
+    game::markOwnedCargo(*body);
     removeStrays(now);
     const auto peer = g_peerHeld.find(remote_body::slot());
     const auto live = remote_body::liveFor();

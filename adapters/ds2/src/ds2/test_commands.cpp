@@ -5,7 +5,7 @@
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
-//   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes them)
+//   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
@@ -15,6 +15,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <set>
 #include <string>
 
 #include "decima/safe_read.h"
@@ -191,11 +192,20 @@ void logLoose(const std::string& text) {
     decima::WorldTransform where{};
     if (sscanf(text.c_str(), "%lf %c", &radius, &remove) < 1 || !ds2::entityTransform(remote_player::samEntity(), where)) return;
     const auto pieces = game::looseCargo({where.position.x, where.position.y, where.position.z}, radius);
-    logger::write("test_commands: %zu loose pieces within %.0f m%s", pieces.size(), radius, remove ? ", deleting them" : "");
+    std::set<uint32_t> gearKinds;
+    for (const uint8_t slot : equip_sync::kMirroredSlots) {
+        for (const game::Cargo& piece : game::slotPieces(0, slot)) gearKinds.insert(piece.type);
+    }
+    logger::write("test_commands: %zu loose pieces within %.0f m%s", pieces.size(), radius, remove ? ", deleting the gear kinds" : "");
     for (const game::LooseCargo& piece : pieces) {
-        if (remove) game::removeCargoLater(piece.handle);
+        if (remove == 'y' && gearKinds.contains(piece.type)) game::removeCargo(piece.handle);
+        if (remove == 'x' && gearKinds.contains(piece.type)) game::removeCargoLater(piece.handle);
         logger::write("test_commands: loose piece %llx kind %u at %.1f %.1f %.1f", static_cast<unsigned long long>(piece.handle),
                       piece.type, piece.position.x, piece.position.y, piece.position.z);
+    }
+    if (remove == 'y') {
+        logger::write("test_commands: right after deleting directly, %zu loose pieces remain",
+                      game::looseCargo({where.position.x, where.position.y, where.position.z}, radius).size());
     }
 }
 
