@@ -59,7 +59,6 @@ bool trackedVictim(uintptr_t victim) {
 
 namespace combat_log {
 
-bool isTracked(uintptr_t victim) { return trackedVictim(victim); }
 
 Snapshot before(uintptr_t victim, uintptr_t params) {
     Snapshot snapshot;

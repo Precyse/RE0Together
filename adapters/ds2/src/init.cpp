@@ -15,7 +15,6 @@
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/health_watch.h"
-#include "ds2/npc_damage_probe.h"
 #include "ds2/camp_alert.h"
 #include "ds2/cargo_defer.h"
 #include "ds2/loading_screen.h"
@@ -81,7 +80,6 @@ DWORD WINAPI initThread(LPVOID) {
         camp_alert::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
-        npc_damage_probe::installEarly();
         health_watch::installEarly();
     }
     weapon_sync::setEnabled(config.weaponSync);

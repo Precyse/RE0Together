@@ -2,14 +2,10 @@
 // DS2-internal: one log line per damage that touches an enemy of the directory or a player's body, with who hit whom, the
 // damage type resource, the part, the amount (DamageParams +0x78, else +0x7C) and the victim's health before and after
 // (0-254 of the maximum), and the attack context's id, type and source. Hits below half a point are not logged unless
-// they changed the victim's health or a player dealt them. Used by the ApplyDamage hook (ds2/combat_hook.cpp) and the
-// NPC damage probe (ds2/npc_damage_probe.cpp). Any thread.
+// they changed the victim's health or a player dealt them. Used by the ApplyDamage hook (ds2/combat_hook.cpp). Any thread.
 #include <cstdint>
 
 namespace combat_log {
-
-// Whether damage to this entity is logged: an enemy of the directory, Sam or the remote body.
-bool isTracked(uintptr_t victim);
 
 struct Snapshot {
     bool tracked = false;
