@@ -9,6 +9,7 @@
 #include <string>
 
 #include "cargo_transfer.h"
+#include "ds2/far_partner.h"
 #include "game.h"
 #include "imgui.h"
 #include "load_overlay.h"
@@ -36,9 +37,6 @@ constexpr ImU32 kLabelText = IM_COL32(240, 240, 240, 255);
 constexpr float kToastTop = 40.0f;
 constexpr float kToastSpacing = 8.0f;
 constexpr float kSnapMetres = 10.0f;  // a jump this large (teleport, respawn) moves the marker at once
-// The host simulates the world within about 800 m of its own player (the entity tables' far radius, partner_focus.cpp); a
-// partner beyond this leaves the loaded world, where enemies stay asleep and nothing is streamed in.
-constexpr double kBeyondLoadedWorldMetres = 700.0;
 
 std::atomic<bool> g_selfMarker{false};
 std::map<uint8_t, std::array<float, 3>> g_shown;  // per peer slot: the position drawn last frame (render thread)
@@ -139,7 +137,7 @@ void drawFarNotices(ImDrawList* list, float width, float y, const world_to_scree
     ImFont* font = ImGui::GetFont();
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
         const double metres = std::hypot(peer.position[0] - self.x, peer.position[1] - self.y);
-        if (metres <= kBeyondLoadedWorldMetres) continue;
+        if (metres <= far_partner::kBeyondLoadedWorldMetres) continue;
         char text[96];
         std::snprintf(text, sizeof(text), "%s  %.0f m  too far", peer.name.c_str(), metres);
         const ImVec2 size = font->CalcTextSizeA(kLabelSize, FLT_MAX, 0.0f, text);

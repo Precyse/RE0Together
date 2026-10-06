@@ -34,6 +34,7 @@
 #include "ds2/remote_weapon.h"
 #include "ds2/sim_tick.h"
 #include "ds2/partner_cargo.h"
+#include "ds2/observer_midpoint.h"
 #include "ds2/partner_focus.h"
 #include "ds2/sneaking_focus.h"
 #include "ds2/story.h"
@@ -124,6 +125,7 @@ DWORD WINAPI initThread(LPVOID) {
     partner_cargo::installEarly();
     partner_focus::installEarly(config.diagnostics);
     sneaking_focus::installEarly();
+    observer_midpoint::installEarly();
     structures::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
