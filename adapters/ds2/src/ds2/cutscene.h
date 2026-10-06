@@ -11,4 +11,8 @@ namespace cutscene {
 // exercised with any network the test commands start.
 void installEarly(bool sync, uint32_t shareMinFrames);
 
+// Test command: calls the engine's Sequence start (through the detour) on the Sequence entity with this UUID. False when
+// the engine has no such Sequence loaded.
+bool playForTest(const uint8_t* entityUuid);
+
 }  // namespace cutscene

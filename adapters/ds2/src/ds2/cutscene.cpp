@@ -239,6 +239,17 @@ void installEarly(bool sync, uint32_t shareMinFrames) {
 
 }  // namespace cutscene
 
+namespace cutscene {
+
+bool playForTest(const uint8_t* entityUuid) {
+    const uintptr_t sequence = ds2::entityByUuid(entityUuid);
+    if (!sequence || !sequence_info::isSequence(sequence)) return false;
+    reinterpret_cast<StartFn>(ds2::at(kSequenceStart))(sequence);
+    return true;
+}
+
+}  // namespace cutscene
+
 namespace game {
 
 // A change of role starts from nothing: a playback of the other role (a guest's announced cutscene carrying the host's
