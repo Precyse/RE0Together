@@ -20,11 +20,19 @@ public static class Updater
     /// <summary>True when a newer build was installed and started; the caller must exit. Always reads the release afresh.</summary>
     public static bool TryInstall(string[] args)
     {
-        if (FindPackageRoot() is not { } root) return false;
+        if (FindPackageRoot() is not { } root)
+        {
+            Log.Info("Updates install only from the packaged launcher");
+            return false;
+        }
         DeleteOldFiles(root);
         try
         {
-            if (ReleaseFeed.Read(force: true) is not { Build: { } build, ZipUrl: { } zipUrl }) return false;
+            if (ReleaseFeed.Read(force: true) is not { Build: { } build, ZipUrl: { } zipUrl })
+            {
+                Log.Info("No release to update from");
+                return false;
+            }
             if (build <= BuildCheck.LocalBuild())
             {
                 Log.Info($"Up to date (build {BuildCheck.LocalBuild()})");
@@ -93,6 +101,7 @@ public static class Updater
     private static void Relaunch(string[] args)
     {
         var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+        start.Environment[SingleInstance.PredecessorVariable] = Environment.ProcessId.ToString();
         foreach (var arg in args) start.ArgumentList.Add(arg);
         Process.Start(start);
     }

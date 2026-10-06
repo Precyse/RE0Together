@@ -40,6 +40,13 @@ public sealed class App
 
     public void Stop() => _stopRequested = true;
 
+    /// <summary>The window's loop host could not start the loop (Steam not running): shown until the loop runs again.</summary>
+    public void MarkOffline()
+    {
+        Status = new AppStatus(AppState.Offline);
+        StatusChanged?.Invoke(Status);
+    }
+
     public void Host(string gameId) => _commands.Enqueue(() => Open(Command.Host, gameId));
 
     public void Join(ulong lobbyId) => _commands.Enqueue(() => Open(Command.Join, lobbyId.ToString()));
@@ -52,7 +59,13 @@ public sealed class App
 
     public void Invite() => _commands.Enqueue(() =>
     {
-        if (_lobby is { IsReady: true } lobby) _steam?.ShowInviteDialog(lobby.Id);
+        if (_lobby is not { IsReady: true } lobby)
+        {
+            Log.Info("No lobby to invite to");
+            return;
+        }
+        _steam?.ShowInviteDialog(lobby.Id);
+        Log.Info("Invite dialog opened");
     });
 
     public int Run()
@@ -255,7 +268,7 @@ public sealed class App
             : _bridge?.IsReady == true ? AppState.GameRunning
             : _lobby.OwnerId == _transport!.LocalId ? AppState.Hosting
             : AppState.Joined;
-        return new AppStatus(state, _lobby.Id, _session?.RttMs) { Players = PlayerSlots(_lobby) };
+        return new AppStatus(state, _lobby.Id, _session?.RttMs) { Players = PlayerSlots(_lobby), GameId = _lobby.GameId };
     }
 
     private IReadOnlyList<PlayerSlot> PlayerSlots(ILobby lobby) =>
@@ -264,7 +277,7 @@ public sealed class App
             .Select(member => new PlayerSlot(member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId))
             .ToList();
 
-    private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? SteamLibrary.FindGameDir(profile.SteamAppId);
+    private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? GameFolders.Find(profile);
 
     /// <summary>Crash recovery and cleanup: every profile with save sync goes back to coop=0 and loses its session folder.
     /// A game that is running keeps both: its session folder holds the saves it is playing from.</summary>
