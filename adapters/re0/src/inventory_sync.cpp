@@ -7,10 +7,13 @@
 
 #include "character_owner.h"
 #include "debug_stats.h"
+#include "equip_refresh.h"
+#include "equip_rule.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
 #include "join_sync.h"
+#include "log.h"
 #include "protocol.h"
 #include "settled_copy.h"
 
@@ -29,6 +32,7 @@ enum class Origin : uint8_t { Owner = 0, MenuExchange = 1 };
 
 NetClient* g_net = nullptr;
 std::array<Block, kCharacterCount> g_blocks;  // game thread
+std::array<bool, kCharacterCount> g_equipPending{};  // game thread: a received block changed the equipped slot
 uint32_t g_frame = 0;
 uint32_t g_lastLocalChangeFrame = 0;
 bool g_localChanged = false;
@@ -89,10 +93,33 @@ void applyRemote(Character character) {
         std::lock_guard lock(g_mutex);
         pending.swap(g_pending[static_cast<size_t>(character)]);
     }
-    if (!pending || !game::writeMemory(blockAddress(character), *pending)) return;
+    Block::Bytes before{};
+    if (!pending || !game::readMemory(blockAddress(character), before) ||
+        !game::writeMemory(blockAddress(character), *pending)) {
+        return;
+    }
     debug_stats::count(debug_stats::Counter::InventoryApplied);
+    if (character_owner::isRemoteOwned(character) && equip_rule::needsRefresh(before.data(), pending->data())) {
+        g_equipPending[static_cast<size_t>(character)] = true;
+    }
     // An exchange applied to our own character is already the state the peer has.
     if (character_owner::isLocalOwned(character)) g_blocks[static_cast<size_t>(character)].adopt(*pending, monotonicMs());
+}
+
+// The game's equip step for a remote-owned character whose equipped slot changed: it needs plain gameplay (no menu,
+// no door) and the character in the loaded room, so a change that arrives earlier waits.
+void refreshEquipped(Character character) {
+    bool& pending = g_equipPending[static_cast<size_t>(character)];
+    if (!pending) return;
+    if (!character_owner::isRemoteOwned(character)) {
+        pending = false;
+        return;
+    }
+    const uintptr_t player = character_owner::find(character);
+    if (!player || !game_state::playing() || game_state::menuOpen() || !game_state::inCurrentRoom(player)) return;
+    pending = false;
+    if (equip_refresh::run(player)) debug_stats::count(debug_stats::Counter::EquipRefreshes);
+    else logger::write("inventory_sync: the equip step faulted for %s", character_owner::name(character));
 }
 
 void onTick() {
@@ -102,10 +129,12 @@ void onTick() {
         if (character_owner::isLocalOwned(character)) {
             applyRemote(character);
             syncLocal(character);
+            refreshEquipped(character);
             continue;
         }
         g_blocks[static_cast<size_t>(character)].reset();
         if (character_owner::isRemoteOwned(character)) applyRemote(character);
+        refreshEquipped(character);
     }
 }
 

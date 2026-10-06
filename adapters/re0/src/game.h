@@ -54,6 +54,15 @@ constexpr uintptr_t kItemRebeccaBlockOffset = 0x24;
 constexpr uintptr_t kItemBillyBlockOffset = 0x64;
 constexpr size_t kInventoryBlockSize = 0x40;
 
+// The game's equip step after a menu closes (0x5d7740, for both characters): the block returns the weapon type of its
+// equipped slot, the player switches to it (creates the weapon unit, sets the weapon type +0x6950), then refreshes.
+constexpr uintptr_t kPlayerItemBlockFunction = 0x50dc70;   // thiscall(player) -> block pointer (equipped slot at +0x3c)
+constexpr uintptr_t kBlockSetEquippedFunction = 0x4db2f0;  // thiscall(block, slot) ret 4 -> weapon type or -1
+constexpr uintptr_t kPlayerSetWeaponTypeFunction = 0x50d870;  // thiscall(player, type) ret 4
+constexpr uintptr_t kPlayerWeaponAttachFunction = 0x50d670;   // thiscall(player)
+constexpr uintptr_t kPlayerWeaponAimFunction = 0x516630;      // thiscall(player)
+constexpr uintptr_t kBlockEquippedOffset = 0x3c;              // u32 equipped slot in the block the player function returns
+
 // sItemPut: the dropped floor items, 28 records; a live record points at its spawned uItem
 constexpr uintptr_t kItemPutGlobal = 0xdce0a8;  // sItemPut*
 constexpr uintptr_t kItemPutRecordsOffset = 0x20;
