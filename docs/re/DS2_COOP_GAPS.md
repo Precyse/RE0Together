@@ -47,7 +47,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | candidate | status | owner | file |
 |---|---|---|---|
 | One player dies or respawns | partial | ds2-live | checked once on one PC; the partner is not told |
-| Desync recovery | partial | new | `resync_trigger.cpp` (file only) |
+| Desync recovery | done | new | `resync_trigger.cpp` (F9 and file) |
 | Game crash on one side | partial | launcher | dumps reach the host (`LogForwarder.cs`); no relaunch path |
 
 ### Setup QoL
@@ -84,7 +84,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `launcher/SaveSyncCoordinator.cs`, `SaveSender.cs`, `SaveReceiver.cs`, `docs/CONTRACT.md`.
 - **Verify:** `tools/ds2/save_sync_test.py` with a file touched on the host side after the join: the guest's staging folder gets it and the session folder only after the fake game exits.
 
-### 6. Resync on a key (S, new)
+### 6. Resync on a key (S, new; built: F9 is polled like F6/F7, not claimed, so the game still sees it)
 - **Root change:** a key (F9) claimed through `input_filter` does what `resync_now.txt` does: asks every peer for all scopes and resends its own; a toast confirms it.
 - **Files:** `adapters/ds2/src/resync_trigger.cpp`, `input_filter.cpp`.
 - **Verify:** `fake_launcher.py` prints the RESYNC it receives; `tests/resync_test.cpp` unchanged.
