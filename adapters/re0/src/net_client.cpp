@@ -206,6 +206,7 @@ bool NetClient::handleFrame(uint16_t type, uint8_t flags, uint8_t slot, std::spa
             peer.slot = payload[0];
             peer.steamId = proto::readLe<uint64_t>(payload.data() + 1);
             peer.name.assign(reinterpret_cast<const char*>(payload.data()) + proto::kPeerUpFixedSize, nameLen);
+            peer.joinSerial = ++joinCounter_;
             std::erase_if(session_.peers, [&](const PeerInfo& p) { return p.slot == peer.slot; });
             logger::write("net: PEER_UP slot=%u name=%s", peer.slot, peer.name.c_str());
             session_.peers.push_back(std::move(peer));

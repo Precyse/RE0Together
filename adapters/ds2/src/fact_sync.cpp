@@ -9,6 +9,7 @@
 #include "fact_wire.h"
 #include "game.h"
 #include "log.h"
+#include "peer_joins.h"
 #include "reject_counters.h"
 #include "resync.h"
 
@@ -22,7 +23,7 @@ uint8_t g_hostSlot = 0;
 std::deque<fact_wire::Entry> g_pending;
 fact_snapshot::Progress g_progress;
 bool g_requestedAtGameplay = false;  // guest: the snapshot request for this stretch of gameplay went out
-std::set<uint8_t> g_snapshotted;     // host: peers that have been sent a snapshot since they joined
+PeerJoins g_joins;  // host: which peer joins have been sent a snapshot
 uint32_t g_snapshotId = 0;
 
 void send(NetClient& net, const std::vector<fact_wire::Entry>& facts) {
@@ -66,12 +67,7 @@ void applyPending() {
 
 // Host: a snapshot for every peer that just joined and for every peer that asked for one.
 void answerSnapshots(NetClient& net, const SessionSnapshot& session) {
-    std::set<uint8_t> present;
-    for (const PeerInfo& peer : session.peers) present.insert(peer.slot);
-    std::erase_if(g_snapshotted, [&](uint8_t slot) { return !present.contains(slot); });
-    for (const uint8_t slot : present) {
-        if (g_snapshotted.insert(slot).second) sendSnapshot(net, slot);
-    }
+    for (const uint8_t slot : g_joins.takeNew(session)) sendSnapshot(net, slot);
     for (const uint8_t slot : resync::takeRequests(resync::kFacts)) sendSnapshot(net, slot);
 }
 
@@ -126,7 +122,7 @@ void tick(NetClient& net, const SessionSnapshot& session) {
         if (!facts.empty()) send(net, facts);
         answerSnapshots(net, session);
     } else {
-        g_snapshotted.clear();
+        g_joins.clear();
     }
     if (g_guest) {
         applyPending();

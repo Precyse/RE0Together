@@ -6,6 +6,7 @@
 
 #include "game.h"
 #include "log.h"
+#include "peer_joins.h"
 #include "remote_body.h"
 #include "weapon_wire.h"
 
@@ -20,7 +21,7 @@ bool g_enabled = false;
 // Net thread only.
 Clock::time_point g_lastPoll;
 std::optional<weapon_wire::WeaponState> g_reported;
-size_t g_knownPeers = 0;
+PeerJoins g_joins;  // which peer joins have been sent the drawn weapon
 std::map<uint8_t, weapon_wire::WeaponState> g_peerState;  // by source slot
 std::optional<weapon_wire::WeaponState> g_applied;        // what the body was last told
 
@@ -31,8 +32,7 @@ void reportState(NetClient& net, const SessionSnapshot& session) {
     g_lastPoll = now;
     const std::optional<weapon_wire::WeaponState> state = game::localWeaponState();
     if (!state) return;
-    const bool joined = session.peers.size() > g_knownPeers;
-    g_knownPeers = session.peers.size();
+    const bool joined = !g_joins.takeNew(session).empty();
     if (!joined && g_reported == state) return;
     g_reported = std::nullopt;  // reported again on the next poll when this send fails
     if (!net.send(weapon_wire::kMsgWeaponState, true, proto::kSlotAll, proto::bytesOf(*state))) return;

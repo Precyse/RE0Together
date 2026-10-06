@@ -13,6 +13,7 @@ struct PeerInfo {
     uint64_t steamId = 0;
     std::string name;
     uint16_t rttMs = 0;
+    uint32_t joinSerial = 0;  // counts the PEER_UPs this client has seen: a peer that replaces one on its slot gets a new number
 };
 
 struct SessionSnapshot {
@@ -67,5 +68,6 @@ private:
     std::mutex mutex_;
     SessionSnapshot session_;
     std::vector<GameFrame> inbox_;
+    uint32_t joinCounter_ = 0;  // under mutex_
     std::vector<std::vector<uint8_t>> outbox_;
 };

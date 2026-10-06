@@ -4,6 +4,7 @@
 
 #include "game.h"
 #include "log.h"
+#include "peer_joins.h"
 #include "resync.h"
 #include "struct_wire.h"
 
@@ -14,7 +15,7 @@ bool g_guest = false;
 bool g_host = false;
 uint8_t g_hostSlot = 0;
 bool g_requestedAtGameplay = false;
-size_t g_knownPeers = 0;
+PeerJoins g_joins;  // host: which peer joins have been sent the structures
 std::map<uint32_t, struct_wire::Placed> g_live;  // host: the structures it placed this session, by construction id
 
 void sendCreate(NetClient& net, const struct_wire::Placed& placed) {
@@ -88,13 +89,14 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     }
     if (!host) {
         g_live.clear();
+        g_joins.clear();
         return;
     }
     // A peer that joined, or asked, gets every structure placed so far (a guest skips the ones it already has).
-    if (session.peers.size() > g_knownPeers || !resync::takeRequests(resync::kStructures).empty()) {
+    const bool joined = !g_joins.takeNew(session).empty();
+    if (joined || !resync::takeRequests(resync::kStructures).empty()) {
         for (const auto& [id, placed] : g_live) sendCreate(net, placed);
     }
-    g_knownPeers = session.peers.size();
     for (const struct_wire::Placed& placed : game::takePlacedStructures()) {
         g_live[placed.create.id] = placed;
         sendCreate(net, placed);
