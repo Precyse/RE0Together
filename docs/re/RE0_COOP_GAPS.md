@@ -32,7 +32,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 ### Gameplay sync
 | candidate | status | owner file | note |
 |---|---|---|---|
-| Level-placed item pickups (ammo, herbs, key items on the map) | missing | none (`floor_items_sync.cpp` covers dropped items only) | the other player's copy stays until a room re-entry applies flags, so both can take it (TESTPLAN row 6 confirms "after re-entering") |
+| Level-placed item pickups (ammo, herbs, key items on the map) | done, unverified live | `floor_items_sync.cpp` | map items are sItemPut records put by the room script; pickups already crossed as FLOOR_TAKE, the script's puts were wrongly announced as FLOOR_PUT (duplicates) and no longer are |
 | Dropped floor items | done | `floor_items_sync.cpp`, `floor_pending.cpp` | |
 | Floor items for a late joiner or rejoiner | done, unverified live | `floor_items_sync.cpp`, `join_sync.cpp` | FLOOR_SNAPSHOT journal (changes since the last save or load); lost when the host restarts |
 | Equipped weapon | done, unverified | `equip_refresh.cpp` | |
@@ -49,8 +49,8 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | candidate | status | owner file | note |
 |---|---|---|---|
 | Partner name, health condition, same/other room | done, unverified live | `partner_hud.cpp`, `partner_status.cpp` | top-right line; condition from hp against the highest hp seen |
-| Partner location while apart | unknown | vanilla map (Q) | check whether the game's map shows the partner's room now that split_rooms keeps the record right; if not, the status line names the room |
-| Ping or marker | missing | none | low value in a fixed-camera game; skip unless the map does not show the partner |
+| Partner location while apart | done (status line), map unchecked | `partner_hud.cpp` | the status line names the partner's room (`room 0x24`); whether the vanilla map (Q) also shows it needs a live look |
+| Ping or marker | skipped | none | low value in a fixed-camera game; the status line names the partner's room |
 | Partner-left notice | done | `state_sync.cpp` | the leave toast names the player; host leaving has its own notice |
 | Pause behaviour | done, unverified live | `menu_mirror.cpp`, `menu_hold_rule.h` | menus hold the partner's world 20 s, reading screens and cutscenes until closed |
 | Controls overlay | missing | `launcher/package/README.txt` | the user's rule is no explainer text in UI; keep keys in the README only |
@@ -107,7 +107,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/re0/src/menu_mirror.cpp`, `room_phase.h`.
 - **Verify:** pure freeze rule (phase, seconds open) with a unit test; `fake_session.py` sending MENU_STATE open for 30 s.
 
-### 8. Level-placed items picked up twice (L, new)
+### 8. Level-placed items picked up twice (L, new; done as a small fix, see RE0_NOTES "Level-placed items")
 - **Root change:** find the stage item pickup (0x4dfa00 reads the stage item table; the add on pickup at 0x4dc269 is the entry point) and the per-item taken flag; send STAGE_ITEM_TAKE {scene, item index}; the receiver removes the item through the game's own path (or sets the flag and hides the unit), queued per room like `floor_pending`.
 - **Files:** new `adapters/re0/src/stage_items_sync.cpp`, `game.h`, `docs/RE0_NOTES.md`; reuse `floor_pending.cpp`.
 - **Verify:** `tools/re0/watch_write.py` on the flag during one pickup (coop-re skill); then `fake_session.py` command `take <scene> <index>` and a screenshot of the item gone.

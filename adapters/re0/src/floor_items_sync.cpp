@@ -1,5 +1,7 @@
 #include "floor_items_sync.h"
 
+#include <intrin.h>
+
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -110,8 +112,12 @@ void sendTake(uint32_t itemId, const Vec3& pos) {
 }
 
 // A remote-owned character's replayed input must not change the floor here: its own machine decides and announces.
+// The room script puts the map items itself on every machine that loads the room: announcing those would duplicate
+// them for a peer already there (and a pending put would duplicate them at its next load). Only their pickup crosses.
 void* __fastcall putDetour(void* self, void* edx, const game::ItemDesc* desc, const Vec3* pos, const Vec3* rot) {
-    if (g_applying) return g_originalPut(self, edx, desc, pos, rot);
+    if (g_applying || reinterpret_cast<uintptr_t>(_ReturnAddress()) == game::kScriptItemPutReturn) {
+        return g_originalPut(self, edx, desc, pos, rot);
+    }
     if (input_redirect::replayingRemoteInput()) return nullptr;
     game::ItemDesc descCopy{};
     Vec3 posCopy{};
