@@ -114,7 +114,8 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/enemy_protocol.h | HIT_REQUEST 0x0110, HIT_APPLIED 0x0111, ENEMY_STATE 0x0112 constants and payload structs | `HitPayload`, `EnemyEntry` |
 | src/enemy_net.cpp | hit messages: guest request, host apply and announce, guest apply; game thread queue | `enemy_net::requestHit`, `announceHit`, `onFrame` |
 | src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) and `puppetSkipsUpdate` | `enemy_state::onFrame`, `enable`, `puppetSkipsUpdate` |
-| src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe`, `aim`, `skipsUpdate` (alive, snapshot under 500 ms old, no HP drop in the last 700 ms), `stepFor` | `enemy_puppet_rule::skipsUpdate`, `stepFor` |
+| src/enemy_motion.cpp | an enemy's motion block (uModel +0x4a0: motion number u16 +4, frame f32 +0x40): `read` for the snapshot, `play` on a puppet (the game's own setter 0x73ef50 for another motion, a frame write when the frame drifted) | `enemy_motion::read`, `play` |
+| src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe`, `aim`, `aimFrame`, `motionStepFor`, `skipsUpdate` (alive, snapshot under 500 ms old, no HP drop in the last 700 ms), `stepFor` | `enemy_puppet_rule::skipsUpdate`, `stepFor` |
 | src/enemy_update_hook.cpp, src/update_thunk.cpp | patches enemy vtable slot 41 (the per-frame update, AI state dispatch) of all 38 vtables; on a puppet the update is skipped | `enemy_update_hook::install`, `update_thunk::patchVtable` |
 | src/player_damage.cpp | HP/death ownership: MinHook gates on `setHP` 0x529310 and `cPlayerThink::onDeath` 0x4fcea0 (remote-owned characters only change via the owner); PLAYER_DIED 0x0120 replays remote deaths; authoritative `setHp` for all sync code | `player_damage::install` |
 | src/vtable_tracer.cpp | counting thunks patched into vtables, 2 s report | `vtable_tracer::install`, `uninstall` |
@@ -136,7 +137,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/jitter_target_test.cpp | x86 exe: jitter target growth, cap, calm shrink, floor | |
 | tests/pad_buffer_test.cpp | x86 exe: PadBuffer waiting, order, stale frames, underrun, skip-ahead, cap, clear | |
 | tests/position_blend_test.cpp | x86 exe: classify thresholds, blend convergence, extrapolation cap, quaternion shorter arc (no game) | |
-| tests/enemy_puppet_rule_test.cpp | x86 exe: puppet track velocity and capped aim, update skipping (fresh, stale, dead, hit reaction window), snap versus blend | |
+| tests/enemy_puppet_rule_test.cpp | x86 exe: puppet track velocity and capped aim, motion frame extrapolation and keep/re-time/switch decision, update skipping (fresh, stale, dead, hit reaction window), snap versus blend | |
 | tests/update_thunk_test.cpp | x86 exe: the update thunk passes the enemy and the original, balances the stack, and a skipping handler does not run the original | |
 | tests/settled_copy_test.cpp | x86 exe: settle delay, resend, adopt and reset of `SettledCopy` (no game) | |
 | tests/floor_pending_test.cpp | x86 exe: put/take coalescing, per-room cap and drop, ordering, room isolation of `floor_pending::Queue` (no game) | |
