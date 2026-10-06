@@ -26,6 +26,7 @@
 #include "ds2/remote_marker.h"
 #include "ds2/remote_player.h"
 #include "ds2/remote_ride.h"
+#include "ds2/queue_diag.h"
 #include "ds2/remote_update.h"
 #include "ds2/setdriver_guard.h"
 #include "ds2/sim_tick.h"
@@ -128,6 +129,7 @@ void spawn() {
     reinterpret_cast<SetResourceFn>(ds2::at(kSetEntityResource))(player, sam + kPlayerEntityResource);
     const auto addPlayer = reinterpret_cast<AddPlayerFn>(decima::readPointer(decima::readPointer(manager) + kManagerAddPlayer));
     addPlayer(manager, player);
+    logger::write("remote_body: spawn: the player %p is listed, its entity does not exist yet", reinterpret_cast<void*>(player));
 
     decima::WorldTransform at{};
     decima::safeRead(samEntity() + ds2::kEntityTransform, at);
@@ -142,6 +144,7 @@ void spawn() {
         reinterpret_cast<RequestSpawnFn>(ds2::at(kRequestSpawn))(player, true, &at);
     }
     g_entity = decima::readPointer(player + kPlayerEntity);
+    logger::write("remote_body: spawn: the entity %p is assigned", reinterpret_cast<void*>(g_entity.load()));
     ds2::field<uint8_t>(g_netPlayer, kNetPlayerSpawnedFlag) = 0;
     remote_guards::silenceRemote();
     g_waitedFrames = 0;
@@ -363,6 +366,8 @@ uint8_t slot() {
 
 bool isLive() { return g_stage == Stage::Live; }
 
+bool isParked() { return g_parked; }
+
 void leave(const char* why) { worldLeft(why, true); }
 
 void requestLeave(const char* why) { g_leaveReason = why; }
@@ -379,6 +384,7 @@ void installEarly() {
     setdriver_guard::install();
     remote_guards::installEarly();
     remote_update::installEarly();
+    queue_diag::installEarly();
     remote_camera::installEarly();
     remote_appearance::installEarly();
     remote_animation::installEarly();
