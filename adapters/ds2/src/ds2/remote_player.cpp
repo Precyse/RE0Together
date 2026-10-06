@@ -65,6 +65,7 @@ constexpr double kSpawnAhead = 2.5;  // metres in front of Sam and
 constexpr double kSpawnRight = 1.2;  // to his right; the first placement moves the body to the partner
 constexpr int kControllerWaitFrames = 300;
 constexpr auto kTargetStale = std::chrono::milliseconds(500);
+constexpr auto kPeerGoneAfter = std::chrono::seconds(5);  // no pose from the peer for this long: it left, the body is parked
 constexpr auto kMarkerRepairWindow = std::chrono::seconds(20);  // the remote's backpack and its marker come up after the body
 constexpr uint8_t kNoSlot = 0xFF;
 constexpr uintptr_t kRemovePlayer = 0x1407549f0;  // PlayerManagerGame::RemovePlayer(manager, player): out of the lists, player-left
@@ -126,6 +127,7 @@ void spawn() {
     reinterpret_cast<SetResourceFn>(ds2::at(kSetEntityResource))(player, sam + kPlayerEntityResource);
     const auto addPlayer = reinterpret_cast<AddPlayerFn>(decima::readPointer(decima::readPointer(manager) + kManagerAddPlayer));
     addPlayer(manager, player);
+    logger::write("remote_body: spawn: the player %p is listed, its entity does not exist yet", reinterpret_cast<void*>(player));
 
     decima::WorldTransform at{};
     decima::safeRead(samEntity() + ds2::kEntityTransform, at);
@@ -140,6 +142,7 @@ void spawn() {
         reinterpret_cast<RequestSpawnFn>(ds2::at(kRequestSpawn))(player, true, &at);
     }
     g_entity = decima::readPointer(player + kPlayerEntity);
+    logger::write("remote_body: spawn: the entity %p is assigned", reinterpret_cast<void*>(g_entity.load()));
     ds2::field<uint8_t>(g_netPlayer, kNetPlayerSpawnedFlag) = 0;
     remote_guards::silenceRemote();
     g_waitedFrames = 0;
@@ -191,6 +194,18 @@ void follow() {
     game::placeBody(g_entity.load(), pose, velocity);
 }
 
+// A body whose peer is gone is never removed in a running world (the engine does not remove player entities there: every
+// component that caches a sibling dangles). It is parked: hidden with the engine's own entity visibility switch (the entity
+// flag bit 1 and the change message, Entity::SetVisible), left where it stood and not placed. A peer that reports again
+// shows it and places it at the peer's pose.
+bool g_parked = false;
+
+void setBodyVisible(bool visible) {
+    ds2::setEntityVisible(g_entity.load(), visible);
+    g_parked = !visible;
+    logger::write("remote_body: %s", visible ? "unparked" : "parked");
+}
+
 // The world the remote lived in is gone (return to title, another load): the engine destroys its entities with it,
 // so only this module's references are dropped, and the body is created again once gameplay resumes.
 // The world the remote lived in is going: its entity goes with it, so the player is only taken out of the player
@@ -213,28 +228,11 @@ constexpr auto kDeadRespawnDelay = std::chrono::seconds(3);
 
 // Takes the body's entity out of the world, so a world that goes on (a fast travel, a dead body) has no entity left whose
 // camera and player data are gone.
-// DSPlayerSystem keeps a table of per-player pointers (+0x226520, one per player slot). Removing a player entity clears the
-// whole table, and the system's next update dereferences Sam's entry (file va 0x140D93A06): the entries are put back,
-// all but the removed body's (found by watching the table while an entity was removed).
-constexpr uintptr_t kPlayerSystemGlobal = 0x14623E9C8;
-constexpr uintptr_t kPlayerSlotTable = 0x226520;
-constexpr size_t kPlayerSlots = 4;
-constexpr size_t kRemoteSlot = 1;
-
 void removeBodyEntity(uintptr_t entity) {
-    const uintptr_t system = decima::readPointer(ds2::at(kPlayerSystemGlobal));
-    uintptr_t table[kPlayerSlots] = {};
-    const bool saved = system && decima::safeCopy(table, system + kPlayerSlotTable, sizeof(table));
     __try {
         reinterpret_cast<void (*)(uintptr_t, bool)>(ds2::at(kRemoveEntity))(entity, true);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logger::write("remote_body: removing the body's entity faulted");
-    }
-    Sleep(40);  // TEMP experiment: let the engine's own jobs finish the removal before the next update
-    for (size_t slot = 0; saved && slot < kPlayerSlots; ++slot) {
-        if (slot != kRemoteSlot && !decima::readPointer(system + kPlayerSlotTable + slot * sizeof(uintptr_t))) {
-            ds2::field<uintptr_t>(system, kPlayerSlotTable + slot * sizeof(uintptr_t)) = table[slot];
-        }
     }
 }
 
@@ -281,6 +279,7 @@ void forgetBody(const char* why, bool removeEntity = false) {
     g_entity = 0;
     g_netPlayer = 0;
     g_samAtSpawn = 0;
+    g_parked = false;
     remote_ride::reset();
     g_stage = Stage::Idle;
 }
@@ -298,6 +297,11 @@ bool diedLongAgo() {
     if (!wasDead) deadSince = Clock::now();
     wasDead = true;
     return Clock::now() - deadSince > kDeadRespawnDelay;
+}
+
+bool peerGone() {
+    std::lock_guard lock(g_targetMutex);
+    return Clock::now() - g_targetAt > kPeerGoneAfter;
 }
 
 // The world is left: `entityAlive` is whether the body's entity still exists (a travel starts with the world intact; a
@@ -336,7 +340,9 @@ void advance() {
                 forgetBody("the body died (the engine's own damage, e.g. drowning) and stays down", true);
                 break;
             }
-            if (!remote_ride::holdsBody()) follow();
+            if (remote_ride::holdsBody()) break;
+            if (peerGone() != g_parked) setBodyVisible(g_parked);
+            if (!g_parked) follow();
             break;
         case Stage::Failed:
             break;
@@ -357,6 +363,8 @@ uint8_t slot() {
 }
 
 bool isLive() { return g_stage == Stage::Live; }
+
+bool isParked() { return g_parked; }
 
 void leave(const char* why) { worldLeft(why, true); }
 
