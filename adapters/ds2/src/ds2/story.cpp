@@ -22,6 +22,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "story_replay.h"
 #include "story_wire.h"
 
 namespace {
@@ -39,7 +40,7 @@ constexpr uintptr_t kMissionId = 0x28, kMissionFlags = 0x24, kMissionState = 0x2
 constexpr uintptr_t kMissionMap = 0x08;  // Impl: {entries*, +0x0C capacity}; entry {u64 id, mission*, u32 hash}
 constexpr uintptr_t kMapCapacity = 0x0C, kEntryMission = 0x08, kEntryHash = 0x10;
 constexpr size_t kMapEntrySize = 0x18;
-constexpr uint16_t kStateProgress = 20, kStateFailed = 30, kStateSuccess = 40;  // EDSMissionState
+constexpr uint16_t kStateProgress = story_replay::kStateProgress, kStateFailed = 30, kStateSuccess = 40;  // EDSMissionState
 constexpr ULONGLONG kPollIntervalMs = 500;
 constexpr uint32_t kNoRow = 0xFFFFFFFF;  // start request argument: no terminal list row
 constexpr uint32_t kCargoPreparedFlag = 1u << 18;    // order cargo already prepared: the guest creates none
@@ -279,8 +280,8 @@ void replayMission(const story_wire::Event& event) {
         return;
     }
     const uint16_t state = ds2::field<uint16_t>(mission, kMissionState);
-    const bool starts = kind == story_wire::Kind::MissionStart || kind == story_wire::Kind::OrderRequest;
-    if ((starts && state >= kStateProgress) || (!starts && state != kStateProgress)) return;
+    if (!story_replay::applies(kind, state)) return;
+    const bool starts = story_replay::isStart(kind);
     if (starts) {
         if (kind == story_wire::Kind::MissionStart) ds2::field<uint32_t>(mission, kMissionFlags) |= kCargoPreparedFlag;
         struct StartArgs {
