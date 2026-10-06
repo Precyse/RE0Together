@@ -36,6 +36,7 @@ constexpr ULONGLONG kRetryDelayMs = 1000;          // before a weapon the engine
 constexpr ULONGLONG kProbeDelayMs = 1000;          // after the weapon is made: where it is and whether it is still there
 constexpr size_t kMaxQueuedFires = 64;
 constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
+constexpr uintptr_t kBoomerangUpdate = 0x142025f30;  // DSBoomerangBehaviorComponent slot 41 (behavior, dt): reaches the fire gate only while the weapon's equipped byte is set
 constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorComponent slot 41(behavior, dt): runs the shot when +0x4D1 is set
 constexpr uintptr_t kWeaponEnabled = 0x363;     // byte: the weapon entity's update (0x141fa9850, 0x141fa9760) runs its behaviors only when set
 constexpr uintptr_t kWeaponBehaviorsReady = 0x21E0;  // byte: set by the entity's slot 38 (0x141fa9f60), which prepares its behaviors
@@ -64,6 +65,18 @@ std::atomic<uint32_t> g_engineShots{0};
 std::atomic<bool> g_shotPending{false};  // a partner's shot waits for the body weapon's next update gate
 std::atomic<uint32_t> g_gateRuns{0};  // the engine's update gate called for the weapon made for the body
 void (*g_originalGate)(uintptr_t behavior, float dt) = nullptr;
+void (*g_originalBoomerangUpdate)(uintptr_t behavior, float dt) = nullptr;
+
+// The boomerang's update passes to the fire gate only while its weapon's equipped byte is set; the engine leaves it 0 for the
+// body's weapon (its holster step, 0x141f57d10 mode 0, clears it, and runs again before the update), so when a shot of the
+// partner is waiting the byte is set right here, in the update that plays it.
+void boomerangUpdateDetour(uintptr_t behavior, float dt) {
+    const uintptr_t made = g_madeWeapon.load();
+    if (made && g_shotPending.load() && decima::readPointer(behavior + ds2::weapon::kBehaviorWeapon) == made) {
+        ds2::field<uint8_t>(made, kWeaponActive) = 1;
+    }
+    g_originalBoomerangUpdate(behavior, dt);
+}
 
 // The partner's shot: the behavior's own state machine would count the pellets, but it runs the player's fire callback
 // (0x140ea5f00), which reads the owner's current-weapon reference the body does not have (a null read crashed the game). So
@@ -421,6 +434,8 @@ void installEarly(uint8_t attachMode, bool diagnostics) {
     g_diagnostics = diagnostics;
     hooks::install("weapon update gate", ds2::at(kWeaponUpdateGate), reinterpret_cast<void*>(&gateDetour),
                    reinterpret_cast<void**>(&g_originalGate));
+    hooks::install("boomerang update", ds2::at(kBoomerangUpdate), reinterpret_cast<void*>(&boomerangUpdateDetour),
+                   reinterpret_cast<void**>(&g_originalBoomerangUpdate));
     sim_tick::add(&tick, "remote weapon", sim_tick::Gate::Gameplay);
 }
 
