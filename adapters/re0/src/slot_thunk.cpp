@@ -1,4 +1,4 @@
-#include "set_action_thunk.h"
+#include "slot_thunk.h"
 
 #include <windows.h>
 
@@ -9,7 +9,7 @@ namespace {
 constexpr size_t kArgumentBytes = sizeof(uint32_t);
 
 // Entry stack: [ret][arg0]... The thunk hands the handler (enemy, original, &arg0) and returns popping its arguments.
-void emitThunk(uint8_t* p, set_action_thunk::Handler handler, uintptr_t original, size_t argc) {
+void emitThunk(uint8_t* p, slot_thunk::Handler handler, uintptr_t original, size_t argc) {
     thunk::emit(p, {0x8D, 0x44, 0x24, 0x04});  // lea eax, [esp+4]
     thunk::emit(p, {0x50});                    // push eax (&arg0)
     thunk::emit(p, {0x68});                    // push original
@@ -24,10 +24,10 @@ void emitThunk(uint8_t* p, set_action_thunk::Handler handler, uintptr_t original
 
 }  // namespace
 
-namespace set_action_thunk {
+namespace slot_thunk {
 
-uintptr_t patchVtable(uintptr_t vtable, uint8_t* memory, size_t argc, Handler handler) {
-    const uintptr_t slotAddress = vtable + game::kEnemySetActionSlot * sizeof(uint32_t);
+uintptr_t patchVtable(uintptr_t vtable, size_t slot, uint8_t* memory, size_t argc, Handler handler) {
+    const uintptr_t slotAddress = vtable + slot * sizeof(uint32_t);
     const uintptr_t original = game::readPointer(slotAddress);
     if (!original) return 0;
     emitThunk(memory, handler, original, argc);
@@ -35,4 +35,4 @@ uintptr_t patchVtable(uintptr_t vtable, uint8_t* memory, size_t argc, Handler ha
     return game::writeProtected(slotAddress, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(memory))) ? original : 0;
 }
 
-}  // namespace set_action_thunk
+}  // namespace slot_thunk

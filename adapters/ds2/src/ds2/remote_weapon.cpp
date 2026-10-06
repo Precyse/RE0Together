@@ -37,12 +37,14 @@ constexpr ULONGLONG kProbeDelayMs = 1000;          // after the weapon is made: 
 constexpr size_t kMaxQueuedFires = 64;
 constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
 constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorComponent slot 41(behavior, dt): runs the shot when +0x4D1 is set
-constexpr uintptr_t kBehaviorShotReady = 0x730;       // byte: the Shotgun/Sniper update (0x1420121d0) calls the gate only when it is set
 constexpr uintptr_t kWeaponEnabled = 0x363;     // byte: the weapon entity's update (0x141fa9850, 0x141fa9760) runs its behaviors only when set
 constexpr uintptr_t kWeaponBehaviorsReady = 0x21E0;  // byte: set by the entity's slot 38 (0x141fa9f60), which prepares its behaviors
+constexpr uintptr_t kWeaponActive = 0x24B9;     // byte: set by the player's state when it equips the weapon (0x141f57f30); the behavior's can't-fire check (slot 60, 0x14202a500) refuses a weapon with it 0
+constexpr uintptr_t kPrepareBehaviors = 0x141faa350;  // (weapon): runs vtable slot 68 of every behavior, the last step of the player's equip
 constexpr size_t kWeaponEnableSlot = 28, kWeaponPrepareSlot = 38;  // DSWeaponEntity vtable slots: enable (0x141fa99e0), prepare behaviors
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
-constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: whether the weapon's update took it
+constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: what the weapon's update made of it
+constexpr ULONGLONG kTriggerHoldMs = 150;     // how long the body's trigger stays held for one of the partner's shots
 constexpr ULONGLONG kShotLogWarmupMs = 4000;  // a shot sooner after the weapon is made is not the one logged (its behavior is not set up yet)
 constexpr uintptr_t kBulletSystemGlobal = 0x14623fa48;  // the bullet pool (0x141fb5c70 adds a bullet per pellet)
 constexpr uintptr_t kBulletsMade = 0x299f28;            // u32: bullets created so far
@@ -85,6 +87,7 @@ struct Held {
     ULONGLONG retryAt = 0;
     ULONGLONG madeAt = 0;
     ULONGLONG probeAt = 0;  // when the weapon's state is logged a second time, 0 when it is not pending
+    ULONGLONG triggerOffAt = 0;  // when the held trigger is let go, 0 when it is not held
     ULONGLONG fireCheckAt = 0;  // when the first fire request is looked at again, 0 when none is pending
     uint32_t bulletsAtFire = 0;
     bool shotLogged = false;
@@ -149,15 +152,26 @@ bool callWeaponSlot(uintptr_t weapon, size_t slot) {
     }
 }
 
-// The table enables and prepares a weapon it draws; the weapon made for the body is enabled and prepared the same way, so
-// its entity update runs its behaviors (the fire gate, the pellet setup).
+bool prepareBehaviorsGuarded(uintptr_t weapon) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t)>(ds2::at(kPrepareBehaviors))(weapon);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// The table enables a weapon it draws and the player's state equips it (active byte, prepare slot, behaviors' own prepare);
+// the weapon made for the body gets the same steps, so its entity update runs its behaviors and they may fire.
 void enableWeapon(uintptr_t weapon) {
     if (!ds2::field<uint8_t>(weapon, kWeaponEnabled) && !callWeaponSlot(weapon, kWeaponEnableSlot)) {
         logger::write("remote_weapon: enabling the weapon faulted");
     }
+    ds2::field<uint8_t>(weapon, kWeaponActive) = 1;
     if (!ds2::field<uint8_t>(weapon, kWeaponBehaviorsReady) && !callWeaponSlot(weapon, kWeaponPrepareSlot)) {
         logger::write("remote_weapon: preparing the weapon's behaviors faulted");
     }
+    if (!prepareBehaviorsGuarded(weapon)) logger::write("remote_weapon: the behaviors' prepare faulted");
 }
 
 bool removeGuarded(uintptr_t entry) {
@@ -291,18 +305,23 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
         g_held.id = weapon_wire::kHolstered;
         g_held.retryAt = now + kRetryDelayMs;
     }
+    if (g_held.triggerOffAt && now >= g_held.triggerOffAt) {
+        g_held.triggerOffAt = 0;
+        if (const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0) {
+            ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorTrigger) = 0;
+        }
+    }
     if (g_held.fireCheckAt && now >= g_held.fireCheckAt) {
         g_held.fireCheckAt = 0;
         const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
-        const bool taken = !(behavior && ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest));
-        logger::write("remote_weapon: the first fire request was %s after %llu ms, the engine ran %u shots of it and made %u bullets",
-                      taken ? "taken" : "NOT taken", static_cast<unsigned long long>(kFireCheckDelayMs), g_engineShots.load(),
-                      bulletsMade() - g_held.bulletsAtFire);
+        logger::write("remote_weapon: the first shot, %llu ms later: the engine ran %u shots and made %u bullets",
+                      static_cast<unsigned long long>(kFireCheckDelayMs), g_engineShots.load(), bulletsMade() - g_held.bulletsAtFire);
         if (behavior) {
-            logger::write("remote_weapon: the update gate ran %u times for the body's weapon; behavior +0x730 %u, pellets %u, weapon flags %llx",
-                          g_gateRuns.load(), ds2::field<uint8_t>(behavior, kBehaviorShotReady),
+            logger::write("remote_weapon: the update gate ran %u times for the body's weapon; fire state %u, request %u, pellets %u, weapon active byte %u",
+                          g_gateRuns.load(), ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorState),
+                          ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorRequest),
                           ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorPellets),
-                          static_cast<unsigned long long>(ds2::field<uint64_t>(g_held.weapon, kEntityFlags)));
+                          ds2::field<uint8_t>(g_held.weapon, kWeaponActive));
         }
     }
     if (g_held.probeAt && now >= g_held.probeAt) {
@@ -334,7 +353,9 @@ void playShot(const weapon_wire::WeaponFire& fire) {
     const uintptr_t behavior = ds2::weapon::shotBehavior(g_held.weapon);
     if (!behavior) return;
     aimAlong(behavior, fire);
-    ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) = 1;
+    ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorTrigger) = 1;
+    ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorRequest) = ds2::weapon::kFireRequestMode;
+    g_held.triggerOffAt = GetTickCount64() + kTriggerHoldMs;
     if (g_held.shotLogged || GetTickCount64() - g_held.madeAt < kShotLogWarmupMs) return;
     g_held.shotLogged = true;
     g_held.fireCheckAt = GetTickCount64() + kFireCheckDelayMs;

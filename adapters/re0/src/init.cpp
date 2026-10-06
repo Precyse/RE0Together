@@ -16,6 +16,7 @@
 #include "enemy_damage_hook.h"
 #include "enemy_net.h"
 #include "enemy_state.h"
+#include "enemy_target.h"
 #include "event_place.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
@@ -36,6 +37,7 @@
 #include "pickup_guard.h"
 #include "player_damage.h"
 #include "protocol.h"
+#include "resync.h"
 #include "save_redirect.h"
 #include "session_slot.h"
 #include "split_rooms.h"
@@ -71,6 +73,7 @@ void enableCoop() {
     split_rooms::enable();
     flag_sync::enable(g_net);
     join_sync::enable(g_net);
+    resync::enable(g_net);
     event_place::enable(g_net);
     if (!session_slot::enable()) logger::write("adapter: session slot unavailable");
     enemy_net::enable(g_net);
@@ -85,6 +88,7 @@ void enableCoop() {
     state_correction::enable();
     enemy_damage_hook::install();
     enemy_action::install();
+    enemy_target::install();
     player_damage::install(g_net);
     menu_mirror::enable();
 }

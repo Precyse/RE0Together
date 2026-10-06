@@ -26,9 +26,11 @@ static_assert(sizeof(HitPayload) == 24);
 
 // ENEMY_STATE: one count byte, then `count` entries.
 constexpr size_t kStateHeaderSize = 1;
+constexpr uint8_t kNoTarget = 0xFF;
 struct EnemyEntry {
     uint8_t slot;
-    uint8_t reserved[3];
+    uint8_t target;  // character id (character_owner::Character) the enemy chases, or kNoTarget
+    uint8_t reserved[2];
     uint32_t vtable;
     int32_t hp;
     float pos[3];

@@ -1,64 +1,42 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 
 namespace CoopLauncher;
 
-/// <summary>Installs the profile's adapter files into the game folder, then starts the game through Steam.</summary>
+/// <summary>Starts a game through Steam. The mod is installed separately (ModInstaller); a launch never installs it.</summary>
 public static class GameLauncher
 {
-    private const string BackupSuffix = ".cfbak";
-    private const string OwnershipSuffix = ".cfown";
-
     public static bool IsRunning(GameProfile profile) =>
         Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe)).Length > 0;
 
-    public static void Launch(GameProfile profile, string? gameDir)
+    /// <summary>False when the game's mod is not installed, the installed game build is not supported or Steam could not start the game, so the session cannot go on.</summary>
+    public static bool Launch(GameProfile profile, string? gameDir)
     {
+        var build = GameBuilds.Installed(profile, gameDir);
+        if (!GameBuilds.IsSupported(profile, build))
+        {
+            Log.Info(GameBuilds.Describe(profile, build));
+            return false;
+        }
         if (IsRunning(profile))
         {
-            Log.Info($"{profile.Name} is already running, not starting it again");
-            return;
+            Log.Info($"{profile.Name} is already running, not starting it again; if it was started outside the launcher, restart it from here");
+            return true;
         }
-        if (gameDir == null) Log.Info($"Game folder for app {profile.SteamAppId} not found, skipping adapter install");
-        else InstallAdapters(profile, gameDir);
+        if (ModInstaller.Status(profile, gameDir).State == ModState.NotInstalled)
+        {
+            Log.Info($"The {profile.Name} mod is not installed, install it from the launcher first");
+            return false;
+        }
         Log.Info($"Starting {profile.Name} via Steam");
-        Process.Start(new ProcessStartInfo($"steam://rungameid/{profile.SteamAppId}") { UseShellExecute = true });
-    }
-
-    private static void InstallAdapters(GameProfile profile, string gameDir)
-    {
-        foreach (var file in profile.AdapterFiles) Install(Path.Combine(RepoPaths.RepoRoot, file.Src), Path.Combine(gameDir, file.Dst));
-    }
-
-    private static void Install(string src, string dst)
-    {
-        if (!File.Exists(src))
+        try
         {
-            Log.Info($"Adapter not built yet, skipping install: {src}");
-            return;
+            Process.Start(new ProcessStartInfo($"steam://rungameid/{profile.SteamAppId}") { UseShellExecute = true });
+            return true;
         }
-        var srcHash = Hash(src);
-        var ownerMarker = dst + OwnershipSuffix;
-        if (File.Exists(dst))
+        catch (System.ComponentModel.Win32Exception e)
         {
-            var dstHash = Hash(dst);
-            if (dstHash == srcHash) return;
-            var ours = File.Exists(ownerMarker) && File.ReadAllText(ownerMarker) == dstHash;
-            var backup = dst + BackupSuffix;
-            if (!ours && !File.Exists(backup))
-            {
-                File.Copy(dst, backup);
-                Log.Info($"Backed up existing {dst} to {backup}");
-            }
+            Log.Info($"Could not start {profile.Name} through Steam: {e.Message}");
+            return false;
         }
-        File.Copy(src, dst, overwrite: true);
-        File.WriteAllText(ownerMarker, srcHash);
-        Log.Info($"Installed {dst}");
-    }
-
-    private static string Hash(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
     }
 }

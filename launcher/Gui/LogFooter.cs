@@ -3,9 +3,9 @@ namespace CoopLauncher.Gui;
 /// <summary>The bottom strip: the newest log line behind an arrow that opens and closes the full log.</summary>
 internal sealed class LogFooter : Control
 {
-    private const int FooterHeight = 30;
-    private const int PadX = 14;
-    private const int ArrowWidth = 18;
+    private static readonly int FooterHeight = Theme.Scale(30);
+    private static readonly int PadX = Theme.Scale(14);
+    private static readonly int ArrowWidth = Theme.Scale(18);
     private const string ArrowOpen = "▲";
     private const string ArrowClose = "▼";
     private static readonly Font ArrowFont = new("Segoe UI", 9f, FontStyle.Bold);
