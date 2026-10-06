@@ -53,11 +53,12 @@ constexpr uint32_t kCountMask = 0x3FF;
 // DSPlayerComponent's per-frame update (message 0x14FF; handler thunk 0x14080ade0 jumps to the body 0x1407eea70). Run for
 // the remote in full it flickers Sam's bottom-left prompts (found by clearing the component's handler entries one at a time:
 // with it cleared 0 of 60 screenshots lost the "Activate Terminal" prompt, against about 1 in 8 without). Its last step
-// runs the player's state machine (the object at +0x1b8, update at vtable slot 9), which is also what starts a ride, so
+// runs the player's state machine (the object at +0x1b8: a pre-step at vtable slot 7, the update at slot 9), which is also what starts a ride, so
 // cutting it whole stopped the remote boarding (never re-checked after the cut). By default only that step runs for the
 // remote; a test command switches the mode.
 constexpr uintptr_t kPlayerComponentUpdate = 0x1407eea70;
 constexpr uintptr_t kPlayerStateObject = 0x1b8;
+constexpr uintptr_t kStatePreUpdateSlot = 0x38;  // the update's first virtual call
 constexpr uintptr_t kStateUpdateSlot = 0x48;
 constexpr uintptr_t kComponentOwner = 0x48;
 std::atomic<PlayerUpdate> g_playerUpdate{PlayerUpdate::StateOnly};
@@ -82,8 +83,11 @@ uint64_t playerUpdateDetour(uintptr_t component, uintptr_t message) {
     }
     if (mode == PlayerUpdate::Skip) return 0;
     const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
-    const uintptr_t update = ds2::field<uintptr_t>(decima::readPointer(state), kStateUpdateSlot);
-    return state && update ? reinterpret_cast<UpdateFn>(update)(state, message) : 0;
+    const uintptr_t vtable = decima::readPointer(state);
+    if (!state || !vtable) return 0;
+    if (const uintptr_t pre = ds2::field<uintptr_t>(vtable, kStatePreUpdateSlot)) reinterpret_cast<uint64_t (*)(uintptr_t)>(pre)(state);
+    const uintptr_t update = ds2::field<uintptr_t>(vtable, kStateUpdateSlot);
+    return update ? reinterpret_cast<UpdateFn>(update)(state, message) : 0;
 }
 
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
