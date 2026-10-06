@@ -2,8 +2,8 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <cstdint>
-#include <vector>
 
 #include "decima/entity.h"
 #include "decima/safe_read.h"
@@ -14,6 +14,8 @@
 #include "msvc_rtti.h"
 
 namespace {
+
+using remote_guards::PlayerUpdate;
 
 // The id table of the entity manager is sized for one player; the remote needs a second slot.
 constexpr uintptr_t kInitIdTable = 0x140171ac0;  // (table, capacity)
@@ -48,12 +50,17 @@ constexpr uint32_t kStartMask = 0x3FFF;
 constexpr int kCountShift = 14;
 constexpr uint32_t kCountMask = 0x3FF;
 
-// DSPlayerComponent's per-frame update handler (message 0x14FF, the stance and state update of a player). Run for the remote
-// it flickers Sam's bottom-left prompts (found by clearing the component's handler entries one at a time: with this one
-// cleared 0 of 60 screenshots lost the "Activate Terminal" prompt, against about 1 in 8 without). The body's pose and
-// animation come from the adapter, so the update is not needed.
-constexpr uintptr_t kPlayerComponentUpdate = 0x14080ade0;
-constexpr const char* kPlayerComponent = "DSPlayerComponent";
+// DSPlayerComponent's per-frame update (message 0x14FF; handler thunk 0x14080ade0 jumps to the body 0x1407eea70). Run for
+// the remote in full it flickers Sam's bottom-left prompts (found by clearing the component's handler entries one at a time:
+// with it cleared 0 of 60 screenshots lost the "Activate Terminal" prompt, against about 1 in 8 without). Its last step
+// runs the player's state machine (the object at +0x1b8, update at vtable slot 9), which is also what starts a ride, so
+// cutting it whole stopped the remote boarding (never re-checked after the cut). By default only that step runs for the
+// remote; a test command switches the mode.
+constexpr uintptr_t kPlayerComponentUpdate = 0x1407eea70;
+constexpr uintptr_t kPlayerStateObject = 0x1b8;
+constexpr uintptr_t kStateUpdateSlot = 0x48;
+constexpr uintptr_t kComponentOwner = 0x48;
+std::atomic<PlayerUpdate> g_playerUpdate{PlayerUpdate::StateOnly};
 
 // The removal handlers that clear DSPlayerSystem's singleton pointers (see player_system_guard, which diverts the init's
 // stores): the remote's removal would clear Sam's.
@@ -63,6 +70,21 @@ struct Removal {
 };
 constexpr Removal kSingletonRemovals[] = {{"DSPlayerEquipmentManageComponent", 0x140F7A930},
                                           {"DSPlayerFacialRigManagerComponent", 0x140EE3EE0}};
+
+using UpdateFn = uint64_t (*)(uintptr_t component, uintptr_t message);
+UpdateFn g_update = nullptr;
+
+uint64_t playerUpdateDetour(uintptr_t component, uintptr_t message) {
+    const uintptr_t remote = remote_player::entity();
+    const PlayerUpdate mode = g_playerUpdate.load();
+    if (!remote || mode == PlayerUpdate::Full || ds2::field<uintptr_t>(component, kComponentOwner) != remote) {
+        return g_update(component, message);
+    }
+    if (mode == PlayerUpdate::Skip) return 0;
+    const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
+    const uintptr_t update = ds2::field<uintptr_t>(decima::readPointer(state), kStateUpdateSlot);
+    return state && update ? reinterpret_cast<UpdateFn>(update)(state, message) : 0;
+}
 
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
 using PartToggleFn = void (*)(uintptr_t holder, uint8_t id);
@@ -94,14 +116,7 @@ void partToggleDetour(uintptr_t holder, uint8_t id) {
 
 // Clears the component's entries in the entity's handler list (all of them, or only those that call `onlyFunction`); the
 // dispatcher drops cleared entries itself.
-struct ClearedEntry {
-    uintptr_t* slot;
-    uintptr_t value;
-    uintptr_t function;
-};
-std::vector<ClearedEntry> g_clearedPlayerUpdate;
-
-void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0, std::vector<ClearedEntry>* cleared = nullptr) {
+void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0) {
     const uintptr_t list = entity + ds2::kEntityHandlerList;
     const int32_t types = ds2::field<int32_t>(list, 0);
     const uintptr_t table = decima::readPointer(list + kTypeTable);
@@ -113,10 +128,7 @@ void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0, 
         for (uint32_t i = first; i < first + count; ++i) {
             auto& entry = ds2::field<uintptr_t>(handlers + i * kHandlerSize, 0);
             const uintptr_t function = ds2::field<uintptr_t>(handlers + i * kHandlerSize, sizeof(uintptr_t));
-            if ((entry & ~uintptr_t{1}) == component && (!onlyFunction || function == onlyFunction)) {
-                if (cleared) cleared->push_back({&entry, entry, function});
-                entry &= 1;  // keeps the low flag bit
-            }
+            if ((entry & ~uintptr_t{1}) == component && (!onlyFunction || function == onlyFunction)) entry &= 1;  // keeps the low flag bit
         }
     }
 }
@@ -128,6 +140,8 @@ namespace remote_guards {
 void installEarly() {
     hooks::install("id table init", ds2::at(kInitIdTable), reinterpret_cast<void*>(&initTableDetour),
                    reinterpret_cast<void**>(&g_initTable));
+    hooks::install("player component update", ds2::at(kPlayerComponentUpdate), reinterpret_cast<void*>(&playerUpdateDetour),
+                   reinterpret_cast<void**>(&g_update));
     hooks::install("art part toggle", ds2::at(kArtPartToggle), reinterpret_cast<void*>(&partToggleDetour),
                    reinterpret_cast<void**>(&g_partToggle));
 }
@@ -137,23 +151,14 @@ void silenceRemote() {
     for (const char* name : kSilencedComponents) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(name)));
     }
-    g_clearedPlayerUpdate.clear();
-    silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(kPlayerComponent)), ds2::at(kPlayerComponentUpdate),
-            &g_clearedPlayerUpdate);
     for (const Removal& removal : kSingletonRemovals) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(removal.component)), ds2::at(removal.function));
     }
 }
 
-void restorePlayerUpdate() {
-    size_t restored = 0;
-    for (const ClearedEntry& entry : g_clearedPlayerUpdate) {
-        if (entry.slot[0] != (entry.value & 1) || entry.slot[1] != entry.function) continue;  // the list moved on: leave it
-        entry.slot[0] = entry.value;
-        ++restored;
-    }
-    logger::write("remote_guards: the DSPlayerComponent update is back in the remote's handler list (%zu of %zu entries)", restored, g_clearedPlayerUpdate.size());
-    g_clearedPlayerUpdate.clear();
+void setPlayerUpdate(PlayerUpdate mode) {
+    g_playerUpdate = mode;
+    logger::write("remote_guards: the remote's DSPlayerComponent update runs as mode %d", static_cast<int>(mode));
 }
 
 }  // namespace remote_guards

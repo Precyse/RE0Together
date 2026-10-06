@@ -10,7 +10,7 @@
 //   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
 //                             paused-update request, 0x140131420), flags (logs the entity flags)
 //   equpdate.txt   "on|off"   whether the remote body's equipment component skips its update (on by default)
-//   playerupdate.txt any      puts the DSPlayerComponent update back into the remote body's handler list
+//   playerupdate.txt "skip|state|full"  what the remote body's DSPlayerComponent update runs: nothing, only the state machine step, all of it
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -266,7 +266,7 @@ void tick() {
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
-    if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_guards::restorePlayerUpdate();
+    if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_guards::setPlayerUpdate(text.rfind("skip", 0) == 0 ? remote_guards::PlayerUpdate::Skip : text.rfind("full", 0) == 0 ? remote_guards::PlayerUpdate::Full : remote_guards::PlayerUpdate::StateOnly);
     if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }
