@@ -411,6 +411,14 @@ void logMissions() {
 
 namespace game {
 
+bool requestMissionSuccess(uint64_t id, uint32_t flag) {
+    const uintptr_t mission = missionById(id);
+    const uintptr_t c = controller();
+    if (!mission || !c) return false;
+    reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, uint32_t)>(ds2::at(kRequestSuccess))(c, mission, flag);
+    return true;
+}
+
 uintptr_t missionById(uint64_t id) {
     const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
     return system ? reinterpret_cast<uintptr_t (*)(uintptr_t, uint64_t)>(ds2::at(kMissionById))(system, id) : 0;
