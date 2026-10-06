@@ -9,6 +9,7 @@
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
 //                             paused-update request, 0x140131420), flags (logs the entity flags)
+//   equpdate.txt   "on|off"   whether the remote body's equipment component skips its update (on by default)
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -26,6 +27,7 @@
 #include "ds2/entity_lookup.h"
 #include "ds2/health_watch.h"
 #include "ds2/place.h"
+#include "ds2/player_system_guard.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
@@ -261,6 +263,7 @@ void tick() {
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
+    if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
     if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }

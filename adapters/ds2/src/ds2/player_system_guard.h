@@ -11,4 +11,8 @@ namespace player_system_guard {
 // Start-up, before the world loads.
 void installEarly();
 
+// Whether the remote's equipment component skips its per-frame update (on by default; a test command turns it off to
+// see what else the update feeds, e.g. the ride start).
+void setEquipmentUpdateSkipped(bool skipped);
+
 }  // namespace player_system_guard
