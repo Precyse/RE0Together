@@ -82,7 +82,8 @@ void startDetour(uintptr_t sequence) {
             logger::write("cutscene: holding Sequence %p (category %u), the host has not announced it", reinterpret_cast<void*>(sequence),
                           info.category);
         }
-        if (verdict.forced) logger::write("cutscene: cutscene %u was held too long, starting it", verdict.id);
+        if (verdict.forced && verdict.id != 0) logger::write("cutscene: cutscene %u was held too long, starting it", verdict.id);
+        if (verdict.forced && verdict.id == 0) logger::write("cutscene: Sequence %p was held too long without an announcement, starting it", reinterpret_cast<void*>(sequence));
     }
     if (readable) {
         cutscene_log::onStart(sequence, info, verdict.hold ? "held" : shared ? "started" : "not shared");
@@ -142,7 +143,7 @@ void dropGone(ULONGLONG now) {
 
 void bindOrphans(ULONGLONG now) {
     for (auto it = g_table.orphans.begin(); it != g_table.orphans.end();) {
-        Playback* p = g_table.waitingFor(it->info);
+        Playback* p = it->released ? nullptr : g_table.waitingFor(it->info);
         if (p) {
             g_table.bind(*p, it->sequence, it->info, now);
             logger::write("cutscene: held cutscene %u (Sequence %p) for the host's go", p->start.id, reinterpret_cast<void*>(it->sequence));
@@ -195,8 +196,11 @@ void applyEnds(ULONGLONG now, Actions& actions) {
         if (!p) continue;
         const bool skipped = cutscene_wire::endedEarly(end, p->start.stopFrame, kEndSlackFrames);
         if (p->phase == Phase::Playing && skipped) {
+            logger::write("cutscene: cutscene %u cut short, the host skipped it at frame %d of %d", end.id, end.frame, p->start.stopFrame);
             actions.forceStop.emplace_back(p->sequence, cutscene_wire::kStopScripted);
         } else if (p->phase == Phase::Held && skipped) {  // started and cut at once: its end nodes run, as the host's skip ran them
+            logger::write("cutscene: held cutscene %u started and cut at once, the host skipped it at frame %d of %d", end.id, end.frame,
+                          p->start.stopFrame);
             actions.forceStart.push_back(p->sequence);
             actions.forceStop.emplace_back(p->sequence, cutscene_wire::kStopScripted);
         } else if (p->phase == Phase::Held) {
