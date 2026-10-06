@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <cstdint>
 
 #include "decima/entity.h"
@@ -55,6 +56,21 @@ struct Removal {
 };
 constexpr Removal kSingletonRemovals[] = {{"DSPlayerEquipmentManageComponent", 0x140F7A930},
                                           {"DSPlayerFacialRigManagerComponent", 0x140EE3EE0}};
+
+// Entity::Dispatch(entity, message, flag), the end of the engine's deferred message queue. Messages queued while the remote's
+// player was being built (the player is listed before its entity exists) can name an entity that is still null when the
+// queue is flushed (a read of 0x98 from null at 0x140136E9C, intermittent at the peer's connect): such a message has no one
+// to go to and is dropped.
+constexpr uintptr_t kEntityDispatch = 0x140136e90;
+using DispatchFn = uint64_t (*)(uintptr_t entity, uintptr_t message, uint8_t flag);
+DispatchFn g_entityDispatch = nullptr;
+
+uint64_t entityDispatchDetour(uintptr_t entity, uintptr_t message, uint8_t flag) {
+    if (entity) return g_entityDispatch(entity, message, flag);
+    static std::atomic<int> dropped{0};
+    if (dropped.fetch_add(1) < 5) logger::write("remote_guards: a queued message for a null entity dropped (message %p)", reinterpret_cast<void*>(message));
+    return 0;
+}
 
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
 using PartToggleFn = void (*)(uintptr_t holder, uint8_t id);
@@ -110,6 +126,8 @@ namespace remote_guards {
 void installEarly() {
     hooks::install("id table init", ds2::at(kInitIdTable), reinterpret_cast<void*>(&initTableDetour),
                    reinterpret_cast<void**>(&g_initTable));
+    hooks::install("entity dispatch", ds2::at(kEntityDispatch), reinterpret_cast<void*>(&entityDispatchDetour),
+                   reinterpret_cast<void**>(&g_entityDispatch));
     hooks::install("art part toggle", ds2::at(kArtPartToggle), reinterpret_cast<void*>(&partToggleDetour),
                    reinterpret_cast<void**>(&g_partToggle));
 }
