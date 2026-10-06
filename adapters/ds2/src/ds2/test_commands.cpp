@@ -4,6 +4,7 @@
 //   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
+//   partnerstream.txt "on"/"off"  the partner's members count as streamed in for the activity update (partner_focus)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
@@ -26,6 +27,7 @@
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/health_watch.h"
+#include "ds2/partner_focus.h"
 #include "ds2/place.h"
 #include "ds2/player_system_guard.h"
 #include "ds2/remote_player.h"
@@ -244,6 +246,7 @@ void tryParking(const std::string& mode) {
     logger::write("test_commands: park '%s', the body's entity flags %llx", mode.c_str(),
                   static_cast<unsigned long long>(ds2::field<uint64_t>(body, kEntityFlags)));
 }
+void setPartnerStreamOverride(const std::string& text) { partner_focus::setStreamedInOverride(text.rfind("on", 0) == 0); }
 
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
@@ -266,6 +269,7 @@ void tick() {
     if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
     if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
+    if (const std::string text = takeCommand(L"partnerstream.txt"); !text.empty()) setPartnerStreamOverride(text);
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.

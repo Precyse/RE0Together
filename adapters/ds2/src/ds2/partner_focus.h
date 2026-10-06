@@ -7,4 +7,8 @@ namespace partner_focus {
 // also logs the tables that keep members near the partner asleep and watches one sleeper's flags; never on in a shipped config.
 void installEarly(bool diagnostics);
 
+// Test toggle (test command partnerstream.txt "on"/"off", off by default): the update judges the partner's members as
+// streamed in whatever the streaming manager says. Any thread.
+void setStreamedInOverride(bool on);
+
 }  // namespace partner_focus
