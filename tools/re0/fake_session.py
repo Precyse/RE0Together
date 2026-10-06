@@ -7,6 +7,16 @@ are read from a text file, one per line, as they are appended:
     room <scene>           the fake player reports this room (ROOM_STATE every second); "room host" follows the game
     party                  the guest asks for the other party mode (PARTY_REQUEST)
     place <scene> <x> <y> <z>  an event on the fake's side moved the game's character (CHARACTER_PLACE)
+    hp <n>                 the fake reports PLAYER_STATE with this hp every second (condition and room on the game's
+                           partner status line)
+    menu <0|1> [phase]     the fake's menu is open (resent every second) or closed; phase is the room phase number
+                           (5 SubScreen, 8 Option, 2 Message, 10 EventDemo); the cap is 20 s except for 2, 3, 10, 12
+    phase <n>              (--guest) the host announces its save slot and room phase (SAVE_SLOT) every second:
+                           1 Main, 14 Dead (game over: the guest presses Continue by itself)
+    floor <room> <item> <count> <x> <y> <z>  (--guest) adds a floor item to the floor snapshot sent with the next join
+                           snapshot (FLOOR_SNAPSHOT)
+    leave                  the fake player goes away (PEER_DOWN) and stops sending; as the host: "Host left"
+    resync                 (--guest) the host asks the guest for a resync (RESYNC_REQUEST)
 The host's door arguments are printed as they arrive, so real doors can be replayed for Billy.
 
 With --guest the roles swap: the game is the guest (Billy) and the fake is the host (Rebecca); it announces ownership
@@ -27,7 +37,11 @@ import time
 PROTO_WELCOME, PROTO_PEER_UP, PROTO_HEARTBEAT = 0x0002, 0x0003, 0x0020
 ROOM_STATE, PARTY_REQUEST, DOOR_CHANGE, CHARACTER_PLACE = 0x0104, 0x0109, 0x010B, 0x0113
 SNAPSHOT_REQUEST, JOIN_SNAPSHOT = 0x010D, 0x010E
-OWNERSHIP, PARTY_MODE = 0x0102, 0x010A
+PLAYER_STATE, OWNERSHIP, PARTY_MODE = 0x0100, 0x0102, 0x010A
+MENU_STATE, SAVE_SLOT, RESYNC_REQUEST, FLOOR_SNAPSHOT = 0x0105, 0x010F, 0x0114, 0x0115
+PROTO_PEER_DOWN = 0x0004
+SESSION_SLOT = 0
+IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
 FLAG_RELIABLE = 1
 HOST_SLOT, GUEST_SLOT, MAX_PLAYERS, EPOCH = 0, 1, 2, 1
 FLAG_MANAGER, FLAG_BITS, FLAG_BYTES = 0xDCC014, 0x20, 0x11C
@@ -78,10 +92,38 @@ class Session:
         self.lock = threading.Lock()
         self.guest_scene = None  # None = follow the host's room
         self.host_scene = 0xFFFF
+        self.hp = None  # the fake's reported hp, None = no PLAYER_STATE
+        self.menu = None  # (open, phase) of the fake's MENU_STATE, None = never sent
+        self.phase = None  # the host's announced room phase (--guest), None = no SAVE_SLOT
+        self.floor = []  # floor snapshot entries for the next join snapshot
+        self.seq = 0
+        self.left = False
 
     def send(self, msg_type, payload):
         with self.lock:
             self.sock.sendall(encode(msg_type, self.peer_slot, payload))
+
+    def periodic(self):
+        """What a real peer repeats every second."""
+        if self.left:
+            return
+        self.room_state()
+        if self.guest:
+            self.send(OWNERSHIP, bytes((GUEST_SLOT, HOST_SLOT)))
+            self.send(PARTY_MODE, bytes((self.party,)))
+        if self.phase is not None:
+            self.send(SAVE_SLOT, struct.pack("<ii", SESSION_SLOT, self.phase))
+        if self.hp is not None:
+            self.seq += 1
+            scene = self.host_scene if self.guest_scene is None else self.guest_scene
+            self.send(PLAYER_STATE, struct.pack("<I3f4fBBHiB3x", self.seq, 0, 0, 0, *IDENTITY_QUAT, self.character,
+                                                int(self.guest), scene, self.hp, 0xFF))
+        if self.menu is not None and self.menu[0]:
+            self.send(MENU_STATE, bytes(self.menu))
+
+    def floor_snapshot(self):
+        return struct.pack("<HH", len(self.floor), 0) + b"".join(
+            struct.pack("<HBBII3f3f", room, 0, 0, item, count, *pos, 0, 0, 0) for room, item, count, pos in self.floor)
 
     def room_state(self):
         scene = self.host_scene if self.guest_scene is None else self.guest_scene
@@ -104,10 +146,13 @@ class Session:
                       flush=True)
             elif msg_type == PARTY_MODE:
                 print(f"party mode: {'team' if payload[0] == 0 else 'leave behind'}", flush=True)
-            elif msg_type == SNAPSHOT_REQUEST and self.snapshot:
-                self.send(JOIN_SNAPSHOT, self.snapshot)
-                print("join snapshot sent", flush=True)
-                self.snapshot = None
+            elif msg_type == SNAPSHOT_REQUEST:
+                print("snapshot requested", flush=True)
+                if self.snapshot:
+                    self.send(JOIN_SNAPSHOT, self.snapshot)
+                    if self.floor:
+                        self.send(FLOOR_SNAPSHOT, self.floor_snapshot())
+                    print("join snapshot sent", flush=True)
 
     def arrive(self, scene):
         self.guest_scene = scene
@@ -137,6 +182,21 @@ class Session:
                              place(rebecca_scene, rebecca_entry, REBECCA, (0, 0, 0)) +
                              game_bytes(ITEMS, BILLY_ITEMS, ITEM_BLOCK) + game_bytes(ITEMS, REBECCA_ITEMS, ITEM_BLOCK) +
                              game_bytes(FLAG_MANAGER, FLAG_BITS, FLAG_BYTES))
+        elif words[0] == "hp":
+            self.hp = int(words[1])
+        elif words[0] == "menu":
+            self.menu = (int(words[1]), int(words[2]) if len(words) > 2 else 5)
+            if not self.menu[0]:
+                self.send(MENU_STATE, bytes((0, 0)))
+        elif words[0] == "phase":
+            self.phase = int(words[1])
+        elif words[0] == "floor":
+            self.floor.append((int(words[1], 0), int(words[2], 0), int(words[3]), tuple(float(v) for v in words[4:7])))
+        elif words[0] == "leave":
+            self.left = True
+            self.send(PROTO_PEER_DOWN, bytes((self.peer_slot,)))
+        elif words[0] == "resync":
+            self.send(RESYNC_REQUEST, b"")
         elif words[0] == "place":
             scene = int(words[1], 0)
             x, y, z = (float(v) for v in words[2:5])
@@ -175,10 +235,7 @@ def main():
             last_tick = now
             with session.lock:
                 sock.sendall(encode(PROTO_HEARTBEAT, HOST_SLOT, flags=0))
-            session.room_state()
-            if args.guest:
-                session.send(OWNERSHIP, bytes((GUEST_SLOT, HOST_SLOT)))
-                session.send(PARTY_MODE, bytes((session.party,)))
+            session.periodic()
         lines = open(args.commands).read().splitlines()
         for line in lines[done:]:
             session.command(line)

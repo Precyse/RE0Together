@@ -53,11 +53,14 @@ add_library(re0_adapter SHARED
     src/net_trace.cpp
     src/flag_sync.cpp
     src/join_sync.cpp
+    src/resync.cpp
     src/session_slot.cpp
     src/auto_join.cpp
     src/virtual_keys.cpp
     src/phase_watch.cpp
     src/menu_mirror.cpp
+    src/partner_hud.cpp
+    src/partner_status.cpp
     src/camera_parity.cpp
     src/command_input.cpp
     src/command_log.cpp
@@ -120,6 +123,12 @@ add_executable(enemy_action_rule_test tests/enemy_action_rule_test.cpp)
 add_executable(enemy_puppet_rule_test tests/enemy_puppet_rule_test.cpp)
 
 
+add_executable(session_rule_test tests/session_rule_test.cpp)
+
+add_executable(menu_hold_rule_test tests/menu_hold_rule_test.cpp)
+
+add_executable(partner_status_test tests/partner_status_test.cpp src/partner_status.cpp)
+
 add_executable(flag_diff_test tests/flag_diff_test.cpp)
 
 add_executable(jitter_target_test tests/jitter_target_test.cpp)
@@ -128,6 +137,6 @@ add_executable(pad_buffer_test tests/pad_buffer_test.cpp)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_puppet_rule_test equip_rule_test spot_rule_test slot_thunk_test enemy_action_rule_test door_phase_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_puppet_rule_test equip_rule_test spot_rule_test slot_thunk_test enemy_action_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

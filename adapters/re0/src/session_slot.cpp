@@ -5,6 +5,8 @@
 #include <cstring>
 
 #include "character_owner.h"
+#include "debug_overlay.h"
+#include "floor_items_sync.h"
 #include "game.h"
 #include "game_state.h"
 #include "hooks.h"
@@ -12,6 +14,8 @@
 #include "net_pad.h"
 #include "protocol.h"
 #include "room_phase.h"
+#include "save_redirect.h"
+#include "session_rule.h"
 
 namespace {
 
@@ -19,6 +23,7 @@ using Clock = std::chrono::steady_clock;
 using session_slot::kUnknown;
 
 constexpr auto kAnnounceInterval = std::chrono::seconds(2);
+constexpr float kRefusedToastSeconds = 3.0f;
 constexpr int32_t kPlayerSlots = 20;  // slots 0..19 are player saves; higher ones are system data (options)
 constexpr int32_t kCoopSlot = kPlayerSlots - 1;  // every save made during a session goes here, never over a solo save
 
@@ -59,27 +64,40 @@ void remember(int32_t slot) {
     logger::write("session_slot: playing slot %d", slot);
 }
 
+// The game's own data is current after a load or a save: floor changes before it need no replay for a joining guest.
+void onSaveOrLoad(int32_t slot) {
+    remember(slot);
+    floor_items_sync::clearJournal();
+}
+
 bool __fastcall loadDetour(void* self, void* edx, int32_t slot, int32_t arg) {
     const int32_t chosen = chooseSlot(slot);
     const bool accepted = g_originalLoad(self, edx, chosen, arg);
-    if (accepted) remember(chosen);
+    if (accepted) onSaveOrLoad(chosen);
     return accepted;
 }
 
 bool __fastcall loadAltDetour(void* self, void* edx, int32_t slot, int32_t arg) {
     const int32_t chosen = chooseSlot(slot);
     const bool accepted = g_originalLoadAlt(self, edx, chosen, arg);
-    if (accepted) remember(chosen);
+    if (accepted) onSaveOrLoad(chosen);
     return accepted;
 }
 
 // Only the in-game save screen is a player's save; the game also saves on its own at boot.
 bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
-    const bool coop = net_pad::active() && isPlayerSlot(slot) && game_state::roomPhase() == room_phase::Save;
+    const auto route = session_rule::saveRoute(isPlayerSlot(slot), game_state::roomPhase(), session_slot::guestSession(),
+                                               net_pad::active());
+    if (route == session_rule::SaveRoute::Refuse) {
+        logger::write("session_slot: guest save of slot %d refused", slot);
+        debug_overlay::toast("Only the host can save", kRefusedToastSeconds);
+        return false;
+    }
+    const bool coop = route == session_rule::SaveRoute::CoopSlot;
     const int32_t target = coop ? kCoopSlot : slot;
     if (coop && slot != target) logger::write("session_slot: save to slot %d kept in the co-op slot %d", slot, target);
     const bool accepted = g_originalSave(self, edx, target);
-    if (accepted) remember(target);
+    if (accepted) onSaveOrLoad(target);
     return accepted;
 }
 
@@ -110,6 +128,8 @@ void onNetTick(NetClient& net) {
 }
 
 int32_t current() { return g_slot.load(); }
+
+bool guestSession() { return save_redirect::servingSession() && !character_owner::isHost(); }
 
 bool hostInGame() { return room_phase::isGameplay(g_hostPhase.load()); }
 
