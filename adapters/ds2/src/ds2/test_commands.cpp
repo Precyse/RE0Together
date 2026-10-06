@@ -11,6 +11,7 @@
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 //   sequence.txt   "uuid"     starts the loaded SequenceNetwork with that UUID (32 hex digits, as cutscene_log prints it): a cutscene without walking to its trigger
+//   missions.txt   any        logs every mission id with its state
 //   networks.txt   any        logs every loaded SequenceNetwork (UUID, main Sequence end frame, playing)
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -34,6 +35,7 @@
 #include "ds2/remote_weapon.h"
 #include "ds2/sequence_info.h"
 #include "ds2/sim_tick.h"
+#include "ds2/story.h"
 #include "enemy_directory.h"
 #include "equip_sync.h"
 #include "game.h"
@@ -271,6 +273,7 @@ void tick() {
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"sequence.txt"); !text.empty()) startSequenceNetwork(text);
     if (const std::string text = takeCommand(L"networks.txt"); !text.empty()) logNetworks();
+    if (const std::string text = takeCommand(L"missions.txt"); !text.empty()) story::logMissions();
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"attach.txt"); !text.empty()) remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, 10));
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();

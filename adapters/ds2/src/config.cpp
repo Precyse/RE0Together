@@ -57,6 +57,8 @@ Config loadConfig() {
             config.godMode = value == "1";
         } else if (key == "cutscene_log") {
             config.cutsceneLog = value == "1";
+        } else if (key == "cutscene_share_min_frames") {
+            config.cutsceneShareMinFrames = static_cast<uint32_t>(std::strtoul(value.c_str(), nullptr, 10));
         } else if (key == "cutscene_sync") {
             config.cutsceneSync = value == "1";
         } else if (key == "weapon_sync") {

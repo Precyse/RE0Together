@@ -13,6 +13,7 @@ struct Config {
     bool testCommands = false;  // command files in the coop folder for live checks (teleport, area, weapon, BT region)
     bool godMode = false;       // test only (needs test_commands=1): every hit on the local player is dropped; never on in a shipped config
     bool cutsceneLog = false;   // log every cutscene (Sequence) start and game-state change
+    uint32_t cutsceneShareMinFrames = 0;  // test only (needs test_commands=1): every Sequence of at least this many frames counts as a shared cutscene; 0 off
     bool cutsceneSync = false;  // cutscenes watched together: the host holds a story cutscene until the guests are ready
     bool weaponSync = false;   // weapons: the partner's body holds and fires the weapon the partner has drawn
     uint8_t weaponAttachMode = 1;  // SetParent mode of the body's weapon (1 = the engine's own), to try other attach variants live

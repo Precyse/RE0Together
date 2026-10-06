@@ -50,6 +50,7 @@ StopFn g_stop = nullptr;
 SkipFn g_skip = nullptr;
 
 std::atomic<bool> g_sync{false};
+uint32_t g_shareMinFrames = 0;  // set once at start-up
 std::atomic<bool> g_host{false};
 std::atomic<bool> g_guest{false};
 std::atomic<size_t> g_guests{0};
@@ -66,7 +67,8 @@ bool isZero(const uint8_t* uuid) {
 void startDetour(uintptr_t sequence) {
     sequence_info::Info info;
     const bool readable = sequence_info::read(sequence, info);
-    const bool shared = readable && cutscene_wire::isShared(info.category, info.gameState);
+    const bool shared = readable && (cutscene_wire::isShared(info.category, info.gameState) ||
+                                     (g_shareMinFrames != 0 && info.stopFrame >= static_cast<int32_t>(g_shareMinFrames)));
     cutscene_table::Verdict verdict;
     if (shared && g_sync && (g_host || g_guest)) {
         std::lock_guard lock(g_mutex);
@@ -225,8 +227,9 @@ void tick() {
 
 namespace cutscene {
 
-void installEarly(bool sync) {
+void installEarly(bool sync, uint32_t shareMinFrames) {
     g_sync = sync;
+    g_shareMinFrames = shareMinFrames;
     hooks::install("cutscene sequence start", ds2::at(kSequenceStart), reinterpret_cast<void*>(&startDetour), reinterpret_cast<void**>(&g_start));
     hooks::install("cutscene sequence stop", ds2::at(kSequenceStop), reinterpret_cast<void*>(&stopDetour), reinterpret_cast<void**>(&g_stop));
     if (!sync) return;

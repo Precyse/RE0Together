@@ -382,6 +382,12 @@ void installEarly() {
     sim_tick::add(&applyIncoming, "story replay", sim_tick::Gate::Gameplay);
 }
 
+void logMissions() {
+    for (const auto& [id, state] : readMissions()) {
+        logger::write("story: mission %llx state %u", static_cast<unsigned long long>(id), state);
+    }
+}
+
 }  // namespace story
 
 namespace game {

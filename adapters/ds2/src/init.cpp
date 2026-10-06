@@ -103,7 +103,7 @@ DWORD WINAPI initThread(LPVOID) {
     loading_screen::installEarly();
     if (config.testCommands) test_commands::installEarly();
     if (config.cutsceneLog) cutscene_log::enable();
-    if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync);
+    if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync, config.testCommands ? config.cutsceneShareMinFrames : 0);
     partner_cargo::installEarly();
     structures::installEarly();
     sim_tick::installEarly();
