@@ -252,8 +252,11 @@ def serve(sock, a):
             elif msg_type == CARGO_GONE and a.echo_cargo:
                 sock.sendall(encode(MOVE_ACK, peer_slot, body[4:]))  # CargoGone and MoveAck (gone) share their bytes
             elif msg_type == CARGO_LIST:
-                if len(body) >= 8 + CARGO_ENTRY_SIZE:
+                (listed,) = struct.unpack_from("<I", body, 4)
+                if listed and len(body) == 8 + listed * CARGO_ENTRY_SIZE:
                     host_first_piece[0] = struct.unpack_from("<Q", body, 8)[0]
+                elif listed:
+                    print(f"cargo: a CARGO_LIST of {listed} pieces has {len(body)} bytes, not {8 + listed * CARGO_ENTRY_SIZE}", flush=True)
                 if a.echo_cargo:
                     sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == EQUIP_STATE and a.echo_equip:
