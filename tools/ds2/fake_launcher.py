@@ -34,6 +34,11 @@ CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, res
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011E
+CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END = 0x012A, 0x012B, 0x012C, 0x012D
+CUTSCENE_START_FORMAT = struct.Struct("<IB3xi16s16s16s")  # id, category, reserved, stop frame, resource, entity, network (cutscene_wire.h)
+CUTSCENE_END_FORMAT = struct.Struct("<IiB3x")  # id, host frame, stop reason, reserved
+CUTSCENE_FRAMES_PER_SECOND = 120
+CUTSCENE_CATEGORY_STORY = 1
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
@@ -153,6 +158,7 @@ def main():
     p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
     p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
+    p.add_argument("--cutscene", default="", help="SECONDS[:RESOURCE_HEX[:NETWORK_HEX[:FRAMES]]]: as the host (use --guest), announce a story cutscene (CUTSCENE_START) after that long, send GO once the adapter answers READY and END when it has played FRAMES (default 720); as the guest, answer each CUTSCENE_START with READY after SECONDS (negative: never); every cutscene message is printed")
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
     p.add_argument("--enemy-id", type=int, default=0, help="the net id --enemy-hit keeps hitting while it exists (default: the nearest enemy)")
@@ -229,6 +235,8 @@ def serve(sock, a):
                     record(body)
             elif msg_type in (ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM) and a.enemy_record:
                 record(body)
+            elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
+                on_cutscene(msg_type, body)
             elif msg_type == CARGO_LIST and a.echo_cargo:
                 sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == EQUIP_STATE and a.echo_equip:
@@ -237,6 +245,20 @@ def serve(sock, a):
                 sock.sendall(encode(msg_type, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
+
+    cutscene = {"id": 0}
+
+    def on_cutscene(msg_type, body):
+        print(f"cutscene: received {msg_type:#06x} {body[4:].hex()}", flush=True)
+        if msg_type == CUTSCENE_START and not a.guest:
+            cutscene_id = struct.unpack_from("<I", body, 4)[0]
+            delay = float(a.cutscene.split(":")[0])
+            if delay >= 0:
+                threading.Timer(delay, lambda: sock.sendall(encode(CUTSCENE_READY, peer_slot, struct.pack("<I", cutscene_id)))).start()
+        elif msg_type == CUTSCENE_READY and a.guest and cutscene["id"]:
+            sock.sendall(encode(CUTSCENE_GO, peer_slot, struct.pack("<I", cutscene["id"])))
+            cutscene["go"] = time.monotonic()
+            print("cutscene: GO sent", flush=True)
 
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None
@@ -301,6 +323,19 @@ def serve(sock, a):
                 told_story = True
                 sock.sendall(encode(0x0119, peer_slot, struct.pack("<B3xIiIQ16s", int(kind), 0, -1, 0, int(mission, 16), bytes(16))))
                 print("story: event sent", flush=True)
+        if a.cutscene and a.guest and start is not None:
+            fields = a.cutscene.split(":")
+            frames = int(fields[3]) if len(fields) > 3 else 720
+            if not cutscene["id"] and now - start >= float(fields[0]):
+                cutscene["id"] = 1
+                resource = bytes.fromhex(fields[1]) if len(fields) > 1 and fields[1] else bytes(range(1, 17))
+                network = bytes.fromhex(fields[2]) if len(fields) > 2 and fields[2] else bytes(16)
+                sock.sendall(encode(CUTSCENE_START, peer_slot, CUTSCENE_START_FORMAT.pack(1, CUTSCENE_CATEGORY_STORY, frames, resource, bytes(16), network)))
+                print("cutscene: START sent", flush=True)
+            if cutscene.get("go") and not cutscene.get("ended") and now - cutscene["go"] >= frames / CUTSCENE_FRAMES_PER_SECOND:
+                cutscene["ended"] = True
+                sock.sendall(encode(CUTSCENE_END, peer_slot, CUTSCENE_END_FORMAT.pack(1, frames, 0)))
+                print("cutscene: END sent", flush=True)
         if replay and start is not None and now - start >= a.enemy_delay:
             if replay_start is None:
                 replay_start = now
