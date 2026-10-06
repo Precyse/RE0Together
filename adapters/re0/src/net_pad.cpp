@@ -28,9 +28,12 @@ game::PadBytes g_object{};
 std::array<uint32_t, pad::kVtableSlotCount> g_vtable{};
 bool g_objectReady = false;
 
+// The replayed character never presses "action": its owner runs the interaction (door, item prompt, take, use) and
+// only the result reaches this machine, so a second prompt or pickup sequence cannot start here.
 template <size_t Slot>
 uint32_t __fastcall queryThunk(void*, void*) {
-    return g_current.values[Slot - pad::kFirstQuerySlot];
+    if constexpr (Slot == pad::kActionSlot) return 0;
+    else return g_current.values[Slot - pad::kFirstQuerySlot];
 }
 
 void* __fastcall stickThunk(void*, void*, void* out) {

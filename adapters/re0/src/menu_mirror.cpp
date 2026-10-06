@@ -5,7 +5,6 @@
 #include <map>
 #include <mutex>
 
-#include "camera_parity.h"
 #include "character_owner.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
@@ -74,7 +73,6 @@ void __fastcall openDetour(void* self, void* edx) {
     if (net_pad::active() && !character_owner::isLocalOwned(focused) && character_owner::isLocalOwned(partner)) {
         g_focusBeforeMenu = focused;
         character_owner::focus(partner);
-        camera_parity::holdLocalFocus();
         logger::write("menu_mirror: menu opened for %s", character_owner::name(partner));
     }
     inventory_sync::onMenuOpen();
@@ -84,7 +82,6 @@ void __fastcall openDetour(void* self, void* edx) {
 void onTick() {
     if (g_focusBeforeMenu == Character::Unknown || game_state::menuOpen()) return;
     character_owner::focus(g_focusBeforeMenu);
-    camera_parity::holdLocalFocus();
     g_focusBeforeMenu = Character::Unknown;
 }
 

@@ -13,6 +13,7 @@ public static class GuiHost
     public static int Run(CliOptions options)
     {
         FreeConsole();
+        Console.SetOut(TextWriter.Null);  // lines written before (the updater) bound Console.Out to the console just freed
         ApplicationConfiguration.Initialize();
         var app = new App(options, interactive: true);
         var loop = new Thread(() => RunLoop(app)) { IsBackground = true, Name = "app-loop" };

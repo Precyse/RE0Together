@@ -39,6 +39,7 @@ ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
 PLAYER_HIT = 0x0121
+RESYNC, RESYNC_ENEMIES = 0x0118, 16  # resync.h: a request for the host's enemy announcements
 PLAYER_HIT_FORMAT = struct.Struct("<HH16sfIiHH12f")  # attacker ref (none: all zero), amount, flags, part, attack type, reserved, 3 vectors
 ENEMY_HIT_FORMAT = struct.Struct("<HH16sfIiI12f")  # enemy ref {net id, reserved, uuid} + hit fields (combat_wire.h)
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
@@ -123,6 +124,8 @@ def main():
     p.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) the peer drives, parked at --drive-pos")
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
+    p.add_argument("--at", default="", help="X,Y,Z: the peer's circle centre is this world point, whatever the local player does (not with --follow)")
+    p.add_argument("--resync-enemies", action="store_true", help="after the first local state ask the host for every enemy again (a peer that joins a running host gets the enemy list this way)")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
@@ -226,7 +229,7 @@ def serve(sock, a):
     seq, start, last_hb, centre = 0, None, 0.0, None
     last_held, last_equip, last_env = None, 0.0, 0.0
     hit_target = None  # the net id --enemy-hit keeps hitting
-    enemies_listed = False
+    enemies_listed = enemies_asked = False
 
     def far(net_id):
         at = announced[net_id][1]
@@ -249,10 +252,14 @@ def serve(sock, a):
         if local and (centre is None or a.follow):
             fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])  # forward (yaw = atan2(forward.x, forward.y))
             first = centre is None
-            centre = (local["x"] + fx * a.offset + a.radius, local["y"] + fy * a.offset, local["z"])
+            centre = (tuple(float(v) for v in a.at.split(",")) if a.at else
+                      (local["x"] + fx * a.offset + a.radius, local["y"] + fy * a.offset, local["z"]))
             if first:
                 start = now
                 print(f"circle centre {centre}", flush=True)
+        if a.resync_enemies and start is not None and not enemies_asked:
+            enemies_asked = True
+            sock.sendall(encode(RESYNC, peer_slot, struct.pack("<I", RESYNC_ENEMIES)))
         if a.struct and local and start is not None:
             add_at, remove_at = map(float, a.struct.split(","))
             if not struct_added and now - start >= add_at:

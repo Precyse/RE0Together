@@ -62,11 +62,13 @@ Config loadConfig() {
             config.overlay = value != "0";
         } else if (key == "net_trace") {
             config.netTrace = value == "1";
+        } else if (key == "auto_join") {
+            config.autoJoin = value == "1";
         } else if (key == "trace_vtables") {
             config.traceVtables = parseVtables(value);
         }
     }
-    logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d", config.port, config.trace,
-                  config.traceVtables.size(), config.coop, config.overlay, config.netTrace);
+    logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d auto_join=%d", config.port, config.trace,
+                  config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.autoJoin);
     return config;
 }

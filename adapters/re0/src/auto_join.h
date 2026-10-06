@@ -8,6 +8,9 @@
 namespace auto_join {
 
 // Net thread, every tick (the game tick does not run outside gameplay).
+// Turns the automatic join on (adapter.ini auto_join=1); without it onNetTick does nothing.
+void enable();
+
 void onNetTick();
 
 }  // namespace auto_join

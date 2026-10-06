@@ -39,19 +39,41 @@ public static class Updater
         public string? ZipUrl => Assets?.FirstOrDefault(a => a.Name == AssetName)?.DownloadUrl;
     }
 
-    /// <summary>True when a newer build was installed and started; the caller must exit.</summary>
+    /// <summary>Start-up: true when a newer build was installed and started; the caller must exit. Safe because no Steam
+    /// session exists yet in this process.</summary>
     public static bool TryInstall(string[] args)
+    {
+        if (!Stage()) return false;
+        try
+        {
+            Relaunch(args);
+            return true;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Log.Info($"Update installed but not started: {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Downloads and installs a newer build without starting it. True when one was installed; the running copy
+    /// keeps going until the user reopens the launcher.</summary>
+    public static bool Stage()
     {
         if (FindPackageRoot() is not { } root) return false;
         DeleteOldFiles(root);
         try
         {
             var release = ReadRepo() is { } repo ? FetchRelease(repo) : null;
-            if (release is not { Build: { } build, ZipUrl: { } zipUrl } || build <= BuildCheck.LocalBuild()) return false;
+            if (release is not { Build: { } build, ZipUrl: { } zipUrl }) return false;
+            if (build <= BuildCheck.LocalBuild())
+            {
+                Log.Info($"Up to date (build {BuildCheck.LocalBuild()})");
+                return false;
+            }
             Log.Info($"Installing build {build}");
             InstallFrom(zipUrl, root);
             if (BuildCheck.LocalBuild() < build) throw new InvalidDataException($"package did not update {BuildCheck.VersionFile}");
-            Relaunch(args);
             return true;
         }
         catch (Exception e)

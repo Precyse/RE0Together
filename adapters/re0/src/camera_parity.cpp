@@ -1,20 +1,13 @@
 #include "camera_parity.h"
 
-#include <algorithm>
-#include <atomic>
 #include <chrono>
-#include <cstring>
 
 #include "character_owner.h"
-#include "command_log.h"
-#include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
 #include "room_phase.h"
-#include "split_rooms.h"
-#include "state_sync.h"
 
 namespace {
 
@@ -24,91 +17,15 @@ using character_owner::switchTo;
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kMinSwapInterval = std::chrono::seconds(1);
-// After a guest's own switch, parity waits this long for the host to apply the request before reverting it.
-constexpr auto kRequestGrace = std::chrono::milliseconds(1500);
-constexpr Character kHostCharacter = Character::Rebecca;
 
-
-NetClient* g_net = nullptr;
-std::atomic<Character> g_hostCharacter{Character::Unknown};  // guest: the host's controlled character
-std::atomic<Character> g_requested{Character::Unknown};      // host: the character to switch to
 Clock::time_point g_lastSwap;
-std::atomic<Clock::time_point> g_graceUntil{};  // written by the net thread (local press), read on the game thread
-uintptr_t g_seenLow = 0;                    // host: the two player objects at the last check, ordered
-uintptr_t g_seenHigh = 0;
 
-void hostSwitchTo(Character wanted) {
-    const SwitchResult result = switchTo(wanted);
-    if (result != SwitchResult::Done) {
-        command_log::decide("switch to %s ignored: %s", character_owner::name(wanted), character_owner::reason(result));
-        return;
-    }
-    command_log::decide("switch to %s applied", character_owner::name(wanted));
-}
-
-
-// The one place a switch request enters the host, from its own key and from a guest's SWITCH_REQUEST.
-void queueSwitch(Character target, const char* origin) {
-    command_log::note("switch to %s requested by %s", character_owner::name(target), origin);
-    if (split_rooms::independent()) {
-        command_log::decide("switch to %s ignored: independent play", character_owner::name(target));
-        return;
-    }
-    g_requested = target;
-}
-
-// Fixed ownership: the host's character is Rebecca. Whenever the player objects change (session start, save
-// load), focus goes to her once; the guest's camera then mirrors it.
-void focusHostCharacterOnNewObjects(uintptr_t controlled, uintptr_t partner) {
-    const uintptr_t low = std::min(controlled, partner);
-    const uintptr_t high = std::max(controlled, partner);
-    if (low == g_seenLow && high == g_seenHigh) return;
-    g_seenLow = low;
-    g_seenHigh = high;
-    if (character_owner::identify(controlled) != kHostCharacter) hostSwitchTo(kHostCharacter);
-}
-
-void forgetHostState() {
-    g_seenLow = g_seenHigh = 0;
-    g_requested = Character::Unknown;
-}
-
-// Why the host cannot act on the players right now, or null.
-const char* hostBlocker(uintptr_t controlled, uintptr_t partner) {
-    if (!net_pad::active()) return "no peer connected";
-    if (!controlled || !partner) return "no partner object";
-    if (game_state::doorActive()) return "door active";
-    return nullptr;
-}
-
-void hostTick() {
-    const uintptr_t controlled = game::controlled();
-    const uintptr_t partner = game::partner();
-    const Character requested = g_requested.exchange(Character::Unknown);
-    if (const char* blocker = hostBlocker(controlled, partner)) {
-        if (!net_pad::active()) forgetHostState();
-        if (requested != Character::Unknown) {
-            command_log::decide("switch to %s ignored: %s", character_owner::name(requested), blocker);
-        }
-        return;
-    }
-    focusHostCharacterOnNewObjects(controlled, partner);
-    if (requested != Character::Unknown) hostSwitchTo(requested);
-}
-
-void guestTick() {
-    const auto now = Clock::now();
-    const Character wanted = g_hostCharacter;
-    if (wanted == Character::Unknown || game_state::menuOpen() || now < g_graceUntil.load() || now - g_lastSwap < kMinSwapInterval) return;
-    if (switchTo(wanted) != SwitchResult::Done) return;
-    g_lastSwap = now;
-    logger::write("camera_parity: swapped controlled character to %u to match the host", static_cast<unsigned>(wanted));
-}
-
-// Independent play: the camera stays on this machine's own character (after a mode change, a save load, a script's
-// switch or a gamepad's switch button, which the keyboard hiding in command_input does not cover), once the screen
-// is settled.
-void keepOwnFocus() {
+// With a peer the camera stays on this machine's own character, in every party mode: after a save load, a script's
+// switch or a gamepad's switch button (which the keyboard hiding in command_input does not cover), once the screen
+// is settled. Menus, doors and cutscenes (any room phase but Main) run on whatever the game set, then the camera
+// comes back.
+void onTick() {
+    if (!net_pad::active()) return;
     const auto now = Clock::now();
     const Character own = character_owner::localCharacter();
     if (own == Character::Unknown || game_state::menuOpen() || game_state::doorActive() ||
@@ -117,69 +34,13 @@ void keepOwnFocus() {
     }
     if (switchTo(own) != SwitchResult::Done) return;
     g_lastSwap = now;
-    logger::write("camera_parity: independent play, focus back on %s", character_owner::name(own));
-}
-
-void onTick() {
-    if (split_rooms::independent()) return keepOwnFocus();
-    if (!character_owner::isHost()) {
-        if (g_net) guestTick();
-        return;
-    }
-    hostTick();
+    logger::write("camera_parity: focus back on %s", character_owner::name(own));
 }
 
 }  // namespace
 
 namespace camera_parity {
 
-void onFrame(const GameFrame& frame) {
-    if (frame.type == kMsgSwitchRequest) {
-        if (frame.payload.size() != 1) return;
-        const Character target = static_cast<Character>(frame.payload[0]);
-        if (character_owner::isHost()) {
-            command_log::note("SWITCH_REQUEST received from slot %u", frame.slot);
-            queueSwitch(target, "guest");
-        } else {
-            command_log::decide("SWITCH_REQUEST from slot %u ignored: not the host", frame.slot);
-        }
-        return;
-    }
-    if (frame.type != state_sync::kMsgPlayerState || frame.payload.size() != sizeof(state_sync::PlayerState)) return;
-    state_sync::PlayerState state;
-    std::memcpy(&state, frame.payload.data(), sizeof(state));
-    if (state.senderIsHost) g_hostCharacter = static_cast<Character>(state.focusedCharacterId);
-}
-
-void onLocalSwitchKey() {
-    const Character focused = character_owner::identify(game::controlled());
-    if (focused == Character::Unknown) return;
-    const Character target = character_owner::other(focused);
-    if (split_rooms::independent()) {
-        command_log::decide("switch to %s ignored: independent play", character_owner::name(target));
-        return;
-    }
-    if (character_owner::isHost()) {
-        queueSwitch(target, "host");
-        return;
-    }
-    const uint8_t id = static_cast<uint8_t>(target);
-    const bool sent = g_net && g_net->send(kMsgSwitchRequest, true, proto::kSlotAll, {&id, sizeof(id)});
-    if (!sent) {
-        command_log::decide("switch to %s not sent: link busy", character_owner::name(target));
-        return;
-    }
-    g_graceUntil = Clock::now() + kRequestGrace;
-    command_log::note("SWITCH_REQUEST to %s sent", character_owner::name(target));
-}
-
-void holdLocalFocus() {
-    if (!character_owner::isHost()) g_graceUntil = Clock::now() + kRequestGrace;
-}
-
-void enable(NetClient& net) {
-    g_net = &net;
-    game_tick::addCallback("camera_parity", onTick);
-}
+void enable() { game_tick::addCallback("camera_parity", onTick); }
 
 }  // namespace camera_parity

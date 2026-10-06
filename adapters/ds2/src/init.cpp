@@ -83,6 +83,7 @@ DWORD WINAPI initThread(LPVOID) {
         camp_alert::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
+        combat_hook::setGodMode(config.godMode && config.testCommands);
         if (config.diagnostics) damage_diag::installEarly();
         health_watch::installEarly();
     }

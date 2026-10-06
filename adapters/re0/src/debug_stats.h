@@ -37,6 +37,8 @@ enum class Counter : size_t {
     InventorySent,
     InventoryApplied,
     InventoryExchanges,
+    EquipRefreshes,
+    EnemyActionRequests,
     FlagWordsSent,
     FlagWordsApplied,
     FloorPutSent,

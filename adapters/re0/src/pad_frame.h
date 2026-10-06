@@ -14,6 +14,7 @@ constexpr size_t kFirstQuerySlot = 5;
 constexpr size_t kQuerySlotCount = 31;
 constexpr size_t kStickSlot = 14;  // void* f(void* out16)
 constexpr size_t kArgSlot = 15;    // u32 f(u32 arg)
+constexpr size_t kActionSlot = 18;  // "action pressed" (+0x48): doors, items and every other interaction
 
 constexpr size_t kStickBytes = 16;
 constexpr size_t kAnalogBytes = 0x40;

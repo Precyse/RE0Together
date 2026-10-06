@@ -74,14 +74,14 @@ uintptr_t createDetour(uintptr_t info) {
     const bool enemy = isEnemyResource(resource);
     const uintptr_t entity = g_create(info);
     if (!enemy || !entity) return entity;
+    std::array<uint8_t, kUuidSize> resourceUuid{};
+    decima::safeCopy(resourceUuid.data(), resource + kResourceUuid, resourceUuid.size());
     if (g_tame.load()) {
         if (const int count = ++g_tamed; count == 1 || count % kTamedLogEvery == 0) {
             logger::write("enemy_spawn: tamed %d enemies", count);
         }
-        enemy_puppet::adopt(entity);
+        enemy_puppet::adopt(entity, resourceUuid);
     } else {
-        std::array<uint8_t, kUuidSize> resourceUuid{};
-        decima::safeCopy(resourceUuid.data(), resource + kResourceUuid, resourceUuid.size());
         enemy_host::add(entity, resourceUuid);
     }
     return entity;
@@ -103,7 +103,11 @@ namespace game {
 void tameEnemies(bool tame) {
     if (g_tame.exchange(tame) == tame) return;
     logger::write("enemy_spawn: enemies %s", tame ? "tamed" : "left alone");
-    if (tame) enemy_puppet::adoptExisting();
+    if (tame) {
+        enemy_puppet::adoptExisting();
+    } else {
+        enemy_puppet::releaseToHost();
+    }
 }
 
 }  // namespace game
