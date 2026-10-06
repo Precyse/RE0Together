@@ -1,7 +1,10 @@
 #include "ds2/remote_update.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <map>
+#include <mutex>
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
@@ -29,7 +32,12 @@ enum Call : uint32_t {
     kMotionWhole = 1u << 9,  // not a skip: the motion call runs whole for the remote instead of its tail step only
 };
 
+constexpr auto kMessageLogEvery = std::chrono::seconds(5);
+
 thread_local bool t_remoteUpdate = false;
+std::mutex g_messageMutex;
+std::map<std::pair<uintptr_t, int>, int> g_messageCounts;  // (message vtable, target: 0 Sam, 1 the remote, 2 other) -> count
+std::chrono::steady_clock::time_point g_messageLoggedAt;
 std::atomic<uint32_t> g_skip{0};
 
 bool skipped(Call call) { return t_remoteUpdate && (g_skip.load() & call) != 0; }
@@ -115,6 +123,26 @@ void hook(const char* name, uintptr_t address, void* detour, Fn* original) {
 }  // namespace
 
 namespace remote_update {
+
+bool running() { return t_remoteUpdate; }
+
+bool onMessage(uintptr_t messageVtable, uintptr_t target) {
+    if (!t_remoteUpdate) return false;
+    const int kind = target == remote_player::samEntity() ? 0 : target == remote_player::entity() ? 1 : 2;
+    std::lock_guard lock(g_messageMutex);
+    ++g_messageCounts[{messageVtable, kind}];
+    const auto now = std::chrono::steady_clock::now();
+    if (now - g_messageLoggedAt >= kMessageLogEvery) {
+        g_messageLoggedAt = now;
+        for (const auto& [key, count] : g_messageCounts) {
+            logger::write("remote_update: messages from the remote's update: vtable %p to %s x%d",
+                          reinterpret_cast<void*>(key.first - ds2::at(ds2::kImageBase) + ds2::kImageBase),
+                          key.second == 0 ? "Sam" : key.second == 1 ? "the remote" : "another entity", count);
+        }
+        g_messageCounts.clear();
+    }
+    return kind == 0 && (g_skip.load() & kBlockMessagesToSam) != 0;
+}
 
 void setSkipMask(uint32_t mask) {
     g_skip = mask;
