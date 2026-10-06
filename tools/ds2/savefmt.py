@@ -77,3 +77,41 @@ def assemble(header, index, sizes, chunks):
     key = key_for(struct.unpack_from("<I", header, SEED_OFFSET)[0])
     table = struct.pack(f"<{len(sizes)}I", *sizes)
     return header + b"".join(xor_cycled(part, key) for part in (index, table, *chunks))
+
+
+def lz4_block(src):
+    """Decodes one LZ4 block (the game's decompressor at DS2.exe 0x14206b9b0 is LZ4_decompress_safe); the output size is
+    not stored, so it runs to the end of `src`. Raises ValueError when the stream is malformed."""
+    out = bytearray()
+    i = 0
+    while i < len(src):
+        token = src[i]
+        i += 1
+        literals = token >> 4
+        if literals == 15:
+            while True:
+                extra = src[i]
+                i += 1
+                literals += extra
+                if extra != 255:
+                    break
+        out += src[i:i + literals]
+        i += literals
+        if i >= len(src):
+            break
+        offset = src[i] | src[i + 1] << 8
+        i += 2
+        length = token & 15
+        if length == 15:
+            while True:
+                extra = src[i]
+                i += 1
+                length += extra
+                if extra != 255:
+                    break
+        length += 4
+        if offset == 0 or offset > len(out):
+            raise ValueError("bad match offset")
+        for _ in range(length):
+            out.append(out[-offset])
+    return bytes(out)

@@ -300,7 +300,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tests/anim_wire_test.cpp | ANIM_STATE / ANIM_EVENT payload with and without timestamp, rejections, pulse detection, held pulses (no game) | |
 | tests/fact_snapshot_test.cpp | FACT_SNAPSHOT chunking, header checks, progress; pending queue release, expiry and overflow (no game) | |
 | tools/ds2/fact_wire_test.py | cross-language FACT_SET check: python encodes and C++ decodes, C++ encodes and python decodes, truncation rejected (no game) | |
-| tools/ds2/savefmt.py | DS2 save container on copies: 32-byte header, XOR key from a Murmur hash of the header seed, index / size table / chunks (chunk 0 text, chunk 1 PNG); `segments` decrypts, `assemble` re-encrypts | `segments`, `assemble`, `key_for` |
+| tools/ds2/savefmt.py | DS2 save container on copies: 32-byte header, XOR key from a Murmur hash of the header seed, index / size table / chunks (chunk 0 text, chunk 1 PNG); `segments` decrypts, `assemble` re-encrypts, `lz4_block` unpacks a chunk (chunks 2-65 are 0x40000-byte LZ4 pages) | `segments`, `assemble`, `key_for`, `lz4_block` |
 | tools/ds2/savefmt_test.py | decrypt then re-encrypt equals the save, PNG in chunk 1 (on the copies in G:/coop-scratch/ds2/savefmt or given files) | |
 | tools/ds2/gear_pair.py | live: copies the session saves, gives Sam a weapon (test command), presses F at a terminal (autosave), copies again and lists the changed saves, for the gear-only diff | |
 | tools/ds2/menu_path.py | sends a comma list of gamectl keys to the game with a screenshot after each (System menu to Load to a save) | |
