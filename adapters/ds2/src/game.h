@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "combat_wire.h"
+#include "cutscene_wire.h"
 #include "env_wire.h"
 #include "fact_wire.h"
 #include "camp_wire.h"
@@ -306,5 +307,24 @@ std::vector<weapon_wire::WeaponFire> takeLocalFires();
 // its shots, played by the body's weapon on that frame. Needs remote_weapon::installEarly. Any thread.
 void setPartnerWeapon(const weapon_wire::WeaponState& state);
 void partnerFire(const weapon_wire::WeaponFire& fire);
+
+// Cutscenes watched together (needs cutscene::installEarly with sync; docs/CONTRACT.md "Cutscenes"). The roles: the host
+// holds a shared cutscene until its guests are ready, a guest plays only the ones the host announced. Any thread.
+void setCutsceneRole(bool host, bool guest, size_t guestCount);
+
+// Host: the cutscenes held since the last call, to announce; `releaseCutscene` lets one start after `delayMs`; the stops
+// since the last call, to announce.
+std::vector<cutscene_wire::Start> takeCutsceneStarts();
+void releaseCutscene(uint32_t id, uint32_t delayMs);
+std::vector<cutscene_wire::End> takeCutsceneEnds();
+
+// Guest: the host's announcement, the ids of the copies held ready since the last call, the host's go and the host's stop.
+void armCutscene(const cutscene_wire::Start& start);
+std::vector<uint32_t> takeCutsceneReady();
+void goCutscene(uint32_t id);
+void endCutscene(const cutscene_wire::End& end);
+
+// A shared cutscene is playing on this machine (the partner's body is hidden meanwhile).
+bool cutscenePlaying();
 
 }  // namespace game

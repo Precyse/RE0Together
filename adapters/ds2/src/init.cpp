@@ -21,6 +21,7 @@
 #include "ds2/cargo_defer.h"
 #include "equip_sync.h"
 #include "ds2/loading_screen.h"
+#include "ds2/cutscene.h"
 #include "ds2/cutscene_log.h"
 #include "ds2/enemy_host.h"
 #include "ds2/enemy_puppet.h"
@@ -101,7 +102,8 @@ DWORD WINAPI initThread(LPVOID) {
     world_pause::installEarly();
     loading_screen::installEarly();
     if (config.testCommands) test_commands::installEarly();
-    if (config.cutsceneLog) cutscene_log::installEarly();
+    if (config.cutsceneLog) cutscene_log::enable();
+    if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync);
     partner_cargo::installEarly();
     structures::installEarly();
     sim_tick::installEarly();

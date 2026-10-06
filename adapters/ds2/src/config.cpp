@@ -57,6 +57,8 @@ Config loadConfig() {
             config.godMode = value == "1";
         } else if (key == "cutscene_log") {
             config.cutsceneLog = value == "1";
+        } else if (key == "cutscene_sync") {
+            config.cutsceneSync = value == "1";
         } else if (key == "weapon_sync") {
             config.weaponSync = value == "1";
         } else if (key == "weapon_attach_mode") {
