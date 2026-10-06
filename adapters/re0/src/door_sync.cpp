@@ -6,7 +6,6 @@
 #include <optional>
 #include <utility>
 
-#include "camera_parity.h"
 #include "character_owner.h"
 #include "debug_stats.h"
 #include "game.h"
@@ -74,7 +73,6 @@ bool __cdecl actOnTriggerDetour(void* script, void* context) {
     const Character own = character_owner::identify(partner);
     if (!partner || !character_owner::isLocalOwned(own) || !actsAs(partner, script, context)) return false;
     character_owner::focus(own);
-    camera_parity::holdLocalFocus();
     logger::write("door_sync: %s acted on a trigger as the partner, focus moved to it", character_owner::name(own));
     return true;
 }
@@ -97,6 +95,7 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
         logger::write("door_sync: suppressed a local door to room 0x%x, the peer owns the focused character", room);
         return;
     }
+    split_rooms::beforeLocalDoor(static_cast<uint16_t>(room));
     g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
     send({room, entry, arg3, arg4, flag, focused, {}});
     logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);
@@ -114,7 +113,6 @@ void onTick() {
     bool bothTravel = false;
     const std::optional<DoorChange> change = takePending(bothTravel);
     if (!change || (!bothTravel && split_rooms::takeOver(*change))) return;
-    character_owner::focus(static_cast<Character>(change->characterId));
     door_sync::run(*change);
 }
 

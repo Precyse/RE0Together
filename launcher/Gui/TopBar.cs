@@ -7,6 +7,9 @@ internal sealed class TopBar : Control
     private const int PadX = 16;
     private const string BrandText = "CO-OP";
 
+    private const int UpdateButtonWidth = 76;
+    private const int UpdateButtonHeight = 26;
+
     private string _build = string.Empty;
     private string _state = string.Empty;
     private Color _lamp = Theme.Dim;
@@ -16,8 +19,18 @@ internal sealed class TopBar : Control
         Dock = DockStyle.Top;
         Height = BarHeight;
         BackColor = Theme.Bg2;
+        Controls.Add(UpdateButton);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw, true);
+    }
+
+    /// <summary>Checks the release for a newer build; enabled only while no session is open.</summary>
+    public FlatButton UpdateButton { get; } = new("Update", ButtonKind.Ghost) { Width = UpdateButtonWidth, Height = UpdateButtonHeight };
+
+    protected override void OnResize(EventArgs e)
+    {
+        UpdateButton.Location = new Point(Width - PadX - UpdateButtonWidth, (Height - UpdateButtonHeight) / 2);
+        base.OnResize(e);
     }
 
     public void Show(string build, string state, Color lamp)
@@ -36,7 +49,7 @@ internal sealed class TopBar : Control
         Draw.Text(g, BrandText, Theme.Brand, Theme.Text, new Rectangle(PadX, 0, Width / 2, Height));
 
         var stateWidth = Draw.Width(_state, Theme.Label);
-        var stateX = Width - PadX - stateWidth;
+        var stateX = UpdateButton.Left - Theme.Gap * 2 - stateWidth;
         Draw.Text(g, _state, Theme.Label, _lamp == Theme.Dim ? Theme.Muted : Theme.Text, new Rectangle(stateX, 0, stateWidth, Height));
         var lampX = stateX - Theme.Gap - Theme.LampSize;
         Draw.Lamp(g, _lamp, lampX, middle);

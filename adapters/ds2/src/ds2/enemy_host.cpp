@@ -221,11 +221,11 @@ void add(uintptr_t entity, const std::array<uint8_t, enemy_wire::kUuidSize>& res
     g_tracked.push_back(std::move(enemy));
 }
 
-std::vector<uintptr_t> release() {
+std::vector<Handover> release() {
     std::lock_guard lock(g_mutex);
-    std::vector<uintptr_t> entities;
+    std::vector<Handover> entities;
     for (const Tracked& enemy : g_tracked) {
-        if (ds2::entityExists(enemy.entityUuid.data())) entities.push_back(enemy.entity);
+        if (ds2::entityExists(enemy.entityUuid.data())) entities.push_back({enemy.entity, enemy.resourceUuid});
     }
     g_tracked.clear();
     return entities;

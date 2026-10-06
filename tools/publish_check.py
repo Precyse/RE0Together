@@ -23,6 +23,8 @@ SECRET_PATTERNS = {
     "API key assignment": re.compile(rb"(?i)(fal_key|api[_-]?key|secret|token)\s*[=:]\s*['\"]?[A-Za-z0-9_\-]{24,}"),
     "Steam Web API key": re.compile(rb"(?i)steam.{0,20}key.{0,5}[=:].{0,3}[0-9A-F]{32}"),
 }
+# Test-only adapter switches that must never ship enabled.
+TEST_ONLY_INI = re.compile(rb"(?im)^\s*god_mode\s*=\s*1\b")
 # Decompiler output pasted into source or notes.
 # Split literals so this file does not match its own patterns.
 DECOMPILER_MARKERS = re.compile(rb"undefined4 FUN" rb"_|/\* WARNING: Could not" rb" recover|// Decompiled" rb" with (ILSpy|JetBrains)")
@@ -52,6 +54,8 @@ def problems_in(path):
     for name, pattern in SECRET_PATTERNS.items():
         if pattern.search(data):
             found.append(f"looks like a {name}")
+    if file.suffix.lower() == ".ini" and TEST_ONLY_INI.search(data):
+        found.append("enables god_mode (test only)")
     if DECOMPILER_MARKERS.search(data):
         found.append("contains decompiler output")
     return found

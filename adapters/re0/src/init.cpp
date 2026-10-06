@@ -1,3 +1,4 @@
+#include "auto_join.h"
 #include "init.h"
 
 #include <cstring>
@@ -11,6 +12,7 @@
 #include "debug_overlay.h"
 #include "door_sync.h"
 #include "door_travel.h"
+#include "enemy_action.h"
 #include "enemy_damage_hook.h"
 #include "enemy_net.h"
 #include "enemy_state.h"
@@ -76,12 +78,13 @@ void enableCoop() {
     command_input::enable();
     pad_commands::install();
     party_mode::enable(g_net);
-    camera_parity::enable(g_net);
+    camera_parity::enable();
     partner_think::enable();
     game_tick::addCallback("net_pad", net_pad::advance);
     input_record::enable(g_net);
     state_correction::enable();
     enemy_damage_hook::install();
+    enemy_action::install();
     player_damage::install(g_net);
     menu_mirror::enable();
 }
@@ -105,6 +108,7 @@ void startSubsystems() {
         return;
     }
     if (config.netTrace) net_trace::enable();
+    if (config.autoJoin) auto_join::enable();
     if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop();
     if (config.trace) vtable_tracer::install(config.traceVtables);

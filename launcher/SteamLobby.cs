@@ -9,12 +9,14 @@ public sealed class SteamLobby : ILobby
     private const string KeyProto = "cf_proto";
     private const string KeyVersion = "cf_ver";
     private const string LauncherVersion = "1.0.0";
+    private const long AnswerTimeoutMs = 30_000;
     private const uint EnterSuccess = (uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess;
 
     private readonly CallResult<LobbyCreated_t> _created;
     private readonly CallResult<LobbyEnter_t> _entered;
     private readonly Callback<LobbyChatUpdate_t> _chatUpdate;
     private readonly Callback<LobbyDataUpdate_t> _dataUpdate;
+    private readonly long _answerDeadlineMs = Environment.TickCount64 + AnswerTimeoutMs;
     private CSteamID _lobby;
     private List<LobbyMember> _members = new();
 
@@ -43,19 +45,23 @@ public sealed class SteamLobby : ILobby
     public static SteamLobby Create(GameProfile profile)
     {
         var lobby = new SteamLobby { GameId = profile.Id };
-        lobby._created.Set(SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, profile.MaxPlayers));
+        lobby.Track(lobby._created, SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, profile.MaxPlayers));
         return lobby;
     }
 
     public static SteamLobby Join(ulong lobbyId)
     {
+        Log.Info($"Joining lobby {lobbyId}");
         var lobby = new SteamLobby();
-        lobby._entered.Set(SteamMatchmaking.JoinLobby(new CSteamID(lobbyId)));
+        lobby.Track(lobby._entered, SteamMatchmaking.JoinLobby(new CSteamID(lobbyId)));
         return lobby;
     }
 
+    /// <summary>A request Steam never answers must end as a failure the window shows, not as silence.</summary>
     public void Pump()
     {
+        if (!IsReady && Failure == null && Environment.TickCount64 > _answerDeadlineMs)
+            Failure = "Steam did not answer the lobby request in time";
     }
 
     public void Dispose()
@@ -65,6 +71,12 @@ public sealed class SteamLobby : ILobby
         _entered.Dispose();
         _chatUpdate.Dispose();
         _dataUpdate.Dispose();
+    }
+
+    private void Track<T>(CallResult<T> result, SteamAPICall_t call) where T : struct
+    {
+        if (call == SteamAPICall_t.Invalid) Failure = "Steam did not accept the lobby request (is Steam online?)";
+        else result.Set(call);
     }
 
     private void OnCreated(LobbyCreated_t result, bool ioFailure)

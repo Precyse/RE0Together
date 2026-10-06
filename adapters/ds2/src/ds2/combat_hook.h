@@ -8,4 +8,7 @@ namespace combat_hook {
 // host reports which enemies died.
 void installEarly();
 
+// Test only: while on, every hit on the local player is dropped (the way a hit on the partner's body is), whoever sent it.
+void setGodMode(bool on);
+
 }  // namespace combat_hook

@@ -38,6 +38,9 @@ constexpr size_t kMaxQueuedFires = 64;
 constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
 constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorComponent slot 41(behavior, dt): runs the shot when +0x4D1 is set
 constexpr uintptr_t kBehaviorShotReady = 0x730;       // byte: the Shotgun/Sniper update (0x1420121d0) calls the gate only when it is set
+constexpr uintptr_t kWeaponEnabled = 0x363;     // byte: the weapon entity's update (0x141fa9850, 0x141fa9760) runs its behaviors only when set
+constexpr uintptr_t kWeaponBehaviorsReady = 0x21E0;  // byte: set by the entity's slot 38 (0x141fa9f60), which prepares its behaviors
+constexpr size_t kWeaponEnableSlot = 28, kWeaponPrepareSlot = 38;  // DSWeaponEntity vtable slots: enable (0x141fa99e0), prepare behaviors
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
 constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: whether the weapon's update took it
 constexpr ULONGLONG kShotLogWarmupMs = 4000;  // a shot sooner after the weapon is made is not the one logged (its behavior is not set up yet)
@@ -97,6 +100,10 @@ uint32_t indexOf(uintptr_t table, uintptr_t entry) {
 // The weapon's entity flags (+0x98), its parent and the table's two indices, to tell a holstered weapon (flag bit 0x2 clear)
 // from a drawn one (the weapon's transform field is not its world position while it is attached, so none is logged).
 void logWeaponState(const char* when, uintptr_t body) {
+    uint8_t enabled = 0, ready = 0;
+    decima::safeRead(g_held.weapon + kWeaponEnabled, enabled);
+    decima::safeRead(g_held.weapon + kWeaponBehaviorsReady, ready);
+    logger::write("remote_weapon: %s: weapon enabled byte %u, behaviors ready byte %u", when, enabled, ready);
     uint64_t flags = 0;
     uint32_t current = 0, requested = 0;
     decima::safeRead(g_held.weapon + kEntityFlags, flags);
@@ -128,6 +135,28 @@ uintptr_t createGuarded(uintptr_t entry, uint16_t id) {
         return ds2::field<uintptr_t>(entry, ds2::weapon::kEntryWeapon);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return 0;
+    }
+}
+
+// Runs one of the weapon entity's virtual functions (slot, this). False when it faulted.
+bool callWeaponSlot(uintptr_t weapon, size_t slot) {
+    __try {
+        const uintptr_t table = ds2::field<uintptr_t>(weapon, 0);
+        reinterpret_cast<void (*)(uintptr_t)>(ds2::field<uintptr_t>(table, slot * sizeof(uintptr_t)))(weapon);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// The table enables and prepares a weapon it draws; the weapon made for the body is enabled and prepared the same way, so
+// its entity update runs its behaviors (the fire gate, the pellet setup).
+void enableWeapon(uintptr_t weapon) {
+    if (!ds2::field<uint8_t>(weapon, kWeaponEnabled) && !callWeaponSlot(weapon, kWeaponEnableSlot)) {
+        logger::write("remote_weapon: enabling the weapon faulted");
+    }
+    if (!ds2::field<uint8_t>(weapon, kWeaponBehaviorsReady) && !callWeaponSlot(weapon, kWeaponPrepareSlot)) {
+        logger::write("remote_weapon: preparing the weapon's behaviors faulted");
     }
 }
 
@@ -237,6 +266,8 @@ void createWeapon(uintptr_t body, uint16_t id) {
     if (g_attachMode != kEngineAttachMode && !reattachGuarded(weapon, body, g_attachMode)) {
         logger::write("remote_weapon: attaching with mode %u faulted", g_attachMode);
     }
+    logWeaponState("before enabling", body);
+    enableWeapon(weapon);
     setTableIndex(table, indexOf(table, entry));
     logger::write("remote_weapon: the body holds weapon %u in table entry %u (attach mode %u)", id, indexOf(table, entry), g_attachMode);
     logWeaponState("made", body);

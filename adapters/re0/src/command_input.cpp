@@ -2,7 +2,6 @@
 
 #include <windows.h>
 
-#include "camera_parity.h"
 #include "character_owner.h"
 #include "command_log.h"
 #include "debug_stats.h"
@@ -23,9 +22,8 @@ constexpr uint8_t kDikExtendedBit = 0x80;
 constexpr UINT kScanCodeMask = 0xFF;
 
 key_config::CommandKeys g_keys{};
-bool g_changeWasDown = false;  // net thread only: keyboard or controller held at the last poll
-bool g_traceWasDown = false;
-virtual_keys::HiddenKeys g_commandScancodes{};  // the switch and partner keys as DirectInput codes
+bool g_traceWasDown = false;  // net thread only: keyboard or controller held at the last poll
+virtual_keys::HiddenKeys g_commandScancodes{};  // the switch (hidden only) and partner keys as DirectInput codes
 
 // DirectInput key code of a virtual key: its scan code, with the high bit for extended keys (arrows).
 uint8_t dikOf(int virtualKey) {
@@ -91,9 +89,7 @@ void onNetTick() {
     pad_commands::setHidden(owned);
     const bool foreground = gameIsForeground();
     const pad_commands::Buttons pad = pad_commands::pressed();
-    const bool change = pressedEdge(keyDown(g_keys.change) || pad.change, g_changeWasDown);
     const bool trace = pressedEdge(keyDown(g_keys.trace) || pad.trace, g_traceWasDown);
-    if (change && accept("switch", g_keys.change, foreground, owned)) camera_parity::onLocalSwitchKey();
     if (trace && accept("party", g_keys.trace, foreground, owned)) party_mode::onLocalToggleKey();
 }
 

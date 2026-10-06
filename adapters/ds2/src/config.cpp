@@ -53,6 +53,8 @@ Config loadConfig() {
             config.ordersDiagnostics = value == "1";
         } else if (key == "test_commands") {
             config.testCommands = value == "1";
+        } else if (key == "god_mode") {
+            config.godMode = value == "1";
         } else if (key == "cutscene_log") {
             config.cutsceneLog = value == "1";
         } else if (key == "weapon_sync") {

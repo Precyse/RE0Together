@@ -22,6 +22,7 @@
 #include "ds2/damage_params.h"
 #include "ds2/engine.h"
 #include "ds2/enemy_vitals.h"
+#include "ds2/damage_diag.h"
 #include "ds2/entity_wake.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/place.h"
@@ -62,6 +63,7 @@ using NodeFn = void (*)(uintptr_t node);
 ApplyFn g_apply = nullptr;
 
 std::atomic<game::CombatRole> g_role{game::CombatRole::None};
+std::atomic<bool> g_godMode{false};
 
 std::mutex g_mutex;  // guards everything below (the engine's threads divert hits, the net thread takes and gives)
 std::vector<combat_wire::EnemyHit> g_hitsOut;
@@ -165,6 +167,7 @@ struct Waiting {
 std::vector<Waiting> g_forwardWaiting;  // simulation thread only
 
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
+    if (g_godMode && params && victim && victim == remote_player::samEntity()) return;
     const combat_log::Snapshot snapshot = combat_log::before(victim, params);
     if (params && victim && !remote_apply::active()) {
         const game::CombatRole role = g_role;
@@ -272,12 +275,14 @@ void runForwarded() {
         if (ds2::entityAsleep(enemy)) {
             if (!waiting.wakeRequested) {
                 waiting.wakeRequested = true;
+                damage_diag::watchSleep(enemy, waiting.hit.enemy.netId);
                 logger::write("enemy_combat: enemy %u is asleep on the host, wake %s", waiting.hit.enemy.netId,
                               ds2::wakeEntity(enemy) ? "requested for the partner's hit" : "faulted");
             }
             return now - waiting.since > kWaitingMs;  // the hit waits while the engine wakes the enemy
         }
         const remote_apply::Scope applying;
+        damage_diag::watchSleep(enemy, waiting.hit.enemy.netId);
         const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit, attackType);
         logger::write("enemy_combat: forwarded hit on enemy %u (entity %p, health %u of 254, attack type %x): %s",
                       waiting.hit.enemy.netId, reinterpret_cast<void*>(enemy), enemy_vitals::readHealth(enemy), attackType,
@@ -337,6 +342,11 @@ void installEarly() {
     hooks::install("combat damage", ds2::at(kApplyDamage), reinterpret_cast<void*>(&applyDetour),
                    reinterpret_cast<void**>(&g_apply));
     sim_tick::add(&tick, "combat", sim_tick::Gate::Gameplay);
+}
+
+void setGodMode(bool on) {
+    g_godMode = on;
+    if (on) logger::write("god_mode: on (test)");
 }
 
 }  // namespace combat_hook
