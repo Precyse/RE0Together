@@ -22,6 +22,7 @@
 #include "ds2/damage_params.h"
 #include "ds2/engine.h"
 #include "ds2/enemy_vitals.h"
+#include "ds2/damage_diag.h"
 #include "ds2/entity_wake.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/place.h"
@@ -272,12 +273,14 @@ void runForwarded() {
         if (ds2::entityAsleep(enemy)) {
             if (!waiting.wakeRequested) {
                 waiting.wakeRequested = true;
+                damage_diag::watchSleep(enemy, waiting.hit.enemy.netId);
                 logger::write("enemy_combat: enemy %u is asleep on the host, wake %s", waiting.hit.enemy.netId,
                               ds2::wakeEntity(enemy) ? "requested for the partner's hit" : "faulted");
             }
             return now - waiting.since > kWaitingMs;  // the hit waits while the engine wakes the enemy
         }
         const remote_apply::Scope applying;
+        damage_diag::watchSleep(enemy, waiting.hit.enemy.netId);
         const bool ok = buildHit(enemy, remote_player::entity(), waiting.hit.hit, attackType);
         logger::write("enemy_combat: forwarded hit on enemy %u (entity %p, health %u of 254, attack type %x): %s",
                       waiting.hit.enemy.netId, reinterpret_cast<void*>(enemy), enemy_vitals::readHealth(enemy), attackType,

@@ -7,6 +7,8 @@
 #include "ds2/engine.h"
 #include "ds2/entity_lookup.h"
 #include "enemy_directory.h"
+#include "ds2/entity_wake.h"
+#include "ds2/sim_tick.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -20,7 +22,18 @@ constexpr uintptr_t kComponentHandled = 0x187A, kComponentStance = 0xABC, kCompo
 constexpr uintptr_t kInfoDamage = 0x00, kInfoStagger = 0x04, kInfoFlags = 0xA0, kInfoType = 0xA8, kInfoApplies = 0xFA;
 constexpr uint32_t kMaxLogged = 400;
 
+constexpr uintptr_t kEntityFlags = 0x98, kEntityCell = 0x232;
+constexpr uint32_t kSleepWatchFrames = 600;
+
 std::atomic<uint32_t> g_logged{0};
+bool g_enabled = false;
+
+struct SleepWatch {
+    uintptr_t entity = 0;
+    uint32_t netId = 0;
+    uint32_t framesLeft = 0;
+    uint64_t lastFlags = 0;
+} g_sleepWatch;  // simulation thread only
 
 using StepFn = uintptr_t (*)(uintptr_t component, uintptr_t info);
 StepFn g_originalPre = nullptr;
@@ -87,11 +100,32 @@ uintptr_t resultDetour(uintptr_t component, uintptr_t info) {
     return g_originalResult(component, info);
 }
 
+// Logs the watched enemy's entity flags (asleep bit 9, sleep and wake request bits 34 to 36) each time they change.
+void sleepTick() {
+    if (!g_sleepWatch.framesLeft) return;
+    --g_sleepWatch.framesLeft;
+    uint64_t flags = 0;
+    uint16_t cell = 0;
+    decima::safeRead(g_sleepWatch.entity + kEntityFlags, flags);
+    decima::safeRead(g_sleepWatch.entity + kEntityCell, cell);
+    if (flags == g_sleepWatch.lastFlags) return;
+    g_sleepWatch.lastFlags = flags;
+    logger::write("damage_diag: enemy %u entity flags %llx (asleep %d), cell %u, %u frames left", g_sleepWatch.netId,
+                  static_cast<unsigned long long>(flags), ds2::entityAsleep(g_sleepWatch.entity), cell, g_sleepWatch.framesLeft);
+}
+
 }  // namespace
 
 namespace damage_diag {
 
+void watchSleep(uintptr_t enemy, uint32_t netId) {
+    if (!g_enabled) return;
+    g_sleepWatch = {enemy, netId, kSleepWatchFrames, ~uint64_t{0}};
+}
+
 void installEarly() {
+    g_enabled = true;
+    sim_tick::add(&sleepTick, "sleep diag", sim_tick::Gate::Gameplay);
     hooks::install("damage pre-process", ds2::at(kPreProcess), reinterpret_cast<void*>(&preDetour), reinterpret_cast<void**>(&g_originalPre));
     hooks::install("damage result step", ds2::at(kResultStep), reinterpret_cast<void*>(&resultDetour),
                    reinterpret_cast<void**>(&g_originalResult));
