@@ -85,6 +85,9 @@ struct Cargo {
     float durability = 0;
 };
 
+// Whether a value of DSBaggage +0x28 / +0x30 is an order id (a mission number and an order type); anything else is plain cargo.
+bool isOrderId(uint64_t id);
+
 // What the local player's backpack holds: cargo, and weapons and tools stowed in it, but not the equipped gear.
 // Any thread.
 std::vector<Cargo> carriedCargo();
@@ -122,10 +125,11 @@ std::vector<Cargo> vehicleCargo(uint64_t vehicle);
 bool addVehicleCargo(uint64_t vehicle, uint32_t type);
 
 // What the backpack of the player whose baggage owner has this key holds (a remote body's network id), and a new piece
-// of `type` created into that backpack's main load: how the partner's rack is shown on the body. Both refuse an owner
-// that is part of the local player's tree. Any thread.
+// created into that backpack's main load: how the partner's rack is shown on the body. An order piece keeps its link and
+// a copy of it that this world holds elsewhere is removed first (Retry). Both refuse an owner that is part of the local
+// player's tree. Any thread.
 std::vector<Cargo> backpackCargo(uint64_t playerKey);
-bool addBackpackCargo(uint64_t playerKey, uint32_t type);
+AddResult addBackpackCargo(uint64_t playerKey, const Cargo& piece);
 
 // Marks the baggage owner with this key (a remote body's network id) and its child owners active or not. An inactive
 // owner is skipped by the cargo menus' gather, so a partner's rack is not listed as the local player's. Refuses the
@@ -135,8 +139,16 @@ void setOwnerActive(uint64_t ownerKey, bool active);
 // The address of the baggage owner with this key (0 = the local player's), 0 when there is none. Any thread.
 uintptr_t baggageOwner(uint64_t ownerKey);
 
-// Host: the pieces of the partner's rack that the game moved into a terminal (delivered) since the last call. Any thread.
-std::vector<Cargo> takeDeliveredByPartner();
+// What the game moved between the partner's rack (the remote body's baggage owner) and this world since the last call: the
+// partner's pieces that went into a terminal (delivered) or into the local player's own tree (taken), which the partner's
+// machine must delete; and the local player's pieces that went into the partner's rack (given), which it must create.
+struct PartnerMoves {
+    std::vector<Cargo> left;
+    std::vector<Cargo> given;
+};
+
+// Any thread.
+PartnerMoves takePartnerMoves();
 
 // What one slot kind of the baggage owner `ownerKey` holds (0 = the local player, a vehicle's id, a remote body's
 // network id); empty when there is no such owner. Any thread.
@@ -167,9 +179,11 @@ std::vector<uint64_t> markedLooseCargo();
 // the game refused. Any thread.
 bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type);
 
-// Asks the game to put a piece of `type` on the ground at `at`, as the world's own cargo is spawned: it starts a
-// little above the spot and falls onto the ground. False when the game refused (e.g. its pool is full). Any thread.
-bool placeCargo(uint32_t type, const world_to_screen::Vec3& at);
+// Asks the game to put `piece` on the ground at `at`, as the world's own cargo is spawned: it starts a little above the
+// spot and falls onto the ground. An order piece keeps its link: a copy of it this world holds elsewhere is removed first
+// (Retry), and one the local backpack holds is refused. Refused too when the game refused (e.g. its pool is full). Any
+// thread.
+AddResult placeCargo(const Cargo& piece, const world_to_screen::Vec3& at);
 
 // Asks the game to delete a piece, carried or on the ground. Any thread.
 bool removeCargo(uint64_t handle);

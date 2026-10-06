@@ -22,13 +22,19 @@ constexpr uint16_t kMsgCargoAdd = proto::kFirstGameType + 3;   // 0x0103, giver 
 constexpr size_t kNameBytes = 44;
 constexpr uint32_t kMaxListed = 64;
 
-// One carried piece on the wire. A CARGO_LIST payload is a u32 count followed by that many entries.
+// One carried piece on the wire. A CARGO_LIST payload is a u32 count followed by that many entries. The order link
+// (DSBaggage +0x28 / +0x30) travels with the piece so the partner's body can hold a piece that counts for the same order.
 struct CargoEntry {
     uint64_t handle;
     uint32_t type;
     char name[kNameBytes];  // UTF-8, zero padded, cut at kNameBytes
+    uint64_t orderId;
+    uint64_t secondId;
+    float durability;
+    uint8_t category;
+    uint8_t reserved[3];
 };
-static_assert(sizeof(CargoEntry) == 56);
+static_assert(sizeof(CargoEntry) == 80);
 
 // The host asks the guest for one of its pieces; the guest deletes it and answers with CARGO_ADD.
 struct CargoTake {
@@ -53,6 +59,9 @@ struct Partner {
     uint8_t slot = 0;
     std::vector<game::Cargo> cargo;
 };
+
+// Net thread: asks `slot` to create `piece` (kind and order link) on its own player.
+void sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece);
 
 // Net thread: messages from the partner, and the periodic work (refresh, report, queued transfers).
 void onFrame(NetClient& net, const GameFrame& frame);

@@ -92,6 +92,8 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 |---|---|---|---|---|
 | 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 reserved |
 | 0x0101-0x0107 | cargo list/take/add, pickups, drops | | see header | `cargo_transfer.h`, `cargo_ground.h` |
+| 0x011A | CARGO_GONE | to the partner | yes | u32 kind, u32 reserved, u64 order id (0 = plain): the partner's rack lost the piece to a terminal or to the sender, delete your copy (`partner_cargo_wire.h`, 16 bytes) |
+| 0x0130 | MOVE_ACK | to the sender | yes | u32 kind, u32 moved (0 = CARGO_GONE done, 1 = a give created), u64 order id: the receiver's own CARGO_LIST shows the move, the sender may stop holding it (`partner_cargo_wire.h`, 16 bytes) |
 | 0x0108 | VEHICLE_STATE | driver/passenger to all | no | `vehicle_sync.h` (64 bytes) |
 | 0x0109 | VEHICLE_LOAD | driver to all | yes | `vehicle_load.h` |
 | 0x010A | ANIM_STATE | all | no | AnimHeader, optional u64 sender time, entries (below) |

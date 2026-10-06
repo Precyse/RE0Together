@@ -37,9 +37,10 @@ SEND_HZ = 60
 HEARTBEAT_S = 1.0
 STATE = struct.Struct("<I3ffI")  # seq, pos[3], yaw, reserved (adapters/ds2/src/player_sync.h)
 CARGO_LIST, CARGO_TAKE, CARGO_ADD = 0x0101, 0x0102, 0x0103
-CARGO_ENTRY = struct.Struct("<QI44s")  # handle, type, name (adapters/ds2/src/cargo_transfer.h)
+CARGO_ENTRY = struct.Struct("<QI44sQQfB3x")  # handle, type, name, order id, second id, durability, category (adapters/ds2/src/cargo_transfer.h)
+CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 CARGO_PICKUP, CARGO_PICKUP_RESULT, CARGO_HOST_PICKUP, CARGO_DROP = 0x0104, 0x0105, 0x0106, 0x0107
-CARGO_PICKUP_REQUEST = struct.Struct("<II3f")  # request, type, position (Spot in adapters/ds2/src/cargo_ground.h)
+CARGO_PICKUP_REQUEST = struct.Struct("<II3ffQQB7x")  # request, type, position, durability, order id, second id, category (Spot in adapters/ds2/src/cargo_ground.h)
 HERE_OFFSET_M = 1.5
 VEHICLE_STATE = 0x0108
 VEHICLE = struct.Struct("<IIQ3f9f")  # seq, role (0 driver, 1 passenger), id, position, rotation rows (adapters/ds2/src/vehicle_sync.h)
@@ -92,7 +93,7 @@ class Rack:
     def report(self):
         with self.lock:
             self.changed = False
-            entries = b"".join(CARGO_ENTRY.pack(h, t, n.encode()[:44]) for h, (t, n) in self.pieces.items())
+            entries = b"".join(CARGO_ENTRY.pack(h, t, n.encode()[:44], 0, 0, 0.0, 0) for h, (t, n) in self.pieces.items())
             return struct.pack("<I", len(self.pieces)) + entries
 
     def handle(self, msg_type, slot, payload):
@@ -101,17 +102,17 @@ class Rack:
                 piece = self.pieces.pop(struct.unpack("<Q", payload)[0], None)
                 self.changed = self.changed or piece is not None
             if piece:
-                self.outbox.put(encode(CARGO_ADD, FLAG_RELIABLE, slot, struct.pack("<I", piece[0])))
+                self.outbox.put(encode(CARGO_ADD, FLAG_RELIABLE, slot, CARGO_ADD_FORMAT.pack(piece[0], 0, 0.0, 0, 0, 0)))
                 print(f"fake_peer: host took {piece[1]} ({piece[0]})", flush=True)
-        elif msg_type == CARGO_ADD and len(payload) == 4:
-            type_id = struct.unpack("<I", payload)[0]
+        elif msg_type == CARGO_ADD and len(payload) == CARGO_ADD_FORMAT.size:
+            type_id = CARGO_ADD_FORMAT.unpack(payload)[0]
             self.add(type_id)
             print(f"fake_peer: host gave {type_id}", flush=True)
         elif msg_type == CARGO_PICKUP_RESULT and len(payload) == 8:
             request, accepted = struct.unpack("<II", payload)
             print(f"fake_peer: pickup {request} {'accepted' if accepted else 'refused'} by the host", flush=True)
         elif msg_type == CARGO_HOST_PICKUP and len(payload) == CARGO_PICKUP_REQUEST.size:
-            _, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack(payload)
+            _, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack(payload)[:5]
             print(f"fake_peer: host picked up {type_id} at ({x:.1f}, {y:.1f}, {z:.1f})", flush=True)
 
 
@@ -130,16 +131,16 @@ class HostScript:
         if msg_type == CARGO_LIST and not self.done:
             (count,) = struct.unpack_from("<I", payload)
             pieces = [CARGO_ENTRY.unpack_from(payload, 4 + i * CARGO_ENTRY.size) for i in range(count)]
-            names = ", ".join(name.rstrip(b"\0").decode() for _, _, name in pieces)
+            names = ", ".join(name.rstrip(b"\0").decode() for _, _, name, *_ in pieces)
             print(f"fake_peer: guest carries {names}", flush=True)
             if pieces:
                 self.outbox.put(encode(CARGO_TAKE, FLAG_RELIABLE, slot, struct.pack("<Q", pieces[0][0])))
-            self.outbox.put(encode(CARGO_ADD, FLAG_RELIABLE, slot, struct.pack("<I", self.give_type)))
+            self.outbox.put(encode(CARGO_ADD, FLAG_RELIABLE, slot, CARGO_ADD_FORMAT.pack(self.give_type, 0, 0.0, 0, 0, 0)))
             self.done = True
-        elif msg_type == CARGO_ADD and len(payload) == 4:
-            print(f"fake_peer: guest gave {struct.unpack('<I', payload)[0]}", flush=True)
+        elif msg_type == CARGO_ADD and len(payload) == CARGO_ADD_FORMAT.size:
+            print(f"fake_peer: guest gave {CARGO_ADD_FORMAT.unpack(payload)[0]}", flush=True)
         elif msg_type == CARGO_PICKUP and len(payload) == CARGO_PICKUP_REQUEST.size:
-            request, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack(payload)
+            request, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack(payload)[:5]
             answer = self.pickup_answers[self.pickups % len(self.pickup_answers)]
             self.pickups += 1
             self.outbox.put(encode(CARGO_PICKUP_RESULT, FLAG_RELIABLE, slot,
@@ -193,7 +194,7 @@ def drain(sock, cargo):
                     drain.load = (vehicle, kinds)
                     print(f"fake_peer: partner's vehicle {vehicle:#x} holds {list(kinds)}", flush=True)
             if msg_type == CARGO_DROP and len(body) - 4 == CARGO_PICKUP_REQUEST.size:
-                _, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack_from(body, 4)
+                _, type_id, x, y, z = CARGO_PICKUP_REQUEST.unpack_from(body, 4)[:5]
                 print(f"fake_peer: partner put down {type_id} at ({x:.1f}, {y:.1f}, {z:.1f})", flush=True)
             if cargo:
                 cargo.handle(msg_type, slot, body[4:])
@@ -235,7 +236,7 @@ def main():
     for msg_type, number, spec in scripted:
         type_id, position = spec.split(":")
         x, y, z = (cx + HERE_OFFSET_M, cy, cz) if position == "here" else map(float, position.split(","))
-        outbox.put(encode(msg_type, FLAG_RELIABLE, SLOT_ALL, CARGO_PICKUP_REQUEST.pack(number, int(type_id), x, y, z)))
+        outbox.put(encode(msg_type, FLAG_RELIABLE, SLOT_ALL, CARGO_PICKUP_REQUEST.pack(number, int(type_id), x, y, z, 0.0, 0, 0, 0)))
     cx += args.offset_x
     threading.Thread(target=drain, args=(sock, cargo), daemon=True).start()
     print(f"fake_peer: circling ({cx:.1f}, {cy:.1f}, {cz:.1f}) r={args.radius} at {args.speed} m/s", flush=True)
