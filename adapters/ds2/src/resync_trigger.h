@@ -5,7 +5,7 @@
 
 namespace resync_trigger {
 
-// Net thread, every tick; looks for the file twice a second.
+// Net thread, every tick; looks for the key every tick and for the file twice a second.
 void poll(NetClient& net);
 
 }  // namespace resync_trigger

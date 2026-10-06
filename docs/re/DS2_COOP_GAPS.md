@@ -9,7 +9,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 |---|---|---|---|---|
 | Host, join, save sync at join | done | launcher | `SaveSyncCoordinator.cs`, `games/ds2.json`, `documents_redirect.cpp` | |
 | Join catch-up: facts, story, structures, enemies | done | ds2-streaming / ds2-story | `fact_sync.cpp`, `story_sync.cpp`, `struct_sync.cpp`, `enemy_sync.cpp` | asked for at the guest's gameplay |
-| Host's later saves reach the guest | missing | new | `adapters/ds2` sends no SAVE_CHANGED | a guest that reloads or restarts after a crash loads the join-time world; snapshots patch facts, story and structures but not cargo, vehicles or ground pieces |
+| Host's later saves reach the guest | done | new | `launcher/SaveWatcher.cs`, `SaveSyncCoordinator.cs`, `SaveReceiver.cs` (CI-compiled only; logic checked with a scratch harness) | a guest that reloads or restarts after a crash loads the join-time world; snapshots patch facts, story and structures but not cargo, vehicles or ground pieces |
 | Guest's own progress (gear, equipment, levels) kept after the session | missing | new | `launcher/AdapterSettings.cs` | the session folder is deleted at launcher exit; roadmap end goal 6 |
 | Partner leaves: body | partial | ds2-live | `ds2/remote_player.cpp` | removing the entity in a running world crashes, so the body stands frozen where the link dropped; ds2-live has an unverified 5 s removal |
 | Partner rejoins: one body, gear and weapon rebuilt | unknown | ds2-live | `ds2/remote_player.cpp`, `equip_sync.cpp` | verify a second body is not built beside the frozen one |
@@ -35,7 +35,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | candidate | status | owner | file | note |
 |---|---|---|---|---|
 | Partner name and distance | done | | `marker_overlay.cpp` | |
-| Partner off screen (behind the camera) | missing | new | `marker_overlay.cpp` | the marker is just not drawn; an edge arrow is missing |
+| Partner off screen (behind the camera) | done | new | `marker_overlay.cpp` | edge arrow with name, distance, health and state; unverified live |
 | Partner health, down, dead, loading, in a menu | missing | new | `player_sync.cpp` | PLAYER_STATE has a reserved u32 that could carry these |
 | Ping or marker | missing | new | none | the game has its own signs; a co-op ping at the aim point is a later item |
 | Partner-left notice | done | | `player_sync.cpp` | toast with name |
@@ -47,7 +47,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | candidate | status | owner | file |
 |---|---|---|---|
 | One player dies or respawns | partial | ds2-live | checked once on one PC; the partner is not told |
-| Desync recovery | partial | new | `resync_trigger.cpp` (file only) |
+| Desync recovery | done | new | `resync_trigger.cpp` (F9 and file) |
 | Game crash on one side | partial | launcher | dumps reach the host (`LogForwarder.cs`); no relaunch path |
 
 ### Setup QoL
@@ -69,7 +69,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/ds2/remote_player.cpp`, `ds2/body.cpp`.
 - **Verify:** `tools/ds2/fake_launcher.py --follow`, kill it, body hidden within 5 s; restart it, the same body returns (one `remote_body: spawned` line in total).
 
-### 3. Partner status: off screen, health, down (S/M, new)
+### 3. Partner status: off screen, health, down (S/M, new; built, see DS2_NOTES "Partner status")
 - **Root change:** PLAYER_STATE's reserved u32 carries flags (dead, down, loading, in menu, driving) and a health byte; the marker shows health and state, and becomes an arrow at the screen edge when the partner is behind the camera or off screen; a toast when the partner dies or respawns.
 - **Files:** `adapters/ds2/src/player_sync.cpp`, `marker_overlay.cpp`, `world_to_screen.h` (edge clamp, unit tested), `ds2/player_state.cpp` (health read).
 - **Verify:** `tests/world_to_screen_test.cpp` for the edge clamp; `fake_launcher.py --at X,Y,Z` behind Sam; a fake flag word from fake_launcher.
@@ -79,12 +79,12 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/config.h`, `config.cpp`, `adapters/ds2/README.md`, `tools/publish_check.py` (keep rejecting test flags).
 - **Verify:** fresh `coop\adapter.ini` written by the first start shows the new defaults; publish_check passes.
 
-### 5. The host's later saves never reach the guest (M, new)
+### 5. The host's later saves never reach the guest (M, new; built: watcher on the host, staging on the guest, promoted while DS2.exe is not running)
 - **Root change:** the host launcher watches `hostSaveDir` for written `*.dat` (game-agnostic, FileSystemWatcher with a settle delay) and re-sends through the existing FILE_* path; the guest stores them in a staging folder and moves them into the session folder only while its game is not running or is on the title screen, so the guest's own autosaves are never overwritten mid-play.
 - **Files:** `launcher/SaveSyncCoordinator.cs`, `SaveSender.cs`, `SaveReceiver.cs`, `docs/CONTRACT.md`.
 - **Verify:** `tools/ds2/save_sync_test.py` with a file touched on the host side after the join: the guest's staging folder gets it and the session folder only after the fake game exits.
 
-### 6. Resync on a key (S, new)
+### 6. Resync on a key (S, new; built: F9 is polled like F6/F7, not claimed, so the game still sees it)
 - **Root change:** a key (F9) claimed through `input_filter` does what `resync_now.txt` does: asks every peer for all scopes and resends its own; a toast confirms it.
 - **Files:** `adapters/ds2/src/resync_trigger.cpp`, `input_filter.cpp`.
 - **Verify:** `fake_launcher.py` prints the RESYNC it receives; `tests/resync_test.cpp` unchanged.

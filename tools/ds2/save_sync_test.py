@@ -1,6 +1,7 @@
 """DS2 save sync end to end on local transport: the host announces and sends every *.dat of its save folder, the
 guest ends with identical files in coop/session/Documents/DEATH STRANDING 2 - ON THE BEACH/<steamid64>/ (the folder
 the adapter's session-save redirect makes the game use), files that do not match the pattern stay behind, and both
+a save the host rewrites after the join reaches the guest's staging folder (or the session folder when no DS2 runs), and both
 sides reset after Ctrl+Break. Works on temporary folders only; never reads or writes real saves.
 
 Usage: python tools/ds2/save_sync_test.py   (COOP_LAUNCHER overrides the launcher exe)
@@ -25,6 +26,7 @@ GAME_FOLDER = "DEATH STRANDING 2 - ON THE BEACH"
 PORTS = (27983, 27984)
 TRANSFER_TIMEOUT_S = 30
 EXIT_TIMEOUT_S = 15
+LATER_SAVE_TIMEOUT_S = 30  # settle delay 3 s plus the transfer
 POLL_S = 0.2
 
 
@@ -52,6 +54,18 @@ def wait_for(condition, seconds):
     return False
 
 
+def later_save_failures(source, guest_game, received_dir):
+    """The host writes a save after the join: it reaches the guest's staging folder, and the session folder only once no
+    DS2 process runs (so either place may hold it, depending on whether the real game is running on this machine)."""
+    name = next(iter(SAVE_FILES))
+    (source / name).write_bytes(os.urandom(SAVE_FILES[name]))
+    staged = guest_game / "coop" / "session" / "staging" / name
+    arrived = lambda: any(p.exists() and sha(p) == sha(source / name) for p in (staged, received_dir / name))
+    if not wait_for(arrived, LATER_SAVE_TIMEOUT_S):
+        return [f"the save rewritten after the join never reached the guest ({staged})"]
+    return []
+
+
 def main():
     work = Path(tempfile.mkdtemp(prefix="cf_ds2_save_sync_"))
     source, host_game, guest_game = work / "source", work / "host_game", work / "guest_game"
@@ -73,6 +87,7 @@ def main():
             failures.append(f"guest never got every save in {received_dir}")
         else:
             failures += [f"{n} differs" for n in SAVE_FILES if sha(received_dir / n) != sha(source / n)]
+            failures += later_save_failures(source, guest_game, received_dir)
         if (received_dir / OTHER_FILE).exists():
             failures.append(f"{OTHER_FILE} was sent although it does not match the pattern")
     finally:

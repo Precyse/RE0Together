@@ -48,18 +48,39 @@ public sealed class SaveSender
             _transport.Send(peer, FileMessages.Manifest(names));
             Log.Info($"Save sync: announced {names.Count} files to {peer}");
         }
-        foreach (var name in names)
+        foreach (var name in names) Enqueue(peer, name);
+    }
+
+    /// <summary>Sends one file the host's game wrote after the join, with the manifest again (it may be a new name).
+    /// False when the file could not be read (the game still holds it): ask again later.</summary>
+    public bool SendChanged(ulong peer, string name)
+    {
+        _pending.RemoveAll(o => o.Peer == peer && o.Name == name);
+        if (_config.FilePattern != null) _transport.Send(peer, FileMessages.Manifest(FileNames()));
+        return Enqueue(peer, name);
+    }
+
+    private bool Enqueue(ulong peer, string name)
+    {
+        var path = Path.Combine(_sourceDir, name);
+        if (!File.Exists(path))
         {
-            var path = Path.Combine(_sourceDir, name);
-            if (!File.Exists(path))
-            {
-                Log.Info($"Save sync: {path} not found, nothing to send for {name}");
-                continue;
-            }
-            var data = File.ReadAllBytes(path);
-            _pending.Add(new Outgoing { Peer = peer, Name = name, Data = data, Hash = SHA256.HashData(data), Id = _nextId++ });
-            Log.Info($"Save sync: sending {name} ({data.Length} bytes) to {peer}");
+            Log.Info($"Save sync: {path} not found, nothing to send for {name}");
+            return true;
         }
+        byte[] data;
+        try
+        {
+            data = File.ReadAllBytes(path);
+        }
+        catch (IOException e)
+        {
+            Log.Info($"Save sync: {path} cannot be read yet ({e.Message})");
+            return false;
+        }
+        _pending.Add(new Outgoing { Peer = peer, Name = name, Data = data, Hash = SHA256.HashData(data), Id = _nextId++ });
+        Log.Info($"Save sync: sending {name} ({data.Length} bytes) to {peer}");
+        return true;
     }
 
     /// <summary>The profile's fixed list, or every file in the source folder that matches the profile's pattern.</summary>
