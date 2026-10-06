@@ -122,8 +122,11 @@ constexpr uintptr_t kStateStepSlot = 0x40;
 void motionTail(uintptr_t component, float dt) {
     const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
     const uintptr_t vtable = decima::readPointer(state);
-    const uintptr_t step = vtable ? ds2::field<uintptr_t>(vtable, kStateStepSlot) : 0;
-    if (step) reinterpret_cast<void (*)(uintptr_t, float)>(step)(state, dt);
+    // The state object can be freed under an update that runs while the body is taken down; its first qword is then
+    // whatever reused the memory (a pointer into text made the step a call to "bject"), so both reads are checked.
+    uintptr_t step = 0;
+    if (!ds2::inGameImage(vtable) || !decima::safeRead(vtable + kStateStepSlot, step) || !ds2::inGameImage(step)) return;
+    reinterpret_cast<void (*)(uintptr_t, float)>(step)(state, dt);
 }
 
 void motionDetour(uintptr_t component, float dt) {

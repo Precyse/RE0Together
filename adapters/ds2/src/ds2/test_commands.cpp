@@ -59,7 +59,6 @@ constexpr uintptr_t kComponentOwner = 0x48;  // a component's entity
 constexpr uintptr_t kComponentLink = 0x98;   // the component its owner's update reads (what the BB pod caches)
 constexpr int kReturnsLogged = 10;
 constexpr ULONGLONG kPollMs = 500;
-constexpr uintptr_t kImageSpan = 0x20000000;
 constexpr DWORD kFaultCodes[] = {EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ILLEGAL_INSTRUCTION, EXCEPTION_STACK_OVERFLOW};
 
 // The text of a command file, deleted on the way; empty when there is none.
@@ -278,7 +277,7 @@ void logStackReturns(uintptr_t stack, uintptr_t base) {
     for (size_t i = 0; i < kStackWordsScanned && found < kReturnsLogged; ++i) {
         uintptr_t value = 0;
         if (!decima::safeRead(stack + i * sizeof(uintptr_t), value)) break;
-        if (value < base || value - base > kImageSpan) continue;
+        if (!ds2::inGameImage(value)) continue;
         char text[32];
         snprintf(text, sizeof(text), " %llx", static_cast<unsigned long long>(value - base + ds2::kImageBase));
         line += text;
@@ -311,7 +310,7 @@ LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
     static size_t logged = 0;
     const uintptr_t at = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
     const uintptr_t base = ds2::at(ds2::kImageBase);
-    if (at < base || at - base > kImageSpan || logged >= kMaxFaultsLogged) return EXCEPTION_CONTINUE_SEARCH;
+    if (!ds2::inGameImage(at) || logged >= kMaxFaultsLogged) return EXCEPTION_CONTINUE_SEARCH;
     for (const DWORD code : kFaultCodes) {
         if (info->ExceptionRecord->ExceptionCode != code) continue;
         ++logged;

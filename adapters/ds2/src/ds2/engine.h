@@ -15,6 +15,15 @@ inline uintptr_t at(uintptr_t fileVa) {
     return reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)) + (fileVa - kImageBase);
 }
 
+constexpr uintptr_t kImageSpan = 0x20000000;  // more than the game image's size
+
+// Whether an address lies inside the game's image (code, vtables, globals): a pointer read from freed or reused memory
+// that is called through must pass this first.
+inline bool inGameImage(uintptr_t address) {
+    const uintptr_t base = at(kImageBase);
+    return address >= base && address - base < kImageSpan;
+}
+
 // A field of a live engine object.
 template <class T>
 T& field(uintptr_t object, uintptr_t offset) {
