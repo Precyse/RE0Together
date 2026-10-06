@@ -49,8 +49,8 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | candidate | status | owner file | note |
 |---|---|---|---|
 | Partner name, health condition, same/other room | done, unverified live | `partner_hud.cpp`, `partner_status.cpp` | top-right line; condition from hp against the highest hp seen |
-| Partner location while apart | unknown | vanilla map (Q) | check whether the game's map shows the partner's room now that split_rooms keeps the record right; if not, the status line names the room |
-| Ping or marker | missing | none | low value in a fixed-camera game; skip unless the map does not show the partner |
+| Partner location while apart | done (status line), map unchecked | `partner_hud.cpp` | the status line names the partner's room (`room 0x24`); whether the vanilla map (Q) also shows it needs a live look |
+| Ping or marker | skipped | none | low value in a fixed-camera game; the status line names the partner's room |
 | Partner-left notice | done | `state_sync.cpp` | the leave toast names the player; host leaving has its own notice |
 | Pause behaviour | done, unverified live | `menu_mirror.cpp`, `menu_hold_rule.h` | menus hold the partner's world 20 s, reading screens and cutscenes until closed |
 | Controls overlay | missing | `launcher/package/README.txt` | the user's rule is no explainer text in UI; keep keys in the README only |
