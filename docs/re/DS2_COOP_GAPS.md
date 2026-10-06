@@ -59,7 +59,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 
 ## Top 10 (missing or partial), ranked by player impact over effort
 
-### 1. Installed game build is never checked (S, new)
+### 1. Installed game build is never checked (S, new; adapter side done in `build_guard.cpp`, launcher buildid check is launcher-app's)
 - **Root change:** the launcher checks the appmanifest `buildid` against `supportedBuilds` in `games/ds2.json` and sends it in BUILD_INFO; the adapter also compares DS2.exe's PE TimeDateStamp with the one its addresses were taken from and, on a mismatch, installs no hooks and shows one toast. DS2 updates often and every fixed VA breaks at once.
 - **Files:** `launcher/SteamLibrary.cs`, `GameProfile.cs`, `BuildCheck.cs`, `games/ds2.json`, `adapters/ds2/src/init.cpp`, `ds2/game.cpp`.
 - **Verify:** `tools/build_check_test.py` with a game build field; a unit test of the stamp compare on a copied header.

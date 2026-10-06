@@ -160,7 +160,8 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | file | owns | key members |
 |---|---|---|
 | src/proxy.cpp | the 17 version.dll exports forwarded to the system DLL by linker directives; DllMain (only inside DS2.exe: the crash reporter loads the DLL too) installs the session-save redirect, pins the module and starts the init thread | `DllMain`, `hostIsGame` |
-| src/init.cpp | start-up: crash dumps, config (installs the remote body's engine hooks when enabled), DX12 overlay hooks, input filter, interaction watch, waits for the player to exist, the simulation-thread tick (vehicles), then the launcher link | `initThread`, `simulationTick` |
+| src/init.cpp | start-up: crash dumps, config, the build guard (unsupported exe: toast-only overlay, no hooks), DX12 overlay hooks, the remote body's engine hooks when enabled, input filter, interaction watch, waits for the player to exist, the simulation-thread tick (vehicles), then the launcher link | `initThread`, `simulationTick` |
+| src/build_guard.cpp | compares DS2.exe's PE TimeDateStamp and SizeOfImage with the build the fixed addresses were taken from (Steam 23923251); a mismatch installs no hooks | `build_guard::checkRunningGame`, `identityOf`, `supported`, `kSupported` |
 | src/config.cpp | `coop/adapter.ini` (port 27980, overlay, self_marker, remote_body = the partner's body, on by default; weapon_sync = weapon sync, off by default; weapon_attach_mode) | `loadConfig` |
 | src/documents_redirect.cpp | session saves: with `coop\session\Documents` present, the game's import slots for SHGetKnownFolderPath / SHGetFolderPathW return that folder for Documents (patched from DllMain) | `documents_redirect::install`, `active` |
 | src/import_patch.cpp | points one of the game executable's own import slots at a detour (save redirect, raw input filter) | `import_patch::redirect` |
@@ -277,6 +278,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/marker_overlay.cpp | the draw callback: toasts, each peer's load (load_overlay), a labelled marker 1.75 m above each peer's origin (head top when standing) (smoothed toward the extrapolated position, snapped on jumps), optional self marker | `marker_overlay::draw`, `setSelfMarker` |
 | README.md | settings and how to remove the mod | |
 | tests/world_to_screen_test.cpp | projection cases (centre, offsets, behind, large coordinates) |
+| tests/build_guard_test.cpp | identity read from a PE header copy, supported/other stamp/other size/truncated/non-PE |
 | tests/load_shape_test.cpp | load stack placement and facing, box size, hull | |
 | tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game); `--encode/--decode <file>` modes for the python cross-check | |
 | tests/bt_wire_test.cpp | BT_ENV / CATCHER_EVENT round trip, short and long payloads, unknown kind and flags, region set arithmetic (no game) | |

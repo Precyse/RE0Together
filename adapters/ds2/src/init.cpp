@@ -1,5 +1,6 @@
 #include "init.h"
 
+#include "build_guard.h"
 #include "cargo_menu.h"
 #include "config.h"
 #include "crash_dump.h"
@@ -12,6 +13,7 @@
 #include "marker_overlay.h"
 #include "net_client.h"
 #include "player_sync.h"
+#include "toast_queue.h"
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/damage_diag.h"
@@ -45,6 +47,7 @@
 namespace {
 
 constexpr DWORD kResolvePollMs = 1000;
+constexpr float kBuildToastSeconds = 600.0f;
 
 // Leaked on purpose: joining the net thread from a static destructor would run under the loader lock.
 NetClient& g_net = *new NetClient;
@@ -60,6 +63,9 @@ void drawOverlay(float width, float height) {
     warp::poll();
 }
 
+// The overlay of an unsupported build: toasts only, nothing that reads the game.
+void drawNoticeOnly(float width, float) { marker_overlay::drawToasts(width); }
+
 }  // namespace
 
 DWORD WINAPI initThread(LPVOID) {
@@ -67,11 +73,18 @@ DWORD WINAPI initThread(LPVOID) {
     logger::write("adapter: saves go to the session folder: %s", documents_redirect::active() ? "yes" : "no");
     crash_dump::install();
     const Config config = loadConfig();
+    const bool supportedBuild = build_guard::checkRunningGame();
+    if (config.overlay && !dx12_hook::install(supportedBuild ? drawOverlay : drawNoticeOnly)) {
+        logger::write("adapter: overlay unavailable");
+    }
+    if (!supportedBuild) {
+        toast_queue::push("Unsupported game version: co-op is off", kBuildToastSeconds);
+        return 0;
+    }
     marker_overlay::setSelfMarker(config.selfMarker);
     remote_body::setEnabled(config.remoteBody);
     if (config.remoteBody) remote_body::installEarly();
     remote_animation::setMirrorLocalPlayer(config.mirrorAnimation);
-    if (config.overlay && !dx12_hook::install(drawOverlay)) logger::write("adapter: overlay unavailable");
     input_filter::install(cargo_menu::claimsKey);
     game::watchOrders();
     world_facts::installEarly(config.logFacts);

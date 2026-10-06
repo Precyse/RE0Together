@@ -40,6 +40,7 @@ add_library(ds2_adapter SHARED
     ${SHARED_SOURCES}
     src/proxy.cpp
     src/init.cpp
+    src/build_guard.cpp
     src/config.cpp
     src/documents_redirect.cpp
     src/import_patch.cpp
@@ -186,3 +187,4 @@ add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
 add_unit_test(bt_wire_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
+add_unit_test(build_guard_test src/build_guard.cpp ${SHARED_DIR}/log.cpp ${SHARED_DIR}/paths.cpp)
