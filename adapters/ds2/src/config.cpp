@@ -44,7 +44,7 @@ Config loadConfig() {
         } else if (key == "mirror_animation") {
             config.mirrorAnimation = value == "1";
         } else if (key == "enemy_sync") {
-            config.enemySync = value == "1";
+            config.enemySync = value != "0";
         } else if (key == "log_facts") {
             config.logFacts = value == "1";
         } else if (key == "diagnostics") {
@@ -62,7 +62,7 @@ Config loadConfig() {
         } else if (key == "cutscene_sync") {
             config.cutsceneSync = value == "1";
         } else if (key == "weapon_sync") {
-            config.weaponSync = value == "1";
+            config.weaponSync = value != "0";
         } else if (key == "weapon_attach_mode") {
             config.weaponAttachMode = static_cast<uint8_t>(std::strtoul(value.c_str(), nullptr, kDecimalBase));
         } else if (key == "remote_body") {
