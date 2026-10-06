@@ -115,6 +115,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/enemy_net.cpp | hit messages: guest request, host apply and announce, guest apply; game thread queue | `enemy_net::requestHit`, `announceHit`, `onFrame` |
 | src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) | `enemy_state::onFrame`, `enable` |
 | tools/re0/motion_probe.py | read-only: the uModel motion block of live enemies (or the player with -1), sampled five times | |
+| tools/re0/enemy_state_probe.py | read-only: per live enemy the AI state index (+0x67a4), motion number, frame, HP and position, printed on every change | |
 | tools/re0/equip_trace.py | read-only before/after snapshot of sItem, sPlayer, both characters and the weapon-class objects they point at; prints every changed dword (for finding what an equip changes) | `before`, `after`, `show` |
 | src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe` (velocity from two snapshots), `aim` (extrapolated target), `stepFor` (hold, blend, snap beyond 300) | `enemy_puppet_rule::stepFor` |
 | src/player_damage.cpp | HP/death ownership: MinHook gates on `setHP` 0x529310 and `cPlayerThink::onDeath` 0x4fcea0 (remote-owned characters only change via the owner); PLAYER_DIED 0x0120 replays remote deaths; authoritative `setHp` for all sync code | `player_damage::install` |
