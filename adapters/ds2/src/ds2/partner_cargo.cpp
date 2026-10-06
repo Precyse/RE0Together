@@ -199,7 +199,11 @@ void addDetour(uintptr_t slot, uintptr_t piece) {
     if (remote) {
         const uintptr_t origin = originOf(piece);
         const uintptr_t destination = slotRoot(slot);
-        if (origin && destination != origin) report(piece, origin, destination, remote, game::baggageOwner(kLocalPlayerKey));
+        const uintptr_t local = game::baggageOwner(kLocalPlayerKey);
+        if (destination == remote || destination == local) {
+            orders_diag::noteSlotAdd(destination == remote, origin, origin == remote, origin == local);
+        }
+        if (origin && destination != origin) report(piece, origin, destination, remote, local);
     }
     g_add(slot, piece);
 }

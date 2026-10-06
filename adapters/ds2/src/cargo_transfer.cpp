@@ -197,7 +197,10 @@ void ask(NetClient& net, uint8_t hostSlot, const Request& request) {
 // Host: a guest asked for a move; the host stays the decider and acts only on a piece it still lists.
 void answerAsk(const cargo_transfer::CargoAsk& request) {
     std::lock_guard lock(g_mutex);
-    if (!g_partner) return;
+    if (!g_partner) {
+        logger::write("cargo: the guest asked for %llx, but sent no list yet", static_cast<unsigned long long>(request.handle));
+        return;
+    }
     const auto& shown = request.wantsIt ? g_local : g_partner->cargo;
     const auto piece = std::find_if(shown.begin(), shown.end(), [&](const auto& c) { return c.handle == request.handle; });
     if (piece == shown.end()) {

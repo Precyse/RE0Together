@@ -104,6 +104,12 @@ void noteHandOverGather(uintptr_t query, uintptr_t remoteOwner, bool appended) {
                   !remoteOwner ? "does not exist" : appended ? "was missing and carries order pieces: appended" : "was left as it is");
 }
 
+void noteSlotAdd(bool toRemote, uintptr_t origin, bool originIsRemote, bool originIsLocal) {
+    if (!g_enabled.load()) return;
+    logger::write("orders_diag: a piece was added to the %s owner, origin %p (%s)", toRemote ? "remote's" : "local player's",
+                  reinterpret_cast<void*>(origin), originIsRemote ? "the remote's" : originIsLocal ? "the local player's" : "other or unknown");
+}
+
 void noteCarriedSet(const void* caller, uint32_t added) {
     if (!g_enabled.load()) return;
     const uintptr_t at = fileVa(caller);

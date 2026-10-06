@@ -32,7 +32,8 @@ VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then
 CARGO_ADD = 0x0103
 CARGO_GONE, MOVE_ACK = 0x011A, 0x0130
 CARGO_ASK = 0x0131
-CARGO_ENTRY_SIZE = 56  # cargo_transfer.h CargoEntry; the first u64 is the handle
+CARGO_ENTRY_SIZE = 80  # cargo_transfer.h CargoEntry; the first u64 is the handle
+CARGO_ENTRY_FORMAT = struct.Struct("<QI44sQQfB3x")  # handle, type, name, order id, second id, durability, category
 CARGO_ASK_FORMAT = struct.Struct("<QB7x")  # handle, wants it (cargo_transfer.h)
 CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 WORLD_ENV = 0x010D
@@ -140,6 +141,7 @@ def main():
     p.add_argument("--give-plain", default="", help="SECONDS: send CARGO_ADD of a Headache Pills piece with durability 123 (a worn piece)")
     p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
     p.add_argument("--ask-take", default="", help="SECONDS: as the guest, send CARGO_ASK for the first piece in the host's last CARGO_LIST (the host gives it)")
+    p.add_argument("--hold-order", action="store_true", help="the peer reports carrying the order piece Special Plant Seeds (CARGO_LIST once a second)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
     p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
@@ -232,6 +234,7 @@ def serve(sock, a):
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
 
+    last_list = 0.0
     host_first_piece = [None]  # the handle of the first piece in the host's last CARGO_LIST
     threading.Thread(target=receive, daemon=True).start()
     seq, start, last_hb, centre = 0, None, 0.0, None
@@ -282,6 +285,10 @@ def serve(sock, a):
             gave = True
             sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(641900174, 7, 900.0, 0, 0x1000071000018E, 0)))
             print("cargo: gave the order piece", flush=True)
+        if a.hold_order and now - last_list >= 1.0:
+            last_list = now
+            entry = CARGO_ENTRY_FORMAT.pack(0x7700, 641900174, b"Special Plant Seeds", 0x1000071000018E, 0, 900.0, 7)
+            sock.sendall(encode(CARGO_LIST, peer_slot, struct.pack("<I", 1) + entry))
         if a.ask_take and start is not None and not asked and now - start >= float(a.ask_take) and host_first_piece[0] is not None:
             asked = True
             sock.sendall(encode(CARGO_ASK, peer_slot, CARGO_ASK_FORMAT.pack(host_first_piece[0], 1)))
