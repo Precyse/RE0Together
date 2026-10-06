@@ -117,7 +117,7 @@ struct Held {
 };
 Held g_held;
 
-bool weaponAlive() { return g_held.weapon && ds2::entityExists(g_held.uuid.data()); }
+bool weaponAlive() { return g_held.weapon && ds2::entityIs(g_held.uuid.data(), g_held.weapon); }
 
 uint32_t indexOf(uintptr_t table, uintptr_t entry) {
     return static_cast<uint32_t>((entry - table - ds2::weapon::kTableFirstEntry) / ds2::weapon::kEntrySize);

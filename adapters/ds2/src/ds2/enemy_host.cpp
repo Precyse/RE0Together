@@ -176,7 +176,7 @@ void tick() {
     PartnerWatch watch;
     for (auto it = g_tracked.begin(); it != g_tracked.end();) {
         Tracked& enemy = *it;
-        if (!ds2::entityExists(enemy.entityUuid.data())) {
+        if (!ds2::entityIs(enemy.entityUuid.data(), enemy.entity)) {
             if (enemy.announced) pushGone(enemy.netId, enemy_wire::GoneReason::Despawned);
             it = g_tracked.erase(it);
             continue;
@@ -237,7 +237,7 @@ std::vector<Handover> release() {
     std::lock_guard lock(g_mutex);
     std::vector<Handover> entities;
     for (const Tracked& enemy : g_tracked) {
-        if (ds2::entityExists(enemy.entityUuid.data())) entities.push_back({enemy.entity, enemy.resourceUuid});
+        if (ds2::entityIs(enemy.entityUuid.data(), enemy.entity)) entities.push_back({enemy.entity, enemy.resourceUuid});
     }
     g_tracked.clear();
     return entities;

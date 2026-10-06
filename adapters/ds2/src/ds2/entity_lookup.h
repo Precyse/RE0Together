@@ -10,6 +10,11 @@ namespace ds2 {
 // `uuid` is the entity's 16-byte UUID (entity +0x10). Any thread; reads the map without its lock.
 bool entityExists(const uint8_t* uuid);
 
+// Whether `entity` is still the entity the engine holds under `uuid`. A raw pointer cached across a world load is valid only
+// if this is true: the same spawn point has the same UUID in every load, so `entityExists` stays true for the new instance
+// while the old pointer is freed memory.
+bool entityIs(const uint8_t* uuid, uintptr_t entity);
+
 // The entity with this UUID (EntityManager::GetEntityByUUID), 0 when the engine has none. Any thread.
 uintptr_t entityByUuid(const uint8_t* uuid);
 
