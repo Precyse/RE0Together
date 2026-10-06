@@ -15,7 +15,7 @@ remote_body=1
 
 `weapon_sync=1` (off by default) makes the partner's body hold the weapon the partner has drawn and play the partner's shots; `weapon_attach_mode=N` tries another way of attaching that weapon.
 
-The host moves cargo between the two backpacks: F7 opens the menu (your backpack and the guest's), the arrow keys pick a piece and choose the side, Enter moves it across. The game does not see those keys while the menu is open.
+Either player moves cargo between the two backpacks (a guest asks the host, which decides): F7 opens the menu (your backpack and the guest's), the arrow keys pick a piece and choose the side, Enter moves it across. The game does not see those keys while the menu is open.
 
 F6 warps you beside the partner (refused while you are dead, riding or driving, in a cutscene, a menu or a loading screen).
 

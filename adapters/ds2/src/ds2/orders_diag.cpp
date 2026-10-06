@@ -17,16 +17,19 @@
 namespace {
 
 constexpr uintptr_t kHeadlineGetter = 0x1414a13a0;  // (UI manager) -> DSUIBaggageCarrierSlotTypeResource, which names a carrier group
-constexpr uintptr_t kHandOverGather = 0x14119b930;  // (query): fills the owner list at +0x12810 for the hand-over menu
-constexpr uintptr_t kGatherScanFrom = 0x12008, kGatherScanTo = 0x12818;  // the query's list fields (+0x12008 list, +0x12808 count, +0x12810 gathered)
+constexpr uintptr_t kOwnerActiveCheck = 0x14119b2e0;  // (owner) -> whether the menus may use the owner
+constexpr uintptr_t kCarrierPanel = 0x141569dc0;  // (menu controller): shows the selected carrier; it asks the headline getter
+constexpr uintptr_t kControllerModel = 0xE0, kModelSelected = 0xC1C, kModelOwnerCount = 0x48, kModelOwners = 0x50;
+constexpr uintptr_t kOwnerCarrierType = 0x10, kOwnerKey = 0x18;
 constexpr size_t kMaxCallersLogged = 24;
-constexpr uintptr_t kImageBase = 0x140000000;
 
 std::atomic<bool> g_enabled{false};
 std::mutex g_mutex;
-std::set<uintptr_t> g_headlineCallers, g_carriedCallers;
+std::set<uintptr_t> g_headlineCallers, g_carriedCallers, g_activeCallers, g_panelOwners;
 
-uintptr_t fileVa(const void* address) { return reinterpret_cast<uintptr_t>(address) - ds2::at(kImageBase) + kImageBase; }
+uintptr_t fileVa(const void* address) {
+    return reinterpret_cast<uintptr_t>(address) - ds2::at(ds2::kImageBase) + ds2::kImageBase;
+}
 
 // Logs `address` once per distinct value (up to a limit).
 bool firstTime(std::set<uintptr_t>& seen, uintptr_t address) {
@@ -35,9 +38,11 @@ bool firstTime(std::set<uintptr_t>& seen, uintptr_t address) {
 }
 
 using GetterFn = uintptr_t (*)(uintptr_t ui);
-using GatherFn = uintptr_t (*)(uintptr_t query);
+using ActiveFn = uint64_t (*)(uintptr_t owner);
+using PanelFn = void (*)(uintptr_t controller, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
+PanelFn g_originalPanel = nullptr;
 GetterFn g_originalGetter = nullptr;
-GatherFn g_originalGather = nullptr;
+ActiveFn g_originalActive = nullptr;
 
 uintptr_t getterDetour(uintptr_t ui) {
     const uintptr_t caller = fileVa(_ReturnAddress());
@@ -45,16 +50,38 @@ uintptr_t getterDetour(uintptr_t ui) {
     return g_originalGetter(ui);
 }
 
-uintptr_t gatherDetour(uintptr_t query) {
-    const uintptr_t result = g_originalGather(query);
+// Which menu code asks whether the remote's owner is usable, and what the game answers (the owner is switched off on purpose).
+uint64_t activeDetour(uintptr_t owner) {
+    const uint64_t answer = g_originalActive(owner);
     const auto key = remote_body::ownerKey();
-    const uintptr_t owner = key ? game::baggageOwner(*key) : 0;
-    bool listed = false;
-    for (uintptr_t at = query + kGatherScanFrom; owner && at < query + kGatherScanTo; at += sizeof(uintptr_t)) {
-        if (decima::readPointer(at) == owner) listed = true;
+    if (key && owner == game::baggageOwner(*key)) {
+        const uintptr_t caller = fileVa(_ReturnAddress());
+        if (firstTime(g_activeCallers, caller)) {
+            logger::write("orders_diag: the owner-active check on the remote's owner was called from %p and answered %llu",
+                          reinterpret_cast<void*>(caller), static_cast<unsigned long long>(answer & 0xFF));
+        }
     }
-    logger::write("orders_diag: the hand-over gather finished, the remote's owner %s", !owner ? "does not exist" : listed ? "is listed" : "is NOT listed");
-    return result;
+    return answer;
+}
+
+// The owner the carrier panel is about to show (the controller's selected entry), logged once per distinct owner.
+void panelDetour(uintptr_t controller, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6) {
+    const uintptr_t model = decima::readPointer(controller + kControllerModel);
+    int32_t selected = -1, count = 0;
+    decima::safeRead(model + kModelSelected, selected);
+    decima::safeRead(model + kModelOwnerCount, count);
+    const uintptr_t owners = decima::readPointer(model + kModelOwners);
+    const uintptr_t owner = selected >= 0 && selected < count && owners ? decima::readPointer(owners + selected * sizeof(uintptr_t)) : 0;
+    uint8_t type = 0;
+    uint64_t key = 0;
+    if (owner && decima::safeRead(owner + kOwnerCarrierType, type) && decima::safeRead(owner + kOwnerKey, key) &&
+        firstTime(g_panelOwners, owner)) {
+        const auto remoteKey = remote_body::ownerKey();
+        logger::write("orders_diag: the carrier panel shows owner %p (type %u, key %llx, the remote's: %s)",
+                      reinterpret_cast<void*>(owner), type, static_cast<unsigned long long>(key),
+                      remoteKey && *remoteKey == key ? "yes" : "no");
+    }
+    g_originalPanel(controller, a2, a3, a4, a5, a6);
 }
 
 }  // namespace
@@ -65,8 +92,22 @@ void installEarly() {
     g_enabled = true;
     hooks::install("orders headline getter", ds2::at(kHeadlineGetter), reinterpret_cast<void*>(&getterDetour),
                    reinterpret_cast<void**>(&g_originalGetter));
-    hooks::install("orders hand-over gather", ds2::at(kHandOverGather), reinterpret_cast<void*>(&gatherDetour),
-                   reinterpret_cast<void**>(&g_originalGather));
+    hooks::install("orders carrier panel", ds2::at(kCarrierPanel), reinterpret_cast<void*>(&panelDetour),
+                   reinterpret_cast<void**>(&g_originalPanel));
+    hooks::install("orders owner-active check", ds2::at(kOwnerActiveCheck), reinterpret_cast<void*>(&activeDetour),
+                   reinterpret_cast<void**>(&g_originalActive));
+}
+
+void noteHandOverGather(uintptr_t query, uintptr_t remoteOwner, bool appended) {
+    if (!g_enabled.load()) return;
+    logger::write("orders_diag: the hand-over gather %p finished, the remote's owner %s", reinterpret_cast<void*>(query),
+                  !remoteOwner ? "does not exist" : appended ? "was missing and carries order pieces: appended" : "was left as it is");
+}
+
+void noteSlotAdd(bool toRemote, uintptr_t origin, bool originIsRemote, bool originIsLocal) {
+    if (!g_enabled.load()) return;
+    logger::write("orders_diag: a piece was added to the %s owner, origin %p (%s)", toRemote ? "remote's" : "local player's",
+                  reinterpret_cast<void*>(origin), originIsRemote ? "the remote's" : originIsLocal ? "the local player's" : "other or unknown");
 }
 
 void noteCarriedSet(const void* caller, uint32_t added) {

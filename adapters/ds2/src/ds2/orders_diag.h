@@ -7,8 +7,18 @@
 
 namespace orders_diag {
 
-// Start-up: installs the two hooks (the headline getter and the hand-over gather).
+// Start-up: installs the two hooks (the headline getter and the owner-active check 0x14119b2e0, which logs its callers for the
+// remote's owner and the answer).
 void installEarly();
+
+// Called by partner_cargo's hand-over gather detour (which appends the remote's owner to the query's list when it carries order
+// pieces and the game left it out): logs whether the owner exists and whether it had to be appended.
+void noteHandOverGather(uintptr_t query, uintptr_t remoteOwner, bool appended);
+
+// Called by partner_cargo's slot-add detour for a piece going into the remote's or the local player's owner: where it came
+// from (0 = unknown), and whether that origin is the remote's or the local player's. Logs it, so a move the classifier
+// ignored (the cargo menu's own path) shows what it saw.
+void noteSlotAdd(bool toRemote, uintptr_t origin, bool originIsRemote, bool originIsLocal);
 
 // Called by partner_cargo's carried-set detour: `caller` is the return address into the game, `added` the number of pieces the
 // walk of the remote's owner added to the collector. Logs each distinct caller once, with how many pieces the remote's owner

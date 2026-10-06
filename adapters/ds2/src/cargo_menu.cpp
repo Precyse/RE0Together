@@ -112,7 +112,7 @@ void drawArrow(ImDrawList* list, float centreX, float y, bool toRight) {
 namespace cargo_menu {
 
 void draw(float, float height) {
-    const auto partner = cargo_transfer::isHost() ? cargo_transfer::partner() : std::nullopt;
+    const auto partner = cargo_transfer::partner();
     if (!partner) {
         g_open = false;
         return;
