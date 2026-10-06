@@ -147,10 +147,11 @@ uint64_t moverUpdateDetour(uintptr_t mover, uintptr_t message, uintptr_t a3, uin
 // E1 diagnostic: the ride plugin's use-vehicle step (it sets request kind 3 from the candidate at +0x24490).
 constexpr uintptr_t kUseVehicleStep = 0x141008970;
 constexpr uintptr_t kPluginCandidate = 0x24490;
-using UseVehicleFn = uint64_t (*)(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+// (plugin, float, float, bool): the step stores xmm1, xmm2 and r9b first, so the float arguments must pass through.
+using UseVehicleFn = uint64_t (*)(uintptr_t plugin, float a2, float a3, uint8_t a4);
 UseVehicleFn g_useVehicle = nullptr;
 
-uint64_t useVehicleDetour(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+uint64_t useVehicleDetour(uintptr_t plugin, float a2, float a3, uint8_t a4) {
     static uintptr_t lastCandidate = ~uintptr_t{0};
     const uintptr_t candidate = ds2::field<uintptr_t>(plugin, kPluginCandidate);
     if (candidate != lastCandidate && plugin == ds2::ridePlugin(remote_player::samEntity())) {
