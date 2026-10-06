@@ -62,7 +62,7 @@ constexpr uintptr_t kCatalogueCount = 0x18, kCatalogueItems = 0x20, kItemContent
 constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: the player's current area
 constexpr uintptr_t kMissionResource = 0x10;
 constexpr size_t kMissionDumpBytes = 0x80, kResourceDumpBytes = 0x108, kPointeeDumpBytes = 0x60;
-constexpr int kMaxListedConfigs = 512;
+constexpr int kMaxListedConfigs = 40;
 constexpr size_t kMaxFaultsLogged = 30;
 constexpr size_t kStackWordsScanned = 96;
 constexpr int kReturnsLogged = 10;
