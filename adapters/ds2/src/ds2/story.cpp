@@ -28,7 +28,7 @@
 
 namespace {
 
-constexpr uintptr_t kMissionSystemGlobal = 0x14623EB30;  // DSMissionSystem; +0x10 = Impl, Impl +0x210 = request controller
+constexpr uintptr_t kMissionSystemGlobal = 0x14623EB30;  // DSMissionSystem; +0x10 = Impl, the request controller is embedded in Impl at +0x210
 constexpr uintptr_t kSectionManagerGlobal = 0x14623EB40;
 constexpr uintptr_t kImplOffset = 0x10, kControllerOffset = 0x210;
 constexpr uintptr_t kMissionById = 0x1413a0dd0;     // (DSMissionSystem*, u64 id) -> mission
@@ -71,7 +71,7 @@ story_ledger::Ledger g_ledger;              // host: the starts of the missions 
 uintptr_t controller() {
     const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
     const uintptr_t impl = system ? decima::readPointer(system + kImplOffset) : 0;
-    return impl ? decima::readPointer(impl + kControllerOffset) : 0;
+    return impl ? impl + kControllerOffset : 0;  // the controller sits inside Impl: the engine passes Impl + 0x210
 }
 
 void report(const story_wire::Event& event) {
