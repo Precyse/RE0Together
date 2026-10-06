@@ -1,4 +1,7 @@
-"""Makes the coop session folder's Continue load a known save (a DHV state) instead of the newest autosaves.
+"""KNOWN BROKEN (2026-10-06): the game rejected the profile.dat this writes and fell back to first-run setup; see
+docs/DS2_NOTES.md "session_fix.py broke the profile". Do not apply it.
+
+Makes the coop session folder's Continue load a known save (a DHV state) instead of the newest autosaves.
 
 Every save has its save time as a FILETIME in its description chunk (chunk 0, uncompressed bytes inside the packed
 stream) and profile.dat holds the newest save's time in its chunk 0 (docs/DS2_NOTES.md "Save container"). This tool
