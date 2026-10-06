@@ -11,7 +11,6 @@
 
 #include <array>
 #include <atomic>
-#include <cstring>
 #include <mutex>
 #include <vector>
 
@@ -41,10 +40,6 @@ constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorCompone
 constexpr uintptr_t kWeaponEnabled = 0x363;     // byte: the weapon entity's update (0x141fa9850, 0x141fa9760) runs its behaviors only when set
 constexpr uintptr_t kWeaponBehaviorsReady = 0x21E0;  // byte: set by the entity's slot 38 (0x141fa9f60), which prepares its behaviors
 constexpr uintptr_t kWeaponActive = 0x24B9;     // byte: set by the player's state when it equips the weapon (0x141f57f30); the behavior's can't-fire check (slot 60, 0x14202a500) refuses a weapon with it 0
-constexpr uintptr_t kAttachToOwner = 0x141de4a30;  // DSAbstractEquipmentEntity attach (weapon, owner, const f32[16]* local matrix): parents it and sets its mover's offset
-constexpr uintptr_t kDefaultPlacementRows[2] = {0x143467ee0, 0x143469840};  // the two 32-byte halves of the default local matrix the NPC equip path (0x141fa7610) passes
-constexpr size_t kPlacementBytes = 64, kPlacementHalf = 32;
-constexpr uint32_t kTestPlaceMode = 99;  // attach.txt mode that runs the owner attach instead of SetParent
 constexpr uintptr_t kPrepareBehaviors = 0x141faa350;  // (weapon): runs vtable slot 68 of every behavior, the last step of the player's equip
 constexpr size_t kWeaponEnableSlot = 28, kWeaponPrepareSlot = 38;  // DSWeaponEntity vtable slots: enable (0x141fa99e0), prepare behaviors
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
@@ -176,21 +171,6 @@ bool callWeaponSlot(uintptr_t weapon, size_t slot) {
     }
 }
 
-// The NPC equip path's last step: the weapon is attached to its owner with the default local matrix, which also marks its
-// mover to follow the owner's attach joint. False when the engine faulted.
-bool placeOnOwnerGuarded(uintptr_t weapon, uintptr_t owner) {
-    alignas(32) uint8_t placement[kPlacementBytes];
-    __try {
-        for (size_t half = 0; half < 2; ++half) {
-            std::memcpy(placement + half * kPlacementHalf, reinterpret_cast<const void*>(ds2::at(kDefaultPlacementRows[half])), kPlacementHalf);
-        }
-        reinterpret_cast<uint8_t (*)(uintptr_t, uintptr_t, const void*)>(ds2::at(kAttachToOwner))(weapon, owner, placement);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 bool prepareBehaviorsGuarded(uintptr_t weapon) {
     __try {
         reinterpret_cast<void (*)(uintptr_t)>(ds2::at(kPrepareBehaviors))(weapon);
@@ -202,7 +182,7 @@ bool prepareBehaviorsGuarded(uintptr_t weapon) {
 
 // The table enables a weapon it draws and the player's state equips it (active byte, prepare slot, behaviors' own prepare);
 // the weapon made for the body gets the same steps, so its entity update runs its behaviors and they may fire.
-void enableWeapon(uintptr_t weapon, uintptr_t owner) {
+void enableWeapon(uintptr_t weapon) {
     if (!ds2::field<uint8_t>(weapon, kWeaponEnabled) && !callWeaponSlot(weapon, kWeaponEnableSlot)) {
         logger::write("remote_weapon: enabling the weapon faulted");
     }
@@ -211,7 +191,6 @@ void enableWeapon(uintptr_t weapon, uintptr_t owner) {
         logger::write("remote_weapon: preparing the weapon's behaviors faulted");
     }
     if (!prepareBehaviorsGuarded(weapon)) logger::write("remote_weapon: the behaviors' prepare faulted");
-    if (!placeOnOwnerGuarded(weapon, owner)) logger::write("remote_weapon: placing the weapon on its owner faulted");
 }
 
 bool removeGuarded(uintptr_t entry) {
@@ -321,7 +300,7 @@ void createWeapon(uintptr_t body, uint16_t id) {
         logger::write("remote_weapon: attaching with mode %u faulted", g_attachMode);
     }
     logWeaponState("before enabling", body);
-    enableWeapon(weapon, body);
+    enableWeapon(weapon);
     setTableIndex(table, indexOf(table, entry));
     logger::write("remote_weapon: the body holds weapon %u in table entry %u (attach mode %u)", id, indexOf(table, entry), g_attachMode);
     logWeaponState("made", body);
@@ -432,8 +411,7 @@ uint16_t attackType() {
 
 void reattach(uint32_t mode) {
     if (!weaponAlive() || !g_held.owner) return;
-    const bool ok = mode == kTestPlaceMode ? placeOnOwnerGuarded(g_held.weapon, g_held.owner)
-                                           : reattachGuarded(g_held.weapon, g_held.owner, mode);
+    const bool ok = reattachGuarded(g_held.weapon, g_held.owner, mode);
     logger::write("remote_weapon: attached with mode %u: %s", mode, ok ? "done" : "faulted");
     logPose(g_held.owner);
 }
