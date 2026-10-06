@@ -11,7 +11,7 @@
 //   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
 //                             paused-update request, 0x140131420), flags (logs the entity flags)
 //   equpdate.txt   "on|off"   whether the remote body's equipment component skips its update (on by default)
-//   playerupdate.txt "skip|state|full"  what the remote body's DSPlayerComponent update runs: nothing, only the state machine step, all of it
+//   playerupdate.txt "hex mask"  the calls of the remote body's DSPlayerComponent update that are skipped (remote_update.h; 0 = all run)
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -31,7 +31,7 @@
 #include "ds2/health_watch.h"
 #include "ds2/place.h"
 #include "ds2/player_system_guard.h"
-#include "ds2/remote_guards.h"
+#include "ds2/remote_update.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
@@ -269,7 +269,7 @@ void tick() {
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
-    if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_guards::setPlayerUpdate(text.rfind("skip", 0) == 0 ? remote_guards::PlayerUpdate::Skip : text.rfind("full", 0) == 0 ? remote_guards::PlayerUpdate::Full : remote_guards::PlayerUpdate::StateOnly);
+    if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_update::setSkipMask(static_cast<uint32_t>(strtoul(text.c_str(), nullptr, 16)));
     if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }

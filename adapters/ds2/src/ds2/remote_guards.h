@@ -11,9 +11,4 @@ void installEarly();
 // prompts from every entity message. Call once the remote entity exists.
 void silenceRemote();
 
-// What the remote's DSPlayerComponent update does: nothing, only the player state machine's step (default: the ride start
-// and the other states need it), or all of it (it flickers Sam's prompts).
-enum class PlayerUpdate { Skip, StateOnly, Full };
-void setPlayerUpdate(PlayerUpdate mode);
-
 }  // namespace remote_guards
