@@ -11,4 +11,8 @@ void installEarly();
 // prompts from every entity message. Call once the remote entity exists.
 void silenceRemote();
 
+// Test only: puts the DSPlayerComponent update back into the remote's handler list (it is cut at the spawn), to see what
+// the engine needs it for (the ride start).
+void restorePlayerUpdate();
+
 }  // namespace remote_guards
