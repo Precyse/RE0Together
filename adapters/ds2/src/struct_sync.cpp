@@ -28,6 +28,15 @@ void sendCreate(NetClient& net, const struct_wire::Placed& placed) {
 namespace struct_sync {
 
 void onFrame(const GameFrame& frame) {
+    if (g_host && frame.type == struct_wire::kMsgStructRemove) {
+        struct_wire::Remove removal;
+        if (struct_wire::decode(frame.payload, removal)) {
+            game::removeStructure(removal);
+        } else {
+            logger::write("struct_sync: dropped a malformed STRUCT_REMOVE request (%zu bytes)", frame.payload.size());
+        }
+        return;
+    }
     if (g_host && frame.type == struct_wire::kMsgStructRequest) {
         struct_wire::Placed placed;
         if (struct_wire::decode(frame.payload, placed) && placed.create.id == struct_wire::kAssignId) {
@@ -64,6 +73,9 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     if (g_guest) {
         for (const struct_wire::Placed& request : game::takeStructureRequests()) {
             net.send(struct_wire::kMsgStructRequest, true, g_hostSlot, struct_wire::encode(request));
+        }
+        for (const struct_wire::Remove& removal : game::takeRemovedStructures()) {
+            net.send(struct_wire::kMsgStructRemove, true, g_hostSlot, proto::bytesOf(removal));
         }
         if (!game::gameplaySettled()) {
             g_requestedAtGameplay = false;

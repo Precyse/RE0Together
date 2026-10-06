@@ -23,7 +23,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Spawn crash 0x140F75E12 (DSPlayerSystem singleton writes) | partial | ds2-live | `ds2/remote_player.cpp` (guard on ds2-live) |
 | Enemies and weapons in a normal session | partial | ds2-tester | `config.h`: `enemy_sync` and `weapon_sync` default off |
 | BT grab of the guest's body | missing | ds2-streaming | `ds2/bt_events.h` TODO |
-| Guest builds structures and roads | built, not run live (STRUCT_REQUEST; roads and the guest's collapse not done) | ds2-streaming | `ds2/structures.cpp` refuses the guest's placements; ladders only |
+| Guest builds structures and roads | built, not run live (STRUCT_REQUEST, guest collapse; roads: plan in DS2_NOTES, needs live observation) | ds2-streaming | `ds2/structures.cpp` refuses the guest's placements; ladders only |
 | Guest voidout or death crater | missing | ds2-streaming | none; a world change made only in the dying player's world |
 | Partner in another region or map | partial (a "too far" line past 700 m; options in "Far partner" below) | ds2-streaming | `ds2/remote_player.cpp` (body leaves on area change), `marker_overlay.cpp` (distance only) |
 | Guest-initiated hand-over | missing | ds2-orders | `cargo_menu.cpp` is the host's (F7) |

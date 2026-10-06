@@ -63,10 +63,10 @@ thread_local bool t_applying = false;  // the adapter itself is building or remo
 
 std::mutex g_mutex;
 std::vector<struct_wire::Placed> g_placed;     // host: to send
-std::vector<struct_wire::Remove> g_removed;    // host: to send
+std::vector<struct_wire::Remove> g_removed;    // to send: the host's removals to everyone, a guest's to the host
 std::vector<struct_wire::Placed> g_requests;   // guest: its own placements, to send to the host
 std::vector<struct_wire::Placed> g_toCreate;   // to build on the simulation thread (the host's, or a guest's request)
-std::vector<struct_wire::Remove> g_toRemove;   // guest: to remove on the simulation thread
+std::vector<struct_wire::Remove> g_toRemove;   // to remove on the simulation thread (the host's, or a guest's request)
 
 uintptr_t fileVa(void* address) {
     static const uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
@@ -147,7 +147,7 @@ uint64_t submitDetour(uintptr_t mgr, uintptr_t desc, uintptr_t c, uintptr_t d, u
 uintptr_t objectById(uintptr_t mgr, uint32_t id);
 
 void noteRemoval(uintptr_t object, uintptr_t factor) {
-    if (t_applying || !g_host.load() || factor > kMaxRemoveFactor) return;
+    if (t_applying || !(g_host.load() || g_guest.load()) || factor > kMaxRemoveFactor) return;
     uint32_t id = 0;
     if (!decima::safeRead(object + kObjectId, id) || objectById(manager(), id) != object) return;
     std::lock_guard lock(g_mutex);
@@ -213,6 +213,12 @@ void create(uintptr_t mgr, const struct_wire::Placed& placed) {
     if (assignId) announceRequested(placed, id);
 }
 
+// Host: tells everyone about a removal it did for a guest's request.
+void announceRemoved(const struct_wire::Remove& removal) {
+    std::lock_guard lock(g_mutex);
+    if (g_removed.size() < kMaxQueued) g_removed.push_back(removal);
+}
+
 // The game's own script export for a player removing a structure: it sends the structure's entity the removal request
 // the way the held-item collapse does (calling the object's RequestRemove directly crashed the player code that still
 // holds the structure).
@@ -223,6 +229,7 @@ void remove(uintptr_t mgr, const struct_wire::Remove& r) {
     }
     reinterpret_cast<RemoveByPlayerFn>(ds2::at(kRemoveByPlayer))(r.id);
     logger::write("structures: asked the game to remove id %u", r.id);
+    if (g_host.load()) announceRemoved(r);
 }
 
 // Simulation thread, ahead of the engine's object update.
@@ -269,10 +276,8 @@ void setStructureRole(bool host, bool guest) {
     g_host = host;
     g_guest = guest;
     std::lock_guard lock(g_mutex);
-    if (!host) {
-        g_placed.clear();
-        g_removed.clear();
-    }
+    if (!host) g_placed.clear();
+    if (!host && !guest) g_removed.clear();
     if (!guest) g_requests.clear();
 }
 

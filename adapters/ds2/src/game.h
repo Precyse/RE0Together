@@ -290,7 +290,7 @@ void applyPlayerHit(const combat_wire::PlayerHit& hit);  // guest: an enemy's hi
 // placements locally and sends them to the host (takeStructureRequests). Needs structures::installEarly. Any thread.
 void setStructureRole(bool host, bool guest);
 
-// Host: the structures its player placed and removed since the last call (ladders so far). Any thread.
+// The structures the local player placed (host) and removed (host, or a guest's collapse) since the last call. Any thread.
 std::vector<struct_wire::Placed> takePlacedStructures();
 std::vector<struct_wire::Remove> takeRemovedStructures();
 // Guest: its own placements since the last call, to send to the host (the placement itself is refused locally).
