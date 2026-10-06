@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
@@ -147,10 +148,11 @@ uint64_t moverUpdateDetour(uintptr_t mover, uintptr_t message, uintptr_t a3, uin
 // E1 diagnostic: the ride plugin's use-vehicle step (it sets request kind 3 from the candidate at +0x24490).
 constexpr uintptr_t kUseVehicleStep = 0x141008970;
 constexpr uintptr_t kPluginCandidate = 0x24490;
-using UseVehicleFn = uint64_t (*)(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+// (plugin, float, float, bool): the step stores xmm1, xmm2 and r9b first, so the float arguments must pass through.
+using UseVehicleFn = uint64_t (*)(uintptr_t plugin, float a2, float a3, uint8_t a4);
 UseVehicleFn g_useVehicle = nullptr;
 
-uint64_t useVehicleDetour(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+uint64_t useVehicleDetour(uintptr_t plugin, float a2, float a3, uint8_t a4) {
     static uintptr_t lastCandidate = ~uintptr_t{0};
     const uintptr_t candidate = ds2::field<uintptr_t>(plugin, kPluginCandidate);
     if (candidate != lastCandidate && plugin == ds2::ridePlugin(remote_player::samEntity())) {
@@ -160,16 +162,17 @@ uint64_t useVehicleDetour(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_
     return g_useVehicle(plugin, a2, a3, a4);
 }
 
-// E2: the vehicle's model, to key the seat offsets by (the entity's resource reference and the first qwords behind it).
+// E2: the vehicle's model, to key the seat offsets by: the UUID of its entity resource (the object the entity's resource
+// reference points at, UUID at +0x10 like any RTTIRefObject).
 constexpr uintptr_t kEntityResource = 0x68;
+constexpr uintptr_t kResourceUuid = 0x10;
 void logVehicleModel(uintptr_t vehicle) {
-    const uintptr_t resource = decima::readPointer(vehicle + kEntityResource);
-    uint64_t words[6] = {};
-    decima::safeCopy(words, resource, sizeof(words));
-    logger::write("remote_ride: vehicle %p resource %p: %llx %llx %llx %llx %llx %llx", reinterpret_cast<void*>(vehicle),
-                  reinterpret_cast<void*>(resource), static_cast<unsigned long long>(words[0]), static_cast<unsigned long long>(words[1]),
-                  static_cast<unsigned long long>(words[2]), static_cast<unsigned long long>(words[3]),
-                  static_cast<unsigned long long>(words[4]), static_cast<unsigned long long>(words[5]));
+    const uintptr_t resource = decima::readPointer(decima::readPointer(vehicle + kEntityResource));
+    uint8_t uuid[16] = {};
+    decima::safeCopy(uuid, resource + kResourceUuid, sizeof(uuid));
+    char text[33] = {};
+    for (int i = 0; i < 16; ++i) snprintf(text + 2 * i, 3, "%02x", uuid[i]);
+    logger::write("remote_ride: vehicle %p model %s", reinterpret_cast<void*>(vehicle), text);
 }
 
 // Whether the local player drives the vehicle too (each machine keeps its own driver; the partner then rides along).
