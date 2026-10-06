@@ -19,12 +19,15 @@ constexpr auto kConfirmInterval = std::chrono::milliseconds(2500);
 // Enter alone cannot pass every screen (an empty save slot under the load cursor ignores it): after this many presses
 // without reaching the game the guest gets the keyboard back and picks a slot; the load is redirected to the host's slot.
 constexpr int kMaxConfirms = 6;
+// A host that never continues (quit, away) must not leave the guest without a keyboard.
+constexpr auto kMaxWait = std::chrono::seconds(60);
 
 using Mode = session_rule::JoinMode;
 
 bool g_fullJoin = false;  // set once at start-up: also drive the boot, title and load screens
 Mode g_mode = Mode::Idle;  // net thread only
 Clock::time_point g_lastConfirm;
+Clock::time_point g_modeSince;
 int g_confirms = 0;
 
 // Outside gameplay the guest follows the host into its game; at game over it waits for the host's choice.
@@ -54,11 +57,17 @@ void onNetTick() {
     if (mode != g_mode) {
         g_mode = mode;
         g_confirms = 0;
+        g_modeSince = Clock::now();
         virtual_keys::setRealKeyboardMuted(mode != Mode::Idle);
         logger::write("%s", describe(mode));
     }
-    if (mode != Mode::Confirming || g_confirms >= kMaxConfirms) return;
     const auto now = Clock::now();
+    if (mode == Mode::Waiting && now - g_modeSince >= kMaxWait && g_modeSince != Clock::time_point{}) {
+        g_modeSince = {};
+        virtual_keys::setRealKeyboardMuted(false);
+        logger::write("auto_join: the host did not continue in %lld s, the keyboard is the guest's again", static_cast<long long>(kMaxWait.count()));
+    }
+    if (mode != Mode::Confirming || g_confirms >= kMaxConfirms) return;
     if (now - g_lastConfirm < kConfirmInterval) return;
     g_lastConfirm = now;
     virtual_keys::tap(virtual_keys::kEnter);
