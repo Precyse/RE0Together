@@ -7,22 +7,7 @@
 
 namespace remote_update {
 
-// Bit 9 (200) makes the motion call run whole for the remote; by default the remote runs only its state step.
 constexpr uint32_t kSkipWholeUpdate = uint32_t{1} << 31;
-
-// Bit 10 (400): the update's messages to Sam's entity are not dispatched (the use prompt is Sam's HUD state).
-constexpr uint32_t kBlockMessagesToSam = uint32_t{1} << 10;
-
-// Bit 11 (800): the remote's use-location, interactive and hand-terminal action plugins are suspended (they evaluate the
-// terminals and prompts around the body, which is Sam's HUD state).
-constexpr uint32_t kSuspendUsePlugins = uint32_t{1} << 11;
-
-// Whether this thread is inside the remote's update.
-bool running();
-
-// Called by the message dispatcher for every message sent to `target` (an entity): counts what the remote's update sends
-// (logged every few seconds), and returns true when the message must not be dispatched.
-bool onMessage(uintptr_t messageVtable, uintptr_t target);
 
 // Start-up, before the world loads.
 void installEarly();
