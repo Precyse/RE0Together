@@ -18,7 +18,9 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
+#include "ds2/entity_wake.h"
 #include "ds2/partner_focus.h"
+#include "hooks.h"
 #include "log.h"
 
 namespace {
@@ -27,6 +29,27 @@ constexpr uintptr_t kDistanceBlock = 0x141bd3ffa;  // first instruction of the d
 constexpr size_t kDistanceBlockBytes = 0x74;       // up to the `test cl, 1` (0x141bd406e) that uses its result
 constexpr uint8_t kBlockStart[] = {0xC5, 0xFB, 0x10, 0x44, 0x24, 0x50};  // vmovsd xmm0, [rsp+0x50]
 constexpr uint8_t kBlockEnd[] = {0xC5, 0xE8, 0x58, 0xF1};                // vaddps xmm6, xmm2, xmm1 (the block's last instruction)
+
+constexpr uintptr_t kUpdateBody = 0x141bd3d50;  // (manager*): the activity update of the NPC managers
+
+// Manager fields the update reads per group index (diagnostics only): per-group arrays and the group records.
+constexpr uintptr_t kGroupBudgets = 0x30;   // uint32*: awake budget
+constexpr uintptr_t kGroupNear = 0x40;      // float*: near radius
+constexpr uintptr_t kGroupFar = 0x50;       // float*: far radius
+constexpr uintptr_t kGroupLimit = 0x60;     // int32*: second limit (the update uses 1000 when negative)
+constexpr uintptr_t kGroupCount = 0x138;    // int32
+constexpr uintptr_t kGroups = 0x140;        // Group* (records of 16 bytes {int32 count, pad, Item** items})
+constexpr uintptr_t kItemEntity = 0x88;     // Item +0x88: the member's Entity*
+constexpr ULONGLONG kLogEveryMs = 5000;
+
+struct Group {
+    int32_t count;
+    int32_t pad;
+    uintptr_t* items;
+};
+static_assert(sizeof(Group) == 0x10);
+
+void (*g_original)(uintptr_t manager) = nullptr;
 
 constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
 constexpr uintptr_t kFocusOffset = 0xA0;  // WorldPosition: the point the update measures from
@@ -70,6 +93,34 @@ float nearestSquaredDistance(uintptr_t entity) {
     return nearest;
 }
 
+// Diagnostics: after the update, every 5 s, each group's members and how many sleep, with the numbers that decide it.
+void logGroups(uintptr_t manager) {
+    static ULONGLONG nextLog = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now < nextLog) return;
+    nextLog = now + kLogEveryMs;
+    const auto groups = ds2::field<const Group*>(manager, kGroups);
+    const int count = ds2::field<int32_t>(manager, kGroupCount);
+    const auto nearRadius = ds2::field<const float*>(manager, kGroupNear);
+    const auto farRadius = ds2::field<const float*>(manager, kGroupFar);
+    const auto limit = ds2::field<const int32_t*>(manager, kGroupLimit);
+    const auto budget = ds2::field<const uint32_t*>(manager, kGroupBudgets);
+    for (int g = 0; g < count; ++g) {
+        int asleep = 0;
+        for (int i = 0; i < groups[g].count; ++i) {
+            uintptr_t entity = 0;
+            if (decima::safeRead(groups[g].items[i] + kItemEntity, entity) && entity && ds2::entityAsleep(entity)) ++asleep;
+        }
+        logger::write("sneaking_focus: manager %p group %d: %d members, %d asleep, near %.0f far %.0f, limit %d, budget %u",
+                      reinterpret_cast<void*>(manager), g, groups[g].count, asleep, nearRadius[g], farRadius[g], limit[g], budget[g]);
+    }
+}
+
+void updateDetour(uintptr_t manager) {
+    g_original(manager);
+    logGroups(manager);
+}
+
 bool blockIsAsExpected(const uint8_t* block) {
     return std::memcmp(block, kBlockStart, sizeof(kBlockStart)) == 0 &&
            std::memcmp(block + kDistanceBlockBytes - sizeof(kBlockEnd), kBlockEnd, sizeof(kBlockEnd)) == 0;
@@ -109,13 +160,17 @@ void writePatch(uint8_t* block) {
 
 namespace sneaking_focus {
 
-void installEarly() {
+void installEarly(bool diagnostics) {
     uint8_t* block = reinterpret_cast<uint8_t*>(ds2::at(kDistanceBlock));
     if (!blockIsAsExpected(block)) {
         logger::write("sneaking_focus: the NPC managers' distance block is not the expected code, left alone");
         return;
     }
     writePatch(block);
+    if (diagnostics) {
+        hooks::install("npc manager update (diagnostics)", ds2::at(kUpdateBody), reinterpret_cast<void*>(&updateDetour),
+                       reinterpret_cast<void**>(&g_original));
+    }
     logger::write("sneaking_focus: the NPC managers' distance is the nearer of the player and the partner");
 }
 

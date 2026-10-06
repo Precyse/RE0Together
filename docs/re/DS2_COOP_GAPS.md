@@ -117,10 +117,10 @@ Measured live: the engine streams tiles and simulates entities around ONE point,
 |---|---|---|
 | A. Soft leash notice (built) | the player sees "name  N m  too far" past 700 m, so a missing fight is explained | no gameplay change; the world around a far partner is still not simulated |
 | B. Hard leash | warp the partner back (F6 exists) or block fast travel / vehicles past a limit | removes the problem by removing freedom; feels restrictive |
-| C. Observer at the midpoint | feed the engine's own observer override with the midpoint of the two players: both stay within about 800 m of it while up to about 1.5 km apart, doubling the supported separation | one number per frame through the engine's own setter; the detail ring around each player gets thinner; needs a live check of terrain and LOD near each player |
+| C. Observer at the midpoint (tried, removed) | feed the engine's own observer override (SetObserverPositionOverride 0x14071fdb0) with a point half way to the partner, capped at 300 m from the host's player | live at 965 m: the observer moved, the far camp did not stream in within 2.7 min (not proven); the code was removed |
 | D. Each machine simulates its own area (guest authoritative for local enemies) | works at any distance | large: enemy authority per area, handover on approach, the host's world and the guest's world diverge; the authority records exist (`authority.cpp`) but nothing assigns enemies by area |
 | E. Second streaming observer | works at any distance | not available in the engine: one observer, about 60 readers of the manager; memory cost of a second ring of tiles on a PC already near its commit limit |
 
-Recommendation: A now (done), then C as the next experiment (cheapest real gain, uses the engine's own override), B as the fallback if C shows tile pop-in near either player (C is built behind the test command `observer.txt`, capped at 300 m from the host player, off by default); D only if long-range split play becomes a goal.
+Recommendation: A (done), B as the next step if the notice is not enough (warp the partner back, limit separation), D only if long-range split play becomes a goal.
 
 Built: `marker_overlay.cpp` draws one line per partner farther than `kBeyondLoadedWorldMetres` (700 m, a margin under the 768 / 800 m table radii) under the toasts.
