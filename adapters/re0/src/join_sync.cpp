@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "flag_sync.h"
+#include "floor_items_sync.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
@@ -35,6 +36,7 @@ std::optional<JoinSnapshot> g_received;    // guarded by g_mutex: guest's unappl
 uintptr_t g_loadedPair = 0;          // controlled ^ partner of the load the snapshot belongs to
 bool g_applied = false;              // the snapshot for g_loadedPair has been applied
 std::atomic<bool> g_caughtUp{false};  // guest: applied and placed (read on the net thread)
+std::atomic<bool> g_resyncRequested{false};  // guest: take a new snapshot even though one was applied
 Clock::time_point g_lastRequest;
 std::optional<JoinSnapshot> g_snapshot;    // received, not yet applied
 std::optional<JoinSnapshot> g_travelling;  // applied; waiting for the own character's door to arrive
@@ -61,6 +63,7 @@ void answer() {
         inventory_sync::readBlock(static_cast<uint8_t>(character), snapshot.inventories[static_cast<size_t>(character)]);
     }
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;
+    floor_items_sync::sendJournal();
     logger::write("join_sync: snapshot sent (Billy scene 0x%02x, Rebecca scene 0x%02x)",
                   placeOf(snapshot, Character::Billy).scene, placeOf(snapshot, Character::Rebecca).scene);
 }
@@ -119,6 +122,13 @@ void guestTick() {
         g_travelling.reset();
         g_lastRequest = {};
     }
+    if (g_resyncRequested.exchange(false) && g_applied) {
+        g_applied = false;
+        g_snapshot.reset();
+        g_travelling.reset();
+        g_lastRequest = {};
+        logger::write("join_sync: asking for a new snapshot");
+    }
     if (g_travelling &&
         placeOf(*g_travelling, character_owner::localCharacter()).scene == scene::current()) {
         finish(*g_travelling);
@@ -158,6 +168,8 @@ void onTick() {
 }  // namespace
 
 namespace join_sync {
+
+void requestResync() { g_resyncRequested = true; }
 
 bool caughtUp() { return character_owner::isHost() || g_caughtUp.load(); }
 

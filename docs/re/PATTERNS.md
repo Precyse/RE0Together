@@ -50,7 +50,7 @@ Seen in: RE0: sSubMenu::open 0x5d9030.
 Shape: a single "update all units" function runs each frame; menus stop the world by not running it.
 Find it: follow the vtable of the unit manager; the per-group update loop.
 Replicate: freeze mirror. Skip it while the peer is in a menu.
-Seen in: RE0: sUnit::updateAll 0x727b50.
+Seen in: RE0: sUnit::updateAll 0x727b50. Bound the hold: reading screens and cutscenes hold until closed, plain menus release after a cap (RE0: 20 s, `menu_hold_rule.h`), so an idle partner cannot freeze the other player; the screen kind travels in the menu message.
 
 ## Remote-controlled character driven by pad replay  [control]
 Shape: a character's brain object reads a pad. Swapping the brain type (player versus AI) changes who drives it.
@@ -86,7 +86,8 @@ Seen in: RE0: virtual_keys (DirectInput8 proxy), session_slot (0x6134c0 / 0x6135
 Shape: the joiner can only load a saved state; the host's live state has moved on (room, inventories, flags, AI-driven partner).
 Find it: reuse the existing sync modules' read/apply points.
 Replicate: after the joiner loads, request a snapshot; apply flags and inventories, travel through the host's last door (engine transition as teleport), place the partner; hold the joiner's own state broadcasts until caught up.
-Seen in: RE0: join_sync.
+Seen in: RE0: join_sync. The same request doubles as resync on demand (a file or a persisting desync re-asks for the snapshot and applies it like the first), and changes the game keeps only in memory (floor items dropped after the last save) travel as a journal cleared at every save or load, replayed idempotently (a put is skipped where the item already is).
+Traps: a guest that plays a session copy must refuse its own saves (they are deleted with the session); refuse at the save request, and check where the game spends the save's resource (RE0 ink ribbon, unchecked).
 
 ## Areas are records; move a member with the engine's own record calls  [state-transition, world-state]
 Shape: the engine keeps a small pool of area records (the loaded area plus dormant ones a party member was left in); each character points at its record. Writing the pointer or position by hand leaves callbacks and registries half-updated.

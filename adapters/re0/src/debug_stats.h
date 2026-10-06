@@ -91,6 +91,10 @@ void noteCallbackDisabled(const char* name);
 // printf-style; also the text shown by the overlay.
 void setError(const char* format, ...);
 
+// The partner status line the overlay always shows (empty: nothing to show).
+void setPartnerLine(const std::string& line);
+std::string partnerLine();
+
 void setLastCommand(const char* text);
 void setLastDecision(const char* text);
 

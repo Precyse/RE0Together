@@ -40,6 +40,7 @@ std::string g_lastCommand;
 Clock::time_point g_commandTime;
 std::string g_lastDecision;
 Clock::time_point g_decisionTime;
+std::string g_partnerLine;
 Clock::time_point g_windowStart = Clock::now();
 std::array<uint32_t, kCounterCount> g_windowBase{};
 std::array<uint32_t, kCounterCount> g_rate{};
@@ -93,6 +94,16 @@ void setLastDecision(const char* text) {
     std::lock_guard lock(g_mutex);
     g_lastDecision = text;
     g_decisionTime = Clock::now();
+}
+
+void setPartnerLine(const std::string& line) {
+    std::lock_guard lock(g_mutex);
+    g_partnerLine = line;
+}
+
+std::string partnerLine() {
+    std::lock_guard lock(g_mutex);
+    return g_partnerLine;
 }
 
 Snapshot snapshot() {
