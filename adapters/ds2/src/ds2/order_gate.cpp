@@ -1,7 +1,8 @@
-// DEATH STRANDING 2: guest restriction on orders. Terminals open for everyone; accepting an order and turning one in
-// go through script-exported callbacks of the terminal's menus (DSUIMissionMenu, DSUIHandOverMenu). While the local
-// player is a guest those callbacks return without calling the engine, with a toast, so nothing changes in either
-// world; the host does both. Delivery points at shelters use the same hand-over menu (docs/DS2_NOTES.md).
+// DEATH STRANDING 2: guest restriction on orders. Terminals open for everyone; accepting an order goes through
+// script-exported callbacks of the terminal's mission menu (DSUIMissionMenu). While the local player is a guest those
+// callbacks return without calling the engine, with a toast, so nothing changes in either world; the host accepts.
+// A guest turns in at its own terminal (the hand-over menu runs normally): the order's success request is the one the
+// story sync forwards to the host (docs/DS2_NOTES.md, "Guest turn-in").
 #include <atomic>
 #include <utility>
 
@@ -24,10 +25,6 @@ struct Callback {
 constexpr Callback kCallbacks[] = {
     {"mission list decide", 0x141751e40, "Only the host can accept orders"},
     {"mission default dialog yes", 0x141751ce0, "Only the host can accept orders"},
-    {"hand over deliver dialog yes", 0x1414c4290, "Only the host can turn in orders"},
-    {"hand over complete partial", 0x1414c4270, "Only the host can turn in orders"},
-    {"hand over partial dialog", 0x1414c4220, "Only the host can turn in orders"},
-    {"hand over close page decide", 0x1414c44a0, "Only the host can turn in orders"},
 };
 constexpr size_t kCallbackCount = sizeof(kCallbacks) / sizeof(kCallbacks[0]);
 
@@ -62,7 +59,7 @@ void watchOrders() { installAll(std::make_index_sequence<kCallbackCount>{}); }
 
 void blockOrders(bool block) {
     if (g_blocking.exchange(block) == block) return;
-    logger::write("order_gate: accepting and turning in orders %s", block ? "refused (guest)" : "allowed");
+    logger::write("order_gate: accepting orders %s", block ? "refused (guest)" : "allowed");
 }
 
 }  // namespace game
