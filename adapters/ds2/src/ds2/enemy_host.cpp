@@ -232,6 +232,11 @@ void add(uintptr_t entity, const std::array<uint8_t, enemy_wire::kUuidSize>& res
     g_tracked.push_back(std::move(enemy));
 }
 
+bool tracks(uintptr_t entity) {
+    std::lock_guard lock(g_mutex);
+    return std::any_of(g_tracked.begin(), g_tracked.end(), [&](const Tracked& enemy) { return enemy.entity == entity; });
+}
+
 std::vector<Handover> release() {
     std::lock_guard lock(g_mutex);
     std::vector<Handover> entities;

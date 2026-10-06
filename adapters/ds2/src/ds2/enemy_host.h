@@ -19,6 +19,9 @@ struct Handover {
     std::array<uint8_t, 16> resourceUuid;
 };
 
+// Whether the engine entity is one of the tracked enemies. Any thread.
+bool tracks(uintptr_t entity);
+
 // This machine became a guest: the tracked enemies that still exist (they spawned before it was told so), no longer
 // tracked. Simulation thread.
 std::vector<Handover> release();

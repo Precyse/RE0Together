@@ -20,6 +20,7 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
+#include "ds2/enemy_host.h"
 #include "ds2/entity_wake.h"
 #include "ds2/health_watch.h"
 #include "ds2/remote_player.h"
@@ -147,11 +148,16 @@ void countSweep(uintptr_t table, size_t handedToPartner) {
     g_sweepTotal += handedToPartner;
 }
 
-// Once: wakes one sleeper of a table that has a budget and a radius and watches its flags, so the log names the code that puts
-// it back to sleep (the write watch logs each distinct writing instruction with its stack).
-void watchFirstSleeper(uintptr_t table, uintptr_t sleeper) {
+// Once: wakes a sleeping enemy near the partner and watches its flags, so the log names the code that puts it back to sleep
+// (the write watch logs each distinct writing instruction with its stack).
+void watchEnemySleeper() {
     static bool watched = false;
-    if (watched || ds2::field<int32_t>(table, kTableBudget) == 0) return;
+    if (watched) return;
+    uintptr_t sleeper = 0;
+    for (const uintptr_t member : g_nearPartner) {
+        if (member && ds2::entityAsleep(member) && enemy_host::tracks(member)) sleeper = member;
+    }
+    if (!sleeper) return;
     watched = true;
     health_watch::arm(sleeper + kEntityFlags);
     ds2::wakeEntity(sleeper);
@@ -173,7 +179,7 @@ void logSleepers(uintptr_t table) {
     logger::write("partner_focus: a sleeper's stream test: near radius %d, mid radius %d (2 = streamed in)",
                   streamTest(manager, sample + ds2::kEntityTransform, kNearStreamRadius),
                   streamTest(manager, sample + ds2::kEntityTransform, kMidStreamRadius));
-    watchFirstSleeper(table, sample);
+    watchEnemySleeper();
     const uintptr_t first = decima::readPointer(ds2::at(kEntityManagerGlobal)) + kTables;
     logger::write("partner_focus: table %llu has %zu of %zu members near the partner asleep (budget %d, awake %d, near %.0f, far %.0f, area %p)",
                   static_cast<unsigned long long>((table - first) / kTableSize), asleep, g_nearPartner.size(),
