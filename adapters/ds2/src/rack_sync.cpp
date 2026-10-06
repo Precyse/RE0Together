@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
+#include <set>
 #include <vector>
 
 #include "cargo_transfer.h"
@@ -27,6 +28,7 @@ using Wanted = std::map<PieceKey, std::vector<game::Cargo>>;
 Clock::time_point g_lastCheck;
 Clock::time_point g_lastChange;
 std::map<PieceKey, size_t> g_lastWanted;
+std::set<PieceKey> g_refused;  // pieces the game refused to create (this world holds the same order piece): not asked again until the target changes
 
 PieceKey keyOf(const game::Cargo& piece) { return {piece.type, piece.orderId}; }
 
@@ -61,12 +63,13 @@ void follow(uint64_t ownerKey, const std::vector<game::Cargo>& reported, Clock::
     // Only a target that has not changed since the previous check is applied (see equip_sync).
     const std::map<PieceKey, size_t> wantCounts = counts(want);
     const bool steady = wantCounts == g_lastWanted;
+    if (!steady) g_refused.clear();
     g_lastWanted = wantCounts;
     if (!steady) return;
     std::map<PieceKey, std::vector<uint64_t>> have;
     for (const game::Cargo& piece : present) have[keyOf(piece)].push_back(piece.handle);
     bool same = true;
-    for (const auto& [key, count] : wantCounts) same = same && have[key].size() == count;
+    for (const auto& [key, count] : wantCounts) same = same && (have[key].size() == count || g_refused.contains(key));
     for (const auto& [key, handles] : have) same = same && wantCounts.contains(key) && wantCounts.at(key) == handles.size();
     if (same || now - g_lastChange < kSettle) return;
     g_lastChange = now;
@@ -79,8 +82,10 @@ void follow(uint64_t ownerKey, const std::vector<game::Cargo>& reported, Clock::
         }
     }
     for (const auto& [key, pieces] : want) {
-        for (size_t i = have[key].size(); i < pieces.size() && removed + added < kMaxChangesPerRound; ++i) {
-            added += game::addBackpackCargo(ownerKey, pieces[i]) == game::AddResult::Done ? 1 : 0;
+        for (size_t i = have[key].size(); i < pieces.size() && !g_refused.contains(key) && removed + added < kMaxChangesPerRound; ++i) {
+            const game::AddResult result = game::addBackpackCargo(ownerKey, pieces[i]);
+            added += result == game::AddResult::Done ? 1 : 0;
+            if (result == game::AddResult::Refused) g_refused.insert(key);
         }
     }
     logger::write("rack_sync: the body's rack: %d pieces removed, %d added (%zu reported)", removed, added, reported.size());
