@@ -1,6 +1,6 @@
 // DEATH STRANDING 2: diagnostics for the NPC managers' activity update (adapter.ini diagnostics=1, never on in a shipped
 // config): every 5 s each group's members, how many sleep and the numbers that decide it, and the members that stand near the
-// partner with their rank in the group's sorted list against its budget.
+// partner (near the player when there is no partner) with their rank in the group's sorted list against its budget.
 #include "ds2/sneaking_diag.h"
 
 #include <windows.h>
@@ -21,7 +21,9 @@ using sneaking_groups::Group;
 using sneaking_groups::memberEntity;
 
 constexpr ULONGLONG kLogEveryMs = 5000;
-constexpr double kPartnerSightMetres = 80.0;  // members this close to the partner get a line of their own
+constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
+constexpr uintptr_t kFocusOffset = 0xA0;  // EntityManagerGame: this machine's player, the point the update measures from
+constexpr double kSightMetres = 80.0;     // members this close to the partner (or the player without one) get a line of their own
 constexpr int kMaxMemberLines = 8;
 
 // How many members of the group are nearer (to the nearer focus) than this one: its place in the update's sorted list.
@@ -35,18 +37,32 @@ int rankInGroup(const Group& group, uintptr_t entity) {
     return rank;
 }
 
-void logPartnerMembers(int index, const Group& group, uint32_t budget, int& lines) {
+// The point the member lines are about: the partner's body, or this machine's player when there is none (a control run).
+bool sightPoint(decima::WorldPosition& out, const char*& label) {
+    if (partner_focus::partnerPosition(out)) {
+        label = "the partner";
+        return true;
+    }
+    const uintptr_t manager = decima::readPointer(ds2::at(kEntityManagerGlobal));
+    if (!manager) return false;
+    out = ds2::field<decima::WorldPosition>(manager, kFocusOffset);
+    label = "the player";
+    return true;
+}
+
+void logSightedMembers(int index, const Group& group, uint32_t budget, int& lines) {
     decima::WorldPosition partner;
-    if (!partner_focus::partnerPosition(partner)) return;
+    const char* label = "";
+    if (!sightPoint(partner, label)) return;
     for (int i = 0; i < group.count && lines < kMaxMemberLines; ++i) {
         const uintptr_t entity = memberEntity(group.items[i]);
         decima::WorldPosition at;
         if (!entity || !decima::safeRead(entity + ds2::kEntityTransform, at)) continue;
         const double metres = std::sqrt(partner_focus::squaredDistance(at, partner));
-        if (metres > kPartnerSightMetres) continue;
+        if (metres > kSightMetres) continue;
         ++lines;
-        logger::write("sneaking_diag: group %d member %p, %.0f m from the partner, %s, rank %d of %d against budget %u", index,
-                      reinterpret_cast<void*>(entity), metres, ds2::entityAsleep(entity) ? "asleep" : "awake",
+        logger::write("sneaking_diag: group %d member %p, %.0f m from %s, %s, rank %d of %d against budget %u", index,
+                      reinterpret_cast<void*>(entity), metres, label, ds2::entityAsleep(entity) ? "asleep" : "awake",
                       rankInGroup(group, entity), group.count, budget);
     }
 }
@@ -80,7 +96,7 @@ void logGroups(uintptr_t manager) {
         logger::write("sneaking_diag: manager %p group %d: %d members, %d asleep, near %.0f far %.0f, limit %d, budget %u",
                       reinterpret_cast<void*>(manager), g, groups[g].count, sleepers(groups[g]), nearRadius[g], farRadius[g],
                       limit[g], budget[g]);
-        logPartnerMembers(g, groups[g], budget[g], memberLines);
+        logSightedMembers(g, groups[g], budget[g], memberLines);
     }
 }
 
