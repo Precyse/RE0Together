@@ -2,7 +2,6 @@
 
 #include <windows.h>
 
-#include <atomic>
 #include <cstdint>
 
 #include "decima/entity.h"
@@ -14,8 +13,6 @@
 #include "msvc_rtti.h"
 
 namespace {
-
-using remote_guards::PlayerUpdate;
 
 // The id table of the entity manager is sized for one player; the remote needs a second slot.
 constexpr uintptr_t kInitIdTable = 0x140171ac0;  // (table, capacity)
@@ -50,19 +47,6 @@ constexpr uint32_t kStartMask = 0x3FFF;
 constexpr int kCountShift = 14;
 constexpr uint32_t kCountMask = 0x3FF;
 
-// DSPlayerComponent's per-frame update (message 0x14FF; handler thunk 0x14080ade0 jumps to the body 0x1407eea70). Run for
-// the remote in full it flickers Sam's bottom-left prompts (found by clearing the component's handler entries one at a time:
-// with it cleared 0 of 60 screenshots lost the "Activate Terminal" prompt, against about 1 in 8 without). Its last step
-// runs the player's state machine (the object at +0x1b8: a pre-step at vtable slot 7, the update at slot 9), which is also what starts a ride, so
-// cutting it whole stopped the remote boarding (never re-checked after the cut). By default only that step runs for the
-// remote; a test command switches the mode.
-constexpr uintptr_t kPlayerComponentUpdate = 0x1407eea70;
-constexpr uintptr_t kPlayerStateObject = 0x1b8;
-constexpr uintptr_t kStatePreUpdateSlot = 0x38;  // the update's first virtual call
-constexpr uintptr_t kStateUpdateSlot = 0x48;
-constexpr uintptr_t kComponentOwner = 0x48;
-std::atomic<PlayerUpdate> g_playerUpdate{PlayerUpdate::StateOnly};
-
 // The removal handlers that clear DSPlayerSystem's singleton pointers (see player_system_guard, which diverts the init's
 // stores): the remote's removal would clear Sam's.
 struct Removal {
@@ -71,24 +55,6 @@ struct Removal {
 };
 constexpr Removal kSingletonRemovals[] = {{"DSPlayerEquipmentManageComponent", 0x140F7A930},
                                           {"DSPlayerFacialRigManagerComponent", 0x140EE3EE0}};
-
-using UpdateFn = uint64_t (*)(uintptr_t component, uintptr_t message);
-UpdateFn g_update = nullptr;
-
-uint64_t playerUpdateDetour(uintptr_t component, uintptr_t message) {
-    const uintptr_t remote = remote_player::entity();
-    const PlayerUpdate mode = g_playerUpdate.load();
-    if (!remote || mode == PlayerUpdate::Full || ds2::field<uintptr_t>(component, kComponentOwner) != remote) {
-        return g_update(component, message);
-    }
-    if (mode == PlayerUpdate::Skip) return 0;
-    const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
-    const uintptr_t vtable = decima::readPointer(state);
-    if (!state || !vtable) return 0;
-    if (const uintptr_t pre = ds2::field<uintptr_t>(vtable, kStatePreUpdateSlot)) reinterpret_cast<uint64_t (*)(uintptr_t)>(pre)(state);
-    const uintptr_t update = ds2::field<uintptr_t>(vtable, kStateUpdateSlot);
-    return update ? reinterpret_cast<UpdateFn>(update)(state, message) : 0;
-}
 
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
 using PartToggleFn = void (*)(uintptr_t holder, uint8_t id);
@@ -144,8 +110,6 @@ namespace remote_guards {
 void installEarly() {
     hooks::install("id table init", ds2::at(kInitIdTable), reinterpret_cast<void*>(&initTableDetour),
                    reinterpret_cast<void**>(&g_initTable));
-    hooks::install("player component update", ds2::at(kPlayerComponentUpdate), reinterpret_cast<void*>(&playerUpdateDetour),
-                   reinterpret_cast<void**>(&g_update));
     hooks::install("art part toggle", ds2::at(kArtPartToggle), reinterpret_cast<void*>(&partToggleDetour),
                    reinterpret_cast<void**>(&g_partToggle));
 }
@@ -158,11 +122,6 @@ void silenceRemote() {
     for (const Removal& removal : kSingletonRemovals) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(removal.component)), ds2::at(removal.function));
     }
-}
-
-void setPlayerUpdate(PlayerUpdate mode) {
-    g_playerUpdate = mode;
-    logger::write("remote_guards: the remote's DSPlayerComponent update runs as mode %d", static_cast<int>(mode));
 }
 
 }  // namespace remote_guards
