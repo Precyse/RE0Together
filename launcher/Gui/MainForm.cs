@@ -66,11 +66,10 @@ public sealed class MainForm : Form
         _footer.Toggled += expanded => _log.Visible = expanded;
         _top.UpdateButton.Click += (_, _) => CheckForUpdate();
         _app.StatusChanged += OnStatusChanged;
-        Log.Written += OnLogWritten;
         FormClosed += (_, _) =>
         {
             _app.StatusChanged -= OnStatusChanged;
-            Log.Written -= OnLogWritten;
+            Log.Unsubscribe(OnLogWritten);
         };
     }
 
@@ -79,6 +78,9 @@ public sealed class MainForm : Form
         base.OnHandleCreated(e);
         var dark = 1;
         DwmSetWindowAttribute(Handle, DwmUseImmersiveDarkMode, ref dark, sizeof(int));
+        // Subscribed only once the handle exists: lines logged before it (start-up, a fatal error of the app loop) come
+        // from the log's history instead of being dropped.
+        foreach (var line in Log.Subscribe(OnLogWritten)) ShowLogLine(line);
     }
 
     [DllImport("dwmapi.dll")]
@@ -144,17 +146,26 @@ public sealed class MainForm : Form
 
     private void JoinTypedCode()
     {
-        if (ulong.TryParse(_joinCode.Input.Text.Trim(), out var lobbyId)) _app.Join(lobbyId);
-        else Log.Info("Invalid lobby code");
+        if (ulong.TryParse(_joinCode.Input.Text.Trim(), out var lobbyId))
+        {
+            Log.Info($"Join requested for lobby {lobbyId}");
+            _app.Join(lobbyId);
+        }
+        else
+        {
+            Log.Info("Invalid lobby code");
+        }
     }
 
     private void OnStatusChanged(AppStatus status) => OnUiThread(() => Apply(status));
 
-    private void OnLogWritten(string line) => OnUiThread(() =>
+    private void OnLogWritten(string line) => OnUiThread(() => ShowLogLine(line));
+
+    private void ShowLogLine(string line)
     {
         _log.AppendText(line + Environment.NewLine);
         _footer.ShowLine(line);
-    });
+    }
 
     private void OnUiThread(Action action)
     {
