@@ -65,6 +65,10 @@ int main() {
           "a removal round trips");
     check(!decode(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(&removal), 5), back), "a short removal is rejected");
 
+    Placed request = sent;
+    request.create.id = kAssignId;
+    check(decode(encode(request), got) && got.create.id == kAssignId, "a guest's request (id left to the host) round trips");
+
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
 }

@@ -287,14 +287,16 @@ void applyEnemyHit(const combat_wire::EnemyHit& hit);    // host: the guest's hi
 void applyPlayerHit(const combat_wire::PlayerHit& hit);  // guest: an enemy's hit on the local player
 
 // The structure roles: the host reports what its player places and removes, a guest refuses its own player's
-// placements. Needs structures::installEarly. Any thread.
+// placements locally and sends them to the host (takeStructureRequests). Needs structures::installEarly. Any thread.
 void setStructureRole(bool host, bool guest);
 
 // Host: the structures its player placed and removed since the last call (ladders so far). Any thread.
 std::vector<struct_wire::Placed> takePlacedStructures();
 std::vector<struct_wire::Remove> takeRemovedStructures();
+// Guest: its own placements since the last call, to send to the host (the placement itself is refused locally).
+std::vector<struct_wire::Placed> takeStructureRequests();
 
-// Guest: builds the host's structure under the host's id / removes it, on the simulation thread's next frame. Any thread.
+// Builds a structure (a guest: the host's under its id; the host: a guest's request under a new id) / removes it, on the simulation thread's next frame. Any thread.
 void buildStructure(const struct_wire::Placed& placed);
 void removeStructure(const struct_wire::Remove& removal);
 

@@ -11,6 +11,7 @@ namespace {
 
 // Net thread only.
 bool g_guest = false;
+bool g_host = false;
 uint8_t g_hostSlot = 0;
 bool g_requestedAtGameplay = false;
 size_t g_knownPeers = 0;
@@ -27,6 +28,15 @@ void sendCreate(NetClient& net, const struct_wire::Placed& placed) {
 namespace struct_sync {
 
 void onFrame(const GameFrame& frame) {
+    if (g_host && frame.type == struct_wire::kMsgStructRequest) {
+        struct_wire::Placed placed;
+        if (struct_wire::decode(frame.payload, placed) && placed.create.id == struct_wire::kAssignId) {
+            game::buildStructure(placed);
+        } else {
+            logger::write("struct_sync: dropped a malformed STRUCT_REQUEST (%zu bytes)", frame.payload.size());
+        }
+        return;
+    }
     if (!g_guest || frame.slot != g_hostSlot) return;
     if (frame.type == struct_wire::kMsgStructCreate) {
         struct_wire::Placed placed;
@@ -48,9 +58,13 @@ void onFrame(const GameFrame& frame) {
 void tick(NetClient& net, const SessionSnapshot& session) {
     const bool host = session.linked && session.localSlot == session.hostSlot;
     g_guest = session.linked && !host;
+    g_host = host;
     g_hostSlot = session.hostSlot;
     game::setStructureRole(host, g_guest);
     if (g_guest) {
+        for (const struct_wire::Placed& request : game::takeStructureRequests()) {
+            net.send(struct_wire::kMsgStructRequest, true, g_hostSlot, struct_wire::encode(request));
+        }
         if (!game::gameplaySettled()) {
             g_requestedAtGameplay = false;
         } else if (!g_requestedAtGameplay && resync::request(net, g_hostSlot, resync::kStructures)) {
