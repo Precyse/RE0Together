@@ -10,6 +10,7 @@ constexpr size_t kUuidSize = 16;
 
 struct Info {
     uint8_t category;  // ESequenceCategory of the resource
+    uint8_t gameState;  // ESequenceGameState of the resource: 1 Cutscene
     int32_t stopFrame;
     uint8_t resource[kUuidSize];  // the SequenceResource's UUID
     uint8_t entity[kUuidSize];    // the Sequence entity's UUID

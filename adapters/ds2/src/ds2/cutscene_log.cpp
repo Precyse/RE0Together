@@ -59,8 +59,8 @@ void onStart(uintptr_t sequence, const sequence_info::Info& info, const char* de
     hex(info.resource, resource);
     hex(info.entity, entity);
     hex(info.network, network);
-    logger::writeUnlessRepeated("cutscene_log: Sequence start %p %s frame %d stop %d category %u resource %s entity %s network %s",
-                  reinterpret_cast<void*>(sequence), decision, sequence_info::frame(sequence), info.stopFrame, info.category,
+    logger::writeUnlessRepeated("cutscene_log: Sequence start %p %s frame %d stop %d category %u state %u resource %s entity %s network %s",
+                  reinterpret_cast<void*>(sequence), decision, sequence_info::frame(sequence), info.stopFrame, info.category, info.gameState,
                   resource, entity, network);
 }
 
