@@ -66,7 +66,7 @@ bool isZero(const uint8_t* uuid) {
 void startDetour(uintptr_t sequence) {
     sequence_info::Info info;
     const bool readable = sequence_info::read(sequence, info);
-    const bool shared = readable && cutscene_wire::isSharedCategory(info.category);
+    const bool shared = readable && cutscene_wire::isShared(info.category, info.gameState);
     cutscene_table::Verdict verdict;
     if (shared && g_sync && (g_host || g_guest)) {
         std::lock_guard lock(g_mutex);

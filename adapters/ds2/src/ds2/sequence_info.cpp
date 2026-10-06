@@ -21,7 +21,7 @@ constexpr uintptr_t kResourceRef = 0x68;  // the Sequence's StreamingRef to its 
 constexpr uintptr_t kRefLoadedFlags = 0x8;
 constexpr unsigned kRefLoadedBit = 59;
 constexpr uintptr_t kHolderObject = 0x20;
-constexpr uintptr_t kResourceCategory = 0xC3;
+constexpr uintptr_t kResourceGameState = 0xC2, kResourceCategory = 0xC3;
 constexpr uintptr_t kStarted = 0x341, kStopReason = 0x344, kFrame = 0x34C, kStopFrame = 0x33C, kParent = 0x468;
 constexpr int kMaxTreeDepth = 16;
 constexpr int32_t kMaxInstances = 4096;
@@ -69,7 +69,8 @@ namespace sequence_info {
 bool read(uintptr_t sequence, Info& out) {
     const uintptr_t resource = walkToResource(sequence).resource;
     Info info{};
-    if (!resource || !decima::safeRead(resource + kResourceCategory, info.category) || info.category > kMaxCategory ||
+    if (!resource || !decima::safeRead(resource + kResourceGameState, info.gameState) ||
+        !decima::safeRead(resource + kResourceCategory, info.category) || info.category > kMaxCategory ||
         !decima::safeRead(sequence + kStopFrame, info.stopFrame) ||
         !decima::safeCopy(info.resource, resource + kObjectUuid, kUuidSize) ||
         !decima::safeCopy(info.entity, sequence + kObjectUuid, kUuidSize)) {

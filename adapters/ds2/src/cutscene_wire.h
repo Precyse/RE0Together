@@ -16,10 +16,12 @@ constexpr uint16_t kMsgGo = proto::kFirstGameType + 0x2C;     // 0x012C, host to
 constexpr uint16_t kMsgEnd = proto::kFirstGameType + 0x2D;    // 0x012D, host to all, reliable: End
 constexpr size_t kUuidSize = 16;
 
-// ESequenceCategory of the cutscenes that are shared (Story, StoryHolo, StoryForceRadio, StoryPrivateRoomRadio,
-// DollmanTalkCutscene); the menu radio is the player's own and stays local.
-constexpr uint8_t kCategoryStory = 1, kCategoryStoryHolo = 2, kCategoryForceRadio = 3, kCategoryPrivateRoomRadio = 5,
-                  kCategoryDollman = 7;
+// ESequenceCategory: the menu radio is the player's own and stays local; every other Sequence whose resource is in the
+// Cutscene game state (ESequenceGameState 1) is shared, whatever its category (the private room entry, 720 frames, is
+// category None).
+constexpr uint8_t kCategoryNone = 0, kCategoryStory = 1, kCategoryStoryHolo = 2, kCategoryForceRadio = 3, kCategoryMenuRadio = 4,
+                  kCategoryPrivateRoomRadio = 5, kCategoryDollman = 7, kCategoryLast = 7;
+constexpr uint8_t kGameStateCutscene = 1;
 
 // How a Sequence stopped, as the engine's stop reason (ESequenceNetworkStopReason).
 constexpr uint8_t kStopFinished = 0, kStopScripted = 3, kStopReasonLast = 3;
@@ -51,9 +53,10 @@ struct End {
 };
 static_assert(sizeof(End) == 12);
 
-inline bool isSharedCategory(uint8_t category) {
-    return category == kCategoryStory || category == kCategoryStoryHolo || category == kCategoryForceRadio ||
-           category == kCategoryPrivateRoomRadio || category == kCategoryDollman;
+inline bool isSharedCategory(uint8_t category) { return category != kCategoryMenuRadio && category <= kCategoryLast; }
+
+inline bool isShared(uint8_t category, uint8_t gameState) {
+    return isSharedCategory(category) && (category != kCategoryNone || gameState == kGameStateCutscene);
 }
 
 template <class T>

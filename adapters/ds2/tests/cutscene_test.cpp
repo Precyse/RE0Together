@@ -40,8 +40,12 @@ void wireTests() {
     bad = start;
     bad.category = 4;
     check(!decode(bytes(bad), got), "the menu radio is not a shared category");
+    bad.category = kCategoryLast + 1;
+    check(!decode(bytes(bad), got), "a category past the last is rejected");
     bad.category = 0;
-    check(!decode(bytes(bad), got), "category none is not shared");
+    check(decode(bytes(bad), got), "category none travels (a Cutscene game state Sequence)");
+    check(isShared(0, kGameStateCutscene) && !isShared(0, 0) && isShared(kCategoryStory, 0) && !isShared(kCategoryMenuRadio, kGameStateCutscene),
+          "sharing: cutscene state or a story category, never the menu radio");
     std::vector<uint8_t> shorter = bytes(start);
     shorter.pop_back();
     check(!decode(shorter, got), "a short START is rejected");
