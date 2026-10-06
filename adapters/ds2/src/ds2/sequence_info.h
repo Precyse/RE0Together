@@ -3,6 +3,7 @@
 // play, how far they are, which SequenceNetwork owns them. Reads are safe against freed memory; any thread.
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace sequence_info {
 
@@ -35,6 +36,15 @@ int32_t frame(uintptr_t sequence);
 
 // Whether the Sequence tree this Sequence belongs to already has a stop reason (the first stop wins).
 bool stopRecorded(uintptr_t sequence);
+
+struct LoadedNetwork {
+    uint8_t uuid[kUuidSize];  // the SequenceNetworkResource's UUID
+    int32_t stopFrame;        // its main Sequence's end frame, 0 when it has none
+    bool started;             // its main Sequence is playing
+};
+
+// Every SequenceNetwork instance the engine has loaded, for the live checks (a network that is not here cannot be started).
+std::vector<LoadedNetwork> loadedNetworks();
 
 // Starts the loaded SequenceNetwork with this resource UUID, the engine's own script call; nothing when none is loaded.
 void startNetwork(const uint8_t* uuid);
