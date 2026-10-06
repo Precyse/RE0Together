@@ -22,6 +22,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "story_ledger.h"
 #include "story_replay.h"
 #include "story_wire.h"
 
@@ -42,7 +43,7 @@ constexpr uintptr_t kMapCapacity = 0x0C, kEntryMission = 0x08, kEntryHash = 0x10
 constexpr size_t kMapEntrySize = 0x18;
 constexpr uint16_t kStateProgress = story_replay::kStateProgress, kStateFailed = 30, kStateSuccess = 40;  // EDSMissionState
 constexpr ULONGLONG kPollIntervalMs = 500;
-constexpr uint32_t kNoRow = 0xFFFFFFFF;  // start request argument: no terminal list row
+constexpr uint32_t kNoRow = story_ledger::kNoRow;
 constexpr uint32_t kCargoPreparedFlag = 1u << 18;    // order cargo already prepared: the guest creates none
 constexpr uintptr_t kSectionUuid = 0x10;             // the DSMissionSectionResource's GGUUID
 constexpr uintptr_t kRequestChangeArea = 0x140709cc0;  // (unused, u16 EDSArea, bool, WorldTransform*, i32 constructionId, bool)
@@ -65,6 +66,7 @@ std::mutex g_mutex;
 std::vector<story_wire::Event> g_outgoing;  // host: to send
 std::vector<story_wire::Event> g_incoming;  // guest: host events to replay; host: guests' order requests to run
 std::vector<story_wire::Event> g_requests;  // guest: order starts to forward to the host
+story_ledger::Ledger g_ledger;              // host: the starts of the missions in progress, guarded by g_mutex
 
 uintptr_t controller() {
     const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
@@ -106,6 +108,11 @@ void forwardOrder(uintptr_t mission, uintptr_t args) {
 void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
     story_wire::Event event = missionEvent(kind, mission, a, b);
     if (section) decima::safeCopy(event.section, section, sizeof(event.section));
+    {
+        std::lock_guard lock(g_mutex);
+        if (kind == story_wire::Kind::MissionStart) g_ledger.noteStart(event);
+        else g_ledger.noteEnd(event.missionId);
+    }
     report(event);
 }
 
@@ -187,9 +194,15 @@ void reportState(uint64_t id, uint16_t state) {
         return;
     }
     story_wire::Event event{};
-    event.kind = static_cast<uint8_t>(kind);
-    event.a = kind == story_wire::Kind::MissionStart ? kNoRow : 0;
-    event.missionId = id;
+    if (kind == story_wire::Kind::MissionStart) {
+        std::lock_guard lock(g_mutex);
+        event = g_ledger.startFor(id);
+    } else {
+        event.kind = static_cast<uint8_t>(kind);
+        event.missionId = id;
+        std::lock_guard lock(g_mutex);
+        g_ledger.noteEnd(id);
+    }
     report(event);
 }
 
@@ -205,6 +218,10 @@ void pollMissions() {
     if (!g_host.load() || epoch != sim_tick::gameplayEpoch()) {  // a load replaces every mission: not a change to report
         known.clear();
         baselined = false;
+        {
+            std::lock_guard lock(g_mutex);
+            g_ledger.clear();
+        }
         epoch = sim_tick::gameplayEpoch();
         if (!g_host.load()) return;
     }
