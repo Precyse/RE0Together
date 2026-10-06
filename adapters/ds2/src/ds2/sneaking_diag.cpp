@@ -21,9 +21,7 @@ using sneaking_groups::Group;
 using sneaking_groups::memberEntity;
 
 constexpr ULONGLONG kLogEveryMs = 5000;
-constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
-constexpr uintptr_t kFocusOffset = 0xA0;  // EntityManagerGame: this machine's player, the point the update measures from
-constexpr double kSightMetres = 80.0;     // members this close to the partner (or the player without one) get a line of their own
+constexpr double kSightMetres = 80.0;  // members this close to the watched point get a line of their own
 constexpr int kMaxMemberLines = 8;
 
 // How many members of the group are nearer (to the nearer focus) than this one: its place in the update's sorted list.
@@ -37,23 +35,10 @@ int rankInGroup(const Group& group, uintptr_t entity) {
     return rank;
 }
 
-// The point the member lines are about: the partner's body, or this machine's player when there is none (a control run).
-bool sightPoint(decima::WorldPosition& out, const char*& label) {
-    if (partner_focus::partnerPosition(out)) {
-        label = "the partner";
-        return true;
-    }
-    const uintptr_t manager = decima::readPointer(ds2::at(kEntityManagerGlobal));
-    if (!manager) return false;
-    out = ds2::field<decima::WorldPosition>(manager, kFocusOffset);
-    label = "the player";
-    return true;
-}
-
 void logSightedMembers(int index, const Group& group, uint32_t budget, int& lines) {
     decima::WorldPosition partner;
     const char* label = "";
-    if (!sightPoint(partner, label)) return;
+    if (!sneaking_focus::watchedPoint(partner, label)) return;
     for (int i = 0; i < group.count && lines < kMaxMemberLines; ++i) {
         const uintptr_t entity = memberEntity(group.items[i]);
         decima::WorldPosition at;
