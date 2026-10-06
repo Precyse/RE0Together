@@ -167,6 +167,17 @@ void tableTests() {
     Verdict past = lone.guestDecide(kSeq, info, 101 + kUnannouncedHoldLimitMs);
     check(!past.hold && past.forced && !lone.guestDecide(kSeq, info, 200 + kUnannouncedHoldLimitMs).hold, "then it plays, and its retries keep passing");
 
+    // A new host session reuses the ids: its START replaces the old playback, a repeat of the same START changes nothing.
+    Table again;
+    again.arm(start, 1000);
+    again.guestDecide(kSeq, info, 1100);
+    again.arm(start, 1200);
+    check(again.playbacks.size() == 1 && again.playbacks[0].phase == Phase::Held, "a repeated START changes nothing");
+    cutscene_wire::Start other = start;
+    other.resource[1] = 9;
+    again.arm(other, 1300);
+    check(again.playbacks.size() == 1 && again.playbacks[0].phase == Phase::Announced && again.playbacks[0].start.resource[1] == 9, "a different START with a known id replaces the old playback");
+
     Table far;
     far.arm(start, 1000);
     far.giveUp(1);
