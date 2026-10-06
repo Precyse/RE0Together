@@ -101,7 +101,7 @@ void tick(NetClient&, const SessionSnapshot& session) {
     g_lastCheck = now;
     const std::optional<uint64_t> body = remote_body::ownerKey();
     const auto partner = cargo_transfer::partner();
-    if (body) game::setOwnerActive(*body, false);  // the game may switch it back on
+    if (body) game::setOwnerActive(*body, true);  // the cargo menus skip an inactive owner; the game may switch it off again
     if (body && partner && partner->slot == remote_body::slot()) follow(*body, partner->cargo, now);
 }
 
