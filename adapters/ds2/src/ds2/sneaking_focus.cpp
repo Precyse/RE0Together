@@ -8,6 +8,7 @@
 // and the engine's own update runs once per part with that focus, so a member is judged once, against its nearest focus.
 #include "ds2/sneaking_focus.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "decima/safe_read.h"
@@ -67,6 +68,10 @@ void runOnParts(uintptr_t manager, Group* groups, int count, std::vector<std::ve
     g_original(manager);
 }
 
+bool anyNearPartner() {
+    return std::any_of(g_nearPartner.begin(), g_nearPartner.end(), [](const auto& group) { return !group.empty(); });
+}
+
 void updateBothFoci(uintptr_t manager, const decima::WorldPosition& partner) {
     Group* groups = ds2::field<Group*>(manager, kGroups);
     const int count = ds2::field<int32_t>(manager, kGroupCount);
@@ -76,6 +81,10 @@ void updateBothFoci(uintptr_t manager, const decima::WorldPosition& partner) {
     const std::vector<Group> savedGroups(groups, groups + count);
 
     splitGroups(groups, count, savedFocus, partner);
+    if (!anyNearPartner()) {
+        g_original(manager);
+        return;
+    }
     runOnParts(manager, groups, count, g_nearThis);
     focus = partner;
     runOnParts(manager, groups, count, g_nearPartner);
