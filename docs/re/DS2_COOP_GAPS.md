@@ -121,6 +121,6 @@ Measured live: the engine streams tiles and simulates entities around ONE point,
 | D. Each machine simulates its own area (guest authoritative for local enemies) | works at any distance | large: enemy authority per area, handover on approach, the host's world and the guest's world diverge; the authority records exist (`authority.cpp`) but nothing assigns enemies by area |
 | E. Second streaming observer | works at any distance | not available in the engine: one observer, about 60 readers of the manager; memory cost of a second ring of tiles on a PC already near its commit limit |
 
-Recommendation: A now (done), then C as the next experiment (cheapest real gain, uses the engine's own override), B as the fallback if C shows tile pop-in near either player (C is built behind the test command `observer.txt`, capped at 300 m from the host player, off by default); D only if long-range split play becomes a goal.
+Recommendation: A now (done), then C as the next experiment (cheapest real gain, uses the engine's own override), B as the fallback if C shows tile pop-in near either player (C is built behind the test command `observer.txt`, capped at 300 m from the host player, off by default; tried live at 965 m: the far camp did not wake in 2.7 min, not proven); D only if long-range split play becomes a goal.
 
 Built: `marker_overlay.cpp` draws one line per partner farther than `kBeyondLoadedWorldMetres` (700 m, a margin under the 768 / 800 m table radii) under the toasts.
