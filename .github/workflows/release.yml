@@ -51,7 +51,7 @@ jobs:
       - name: Launcher end-to-end tests
         shell: pwsh
         run: |
-          dotnet build launcher/CoopLauncher.csproj -c Release
+          dotnet build launcher/CoopLauncher.csproj -c Release -o launcher/bin/Release/net8.0-windows
           python tools/save_sync_test.py
           if ($LASTEXITCODE -ne 0) { throw "save_sync_test failed" }
           python tools/diagnostics_test.py
