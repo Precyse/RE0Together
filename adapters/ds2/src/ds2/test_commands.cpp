@@ -7,6 +7,7 @@
 //   partnerstream.txt "on"/"off"  the partner's members count as streamed in for the activity update (partner_focus)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
+//   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
 //                             paused-update request, 0x140131420), flags (logs the entity flags)
@@ -24,6 +25,7 @@
 #include <string>
 
 #include "decima/safe_read.h"
+#include "ds2/camp_alert.h"
 #include "ds2/engine.h"
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
@@ -267,6 +269,7 @@ void tick() {
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
+    if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
     if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_guards::setPlayerUpdate(text.rfind("skip", 0) == 0 ? remote_guards::PlayerUpdate::Skip : text.rfind("full", 0) == 0 ? remote_guards::PlayerUpdate::Full : remote_guards::PlayerUpdate::StateOnly);
