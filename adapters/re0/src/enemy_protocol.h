@@ -33,7 +33,8 @@ struct EnemyEntry {
     int32_t hp;
     float pos[3];
     float quat[4];
+    int32_t action[4];  // the enemy's behaviour record {state, id, a, b} (enemy_action_rule.h)
 };
-static_assert(sizeof(EnemyEntry) == 40);
+static_assert(sizeof(EnemyEntry) == 56);
 
 }  // namespace enemy_protocol

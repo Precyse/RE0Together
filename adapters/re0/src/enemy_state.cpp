@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "debug_stats.h"
+#include "enemy_action.h"
 #include "enemy_protocol.h"
 #include "enemy_puppet_rule.h"
 #include "enemy_registry.h"
@@ -40,11 +41,20 @@ Snapshot g_latest;     // guarded by g_mutex
 bool g_fresh = false;  // guarded by g_mutex
 std::array<bool, game::kEnemyPoolSlots> g_mismatchLogged{};
 std::array<enemy_puppet_rule::Track, game::kEnemyPoolSlots> g_tracks{};  // game thread only: what the owner last said
+std::array<enemy_action_rule::Sync, game::kEnemyPoolSlots> g_actions{};  // game thread only
 
 bool logDue() {
     const auto now = Clock::now();
     if (now - g_lastLog < kLogInterval) return false;
     g_lastLog = now;
+    return true;
+}
+
+// The enemy's behaviour record into a snapshot entry.
+bool readAction(uintptr_t enemy, int32_t (&out)[4]) {
+    enemy_action_rule::Action action;
+    if (!enemy_action::read(enemy, action)) return false;
+    std::memcpy(out, action.word, sizeof(action.word));
     return true;
 }
 
@@ -57,7 +67,7 @@ void sendState() {
         entry.slot = static_cast<uint8_t>(slot);
         entry.vtable = static_cast<uint32_t>(game::readPointer(enemy));
         if (!enemy_registry::isEnemy(enemy) || !game::readMemory(enemy + game::kEnemyHpOffset, entry.hp) ||
-            !game::readTransform(enemy, entry.pos, entry.quat)) {
+            !game::readTransform(enemy, entry.pos, entry.quat) || !readAction(enemy, entry.action)) {
             continue;
         }
         const auto* bytes = reinterpret_cast<const uint8_t*>(&entry);
@@ -99,10 +109,14 @@ void applyEntry(const EnemyEntry& entry) {
     const uintptr_t enemy = enemy_registry::enemyAt(entry.slot);
     if (!enemy || game::readPointer(enemy) != entry.vtable) {
         track.valid = false;
+        g_actions[entry.slot].reset();
         return logOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
     }
     applyHp(entry, enemy);
     enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, nowMs());
+    enemy_action_rule::Action owner;
+    std::memcpy(owner.word, entry.action, sizeof(owner.word));
+    g_actions[entry.slot].observeOwner(owner, nowMs());
 }
 
 // Moves a puppet toward where the owner's enemy is now: blended while it lags, snapped only after a jump.
@@ -128,11 +142,21 @@ void followPose(uintptr_t enemy, int slot, const enemy_puppet_rule::Track& track
     game::writeTransform(enemy, blendedPos, blendedQuat);
 }
 
+// A puppet that keeps doing something else than the owner is told the owner's behaviour through the class's own
+// setAction, so its handlers start the matching animation (enemy_action_rule.h).
+void matchAction(uintptr_t enemy, int slot, int64_t now) {
+    enemy_action_rule::Action local;
+    if (!enemy_action::read(enemy, local) || !g_actions[slot].due(local, now)) return;
+    if (enemy_action::request(enemy, g_actions[slot].owner())) debug_stats::count(debug_stats::Counter::EnemyActionRequests);
+
+}
+
 // The pose of a living puppet follows the owner's.
 void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
     const uintptr_t enemy = enemy_registry::enemyAt(slot);
     if (!enemy || track.hp <= 0) return;
     followPose(enemy, slot, track, now);
+    matchAction(enemy, slot, now);
 }
 
 void takeLatest() {
@@ -157,6 +181,7 @@ void driveTracks() {
 void onTick() {
     if (puppetActive()) return driveTracks();
     for (auto& track : g_tracks) track.valid = false;
+    for (auto& sync : g_actions) sync.reset();
     if (!net_pad::active() || split_rooms::apart()) return;  // apart, each machine runs its own room's enemies
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;

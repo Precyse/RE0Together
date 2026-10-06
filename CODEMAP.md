@@ -116,8 +116,9 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/enemy_net.cpp | hit messages: guest request, host apply and announce, guest apply; game thread queue | `enemy_net::requestHit`, `announceHit`, `onFrame` |
 | src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) | `enemy_state::onFrame`, `enable` |
 | tools/re0/motion_probe.py | read-only: the uModel motion block of live enemies (or the player with -1), sampled five times | |
-| tools/re0/enemy_state_probe.py | read-only: per live enemy the AI state index (+0x67a4), motion number, frame, HP and position, printed on every change | |
+| tools/re0/enemy_state_probe.py | read-only: per live enemy the AI record (+0x67a4..), motion number, frame, HP and position, printed on every change (`frames` prints every sample) | |
 | tools/re0/equip_trace.py | read-only before/after snapshot of sItem, sPlayer, both characters and the weapon-class objects they point at; prints every changed dword (for finding what an equip changes) | `before`, `after`, `show` |
+| src/enemy_action.cpp, src/enemy_action_rule.h | an enemy's behaviour record {state, id, a, b} at +0x67a4 (read/sent in ENEMY_STATE, 56 bytes per entry); on a puppet whose own record differs from the owner's for 200 ms (owner record settled 120 ms, 400 ms between requests) the class's own setAction (vtable slot 63, only the five 4-argument implementations) is called with the owner's record so its handlers start the matching motion; `enemy_action_rule::Sync` is the pure timing rule | `enemy_action::request`, `enemy_action_rule::Sync::due` |
 | src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe` (velocity from two snapshots), `aim` (extrapolated target), `stepFor` (hold, blend, snap beyond 300) | `enemy_puppet_rule::stepFor` |
 | src/player_damage.cpp | HP/death ownership: MinHook gates on `setHP` 0x529310 and `cPlayerThink::onDeath` 0x4fcea0 (remote-owned characters only change via the owner); PLAYER_DIED 0x0120 replays remote deaths; authoritative `setHp` for all sync code | `player_damage::install` |
 | src/vtable_tracer.cpp | counting thunks patched into vtables, 2 s report | `vtable_tracer::install`, `uninstall` |
@@ -139,6 +140,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/jitter_target_test.cpp | x86 exe: jitter target growth, cap, calm shrink, floor | |
 | tests/pad_buffer_test.cpp | x86 exe: PadBuffer waiting, order, stale frames, underrun, skip-ahead, cap, clear | |
 | tests/position_blend_test.cpp | x86 exe: classify thresholds, blend convergence, extrapolation cap, quaternion shorter arc (no game) | |
+| tests/enemy_action_rule_test.cpp | x86 exe: request only after the owner record settled and the mismatch persisted, cooldown, a caught-up puppet clears it | |
 | tests/equip_rule_test.cpp | x86 exe: equipped slot read and the refresh decision | |
 | tests/enemy_puppet_rule_test.cpp | x86 exe: puppet track velocity, capped aim, hold/blend/snap steps | |
 | tests/settled_copy_test.cpp | x86 exe: settle delay, resend, adopt and reset of `SettledCopy` (no game) | |
