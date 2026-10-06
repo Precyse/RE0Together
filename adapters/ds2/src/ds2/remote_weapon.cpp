@@ -366,6 +366,10 @@ void playShot(const weapon_wire::WeaponFire& fire) {
     const uintptr_t behavior = ds2::weapon::shotBehavior(g_held.weapon);
     if (!behavior) return;
     aimAlong(behavior, fire);
+    // A throwable's or the boomerang's update (0x142025f30) reaches the fire gate only while the weapon's equipped byte is set,
+    // and the engine leaves it 0 for them (its holster step, 0x141f57d10 mode 0, clears it: an event, not a per-frame rule),
+    // so the partner's shot sets it for the frame the shot is played in.
+    ds2::field<uint8_t>(g_held.weapon, kWeaponActive) = 1;
     g_shotPending = true;
     if (g_held.shotLogged || GetTickCount64() - g_held.madeAt < kShotLogWarmupMs) return;
     g_held.shotLogged = true;
