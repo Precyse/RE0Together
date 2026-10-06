@@ -3,8 +3,8 @@ namespace CoopLauncher.Gui;
 /// <summary>A one-line text field: dark well, 1px line border that turns white while focused.</summary>
 internal sealed class FieldBox : Panel
 {
-    private const int InsetX = 10;
-    private const int InsetY = 9;
+    private static readonly int InsetX = Theme.Scale(10);
+    private static readonly int InsetY = Theme.Scale(9);
 
     public TextBox Input { get; } = new()
     {

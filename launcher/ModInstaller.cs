@@ -27,8 +27,16 @@ public static class ModInstaller
         var files = Files(profile, gameDir);
         if (files.Count == 0 || !files.All(f => File.Exists(f.Dst) && File.Exists(f.Dst + OwnershipSuffix)))
             return new ModStatus(ModState.NotInstalled, 0);
-        var stale = files.Any(f => File.Exists(f.Src) && Hash(f.Src) != Hash(f.Dst));
-        return new ModStatus(stale ? ModState.UpdateAvailable : ModState.Installed, ReadBuild(files[0].Dst));
+        try
+        {
+            var stale = files.Any(f => File.Exists(f.Src) && Hash(f.Src) != Hash(f.Dst));
+            return new ModStatus(stale ? ModState.UpdateAvailable : ModState.Installed, ReadBuild(files[0].Dst));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not read the {profile.Name} mod: {e.Message}");
+            return new ModStatus(ModState.NotInstalled, 0);
+        }
     }
 
     /// <summary>Copies the package's adapter files into the game folder (also how an update re-copies them).</summary>

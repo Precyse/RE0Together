@@ -5,6 +5,7 @@ public static class StatusText
     public static string Format(AppStatus status) => status.State switch
     {
         AppState.Idle => "Idle",
+        AppState.Offline => "Offline",
         AppState.Connecting => "Connecting",
         AppState.Hosting => "Hosting",
         AppState.Joined => "Joined",

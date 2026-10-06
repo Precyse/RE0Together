@@ -43,6 +43,7 @@ public sealed class App
     /// <summary>The window's loop host could not start the loop (Steam not running): shown until the loop runs again.</summary>
     public void MarkOffline()
     {
+        if (Status.State == AppState.Offline) return;
         Status = new AppStatus(AppState.Offline);
         StatusChanged?.Invoke(Status);
     }

@@ -10,7 +10,7 @@ internal sealed record GameStatus(ModStatus Mod, bool GameFound, int PackageBuil
 
     public bool UpdateAvailable => Mod.State == ModState.UpdateAvailable;
 
-    public string Line => Mod.State switch
+    public string Line => !GameFound ? "Game not found" : Mod.State switch
     {
         ModState.NotInstalled => "Not installed",
         ModState.UpdateAvailable => PackageBuild > 0 ? $"Update available (Build {PackageBuild})" : "Update available",

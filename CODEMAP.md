@@ -6,26 +6,36 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 
 | file | owns | key members |
 |---|---|---|
-| Program.cs | entry point: update check, then GUI (no args) or CLI, error boundary | `Main`, `RunCli` |
+| Program.cs | entry point (a windowed exe; a command-line start attaches to its console): window start = single instance, update check (if the setting is on), GUI; arguments = update check, CLI, error boundary | `Main`, `RunWindow`, `RunCli` |
 | CliOptions.cs | argument parsing | `CliOptions.Parse`, `Usage` |
 | App.cs | wiring and ~100 Hz main loop; CLI runs one session, interactive (GUI) takes commands and returns to idle | `Run`, `Host`, `Join`, `Leave`, `Invite`, `Stop`, `StatusChanged`, `EndSession` |
-| AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT) | `AppStatus`, `AppState` |
+| AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT, offline when the loop cannot start) and the open lobby's game | `AppStatus`, `AppState` |
 | Updater.cs | self-update from the rolling release `latest` (`version.txt` build): download the whole package (launcher, game profiles, every game's adapter), rename old files to `*.old`, copy new; start-up relaunches (`TryInstall`), the window's Update button only stages (`Stage`: no relaunch while a Steam session is open, the player reopens); skipped silently on any failure or outside the packaged layout | `TryInstall`, `Stage` |
 | ReleaseFeed.cs | the one cached read of the GitHub release (`update.json` repo): read at startup, forced only by the Update button; a failed read is logged and keeps the old result; also the shared HTTP client | `Read`, `Get`, `AssetName` |
 | ModInstaller.cs | a game's mod = its profile adapterFiles in the game folder: `Status` (not installed / installed / update available; marker `.cfown` detects installs), `Install` (also the update re-copy; backs up originals as `.cfbak`, records the build in `.cfbuild`), `Uninstall` (restores backups) | `Status`, `Install`, `Uninstall` |
-| InstanceGuard.cs | one window launcher at a time: a new window launcher closes older launcher processes | `CloseOtherLaunchers` |
-| Gui/GuiHost.cs | GUI entry: hides the console, runs App on a background thread, window on the STA thread | `Run` |
-| Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires the mod button (Install/Update/Uninstall; Host needs the mod installed), Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
-| Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed) | `Theme` |
+| InstanceGuard.cs | closes other launcher processes (stale or older copies holding Steam); run by SingleInstance when this start becomes the window | `CloseOtherLaunchers` |
+| SingleInstance.cs | one launcher window per user session: named mutex; a second start asks the running window to come forward (events) and exits; an unresponsive copy is closed through InstanceGuard and replaced; an update relaunch waits for its predecessor (`COOP_LAUNCHER_PREDECESSOR`) | `Acquire`, `OnShowRequested` |
+| AppData.cs | `%AppData%\CoopLauncher` paths: `settings.json`, `logs\launcher.log` | `SettingsFile`, `LogsDir`, `LogFile` |
+| AppSettings.cs | the launcher's settings (check for updates at start, per-game game folder, window bounds): read once, written on every change | `AppSettings.Current`, `Update`, `WithGameFolder` |
+| GameFolders.cs | a game's folder: the settings override, else Steam's (`SteamLibrary.FindGameDir`) | `Find` |
+| ParentConsole.cs | command-line starts attach to the starting console (the exe is windowed, no console flash) | `Attach` |
+| Gui/GuiHost.cs | GUI entry: log file, unhandled UI errors logged, App loop on a background thread (retried every 3 s while it cannot start, e.g. Steam not running: state Offline), window on the STA thread | `Run` |
+| Gui/MainForm.cs | the window in the broadcast tool's operator look (title, icon, remembered bounds): composes the views below, wires the mod button (Install/Update/Uninstall; Host needs the mod installed), Host / Join / Copy / Invite / Leave to App, switches the right pane to the settings view, selects a joined lobby's game, applies AppStatus | `MainForm`, `Apply`, `BringForward` |
+| Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed); every pixel metric goes through `Scale` (system DPI) | `Theme`, `Scale`, `Unscale` |
 | Gui/Draw.cs | shared painting: text, captions, lamps, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Wrapped` |
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
-| Gui/TopBar.cs | top strip: brand, newer launcher build on GitHub, build, state lamp and state, Update button (idle only) | `TopBar.Show`, `ShowAvailable`, `UpdateButton` |
+| Gui/TopBar.cs | top strip: brand, newer launcher build on GitHub, build, state lamp and state, Settings (Back while open) and Update buttons (Update idle only) | `TopBar.Show`, `ShowAvailable`, `ShowSettingsOpen`, `SettingsButton`, `UpdateButton` |
 | Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus` |
 | Gui/GameStatus.cs | rail line and mod button label for a game's `ModStatus` (Not installed, Installed (Build N), Update available (Build M)) | `GameStatus.Line`, `Action` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character, partner ping | `PlayerSlots.Show` |
 | Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
 | Gui/FieldBox.cs | dark one-line text field with focus border | `FieldBox.Input` |
+| Gui/FlatToggle.cs | flat squared on/off switch with a label | `FlatToggle.Checked`, `Flipped` |
+| Gui/SectionPanel.cs | captioned pane section with a separator, sized to its content on request | `SectionPanel`, `FitToContent` |
+| Gui/ControlRow.cs | a row of controls at control height, spacers, top-down stacking | `ControlRow.Create`, `Spacer`, `Stack` |
+| Gui/SettingsView.cs | the settings pane: each game's folder (Browse / Reset), check for updates at start, open the logs folder; saved on change | `SettingsView`, `GameFolderChanged` |
+| Gui/WindowMemory.cs | restores and saves the window rectangle and maximized state | `Restore`, `Save` |
 | Gui/LogFooter.cs | newest log line; arrow toggles the full log drawer | `LogFooter.Toggled` |
 | Gui/StatusText.cs | state words and the state lamp colour | `Format`, `Lamp` |
 | Session.cs | slots, epochs, membership diffs, frame routing | `ApplyMembership`, `OnPeerFrame`, `OnAdapterFrame`, `End` |
@@ -51,10 +61,10 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest | `OnFrame`, `Complete` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest` |
 | AdapterSettings.cs | `coop=` in the adapter ini, session dir cleanup | `EnableCoop`, `Reset` |
-| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs) | `Launch` |
+| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs); a failed Steam start is logged | `Launch` |
 | SteamLibrary.cs | game folder from libraryfolders.vdf + appmanifest | `FindGameDir` |
 | RepoPaths.cs | repo root / games dir discovery | |
-| Log.cs | timestamped console log; `Written` event feeds the GUI log pane | `Info` |
+| Log.cs | timestamped console log; `Written` event feeds the GUI log pane; the window also writes `%AppData%\CoopLauncher\logs\launcher.log` (previous run kept as `launcher.prev.log`) | `Info`, `WriteToFile` |
 
 ## adapters/re0/ (C++20, x86, dinput8.dll proxy)
 
@@ -310,7 +320,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 
 ## Where to look for
 
-- GUI: `launcher/Gui/MainForm.cs` composes the views in `launcher/Gui/`; session logic stays in `App.cs`; preview builds of `launcher-*` branches: `.github/workflows/launcher-preview.yml` (prerelease `launcher-preview`)
+- GUI: `launcher/Gui/MainForm.cs` composes the views in `launcher/Gui/`; settings (file `%AppData%\CoopLauncher\settings.json`): `AppSettings.cs` and `Gui/SettingsView.cs`; session logic stays in `App.cs`; preview builds of `launcher-*` branches: `.github/workflows/launcher-preview.yml` (prerelease `launcher-preview`)
 - Auto-update or release packaging: `Updater.cs`, `.github/workflows/release.yml`
 - Wire format or control messages: `Framing.cs`, `ControlMessages.cs`
 - Slot / epoch rules: `Session.cs`, `SlotAssigner.cs`
