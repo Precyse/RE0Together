@@ -11,6 +11,7 @@
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   mission.txt    "id"      logs the mission object (hex id) and its resource as qwords, and 0x60 bytes behind each pointer in the
 //                             resource, to find a delivery's destination (a position for tp.txt)
+//   success.txt    "id"      the game's own success request for that mission (a guest's turn-in end, without the menus)
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 //   sequence.txt   "uuid"     starts the loaded SequenceNetwork with that UUID (32 hex digits, as cutscene_log prints it): a cutscene without walking to its trigger
 //   cutscene.txt   "uuid"     calls the engine's Sequence start on the loaded Sequence entity with that UUID (32 hex digits): the hold, START, READY and GO of a synced cutscene
@@ -304,6 +305,12 @@ void logMission(const std::string& text) {
     }
 }
 
+void requestSuccess(const std::string& text) {
+    unsigned long long id = 0;
+    if (sscanf(text.c_str(), "%llx", &id) != 1) return;
+    logger::write("test_commands: success request for mission %llx %s", id, game::requestMissionSuccess(id, 0) ? "made" : "not found");
+}
+
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
     if (sscanf(text.c_str(), "%llx", &address) == 1) health_watch::arm(static_cast<uintptr_t>(address));
@@ -329,6 +336,7 @@ void tick() {
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"mission.txt"); !text.empty()) logMission(text);
+    if (const std::string text = takeCommand(L"success.txt"); !text.empty()) requestSuccess(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }
 

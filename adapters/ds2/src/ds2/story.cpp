@@ -37,6 +37,7 @@ constexpr uintptr_t kRequestStart = 0x1413ef8b0;    // (controller, mission, con
 constexpr uintptr_t kRequestSuccess = 0x1413efc00;  // (controller, mission, flag)
 constexpr uintptr_t kRequestFail = 0x1413efda0;     // (controller, mission, reason)
 constexpr uintptr_t kRequestSection = 0x1413bdad0;  // (SectionManager*, section, bool active)
+constexpr uintptr_t kMissionResource = 0x10;
 constexpr uintptr_t kMissionId = 0x28, kMissionFlags = 0x24, kMissionState = 0x22;
 constexpr uintptr_t kMissionMap = 0x08;  // Impl: {entries*, +0x0C capacity}; entry {u64 id, mission*, u32 hash}
 constexpr uintptr_t kMapCapacity = 0x0C, kEntryMission = 0x08, kEntryHash = 0x10;
@@ -44,6 +45,7 @@ constexpr size_t kMapEntrySize = 0x18;
 constexpr uint16_t kStateProgress = story_replay::kStateProgress, kStateFailed = 30, kStateSuccess = 40;  // EDSMissionState
 constexpr ULONGLONG kPollIntervalMs = 500;
 constexpr uint32_t kNoRow = story_ledger::kNoRow;
+constexpr uintptr_t kDeliveryResourceVtable = 0x1432b04c8;  // DSDeliveryMissionResource: the missions a terminal's hand-over completes
 constexpr uint32_t kCargoPreparedFlag = 1u << 18;    // order cargo already prepared: the guest creates none
 constexpr uintptr_t kSectionUuid = 0x10;             // the DSMissionSectionResource's GGUUID
 constexpr uintptr_t kRequestChangeArea = 0x140709cc0;  // (unused, u16 EDSArea, bool, WorldTransform*, i32 constructionId, bool)
@@ -103,6 +105,22 @@ void forwardOrder(uintptr_t mission, uintptr_t args) {
     if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
 }
 
+bool isDelivery(uintptr_t mission) {
+    const uintptr_t resource = decima::readPointer(mission + kMissionResource);
+    return resource && decima::readPointer(resource) == ds2::at(kDeliveryResourceVtable);
+}
+
+// Guest: an order delivered at its own terminal is completed by the host (its world holds the order's state), whose
+// success comes back as the usual event.
+void forwardDelivery(uintptr_t mission, uintptr_t flag) {
+    story_wire::Event event{};
+    event.kind = static_cast<uint8_t>(story_wire::Kind::OrderDelivered);
+    event.a = static_cast<uint32_t>(flag);
+    decima::safeRead(mission + kMissionId, event.missionId);
+    std::lock_guard lock(g_mutex);
+    if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
+}
+
 // Host: a mission request the script made, reported when it is made (before the drain applies it and before the section it
 // activates) with the arguments the guest's replay needs; the poll below stays as the catch for starts that bypass these calls.
 void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
@@ -136,7 +154,10 @@ uint64_t requestStartDetour(uintptr_t c, uintptr_t mission, uintptr_t args, uint
 
 uint64_t requestSuccessDetour(uintptr_t c, uintptr_t mission, uintptr_t flag, uintptr_t d, uintptr_t e, uintptr_t f,
                               uintptr_t g, uintptr_t h) {
-    if (vetoed()) return 0;
+    if (vetoed()) {
+        if (isDelivery(mission)) forwardDelivery(mission, flag);
+        return 0;
+    }
     if (g_host.load() && mission) reportRequest(story_wire::Kind::MissionSuccess, mission, static_cast<uint32_t>(flag), 0, 0);
     return g_requestSuccess(c, mission, flag, d, e, f, g, h);
 }
@@ -389,6 +410,14 @@ void logMissions() {
 }  // namespace story
 
 namespace game {
+
+bool requestMissionSuccess(uint64_t id, uint32_t flag) {
+    const uintptr_t mission = missionById(id);
+    const uintptr_t c = controller();
+    if (!mission || !c) return false;
+    reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, uint32_t)>(ds2::at(kRequestSuccess))(c, mission, flag);
+    return true;
+}
 
 uintptr_t missionById(uint64_t id) {
     const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));

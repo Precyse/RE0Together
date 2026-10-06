@@ -308,6 +308,10 @@ void requestStorySnapshot();
 // The mission object (DSMissionSystem's map entry, +0x10 its resource) with this full mission id, 0 when there is none.
 uintptr_t missionById(uint64_t id);
 
+// Makes the game's own success request for this mission (through the story hook, so a guest's is vetoed and a delivery's
+// forwarded to the host); false when the mission is not found. Test commands only.
+bool requestMissionSuccess(uint64_t id, uint32_t flag);
+
 // Guest: the order starts the player asked for at a terminal (refused locally, the host runs them). Any thread.
 std::vector<story_wire::Event> takeStoryRequests();
 
