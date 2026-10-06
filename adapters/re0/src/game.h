@@ -148,6 +148,11 @@ constexpr uint32_t kSceneDoorFlag = 4;
 // through the door, 2 a following partner) and commits its transform.
 constexpr uintptr_t kScenePlaceFunction = 0x61ed50;
 constexpr uint32_t kScenePlaceDoorMode = 0;
+constexpr uint32_t kScenePlaceSideMode = 1;    // read live: a second spot beside the door spot (+50 on one axis)
+constexpr uint32_t kScenePlaceFollowMode = 2;  // read live: a spot behind it (-50), the same as mode 0 at some entries
+constexpr uint32_t kScenePlaceModeCount = 3;
+constexpr uintptr_t kSceneEntrySpotsOffset = 0x9aa4;
+constexpr uintptr_t kSceneEntrySpotSize = 0x18;  // {f32 x, y, z, then 3 f32 of facing}
 // thiscall on sSceneInfo (record, player) ret 8: moves the player into the record (leave/enter callbacks included).
 constexpr uintptr_t kSceneAssignFunction = 0x619e30;
 // thiscall on sSceneInfo (record) ret 4: unloads a record nobody is in.

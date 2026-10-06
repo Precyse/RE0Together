@@ -109,6 +109,8 @@ add_executable(position_blend_test tests/position_blend_test.cpp)
 
 add_executable(equip_rule_test tests/equip_rule_test.cpp)
 
+add_executable(spot_rule_test tests/spot_rule_test.cpp)
+
 add_executable(enemy_action_rule_test tests/enemy_action_rule_test.cpp)
 
 add_executable(enemy_puppet_rule_test tests/enemy_puppet_rule_test.cpp)
@@ -122,6 +124,6 @@ add_executable(pad_buffer_test tests/pad_buffer_test.cpp)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_puppet_rule_test equip_rule_test enemy_action_rule_test door_phase_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_puppet_rule_test equip_rule_test spot_rule_test enemy_action_rule_test door_phase_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()
