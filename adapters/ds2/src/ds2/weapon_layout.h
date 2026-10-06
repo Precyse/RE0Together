@@ -42,7 +42,13 @@ constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and
 constexpr uintptr_t kWeaponCurrentBehavior = 0x21C0;  // the behavior of the weapon's current mode (a rifle has a Gun and a GrenadeLauncher behavior)
 constexpr uintptr_t kBehaviorWeapon = 0x50;        // the DSWeaponEntity it belongs to
 constexpr uintptr_t kBehaviorPellets = 0x5BC;      // u32, Gun and ShotGun
-constexpr uintptr_t kBehaviorFireRequest = 0x4D1;  // byte: the update runs the shot when it is set, then clears it
+constexpr uintptr_t kBehaviorFireRequest = 0x4D1;  // byte: the update runs the shot when it is set, then clears it; it sets it itself (with the pellet count) when it fires
+// The behavior's own fire state machine (base update, vtable slot 31, 0x142028540): the trigger byte must be held for the
+// request to stay, a request of 3 moves state 1 or 2 to the firing state 3, which counts pellets and sets the fire request.
+constexpr uintptr_t kBehaviorTrigger = 0x4D2;  // byte: the trigger is held (0 resets the request)
+constexpr uintptr_t kBehaviorRequest = 0x4D4;  // u32: 0 none, 3 fire
+constexpr uintptr_t kBehaviorState = 0x4D8;    // u32: 1 idle, 2 ready, 3 firing, 4 cooling down
+constexpr uint32_t kFireRequestMode = 3;
 // The aim target a Gun behavior's shot request reads (slot 84, 0x14201e910): [behavior +0x390] points at a struct whose
 // byte +0 bit 0 says a target is set and whose doubles at +0x8, +0x10 and +0x18 are the target's world position; the shot
 // goes from the muzzle toward it, and from the muzzle's own forward axis when no target is set (static: the body's owner
