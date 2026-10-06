@@ -13,6 +13,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Updater.cs | self-update from the rolling release `latest` (`version.txt` build): download the whole package (launcher, game profiles, every game's adapter), rename old files to `*.old`, copy new, relaunch; skipped silently on any failure or outside the packaged layout | `TryInstall` |
 | ReleaseFeed.cs | the one cached read of the GitHub release (`update.json` repo): read at startup, forced only by the Update button; a failed read is logged and keeps the old result; also the shared HTTP client | `Read`, `Get`, `AssetName` |
 | ModInstaller.cs | a game's mod = its profile adapterFiles in the game folder: `Status` (not installed / installed / update available; marker `.cfown` detects installs), `Install` (also the update re-copy; backs up originals as `.cfbak`, records the build in `.cfbuild`), `Uninstall` (restores backups) | `Status`, `Install`, `Uninstall` |
+| InstanceGuard.cs | one window launcher at a time: a new window launcher closes older launcher processes | `CloseOtherLaunchers` |
 | Gui/GuiHost.cs | GUI entry: hides the console, runs App on a background thread, window on the STA thread | `Run` |
 | Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires the mod button (Install/Update/Uninstall; Host needs the mod installed), Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
 | Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed) | `Theme` |
