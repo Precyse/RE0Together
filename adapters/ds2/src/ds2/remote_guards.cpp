@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <vector>
 
 #include "decima/entity.h"
 #include "decima/safe_read.h"
@@ -93,7 +94,14 @@ void partToggleDetour(uintptr_t holder, uint8_t id) {
 
 // Clears the component's entries in the entity's handler list (all of them, or only those that call `onlyFunction`); the
 // dispatcher drops cleared entries itself.
-void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0) {
+struct ClearedEntry {
+    uintptr_t* slot;
+    uintptr_t value;
+    uintptr_t function;
+};
+std::vector<ClearedEntry> g_clearedPlayerUpdate;
+
+void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0, std::vector<ClearedEntry>* cleared = nullptr) {
     const uintptr_t list = entity + ds2::kEntityHandlerList;
     const int32_t types = ds2::field<int32_t>(list, 0);
     const uintptr_t table = decima::readPointer(list + kTypeTable);
@@ -105,7 +113,10 @@ void silence(uintptr_t entity, uintptr_t component, uintptr_t onlyFunction = 0) 
         for (uint32_t i = first; i < first + count; ++i) {
             auto& entry = ds2::field<uintptr_t>(handlers + i * kHandlerSize, 0);
             const uintptr_t function = ds2::field<uintptr_t>(handlers + i * kHandlerSize, sizeof(uintptr_t));
-            if ((entry & ~uintptr_t{1}) == component && (!onlyFunction || function == onlyFunction)) entry &= 1;  // keeps the low flag bit
+            if ((entry & ~uintptr_t{1}) == component && (!onlyFunction || function == onlyFunction)) {
+                if (cleared) cleared->push_back({&entry, entry, function});
+                entry &= 1;  // keeps the low flag bit
+            }
         }
     }
 }
@@ -126,10 +137,23 @@ void silenceRemote() {
     for (const char* name : kSilencedComponents) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(name)));
     }
-    silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(kPlayerComponent)), ds2::at(kPlayerComponentUpdate));
+    g_clearedPlayerUpdate.clear();
+    silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(kPlayerComponent)), ds2::at(kPlayerComponentUpdate),
+            &g_clearedPlayerUpdate);
     for (const Removal& removal : kSingletonRemovals) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(removal.component)), ds2::at(removal.function));
     }
+}
+
+void restorePlayerUpdate() {
+    size_t restored = 0;
+    for (const ClearedEntry& entry : g_clearedPlayerUpdate) {
+        if (entry.slot[0] != (entry.value & 1) || entry.slot[1] != entry.function) continue;  // the list moved on: leave it
+        entry.slot[0] = entry.value;
+        ++restored;
+    }
+    logger::write("remote_guards: the DSPlayerComponent update is back in the remote's handler list (%zu of %zu entries)", restored, g_clearedPlayerUpdate.size());
+    g_clearedPlayerUpdate.clear();
 }
 
 }  // namespace remote_guards
