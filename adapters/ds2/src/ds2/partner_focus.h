@@ -3,7 +3,8 @@
 // around it stays active (enemies awake and fighting, physics, AI) the way it does around a second local player.
 namespace partner_focus {
 
-// Start-up: the detour on the engine's per-category activity update 0x140171d90.
-void installEarly();
+// Start-up: the detour on the engine's per-category activity update 0x140171d90. `diagnostics` (adapter.ini diagnostics=1)
+// also logs the tables that keep members near the partner asleep and watches one sleeper's flags; never on in a shipped config.
+void installEarly(bool diagnostics);
 
 }  // namespace partner_focus
