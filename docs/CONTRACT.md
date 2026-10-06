@@ -74,7 +74,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 - Guest: write chunks to a temp file, verify the sha256, move it into `<game>\<sessionDir>\`, and reply FILE_ACK. Launch the game only after every file has been ACKed ok (60 s timeout, then abort with a message).
 - Both sides set `coop=1` in `<game>\<adapterIni>` before launching. On launcher exit, and on launcher start to recover from a crash, delete the session dir and set `coop=0`, so a normal launch plays vanilla.
 - The adapter redirects the game's save I/O to the session dir whenever that dir holds the files and `coop=1`.
-- Games that keep their saves outside the Steam cloud folder add `hostSaveDir` (host source), `guestSaveDir` (guest destination, relative to the game folder) and `filePattern` (e.g. `*.dat`). The folders are templates: `{documents}` is the user's Documents folder, `{steamid64}` the signed-in Steam user (from Steam's registry key). The host sends every matching file after a FILE_MANIFEST. Example: `launcher/games/ds2.json`.
+- Games that keep their saves outside the Steam cloud folder add `hostSaveDir` (host source), `guestSaveDir` (guest destination, relative to the game folder) and `filePattern` (e.g. `*.dat`). The folders are templates: `{documents}` is the user's Documents folder, `{steamid64}` the signed-in Steam user (from Steam's registry key). The host sends every matching file after a FILE_MANIFEST. Example: `launcher/games/ds2.json`. Before the launcher deletes a session folder (exit, crash recovery) it copies the guest's files in it to `<sessionDir's parent>rchive\<yyyyMMdd-HHmmss>\` (staging and `.part` files excluded; the last 5 archives are kept), so the guest's own progress is never lost. With `filePattern` the host launcher also watches its save folder (the game writes saves after the join and sends no SAVE_CHANGED) and, 3 s after a matching file stops changing, sends it to every peer as FILE_MANIFEST (current list) plus FILE_BEGIN/CHUNK/END. The guest takes the first full set straight into the session folder; every later file goes to `<sessionDir>/staging` and is moved into the session folder only while the game exe is not running, so a running game's own saves are never replaced.
 
 ## Adapter responsibilities (every game)
 
@@ -90,7 +90,7 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 
 | type | name | dir | reliable | payload |
 |---|---|---|---|---|
-| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 reserved |
+| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 status (DS2: bits 0-7 health 0-254 or 255 unknown, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 sender reports; 0 = not reported, `partner_status.h`) |
 | 0x0101-0x0107 | cargo list/take/add, pickups, drops | | see header | `cargo_transfer.h`, `cargo_ground.h` |
 | 0x011A | CARGO_GONE | to the partner | yes | u32 kind, u32 reserved, u64 order id (0 = plain): the partner's rack lost the piece to a terminal or to the sender, delete your copy (`partner_cargo_wire.h`, 16 bytes) |
 | 0x0130 | MOVE_ACK | to the sender | yes | u32 kind, u32 moved (0 = CARGO_GONE done, 1 = a give created), u64 order id: the receiver's own CARGO_LIST shows the move, the sender may stop holding it (`partner_cargo_wire.h`, 16 bytes) |

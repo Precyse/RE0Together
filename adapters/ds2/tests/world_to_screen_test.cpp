@@ -1,6 +1,7 @@
 // world_to_screen::project against hand-computed cases (no game).
 #include <cmath>
 #include <cstdio>
+#include <numbers>
 
 #include "../src/world_to_screen.h"
 
@@ -50,6 +51,22 @@ int main() {
     moved.position = {100000.5, 200000.25, 50};
     const auto far = project(moved, {100000.5, 200010.25, 50}, kWidth, kHeight);
     check(far && near(far->x, 960) && near(far->y, 540), "large world coordinates keep precision");
+
+    constexpr float kMargin = 40;
+    check(!world_to_screen::edgeArrow(cam, {0, 10, 0}, kWidth, kHeight, kMargin), "an on-screen point has no arrow");
+    const auto right = world_to_screen::edgeArrow(cam, {50, 10, 0}, kWidth, kHeight, kMargin);
+    check(right && near(right->x, kWidth - kMargin) && near(right->y, 540) && near(right->angle, 0),
+          "a point far to the right sits on the right edge pointing right");
+    const auto behindLeft = world_to_screen::edgeArrow(cam, {-5, -10, 0}, kWidth, kHeight, kMargin);
+    check(behindLeft && near(behindLeft->x, kMargin) && near(std::cos(behindLeft->angle), -1),
+          "behind and to the left points left on the left edge");
+    const auto straightBehind = world_to_screen::edgeArrow(cam, {0, -10, 0}, kWidth, kHeight, kMargin);
+    check(straightBehind && near(straightBehind->x, 960) && near(straightBehind->y, kHeight - kMargin) &&
+              near(straightBehind->angle, static_cast<float>(std::numbers::pi / 2)),
+          "exactly behind points down at the bottom edge");
+    const auto above = world_to_screen::edgeArrow(cam, {0, 10, 40}, kWidth, kHeight, kMargin);
+    check(above && near(above->y, kMargin) && near(above->angle, static_cast<float>(-std::numbers::pi / 2)),
+          "a point far above sits on the top edge pointing up");
 
     std::printf(g_failures ? "FAILED\n" : "PASS\n");
     return g_failures ? 1 : 0;

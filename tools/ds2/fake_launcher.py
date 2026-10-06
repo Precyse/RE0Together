@@ -152,6 +152,7 @@ def main():
     p.add_argument("--at", default="", help="X,Y,Z: the peer's circle centre is this world point, whatever the local player does (not with --follow)")
     p.add_argument("--resync-enemies", action="store_true", help="after the first local state ask the host for every enemy again (a peer that joins a running host gets the enemy list this way)")
     p.add_argument("--throw-at", action="store_true", help="with --weapon and --fire: each throw is a lob at the announced enemy nearest the peer (needs the enemy list: add --resync-enemies)")
+    p.add_argument("--status", type=lambda v: int(v, 16), default=0, help="HEX: the peer's PLAYER_STATE status word (partner_status.h: bits 0-7 health 0-254, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 reports)")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
@@ -223,8 +224,11 @@ def serve(sock, a):
             body = read_exact(sock, n)
             msg_type = struct.unpack_from("<H", body)[0]
             if msg_type == PLAYER_STATE and len(body) >= 4 + STATE.size:
-                _, x, y, z, yaw, _ = STATE.unpack_from(body, 4)
+                _, x, y, z, yaw, status = STATE.unpack_from(body, 4)
                 local.update(x=x, y=y, z=z, yaw=yaw)
+                if status != local.get("status"):
+                    local["status"] = status
+                    print(f"local status word {status:#06x}", flush=True)
             elif msg_type == WORLD_ENV and len(body) - 4 == ENV.size:
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
@@ -458,7 +462,7 @@ def serve(sock, a):
                 y = local["y"] + fy * a.offset - fx * a.radius
                 yaw = local["yaw"]
             seq += 1
-            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, 0), flags=0))
+            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, a.status), flags=0))
         time.sleep(1.0 / SEND_HZ)
 
 

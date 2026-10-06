@@ -40,6 +40,7 @@ add_library(ds2_adapter SHARED
     ${SHARED_SOURCES}
     src/proxy.cpp
     src/init.cpp
+    src/build_guard.cpp
     src/config.cpp
     src/documents_redirect.cpp
     src/import_patch.cpp
@@ -103,6 +104,8 @@ add_library(ds2_adapter SHARED
     src/ds2/place.cpp
     src/ds2/vehicle.cpp
     src/ds2/player_state.cpp
+    src/ds2/local_status.cpp
+    src/partner_status.cpp
     src/ds2/remote_player.cpp
     src/ds2/remote_camera.cpp
     src/ds2/remote_baggage.cpp
@@ -194,3 +197,5 @@ add_unit_test(bt_wire_test)
 add_unit_test(cutscene_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
+add_unit_test(partner_status_test src/partner_status.cpp)
+add_unit_test(build_guard_test src/build_guard.cpp ${SHARED_DIR}/log.cpp ${SHARED_DIR}/paths.cpp)
