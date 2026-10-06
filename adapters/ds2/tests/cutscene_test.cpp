@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "../src/cutscene_gate.h"
+#include "../src/cutscene_table.h"
 #include "../src/cutscene_wire.h"
 
 namespace {
@@ -93,11 +94,80 @@ void gateTests() {
     check(gate.takeOpened(4001).empty(), "an answer for an unknown cutscene is ignored");
 }
 
+
+sequence_info::Info infoFor(uint8_t resourceByte) {
+    sequence_info::Info info{};
+    info.category = cutscene_wire::kCategoryDollman;
+    info.stopFrame = 3257;
+    info.resource[0] = resourceByte;
+    info.entity[0] = resourceByte;
+    return info;
+}
+
+void tableTests() {
+    using namespace cutscene_table;
+    constexpr uintptr_t kSeq = 0x1000;
+    const sequence_info::Info info = infoFor(7);
+
+    Table host;
+    Verdict v = host.hostDecide(kSeq, info, 1000, 1);
+    check(v.hold && v.created && v.id == 1 && host.outStarts.size() == 1, "the host holds a shared start and announces it");
+    check(host.hostDecide(kSeq, info, 1016, 1).hold, "the engine's retry stays held");
+    host.release(1, 4000, 0);
+    v = host.hostDecide(kSeq, info, 4000, 1);
+    check(!v.hold && !v.forced, "after the release the next start call passes (no delay)");
+    check(!host.hostDecide(kSeq, info, 4016, 1).hold, "and keeps passing while it plays");
+
+    Table delayed;
+    delayed.hostDecide(kSeq, info, 1000, 1);
+    delayed.release(1, 4000, 30);
+    check(delayed.hostDecide(kSeq, info, 4020, 1).hold, "a release delay holds until it has passed");
+    check(!delayed.hostDecide(kSeq, info, 4030, 1).hold, "and lets it pass at the delay");
+
+    Table slow;
+    slow.hostDecide(kSeq, info, 1000, 1);
+    v = slow.hostDecide(kSeq, info, 1000 + kHoldLimitMs + 1, 1);
+    check(!v.hold && v.forced, "a hold nobody released ends at the limit");
+
+    Table alone;
+    check(!alone.hostDecide(kSeq, info, 1000, 0).hold && alone.outStarts.empty(), "a host without guests holds nothing");
+
+    Table guest;
+    cutscene_wire::Start start{};
+    start.id = 1;
+    start.category = cutscene_wire::kCategoryDollman;
+    start.resource[0] = 7;
+    guest.arm(start, 1000);
+    v = guest.guestDecide(kSeq, info, 1100);
+    check(v.hold && guest.outReady.size() == 1 && guest.outReady[0] == 1, "a guest holds its own copy of an announced cutscene and reports ready");
+    guest.go(1, 2000);
+    check(!guest.guestDecide(kSeq, info, 2000).hold, "the host's go lets it start");
+    check(guest.guestDecide(kSeq + 1, infoFor(9), 2100).hold && guest.orphans.size() == 1, "an unannounced shared Sequence stays held");
+
+    Table early;
+    early.arm(start, 1000);
+    early.go(1, 1500);
+    early.guestDecide(kSeq, info, 1600);
+    check(!early.guestDecide(kSeq, info, 1616).hold, "a go that arrived before the copy was held releases it at once");
+
+    // The failure seen live: a guest's announcement with the host's own id 1 left over from an earlier role swallowed the release.
+    Table stale;
+    stale.arm(start, 1000);
+    stale.hostDecide(kSeq, info, 2000, 1);
+    stale.release(1, 5000, 0);
+    check(stale.hostDecide(kSeq, info, 5000, 1).hold, "ids from two roles in one table collide (why a role change clears the table)");
+    Table fresh;
+    fresh.hostDecide(kSeq, info, 2000, 1);
+    fresh.release(1, 5000, 0);
+    check(!fresh.hostDecide(kSeq, info, 5000, 1).hold, "a table cleared at the role change releases");
+}
+
 }  // namespace
 
 int main() {
     wireTests();
     gateTests();
+    tableTests();
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
 }
