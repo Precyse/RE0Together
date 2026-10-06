@@ -64,7 +64,8 @@ thread_local bool t_applying = false;  // the adapter itself is building or remo
 std::mutex g_mutex;
 std::vector<struct_wire::Placed> g_placed;     // host: to send
 std::vector<struct_wire::Remove> g_removed;    // host: to send
-std::vector<struct_wire::Placed> g_toCreate;   // guest: to build on the simulation thread
+std::vector<struct_wire::Placed> g_requests;   // guest: its own placements, to send to the host
+std::vector<struct_wire::Placed> g_toCreate;   // to build on the simulation thread (the host's, or a guest's request)
 std::vector<struct_wire::Remove> g_toRemove;   // guest: to remove on the simulation thread
 
 uintptr_t fileVa(void* address) {
@@ -117,11 +118,16 @@ bool describe(uintptr_t desc, struct_wire::Placed& out) {
 uint64_t submitDetour(uintptr_t mgr, uintptr_t desc, uintptr_t c, uintptr_t d, uintptr_t e, uintptr_t f, uintptr_t g,
                       uintptr_t h) {
     if (!t_applying && fileVa(_ReturnAddress()) == kPlayerPlacementCaller) {
+        struct_wire::Placed placed;
         if (g_guest.load()) {
-            logger::write("structures: a placement by the guest's own player was refused");
+            if (describe(desc, placed)) {
+                placed.create.id = struct_wire::kAssignId;
+                logger::write("structures: a placement by the guest's own player (kind %u) was sent to the host", placed.create.kind);
+                std::lock_guard lock(g_mutex);
+                if (g_requests.size() < kMaxQueued) g_requests.push_back(std::move(placed));
+            }
             return 0;
         }
-        struct_wire::Placed placed;
         if (g_host.load() && describe(desc, placed)) {
             std::string tail;
             for (const uint8_t byte : placed.tail) {
@@ -170,10 +176,19 @@ struct Override {
 
 uintptr_t objectById(uintptr_t mgr, uint32_t id) { return reinterpret_cast<ObjectByIdFn>(ds2::at(kObjectById))(mgr, id); }
 
-// Guest, simulation thread: builds the host's structure the way the game builds the player's own.
+// Host: tells everyone about the structure it just built for a guest's request, under the id its own counter gave it.
+void announceRequested(struct_wire::Placed placed, uint32_t id) {
+    placed.create.id = id;
+    std::lock_guard lock(g_mutex);
+    if (g_placed.size() < kMaxQueued) g_placed.push_back(std::move(placed));
+}
+
+// Simulation thread: builds a structure the way the game builds the player's own. A guest builds the host's under the host's
+// id; the host builds a guest's request under an id of its own counter and announces it to everyone.
 void create(uintptr_t mgr, const struct_wire::Placed& placed) {
     const struct_wire::Create& c = placed.create;
-    if (objectById(mgr, c.id)) {
+    const bool assignId = c.id == struct_wire::kAssignId;
+    if (!assignId && objectById(mgr, c.id)) {
         logger::write("structures: id %u already exists, not built again", c.id);
         return;
     }
@@ -192,8 +207,10 @@ void create(uintptr_t mgr, const struct_wire::Placed& placed) {
     ds2::field<uint16_t>(desc, kDescFlags) = kPlayerBuildFlags;
     ds2::field<uint32_t>(desc, kDescOwner) = kPlayerOwner;
     std::memcpy(reinterpret_cast<void*>(desc + struct_wire::kBaseDescriptorBytes), placed.tail.data(), placed.tail.size());
+    const uint32_t id = ds2::field<uint32_t>(desc, kDescId);
     reinterpret_cast<SubmitFn>(ds2::at(kSubmit))(mgr, desc);
-    logger::write("structures: built kind %u id %u", c.kind, c.id);
+    logger::write("structures: built kind %u id %u", c.kind, id);
+    if (assignId) announceRequested(placed, id);
 }
 
 // The game's own script export for a player removing a structure: it sends the structure's entity the removal request
@@ -251,17 +268,25 @@ namespace game {
 void setStructureRole(bool host, bool guest) {
     g_host = host;
     g_guest = guest;
+    std::lock_guard lock(g_mutex);
     if (!host) {
-        std::lock_guard lock(g_mutex);
         g_placed.clear();
         g_removed.clear();
     }
+    if (!guest) g_requests.clear();
 }
 
 std::vector<struct_wire::Placed> takePlacedStructures() {
     std::lock_guard lock(g_mutex);
     std::vector<struct_wire::Placed> out;
     out.swap(g_placed);
+    return out;
+}
+
+std::vector<struct_wire::Placed> takeStructureRequests() {
+    std::lock_guard lock(g_mutex);
+    std::vector<struct_wire::Placed> out;
+    out.swap(g_requests);
     return out;
 }
 

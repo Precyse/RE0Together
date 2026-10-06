@@ -13,6 +13,10 @@ namespace struct_wire {
 
 constexpr uint16_t kMsgStructCreate = proto::kFirstGameType + 15;  // 0x010F, host to all, reliable
 constexpr uint16_t kMsgStructRemove = proto::kFirstGameType + 16;  // 0x0110, host to all, reliable
+// A guest asks the host to build what its player placed: the same payload as STRUCT_CREATE with id kAssignId, so the
+// host's own counter names the structure (the id counters of the two worlds start equal and would collide).
+constexpr uint16_t kMsgStructRequest = proto::kFirstGameType + 42;  // 0x012A, guest to host, reliable
+constexpr uint32_t kAssignId = 0xFFFFFFFF;                          // the game's own "assign me an id" (Init takes -1)
 
 constexpr uint8_t kKindLadder = 10;
 constexpr size_t kBaseDescriptorBytes = 0x328;  // the common part of every creation descriptor; the kind's own fields follow
