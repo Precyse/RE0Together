@@ -144,6 +144,34 @@ uint64_t moverUpdateDetour(uintptr_t mover, uintptr_t message, uintptr_t a3, uin
     return result;
 }
 
+// E1 diagnostic: the ride plugin's use-vehicle step (it sets request kind 3 from the candidate at +0x24490).
+constexpr uintptr_t kUseVehicleStep = 0x141008970;
+constexpr uintptr_t kPluginCandidate = 0x24490;
+using UseVehicleFn = uint64_t (*)(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+UseVehicleFn g_useVehicle = nullptr;
+
+uint64_t useVehicleDetour(uintptr_t plugin, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+    static uintptr_t lastCandidate = ~uintptr_t{0};
+    const uintptr_t candidate = ds2::field<uintptr_t>(plugin, kPluginCandidate);
+    if (candidate != lastCandidate && plugin == ds2::ridePlugin(remote_player::samEntity())) {
+        lastCandidate = candidate;
+        logger::write("remote_ride: use-vehicle step, plugin %p candidate %p", reinterpret_cast<void*>(plugin), reinterpret_cast<void*>(candidate));
+    }
+    return g_useVehicle(plugin, a2, a3, a4);
+}
+
+// E2: the vehicle's model, to key the seat offsets by (the entity's resource reference and the first qwords behind it).
+constexpr uintptr_t kEntityResource = 0x68;
+void logVehicleModel(uintptr_t vehicle) {
+    const uintptr_t resource = decima::readPointer(vehicle + kEntityResource);
+    uint64_t words[6] = {};
+    decima::safeCopy(words, resource, sizeof(words));
+    logger::write("remote_ride: vehicle %p resource %p: %llx %llx %llx %llx %llx %llx", reinterpret_cast<void*>(vehicle),
+                  reinterpret_cast<void*>(resource), static_cast<unsigned long long>(words[0]), static_cast<unsigned long long>(words[1]),
+                  static_cast<unsigned long long>(words[2]), static_cast<unsigned long long>(words[3]),
+                  static_cast<unsigned long long>(words[4]), static_cast<unsigned long long>(words[5]));
+}
+
 // Whether the local player drives the vehicle too (each machine keeps its own driver; the partner then rides along).
 bool localDrives(uint64_t vehicleId) {
     const auto own = game::drivenVehicle();
@@ -172,6 +200,8 @@ bool holdsBody() { return g_stage != Stage::OnFoot; }
 void installEarly() {
     hooks::install("player mover update", ds2::at(kMoverUpdate), reinterpret_cast<void*>(&moverUpdateDetour),
                    reinterpret_cast<void**>(&g_moverUpdate));
+    hooks::install("use vehicle step", ds2::at(kUseVehicleStep), reinterpret_cast<void*>(&useVehicleDetour),
+                   reinterpret_cast<void**>(&g_useVehicle));
 }
 
 // The local player on foot beside the vehicle the partner drives presses F: the game's own prompt is open for him (see
@@ -213,6 +243,7 @@ void tick() {
                 g_vehicleId = *driven;
                 g_followsLocal = localDrives(g_vehicleId);
                 g_passenger = g_followsLocal || riding->role == vehicle_sync::kRolePassenger;
+                logVehicleModel(vehicle);
                 requestBoarding(plugin, vehicle);
                 g_stage = Stage::Boarding;
                 logger::write("remote_ride: boarding vehicle %llx as %s", static_cast<unsigned long long>(g_vehicleId),

@@ -196,11 +196,10 @@ void follow() {
 // component that caches a sibling dangles). It is parked: hidden with the engine's own entity visibility switch (the entity
 // flag bit 1 and the change message, Entity::SetVisible), left where it stood and not placed. A peer that reports again
 // shows it and places it at the peer's pose.
-constexpr uintptr_t kSetVisible = 0x140134440;  // Entity::SetVisible(entity, visible)
 bool g_parked = false;
 
 void setBodyVisible(bool visible) {
-    reinterpret_cast<void (*)(uintptr_t, bool)>(ds2::at(kSetVisible))(g_entity.load(), visible);
+    ds2::setEntityVisible(g_entity.load(), visible);
     g_parked = !visible;
     logger::write("remote_body: %s", visible ? "unparked" : "parked");
 }
