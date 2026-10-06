@@ -3,6 +3,7 @@
 #include <cstring>
 #include <vector>
 
+#include "../src/story_ledger.h"
 #include "../src/story_replay.h"
 #include "../src/story_wire.h"
 
@@ -66,6 +67,25 @@ int main() {
     check(applies(Kind::MissionSuccess, 20) && !applies(Kind::MissionSuccess, 10) && !applies(Kind::MissionSuccess, 40),
           "a success replays only for a mission in progress");
     check(applies(Kind::MissionFail, 20) && !applies(Kind::MissionFail, 30), "a failure replays once");
+
+    story_ledger::Ledger ledger;
+    Event start{};
+    start.kind = static_cast<uint8_t>(Kind::MissionStart);
+    start.missionId = 0xAB;
+    start.a = 3;
+    start.b = -2;
+    start.section[0] = 5;
+    ledger.noteStart(start);
+    Event replay = ledger.startFor(0xAB);
+    check(std::memcmp(&replay, &start, sizeof(start)) == 0, "a mission started by the script replays with its real arguments and section");
+    replay = ledger.startFor(0xCD);
+    check(replay.kind == static_cast<uint8_t>(Kind::MissionStart) && replay.a == story_ledger::kNoRow && replay.missionId == 0xCD,
+          "a mission the host never saw start replays with the no-row fallback");
+    ledger.noteEnd(0xAB);
+    check(ledger.size() == 0 && ledger.startFor(0xAB).a == story_ledger::kNoRow, "an ended mission leaves the ledger");
+    ledger.noteStart(start);
+    ledger.clear();
+    check(ledger.size() == 0, "a load clears the ledger");
 
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
