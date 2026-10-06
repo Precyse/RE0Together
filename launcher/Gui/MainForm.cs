@@ -64,12 +64,12 @@ public sealed class MainForm : Form
         _invite.Click += (_, _) => _app.Invite();
         _leave.Click += (_, _) => _app.Leave();
         _footer.Toggled += expanded => _log.Visible = expanded;
+        _top.UpdateButton.Click += (_, _) => CheckForUpdate();
         _app.StatusChanged += OnStatusChanged;
-        Log.Written += OnLogWritten;
         FormClosed += (_, _) =>
         {
             _app.StatusChanged -= OnStatusChanged;
-            Log.Written -= OnLogWritten;
+            Log.Unsubscribe(OnLogWritten);
         };
     }
 
@@ -78,6 +78,9 @@ public sealed class MainForm : Form
         base.OnHandleCreated(e);
         var dark = 1;
         DwmSetWindowAttribute(Handle, DwmUseImmersiveDarkMode, ref dark, sizeof(int));
+        // Subscribed only once the handle exists: lines logged before it (start-up, a fatal error of the app loop) come
+        // from the log's history instead of being dropped.
+        foreach (var line in Log.Subscribe(OnLogWritten)) ShowLogLine(line);
     }
 
     [DllImport("dwmapi.dll")]
@@ -129,19 +132,40 @@ public sealed class MainForm : Form
         }
     }
 
+    /// <summary>Installs a newer release in the background; when one was installed the new launcher is already
+    /// starting, so this one closes.</summary>
+    private void CheckForUpdate()
+    {
+        _top.UpdateButton.Enabled = false;
+        Task.Run(() => Updater.TryInstall(Array.Empty<string>())).ContinueWith(task =>
+        {
+            if (task.Result) Close();
+            else _top.UpdateButton.Enabled = _app.Status.State == AppState.Idle;
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
     private void JoinTypedCode()
     {
-        if (ulong.TryParse(_joinCode.Input.Text.Trim(), out var lobbyId)) _app.Join(lobbyId);
-        else Log.Info("Invalid lobby code");
+        if (ulong.TryParse(_joinCode.Input.Text.Trim(), out var lobbyId))
+        {
+            Log.Info($"Join requested for lobby {lobbyId}");
+            _app.Join(lobbyId);
+        }
+        else
+        {
+            Log.Info("Invalid lobby code");
+        }
     }
 
     private void OnStatusChanged(AppStatus status) => OnUiThread(() => Apply(status));
 
-    private void OnLogWritten(string line) => OnUiThread(() =>
+    private void OnLogWritten(string line) => OnUiThread(() => ShowLogLine(line));
+
+    private void ShowLogLine(string line)
     {
         _log.AppendText(line + Environment.NewLine);
         _footer.ShowLine(line);
-    });
+    }
 
     private void OnUiThread(Action action)
     {
@@ -171,6 +195,7 @@ public sealed class MainForm : Form
         _join.Enabled = idle;
         _joinCode.Enabled = idle;
         _leave.Enabled = !idle;
+        _top.UpdateButton.Enabled = idle;
     }
 
     private static string BuildLabel()

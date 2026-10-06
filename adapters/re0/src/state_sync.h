@@ -18,7 +18,7 @@ struct PlayerState {
     uint8_t senderIsHost;
     uint16_t room;               // sender's loaded scene id (scene.h)
     int32_t hp;                  // HP of the owned character
-    uint8_t focusedCharacterId;  // the sender's camera character (sPlayer+0x2c), 0xFF when unknown
+    uint8_t focusedCharacterId;  // the sender's camera character (sPlayer+0x2c), 0xFF when unknown; diagnostic only
     uint8_t reserved[3];
 };
 static_assert(sizeof(PlayerState) == 44);

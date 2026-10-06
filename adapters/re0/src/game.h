@@ -54,6 +54,15 @@ constexpr uintptr_t kItemRebeccaBlockOffset = 0x24;
 constexpr uintptr_t kItemBillyBlockOffset = 0x64;
 constexpr size_t kInventoryBlockSize = 0x40;
 
+// The game's equip step after a menu closes (0x5d7740, for both characters): the block returns the weapon type of its
+// equipped slot, the player switches to it (creates the weapon unit, sets the weapon type +0x6950), then refreshes.
+constexpr uintptr_t kPlayerItemBlockFunction = 0x50dc70;   // thiscall(player) -> block pointer (equipped slot at +0x3c)
+constexpr uintptr_t kBlockSetEquippedFunction = 0x4db2f0;  // thiscall(block, slot) ret 4 -> weapon type or -1
+constexpr uintptr_t kPlayerSetWeaponTypeFunction = 0x50d870;  // thiscall(player, type) ret 4
+constexpr uintptr_t kPlayerWeaponAttachFunction = 0x50d670;   // thiscall(player)
+constexpr uintptr_t kPlayerWeaponAimFunction = 0x516630;      // thiscall(player)
+constexpr uintptr_t kBlockEquippedOffset = 0x3c;              // u32 equipped slot in the block the player function returns
+
 // sItemPut: the dropped floor items, 28 records; a live record points at its spawned uItem
 constexpr uintptr_t kItemPutGlobal = 0xdce0a8;  // sItemPut*
 constexpr uintptr_t kItemPutRecordsOffset = 0x20;
@@ -139,6 +148,11 @@ constexpr uint32_t kSceneDoorFlag = 4;
 // through the door, 2 a following partner) and commits its transform.
 constexpr uintptr_t kScenePlaceFunction = 0x61ed50;
 constexpr uint32_t kScenePlaceDoorMode = 0;
+constexpr uint32_t kScenePlaceSideMode = 1;    // read live: a second spot beside the door spot (+50 on one axis)
+constexpr uint32_t kScenePlaceFollowMode = 2;  // read live: a spot behind it (-50), the same as mode 0 at some entries
+constexpr uint32_t kScenePlaceModeCount = 3;
+constexpr uintptr_t kSceneEntrySpotsOffset = 0x9aa4;
+constexpr uintptr_t kSceneEntrySpotSize = 0x18;  // {f32 x, y, z, then 3 f32 of facing}
 // thiscall on sSceneInfo (record, player) ret 8: moves the player into the record (leave/enter callbacks included).
 constexpr uintptr_t kSceneAssignFunction = 0x619e30;
 // thiscall on sSceneInfo (record) ret 4: unloads a record nobody is in.
@@ -155,6 +169,16 @@ constexpr uintptr_t kEnemyPoolEntrySize = 16;
 constexpr uintptr_t kEnemyPoolObjectOffset = 0xc;  // uEnemy* inside a pool entry
 constexpr int kEnemyPoolSlots = 37;
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
+constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, a, b}, written by the class setAction
+constexpr size_t kEnemySetActionSlot = 63;        // vtable slot (+0xfc): setAction(state, id, a, b), thiscall ret 0x10
+// The slot-63 implementations and their stack argument counts (the ret size tells: 0x10 = 4, 8 = 2, 4 = 1). A thunk or
+// call with the wrong count would unbalance the stack, so only these are ever patched or called.
+struct SetActionFunction {
+    uintptr_t function;
+    size_t argc;
+};
+constexpr std::array<SetActionFunction, 7> kEnemySetActionFunctions = {
+    {{0x4cc670, 4}, {0x44d820, 4}, {0x4650f0, 4}, {0x480c20, 4}, {0x4bbc70, 4}, {0x48ac80, 2}, {0x4b17f0, 1}}};
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, float distance, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
