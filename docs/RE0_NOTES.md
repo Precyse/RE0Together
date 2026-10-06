@@ -200,3 +200,5 @@ took the camera and the door itself never started (lost). Doors, placements and 
 **Boot-time save:** on the boot notice screen the game issues its own save request for slot 0 (no room phase). Redirecting
 it into the co-op slot made the next load assert in the scene id check (crash at 0x401f78 via 0x610d8a); session_slot now
 redirects only saves made from the Save room phase.
+
+**Pickups run only on the owner's machine (2026-10-06).** The replayed press of a remote-owned character started the pickup interaction on the other machine too, so the take prompt opened on both and the sequence played twice. `pickup_guard` now ends a remote-owned character's pickup action at its first step. Only the confirmed result crosses: FLOOR_TAKE comes from `sItemPut::remove` (the item left the floor, taken or used from the prompt; declining never calls it), the added item or used herb/ammo through INVENTORY and state sync. Not yet seen live.
