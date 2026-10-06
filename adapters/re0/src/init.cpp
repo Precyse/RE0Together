@@ -1,3 +1,4 @@
+#include "auto_join.h"
 #include "init.h"
 
 #include <cstring>
@@ -105,6 +106,7 @@ void startSubsystems() {
         return;
     }
     if (config.netTrace) net_trace::enable();
+    if (config.autoJoin) auto_join::enable();
     if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop();
     if (config.trace) vtable_tracer::install(config.traceVtables);

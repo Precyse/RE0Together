@@ -24,6 +24,7 @@ constexpr int kMaxConfirms = 6;
 
 enum class Mode { Idle, Waiting, Confirming };
 
+bool g_enabled = false;   // set once at start-up
 Mode g_mode = Mode::Idle;  // net thread only
 Clock::time_point g_lastConfirm;
 int g_confirms = 0;
@@ -51,7 +52,10 @@ const char* describe(Mode mode) {
 
 namespace auto_join {
 
+void enable() { g_enabled = true; }
+
 void onNetTick() {
+    if (!g_enabled) return;
     const Mode mode = modeNow();
     if (mode != g_mode) {
         g_mode = mode;
