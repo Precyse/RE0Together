@@ -30,6 +30,7 @@
 #include "ds2/remote_weapon.h"
 #include "ds2/sim_tick.h"
 #include "ds2/partner_cargo.h"
+#include "ds2/partner_focus.h"
 #include "ds2/story.h"
 #include "ds2/test_commands.h"
 #include "ds2/warp.h"
@@ -103,6 +104,7 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.testCommands) test_commands::installEarly();
     if (config.cutsceneLog) cutscene_log::installEarly();
     partner_cargo::installEarly();
+    partner_focus::installEarly();
     structures::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
