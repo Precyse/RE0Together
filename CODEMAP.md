@@ -125,7 +125,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/enemy_protocol.h | HIT_REQUEST 0x0110, HIT_APPLIED 0x0111, ENEMY_STATE 0x0112 constants and payload structs | `HitPayload`, `EnemyEntry` |
 | src/enemy_net.cpp | hit messages: guest request, host apply and announce, guest apply; game thread queue | `enemy_net::requestHit`, `announceHit`, `onFrame` |
 | src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) | `enemy_state::onFrame`, `enable` |
-| tools/re0/field_refs.py, slot_funcs.py | static (image.bin): every instruction with a given field offset (writers of +0x67a4, +0x6b80); the function each enemy vtable has in a slot and what its returns pop | |
+| tools/re0/field_refs.py, slot_funcs.py, think_scan.py | static (image.bin): every instruction with a given field offset (writers of +0x67a4, +0x6b80); the function each enemy vtable has in a slot and what its returns pop; per state-dispatch table entry a profile (setAction calls reached within two calls, direct state writes, position writes, size) that finds the AI decision step | |
 | tools/re0/motion_probe.py | read-only: the uModel motion block of live enemies (or the player with -1), sampled five times | |
 | tools/re0/enemy_state_probe.py | read-only: per live enemy the AI record (+0x67a4..), motion number, frame, HP and position, printed on every change (`frames` prints every sample) | |
 | tools/re0/enemy_target_probe.py | read-only: which offsets of a live enemy hold the controlled or partner player pointer (its target) | |
@@ -329,6 +329,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 - Add a game: new `launcher/games/<id>.json` (DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`, stages `docs/DS2_ROADMAP.md`)
 - Native `steam_api64.dll` (Valve-signed redistributable from the Steamworks.NET 2024.8.0 standalone release, SDK 1.60): `launcher/native/`
 - Items (inventory blocks): `inventory_sync.cpp`; floor items: `floor_items_sync.cpp`; layouts in `docs/RE0_NOTES.md` Items
+- What RE0 co-op still lacks (done / not needed / open): `docs/re/RE0_COOP_GAPS.md`
 - RE0 game addresses: `adapters/re0/src/game.h` (source: `docs/RE0_NOTES.md`)
 - Save sync: `SaveSyncCoordinator.cs` (launcher), `save_redirect.cpp` (adapter)
 - Guest logs on the host: `LogForwarder.cs`, written to `<game>\coop\peer_<steamid>.log`

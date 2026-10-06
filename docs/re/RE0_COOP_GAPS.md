@@ -1,6 +1,6 @@
 # RE0 co-op gaps (audit 2026-10-06)
 
-What a real two-player session hits that the single-player game assumes away. Each candidate was checked against `main` (867c42c). Status: **done** (code exists, may be unverified live), **partial**, **missing**. Enemy items belong to the agent re0-sync and are marked so.
+What a real two-player session hits that the single-player game assumes away. Each candidate was checked against `main` (867c42c). Status: **done** (code exists, may be unverified live; nothing here ran on two PCs), **partial**, **missing**, **not needed**. Enemy items belong to the agent re0-sync.
 
 ## Last night's problems, for reference
 
@@ -36,12 +36,15 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Dropped floor items | done | `floor_items_sync.cpp`, `floor_pending.cpp` | |
 | Floor items for a late joiner or rejoiner | done, unverified live | `floor_items_sync.cpp`, `join_sync.cpp` | FLOOR_SNAPSHOT journal (changes since the last save or load); lost when the host restarts |
 | Equipped weapon | done, unverified | `equip_refresh.cpp` | |
-| Story flags | done | `flag_sync.cpp` | |
+| Story flags, puzzle progress, doors unlocked once, events seen | done | `flag_sync.cpp` | the 0x47 flag words, which include the enemy-killed bits |
+| Partner health and HP changes (HUD shows both characters) | done | `state_sync.cpp`, `state_correction.cpp`, `player_damage.cpp` | only the owner changes a character's HP |
+| Cutscenes and scripted moves of the other character | done | `event_place.cpp` | the story cutscene itself seen by both is a separate row below |
 | Story cutscene seen by both | missing | `menu_mirror.cpp`, `room_phase.h` | the non-trigger side only freezes ("Waiting for partner"); it never plays the cutscene |
-| Puzzle props (push blocks, dumbwaiter, cranks) | unknown | `flag_sync.cpp` | verify whether their state is flags or object positions |
+| Puzzle props (push blocks, dumbwaiter, cranks) | partial | `flag_sync.cpp` | the flags they set are synced; objects whose state lives in the unit (pushable or shootable props, moving platforms, doors that animate after a script) are not; not audited object by object |
 | Using a healing item on the partner | unknown | `player_damage.cpp` | the setHP gate refuses non-owner HP changes; check whether the game offers it and whether the herb is lost |
-| Enemy AI target, drift, AI decisions on puppets | re0-sync | `enemy_state.cpp`, `enemy_action.cpp` | |
-| Enemies of a room killed while the other player is elsewhere | re0-sync | `enemy_state.cpp`, `door_travel.cpp` | |
+| Enemies the same on both screens: owner runs the AI, the other machine shows puppets (pose, HP, behaviour record, target); kills and damage are owner-only | done, unverified live | `enemy_state.cpp`, `enemy_action.cpp`, `enemy_target.cpp`, `enemy_damage_hook.cpp`, `enemy_net.cpp` | puppets skip the base classes' think step (0x41db20), the update restores the behaviour record after the classes' direct state writes, both target selectors (0x421b20, 0x439e90) follow the owner's target |
+| Enemy classes outside the 15 base ones | open | `enemy_action.cpp` | they still run their own decision code on a puppet; only the setAction calls and the record are held to the owner (RE0_NOTES: no think step could be skipped); watch for puppets that stand still, snap or repeat an animation, or attack the other character than the owner's target |
+| Enemies killed in one player's room stay dead for both | done, unverified live | `flag_sync.cpp` | an enemy reads bit `0x612 + spawn id` at its first update, scripts set it, `flag_sync` carries it (RE0_NOTES, kill persistence) |
 | Enemy state on reunion in a shared room (authority hand-over) | re0-sync | `door_travel.cpp` (`enemyAuthority`) | |
 | Boss fights (multi-part enemies, scripted phases) | re0-sync | `enemy_*` | |
 
@@ -53,6 +56,9 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Ping or marker | skipped | none | low value in a fixed-camera game; the status line names the partner's room |
 | Partner-left notice | done | `state_sync.cpp` | the leave toast names the player; host leaving has its own notice |
 | Pause behaviour | done, unverified live | `menu_mirror.cpp`, `menu_hold_rule.h` | menus hold the partner's world 20 s, reading screens and cutscenes until closed |
+| Item box | not needed | none | RE0 has none; items are dropped on the floor (floor sync covers it) |
+| Downed or revive | not needed | none | RE0 has no such state; a death is a game over |
+| Local script flags (sEventScript +0x58) | not needed | none | script-internal ordering, not saved; RE0_NOTES says why they are not synced |
 | Controls overlay | missing | `launcher/package/README.txt` | the user's rule is no explainer text in UI; keep keys in the README only |
 
 ### Failure handling
