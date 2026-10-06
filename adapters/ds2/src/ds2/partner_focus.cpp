@@ -42,6 +42,9 @@ constexpr uintptr_t kTableArea = 0x48;        // optional area object: members o
 constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
 constexpr uintptr_t kTables = 0x20E0;
 constexpr uintptr_t kTableSize = 0xE8;
+constexpr uintptr_t kStreamingManagerGlobal = 0x146266958;  // StreamingStrategyManagerGame*
+constexpr uintptr_t kStreamTest = 0x1426E64F0;              // (manager, position*, radius) -> 2 when streamed in
+constexpr float kNearStreamRadius = 4.0f, kMidStreamRadius = 2.0f;  // the radii the update passes (constants in the code)
 
 constexpr ULONGLONG kLogEveryMs = 5000;
 
@@ -127,8 +130,18 @@ void countSweep(uintptr_t table, size_t handedToPartner) {
 // Names why members near the partner are still asleep: the table's budget, radii and area decide it.
 void logSleepers(uintptr_t table) {
     size_t asleep = 0;
-    for (const uintptr_t member : g_nearPartner) asleep += member && ds2::entityAsleep(member);
+    uintptr_t sample = 0;
+    for (const uintptr_t member : g_nearPartner) {
+        if (!member || !ds2::entityAsleep(member)) continue;
+        ++asleep;
+        sample = member;
+    }
     if (asleep == 0) return;
+    const uintptr_t manager = decima::readPointer(ds2::at(kStreamingManagerGlobal));
+    const auto streamTest = reinterpret_cast<uint8_t (*)(uintptr_t, uintptr_t, float)>(ds2::at(kStreamTest));
+    logger::write("partner_focus: a sleeper's stream test: near radius %d, mid radius %d (2 = streamed in)",
+                  streamTest(manager, sample + ds2::kEntityTransform, kNearStreamRadius),
+                  streamTest(manager, sample + ds2::kEntityTransform, kMidStreamRadius));
     const uintptr_t first = decima::readPointer(ds2::at(kEntityManagerGlobal)) + kTables;
     logger::write("partner_focus: table %llu has %zu of %zu members near the partner asleep (budget %d, awake %d, near %.0f, far %.0f, area %p)",
                   static_cast<unsigned long long>((table - first) / kTableSize), asleep, g_nearPartner.size(),
