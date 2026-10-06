@@ -172,7 +172,11 @@ void seatLocalPassenger() {
 // off through the game's own ride-off, as the remote does, instead of staying seated in a vehicle nobody drives.
 void leaveLocalPassengerIfDriverGone() {
     const uint64_t vehicleId = setdriver_guard::localPassengerVehicle();
-    if (!vehicleId || g_localLeaving) return;
+    if (!vehicleId) {  // the engine's ride-off answered Sam's SetDriver: the ride is over
+        g_localLeaving = false;
+        return;
+    }
+    if (g_localLeaving) return;
     const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
     if (riding && riding->id == vehicleId && riding->role == vehicle_sync::kRoleDriver && !remote_player::isParked()) return;
     const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
