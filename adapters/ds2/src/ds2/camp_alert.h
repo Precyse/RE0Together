@@ -5,4 +5,7 @@ namespace camp_alert {
 // Start-up: the simulation tick that polls (host) or applies (guest) the camps.
 void installEarly();
 
+// Test command: every camp goes to the alert phase through the game's own SetForceAlertCP. Simulation thread.
+void alertAllCamps();
+
 }  // namespace camp_alert

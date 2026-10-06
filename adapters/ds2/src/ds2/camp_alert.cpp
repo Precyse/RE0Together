@@ -150,6 +150,12 @@ namespace camp_alert {
 
 void installEarly() { sim_tick::add(&tick, "camp alert", sim_tick::Gate::Gameplay); }
 
+void alertAllCamps() {
+    const std::vector<Camp> camps = readCamps();
+    for (const Camp& camp : camps) setPhase(camp, camp_wire::kPhaseAlert);
+    logger::write("camp_alert: %zu camps forced to alert", camps.size());
+}
+
 }  // namespace camp_alert
 
 namespace game {
