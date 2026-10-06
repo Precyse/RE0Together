@@ -33,10 +33,10 @@ constexpr uintptr_t kEntityUuid = 0x10;
 constexpr uintptr_t kEntityFlags = 0x98;
 constexpr ULONGLONG kSampleMs = 100;
 constexpr size_t kMaxTracked = 512;
-// The host's streaming sleeps enemies far from the HOST's player; an enemy within this range of the partner's body is kept awake
-// (re-asked at most this often per enemy), so it can fight the partner and take its hits.
-constexpr double kKeepAwakeMetres = 80.0;
-constexpr ULONGLONG kWakeRetryMs = 1000;
+// partner_focus keeps the enemies around the partner's body simulated; enemies within this range of it are counted, with the
+// sleeping ones among them, to show it holds.
+constexpr double kPartnerWatchMetres = 80.0;
+constexpr ULONGLONG kPartnerWatchLogMs = 5000;
 constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 constexpr double kMinMoveMeters = 0.03;  // an enemy that moved less than this and did not turn is not reported again...
@@ -44,6 +44,11 @@ constexpr float kMinTurn = 0.01f;
 constexpr double kAnimationRadius = 50.0;  // metres around the partner: further enemies are not animated on its side
 constexpr ULONGLONG kAnimationSnapshotMs = 10000;  // a new enemy in range and a requested snapshot send one at once
 constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
+
+struct PartnerWatch {
+    int inRange = 0;
+    int asleep = 0;
+};
 
 struct Tracked {
     uint16_t netId;
@@ -60,7 +65,6 @@ struct Tracked {
     std::unique_ptr<remote_animation::VariableValues> sentVariables;  // only while the partner is near
     ULONGLONG variablesSnapshotAt = 0;
     uint8_t sentHealth = enemy_wire::kHealthUnknown;
-    ULONGLONG wakeAskedAt = 0;
 };
 
 std::mutex g_mutex;  // guards everything below (spawn workers add, the simulation thread samples, the net thread takes)
@@ -107,15 +111,21 @@ void sampleAnimation(Tracked& enemy, const decima::WorldTransform& transform, co
     g_anims.push_back(std::move(anim));
 }
 
-// Keeps an enemy near the partner's body awake: the engine sleeps it by the distance to the host's own player only.
-void keepAwake(Tracked& enemy, const decima::WorldTransform& transform, const decima::WorldPosition& partner, ULONGLONG now) {
+// Counts an enemy within range of the partner's body, and whether the engine put it to sleep.
+void watchNearPartner(const Tracked& enemy, const decima::WorldTransform& transform, const decima::WorldPosition& partner,
+                      PartnerWatch& watch) {
     const double dx = transform.position.x - partner.x, dy = transform.position.y - partner.y, dz = transform.position.z - partner.z;
-    if (dx * dx + dy * dy + dz * dz > kKeepAwakeMetres * kKeepAwakeMetres || now - enemy.wakeAskedAt < kWakeRetryMs ||
-        !ds2::entityAsleep(enemy.entity)) {
-        return;
-    }
-    enemy.wakeAskedAt = now;
-    ds2::wakeEntity(enemy.entity);
+    if (dx * dx + dy * dy + dz * dz > kPartnerWatchMetres * kPartnerWatchMetres) return;
+    ++watch.inRange;
+    if (!ds2::entityAsleep(enemy.entity)) return;
+    ++watch.asleep;
+}
+
+void logPartnerWatch(const PartnerWatch& watch, ULONGLONG now) {
+    static ULONGLONG lastLog = 0;
+    if (now - lastLog < kPartnerWatchLogMs || watch.inRange == 0) return;
+    lastLog = now;
+    logger::write("enemy_host: %d enemies within %.0f m of the partner, %d asleep", watch.inRange, kPartnerWatchMetres, watch.asleep);
 }
 
 bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
@@ -163,6 +173,7 @@ void tick() {
     }
     decima::WorldPosition partnerAt{};
     const bool havePartner = partnerPosition(partnerAt);
+    PartnerWatch watch;
     for (auto it = g_tracked.begin(); it != g_tracked.end();) {
         Tracked& enemy = *it;
         if (!ds2::entityExists(enemy.entityUuid.data())) {
@@ -174,7 +185,7 @@ void tick() {
         uint64_t flags = 0;
         if (ds2::entityTransform(enemy.entity, transform) && decima::safeRead(enemy.entity + kEntityFlags, flags)) {
             const bool dead = enemy_vitals::isDead(enemy.entity);
-            if (havePartner && !dead) keepAwake(enemy, transform, partnerAt, now);
+            if (havePartner && !dead) watchNearPartner(enemy, transform, partnerAt, watch);
             if (!enemy.announced && g_spawns.size() < kMaxQueued) {
                 enemy_wire::EnemySpawn spawn{};
                 spawn.netId = enemy.netId;
@@ -204,6 +215,7 @@ void tick() {
         }
         ++it;
     }
+    if (havePartner) logPartnerWatch(watch, now);
 }
 
 }  // namespace

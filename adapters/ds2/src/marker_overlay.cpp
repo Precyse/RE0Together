@@ -2,11 +2,13 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <map>
 #include <string>
 
 #include "cargo_transfer.h"
+#include "ds2/far_partner.h"
 #include "game.h"
 #include "imgui.h"
 #include "load_overlay.h"
@@ -70,8 +72,8 @@ void drawMarker(ImDrawList* list, const world_to_screen::Camera& camera, const w
     list->AddText(font, kLabelSize, at, kLabelText, label);
 }
 
-// Session messages (peer joined / left), stacked top-centre, fading out.
-void drawToasts(ImDrawList* list, float width) {
+// Session messages (peer joined / left), stacked top-centre, fading out. Returns the y below the last one.
+float drawToasts(ImDrawList* list, float width) {
     ImFont* font = ImGui::GetFont();
     float y = kToastTop;
     for (const toast_queue::Visible& toast : toast_queue::visible()) {
@@ -84,6 +86,24 @@ void drawToasts(ImDrawList* list, float width) {
         list->AddText(font, kLabelSize, at, IM_COL32(240, 240, 240, alpha), toast.text.c_str());
         y += size.y + 2 * kLabelPadding + kToastSpacing;
     }
+    return y;
+}
+
+// One line per partner beyond the loaded world, under the toasts, for as long as it holds.
+void drawFarNotices(ImDrawList* list, float width, float y, const world_to_screen::Vec3& self) {
+    ImFont* font = ImGui::GetFont();
+    for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
+        const double metres = std::hypot(peer.position[0] - self.x, peer.position[1] - self.y);
+        if (metres <= far_partner::kBeyondLoadedWorldMetres) continue;
+        char text[96];
+        std::snprintf(text, sizeof(text), "%s  %.0f m  too far", peer.name.c_str(), metres);
+        const ImVec2 size = font->CalcTextSizeA(kLabelSize, FLT_MAX, 0.0f, text);
+        const ImVec2 at((width - size.x) * 0.5f, y);
+        list->AddRectFilled(ImVec2(at.x - kLabelPadding, at.y - kLabelPadding),
+                            ImVec2(at.x + size.x + kLabelPadding, at.y + size.y + kLabelPadding), kLabelBack);
+        list->AddText(font, kLabelSize, at, kLabelText, text);
+        y += size.y + 2 * kLabelPadding + kToastSpacing;
+    }
 }
 
 }  // namespace
@@ -94,7 +114,8 @@ void setSelfMarker(bool enabled) { g_selfMarker = enabled; }
 
 void draw(float width, float height) {
     ImDrawList* list = ImGui::GetBackgroundDrawList();
-    drawToasts(list, width);
+    const float noticeTop = drawToasts(list, width);
+    if (const auto self = game::localPlayer()) drawFarNotices(list, width, noticeTop, self->position);
     const auto camera = game::camera();
     if (!camera) return;
     const auto partner = cargo_transfer::partner();

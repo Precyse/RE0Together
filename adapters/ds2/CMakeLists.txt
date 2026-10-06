@@ -134,7 +134,9 @@ add_library(ds2_adapter SHARED
     src/ds2/weapon_layout.cpp
     src/ds2/local_weapon.cpp
     src/ds2/remote_weapon.cpp
-    src/ds2/damage_veto.cpp)
+    src/ds2/damage_veto.cpp
+    src/ds2/partner_focus.cpp
+    src/ds2/sneaking_focus.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
 target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)
