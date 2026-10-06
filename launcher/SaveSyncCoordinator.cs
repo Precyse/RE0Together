@@ -9,7 +9,6 @@ public sealed class SaveSyncCoordinator : IDisposable
 {
     private const long TimeoutMs = 60_000;
     private const long GameCheckIntervalMs = 1000;
-    private const string StagingFolder = "staging";
 
     private readonly SaveSyncProfile _config;
     private readonly string _gameDir;
@@ -63,7 +62,7 @@ public sealed class SaveSyncCoordinator : IDisposable
             return new SaveSyncCoordinator(config, gameDir, profile.Exe, sender, null, WatchSaves(config, source), () => session.PeerIds);
         }
         var filesDir = Path.Combine(gameDir, config.GuestSaveDir is { } guestDir ? SavePaths.Expand(guestDir) : config.SessionDir);
-        var stagingDir = Path.Combine(gameDir, config.SessionDir, StagingFolder);
+        var stagingDir = Path.Combine(gameDir, config.SessionDir, SaveReceiver.StagingFolder);
         var receiver = new SaveReceiver(config, filesDir, stagingDir, transport, () => lobby.OwnerId);
         session.FileFrameReceived += receiver.OnFrame;
         return new SaveSyncCoordinator(config, gameDir, profile.Exe, null, receiver, null, () => []);

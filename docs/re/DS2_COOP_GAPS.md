@@ -10,7 +10,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Host, join, save sync at join | done | launcher | `SaveSyncCoordinator.cs`, `games/ds2.json`, `documents_redirect.cpp` | |
 | Join catch-up: facts, story, structures, enemies | done | ds2-streaming / ds2-story | `fact_sync.cpp`, `story_sync.cpp`, `struct_sync.cpp`, `enemy_sync.cpp` | asked for at the guest's gameplay |
 | Host's later saves reach the guest | done | new | `launcher/SaveWatcher.cs`, `SaveSyncCoordinator.cs`, `SaveReceiver.cs` (CI-compiled only; logic checked with a scratch harness) | a guest that reloads or restarts after a crash loads the join-time world; snapshots patch facts, story and structures but not cargo, vehicles or ground pieces |
-| Guest's own progress (gear, equipment, levels) kept after the session | missing | new | `launcher/AdapterSettings.cs` | the session folder is deleted at launcher exit; roadmap end goal 6 |
+| Guest's own progress (gear, equipment, levels) kept after the session | partial (archived, not merged) | new | `launcher/AdapterSettings.cs` | the session folder is deleted at launcher exit; roadmap end goal 6 |
 | Partner leaves: body | partial | ds2-live | `ds2/remote_player.cpp` | removing the entity in a running world crashes, so the body stands frozen where the link dropped; ds2-live has an unverified 5 s removal |
 | Partner rejoins: one body, gear and weapon rebuilt | unknown | ds2-live | `ds2/remote_player.cpp`, `equip_sync.cpp` | verify a second body is not built beside the frozen one |
 | Role switch (guest becomes host) | partial | ds2-tester | `ds2/enemy_puppet.cpp` (`releaseToHost`) | built, not live |
@@ -104,7 +104,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/cargo_menu.cpp`, `cargo_transfer.cpp`.
 - **Verify:** `tools/ds2/fake_peer.py --host --pickup-answers` style host answering a guest give; the piece leaves the game's backpack and is reported added.
 
-### 10. The guest's own progress is lost at session end (L, new)
+### 10. The guest's own progress is lost at session end (L, new; first step done: `AdapterSettings.Reset` archives the session saves; the merge is open)
 - **Root change:** the save files hold world and personal state together, and every join overwrites the guest's copy with the host's, so the real fix is a merge: find which save blocks are personal (equipment, levels, private locker) and carry them from the guest's last session save into the next session's copy. First step (S): archive the guest's session save at session end instead of deleting it, so nothing is lost while the merge is worked out.
 - **Files:** `launcher/AdapterSettings.cs`, `SaveSyncCoordinator.cs`, `SavePaths.cs`, `docs/CONTRACT.md`, `docs/DS2_NOTES.md` (save layout).
 - **Verify:** `tools/ds2/save_sync_test.py`: end a session, the guest's session files are in the archive folder; the merge itself needs a save diff of two guest saves that differ only in gear.

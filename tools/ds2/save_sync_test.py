@@ -2,7 +2,7 @@
 guest ends with identical files in coop/session/Documents/DEATH STRANDING 2 - ON THE BEACH/<steamid64>/ (the folder
 the adapter's session-save redirect makes the game use), files that do not match the pattern stay behind, and both
 a save the host rewrites after the join reaches the guest's staging folder (or the session folder when no DS2 runs), and both
-sides reset after Ctrl+Break. Works on temporary folders only; never reads or writes real saves.
+sides reset after Ctrl+Break, the guest's session saves archived in coop/archive/<stamp>/. Works on temporary folders only; never reads or writes real saves.
 
 Usage: python tools/ds2/save_sync_test.py   (COOP_LAUNCHER overrides the launcher exe)
 Note: like every launcher start, it resets the adapter settings of every installed profile with save sync.
@@ -101,6 +101,9 @@ def main():
                 failures.append("launcher did not exit on Ctrl+Break")
     if (guest_game / "coop" / "session").exists():
         failures.append("guest session dir not removed")
+    archived = list((guest_game / "coop" / "archive").glob(f"*/Documents/{GAME_FOLDER}/*/{next(iter(SAVE_FILES))}"))
+    if not archived:
+        failures.append("guest's session saves were not archived at session end")
 
     print("FAIL: " + "; ".join(failures) if failures else "ds2 save_sync_test OK")
     print(f"logs in {work}")

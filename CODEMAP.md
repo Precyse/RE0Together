@@ -48,7 +48,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SaveWatcher.cs | host: FileSystemWatcher on the save folder; reports a changed save once it has been quiet for 3 s (retry by touching it again) | `Touch`, `TakeSettled` |
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest; after the first full set, later files go to `<sessionDir>/staging` and `PromoteStaged` moves them into the session dir | `OnFrame`, `Complete`, `PromoteStaged` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest` |
-| AdapterSettings.cs | `coop=` in the adapter ini, session dir cleanup | `EnableCoop`, `Reset` |
+| AdapterSettings.cs | `coop=` in the adapter ini, session dir cleanup after copying its files (not staging) to `<sessionDir's parent>/archive/<stamp>/`, last 5 kept | `EnableCoop`, `Reset` |
 | GameLauncher.cs | adapter install (sha256, `.cfbak`) and Steam game start | `Launch` |
 | SteamLibrary.cs | game folder from libraryfolders.vdf + appmanifest | `FindGameDir` |
 | RepoPaths.cs | repo root / games dir discovery | |

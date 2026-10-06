@@ -9,6 +9,7 @@ namespace CoopLauncher;
 public sealed class SaveReceiver
 {
     private const long MaxFileBytes = 64L * 1024 * 1024;
+    public const string StagingFolder = "staging";  // under the session dir: files the host sent after the first full set
     private const string TempSuffix = ".part";
 
     private sealed class Incoming
