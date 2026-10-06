@@ -17,6 +17,7 @@
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/entity_wake.h"
+#include "ds2/health_watch.h"
 #include "enemy_directory.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
@@ -48,6 +49,7 @@ constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hund
 struct PartnerWatch {
     int inRange = 0;
     int asleep = 0;
+    uintptr_t firstSleeper = 0;
 };
 
 struct Tracked {
@@ -75,6 +77,7 @@ std::vector<enemy_wire::EnemyState> g_states;
 std::vector<enemy_wire::EnemyGone> g_gone;
 std::vector<enemy_wire::EnemyAnim> g_anims;
 bool g_sharing = false;
+bool g_diagnostics = false;
 bool g_snapshotRequested = false;
 
 void pushGone(uint16_t netId, enemy_wire::GoneReason reason) {
@@ -117,7 +120,20 @@ void watchNearPartner(const Tracked& enemy, const decima::WorldTransform& transf
     const double dx = transform.position.x - partner.x, dy = transform.position.y - partner.y, dz = transform.position.z - partner.z;
     if (dx * dx + dy * dy + dz * dz > kPartnerWatchMetres * kPartnerWatchMetres) return;
     ++watch.inRange;
-    if (ds2::entityAsleep(enemy.entity)) ++watch.asleep;
+    if (!ds2::entityAsleep(enemy.entity)) return;
+    ++watch.asleep;
+    if (!watch.firstSleeper) watch.firstSleeper = enemy.entity;
+}
+
+// Diagnostics: once, wakes a sleeping enemy near the partner and watches its flags, so the log names the code that puts it
+// back to sleep (the write watch logs each distinct writing instruction with its stack).
+void watchSleeper(uintptr_t sleeper) {
+    static bool watched = false;
+    if (watched) return;
+    watched = true;
+    health_watch::arm(sleeper + kEntityFlags);
+    ds2::wakeEntity(sleeper);
+    logger::write("enemy_host: watching the flags of the sleeping enemy %p after waking it", reinterpret_cast<void*>(sleeper));
 }
 
 void logPartnerWatch(const PartnerWatch& watch, ULONGLONG now) {
@@ -125,6 +141,7 @@ void logPartnerWatch(const PartnerWatch& watch, ULONGLONG now) {
     if (now - lastLog < kPartnerWatchLogMs || watch.inRange == 0) return;
     lastLog = now;
     logger::write("enemy_host: %d enemies within %.0f m of the partner, %d asleep", watch.inRange, kPartnerWatchMetres, watch.asleep);
+    if (g_diagnostics && watch.firstSleeper) watchSleeper(watch.firstSleeper);
 }
 
 bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
@@ -232,11 +249,6 @@ void add(uintptr_t entity, const std::array<uint8_t, enemy_wire::kUuidSize>& res
     g_tracked.push_back(std::move(enemy));
 }
 
-bool tracks(uintptr_t entity) {
-    std::lock_guard lock(g_mutex);
-    return std::any_of(g_tracked.begin(), g_tracked.end(), [&](const Tracked& enemy) { return enemy.entity == entity; });
-}
-
 std::vector<Handover> release() {
     std::lock_guard lock(g_mutex);
     std::vector<Handover> entities;
@@ -303,6 +315,8 @@ std::vector<enemy_wire::EnemyGone> takeEnemyGone() {
 
 namespace enemy_host {
 
-void installEarly() { sim_tick::add(&tick, "enemy host", sim_tick::Gate::Gameplay); }
+void installEarly(bool diagnostics) {
+    g_diagnostics = diagnostics;
+    sim_tick::add(&tick, "enemy host", sim_tick::Gate::Gameplay); }
 
 }  // namespace enemy_host

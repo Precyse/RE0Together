@@ -8,7 +8,7 @@
 namespace enemy_host {
 
 // Start-up: the simulation tick that announces, samples and reports the enemies.
-void installEarly();
+void installEarly(bool diagnostics);
 
 // Any thread (spawn workers): `entity` was just built from an entity resource with this UUID.
 void add(uintptr_t entity, const std::array<uint8_t, 16>& resourceUuid);
@@ -18,9 +18,6 @@ struct Handover {
     uintptr_t entity;
     std::array<uint8_t, 16> resourceUuid;
 };
-
-// Whether the engine entity is one of the tracked enemies. Any thread.
-bool tracks(uintptr_t entity);
 
 // This machine became a guest: the tracked enemies that still exist (they spawned before it was told so), no longer
 // tracked. Simulation thread.
