@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
@@ -161,16 +162,17 @@ uint64_t useVehicleDetour(uintptr_t plugin, float a2, float a3, uint8_t a4) {
     return g_useVehicle(plugin, a2, a3, a4);
 }
 
-// E2: the vehicle's model, to key the seat offsets by (the entity's resource reference and the first qwords behind it).
+// E2: the vehicle's model, to key the seat offsets by: the UUID of its entity resource (the object the entity's resource
+// reference points at, UUID at +0x10 like any RTTIRefObject).
 constexpr uintptr_t kEntityResource = 0x68;
+constexpr uintptr_t kResourceUuid = 0x10;
 void logVehicleModel(uintptr_t vehicle) {
-    const uintptr_t resource = decima::readPointer(vehicle + kEntityResource);
-    uint64_t words[6] = {};
-    decima::safeCopy(words, resource, sizeof(words));
-    logger::write("remote_ride: vehicle %p resource %p: %llx %llx %llx %llx %llx %llx", reinterpret_cast<void*>(vehicle),
-                  reinterpret_cast<void*>(resource), static_cast<unsigned long long>(words[0]), static_cast<unsigned long long>(words[1]),
-                  static_cast<unsigned long long>(words[2]), static_cast<unsigned long long>(words[3]),
-                  static_cast<unsigned long long>(words[4]), static_cast<unsigned long long>(words[5]));
+    const uintptr_t resource = decima::readPointer(decima::readPointer(vehicle + kEntityResource));
+    uint8_t uuid[16] = {};
+    decima::safeCopy(uuid, resource + kResourceUuid, sizeof(uuid));
+    char text[33] = {};
+    for (int i = 0; i < 16; ++i) snprintf(text + 2 * i, 3, "%02x", uuid[i]);
+    logger::write("remote_ride: vehicle %p model %s", reinterpret_cast<void*>(vehicle), text);
 }
 
 // Whether the local player drives the vehicle too (each machine keeps its own driver; the partner then rides along).
