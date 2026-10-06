@@ -101,6 +101,7 @@ bool g_passenger = false;     // the peer reports a passenger seat: the remote s
 bool g_followsLocal = false;  // the local player drives the same vehicle: the remote rides only while he does
 uint64_t g_vehicleId = 0;
 uint64_t g_localPassengerSeen = 0;  // the vehicle the local player was last seated in as a passenger
+bool g_localLeaving = false;        // the local player's ride-off was requested because the driver left
 
 using ClearParentFn = void (*)(uintptr_t entity);
 
@@ -154,11 +155,31 @@ void seatLocalPassenger() {
     const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
     decima::WorldTransform seat{};
     if (plugin && ds2::field<uint8_t>(plugin, kPluginPhase) == kPhaseOnFoot) {
-        if (Clock::now() - g_samBoardedAt > kBoardRetry) setdriver_guard::endLocalPassenger();
+        if (g_localLeaving) {  // the ride-off ended: the engine leaves the entity parented to the vehicle
+            reinterpret_cast<ClearParentFn>(ds2::at(kClearParent))(remote_player::samEntity());
+            g_localLeaving = false;
+            setdriver_guard::endLocalPassenger();
+        } else if (Clock::now() - g_samBoardedAt > kBoardRetry) {
+            setdriver_guard::endLocalPassenger();
+        }
         return;
     }
     if (passengerSeat(ds2::loadedVehicle(vehicleId), seat)) ds2::teleportEntity(remote_player::samEntity(), seat);
     g_samBoardedAt = Clock::now();
+}
+
+// The driver left (the partner stopped driving that vehicle, disconnected, or its body is parked): the local passenger gets
+// off through the game's own ride-off, as the remote does, instead of staying seated in a vehicle nobody drives.
+void leaveLocalPassengerIfDriverGone() {
+    const uint64_t vehicleId = setdriver_guard::localPassengerVehicle();
+    if (!vehicleId || g_localLeaving) return;
+    const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
+    if (riding && riding->id == vehicleId && riding->role == vehicle_sync::kRoleDriver && !remote_player::isParked()) return;
+    const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
+    if (!plugin || ds2::field<uint8_t>(plugin, kPluginPhase) != kPhaseDrive) return;
+    ds2::field<uint8_t>(plugin, kPluginRequestedPhase) = kPhaseRideOff;
+    g_localLeaving = true;
+    logger::write("remote_ride: the driver left, the local player gets off");
 }
 
 // DSPlayerMover's update writes a seated player's transform (the driver's seat) into the entity itself. The remote,
@@ -230,6 +251,7 @@ void reset() {
     g_followsLocal = false;
     g_vehicleId = 0;
     g_localPassengerSeen = 0;
+    g_localLeaving = false;
 }
 
 bool holdsBody() { return g_stage != Stage::OnFoot; }
@@ -269,6 +291,7 @@ void boardLocalPassenger() {
 
 void tick() {
     boardLocalPassenger();
+    leaveLocalPassengerIfDriverGone();
     const uintptr_t plugin = ds2::ridePlugin(remote_player::entity());
     if (!plugin) return;
     const uint8_t phase = ds2::field<uint8_t>(plugin, kPluginPhase);
