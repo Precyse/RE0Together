@@ -24,9 +24,9 @@ enum class Hand : uint8_t { Default = 0, Right = 1, Left = 2 };
 constexpr uint8_t kLastHand = static_cast<uint8_t>(Hand::Left);
 
 // Which weapon behavior made the shot (the engine's CreateAttackRequest of that behavior class, vtable slot 46).
-// Sniper rifles, revolvers and the ghost mech's machine gun share Gun's; mech baggage shares HandGrenade's.
-enum class Kind : uint8_t { Gun = 1, ShotGun, BolaGun, StickyGun, GrenadeLauncher, HandGrenade, SingleShotBeam };
-constexpr uint8_t kLastKind = static_cast<uint8_t>(Kind::SingleShotBeam);
+// Sniper rifles, revolvers and the ghost mech's machine gun share Gun's; mech baggage shares HandGrenade's. Boomerang is the BloodBoomerang's own throw (0x142009b40, built like Gun's: pellet count, muzzle slot 84).
+enum class Kind : uint8_t { Gun = 1, ShotGun, BolaGun, StickyGun, GrenadeLauncher, HandGrenade, SingleShotBeam, Boomerang };
+constexpr uint8_t kLastKind = static_cast<uint8_t>(Kind::Boomerang);
 
 struct WeaponState {
     uint16_t weaponId;  // EDSWeaponId, kHolstered when nothing is drawn
