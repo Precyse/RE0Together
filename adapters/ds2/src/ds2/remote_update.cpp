@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <mutex>
+#include <vector>
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
@@ -68,15 +69,29 @@ constexpr uintptr_t kPluginSuspended = 0xa;
 constexpr const char* kUsePlugins[] = {"DSPlayerUseLocationActionPlugin", "DSPlayerInteractiveActionPlugin",
                                        "DSPlayerHandTerminalActionPlugin"};
 
+// Resolved once (the RTTI lookup scans the module).
+const std::vector<uintptr_t>& usePluginVtables() {
+    static const std::vector<uintptr_t> vtables = [] {
+        std::vector<uintptr_t> found;
+        for (const char* name : kUsePlugins) {
+            if (const uintptr_t vtable = msvc_rtti::vtableOf(name)) found.push_back(vtable);
+        }
+        return found;
+    }();
+    return vtables;
+}
+
+// A plugin sits in the state object itself or is pointed at from it: both are looked at.
 void suspendUsePlugins(uintptr_t component) {
     static bool logged = false;
     const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
-    for (const char* name : kUsePlugins) {
-        const uintptr_t vtable = msvc_rtti::vtableOf(name);
-        for (uintptr_t offset = 0; vtable && state && offset < kStateSize; offset += sizeof(uintptr_t)) {
-            if (ds2::field<uintptr_t>(state, offset) != vtable) continue;
-            ds2::field<uint8_t>(state + offset, kPluginSuspended) = 1;
-            if (!logged) logger::write("remote_update: %s suspended at state +0x%llx", name, static_cast<unsigned long long>(offset));
+    for (const uintptr_t vtable : usePluginVtables()) {
+        for (uintptr_t offset = 0; state && offset < kStateSize; offset += sizeof(uintptr_t)) {
+            const uintptr_t word = ds2::field<uintptr_t>(state, offset);
+            const uintptr_t plugin = word == vtable ? state + offset : decima::readPointer(word) == vtable ? word : 0;
+            if (!plugin) continue;
+            ds2::field<uint8_t>(plugin, kPluginSuspended) = 1;
+            if (!logged) logger::write("remote_update: use plugin %p suspended (state +0x%llx)", reinterpret_cast<void*>(plugin), static_cast<unsigned long long>(offset));
         }
     }
     logged = true;
