@@ -24,6 +24,7 @@
 #include "equip_sync.h"
 #include "fact_sync.h"
 #include "game.h"
+#include "gear_restore.h"
 #include "log.h"
 #include "position_blend.h"
 #include "reject_counters.h"
@@ -165,6 +166,7 @@ void tick(NetClient& net) {
     enemy_combat::tick(net, session);
     partner_cargo_sync::tick(net, session);
     equip_sync::tick(net, session);
+    gear_restore::tick(session);
     weapon_sync::tick(net, session);
     rack_sync::tick(net, session);
     anim_sync::tick(net, session);

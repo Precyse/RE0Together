@@ -15,6 +15,7 @@ struct Config {
     bool cutsceneLog = false;   // log every cutscene (Sequence) start and game-state change
     bool weaponSync = false;   // weapons: the partner's body holds and fires the weapon the partner has drawn
     uint8_t weaponAttachMode = 1;  // SetParent mode of the body's weapon (1 = the engine's own), to try other attach variants live
+    bool gearRestore = false;  // a guest keeps its own gained gear across sessions (coop\personal_gear.txt, src/gear_restore.h); off until checked live
     bool remoteBody = true;    // the partner's body: a second player entity that walks and rides (adapter.ini remote_body=0 turns it off)
 };
 
