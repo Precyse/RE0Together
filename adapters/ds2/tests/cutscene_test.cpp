@@ -154,6 +154,19 @@ void tableTests() {
     early.guestDecide(kSeq, info, 1600);
     check(!early.guestDecide(kSeq, info, 1616).hold, "a go that arrived before the copy was held releases it at once");
 
+    // Held time counts from the bind, not from the announcement (a slow world load must not force an unsynced start).
+    Table late;
+    late.arm(start, 1000);
+    late.guestDecide(kSeq, info, 1000 + kHoldLimitMs + 3000);
+    check(late.guestDecide(kSeq, info, 1000 + kHoldLimitMs + 3500).hold, "the hold limit counts from the bind, not the announcement");
+    check(!late.guestDecide(kSeq, info, 1000 + kHoldLimitMs + 3000 + kHoldLimitMs + 1).hold, "and still ends after the limit from the bind");
+
+    // An unannounced shared Sequence is held for a while, then plays and keeps passing.
+    Table lone;
+    check(lone.guestDecide(kSeq, info, 100).hold && lone.guestDecide(kSeq, info, 100 + kUnannouncedHoldLimitMs).hold, "an unannounced Sequence is held up to the limit");
+    Verdict past = lone.guestDecide(kSeq, info, 101 + kUnannouncedHoldLimitMs);
+    check(!past.hold && past.forced && !lone.guestDecide(kSeq, info, 200 + kUnannouncedHoldLimitMs).hold, "then it plays, and its retries keep passing");
+
     Table far;
     far.arm(start, 1000);
     far.giveUp(1);
