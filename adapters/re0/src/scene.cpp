@@ -4,6 +4,7 @@
 
 #include "game.h"
 #include "log.h"
+#include "spot_rule.h"
 
 namespace {
 
@@ -31,6 +32,19 @@ void registerUnits(uintptr_t player, int32_t sceneId) {
 // True when neither character belongs to `record`.
 bool empty(uintptr_t record) { return recordOf(game::controlled()) != record && recordOf(game::partner()) != record; }
 
+// The mode (spot of the entry) `player` is put on: the door spot, or a distinct one when the other character already
+// stands in `record`, so the two never share a spot (spot_rule.h).
+uint32_t placeMode(uintptr_t player, uintptr_t record, uint32_t entry) {
+    const uintptr_t other = player == game::controlled() ? game::partner() : game::controlled();
+    spot_rule::Spot spots[spot_rule::kModes] = {};
+    for (uint32_t mode = 0; mode < game::kScenePlaceModeCount; ++mode) {
+        const uintptr_t address =
+            record + game::kSceneEntrySpotsOffset + (entry * game::kScenePlaceModeCount + mode) * game::kSceneEntrySpotSize;
+        if (!game::readMemory(address, spots[mode])) return game::kScenePlaceDoorMode;
+    }
+    return spot_rule::modeFor(other && recordOf(other) == record, spots);
+}
+
 // The door carry's sequence for one character (0x61e2c0): detach its units, find or load the room's record, place
 // it on the entry spot, assign it, attach its units to the new room; then the old record goes if it is dormant and
 // empty.
@@ -43,7 +57,7 @@ void moveUnguarded(uintptr_t player, uint16_t sceneId, uint32_t entry) {
     auto* record = game::callThiscall<void*>(game::kSceneRecordFunction, info, static_cast<uint32_t>(sceneId), flags);
     if (!record) return;
     game::callThiscall<void>(game::kScenePlaceFunction, record, reinterpret_cast<void*>(player), entry,
-                             game::kScenePlaceDoorMode);
+                             placeMode(player, reinterpret_cast<uintptr_t>(record), entry));
     game::callThiscall<void>(game::kSceneAssignFunction, info, record, reinterpret_cast<void*>(player));
     registerUnits(player, static_cast<int32_t>(idOf(reinterpret_cast<uintptr_t>(record))));
     if (old != currentRecord() && old != recordOf(player) && empty(old)) {

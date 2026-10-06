@@ -148,6 +148,11 @@ constexpr uint32_t kSceneDoorFlag = 4;
 // through the door, 2 a following partner) and commits its transform.
 constexpr uintptr_t kScenePlaceFunction = 0x61ed50;
 constexpr uint32_t kScenePlaceDoorMode = 0;
+constexpr uint32_t kScenePlaceSideMode = 1;    // read live: a second spot beside the door spot (+50 on one axis)
+constexpr uint32_t kScenePlaceFollowMode = 2;  // read live: a spot behind it (-50), the same as mode 0 at some entries
+constexpr uint32_t kScenePlaceModeCount = 3;
+constexpr uintptr_t kSceneEntrySpotsOffset = 0x9aa4;
+constexpr uintptr_t kSceneEntrySpotSize = 0x18;  // {f32 x, y, z, then 3 f32 of facing}
 // thiscall on sSceneInfo (record, player) ret 8: moves the player into the record (leave/enter callbacks included).
 constexpr uintptr_t kSceneAssignFunction = 0x619e30;
 // thiscall on sSceneInfo (record) ret 4: unloads a record nobody is in.
@@ -164,6 +169,11 @@ constexpr uintptr_t kEnemyPoolEntrySize = 16;
 constexpr uintptr_t kEnemyPoolObjectOffset = 0xc;  // uEnemy* inside a pool entry
 constexpr int kEnemyPoolSlots = 37;
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
+constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, a, b}, written by the class setAction
+constexpr size_t kEnemySetActionSlot = 63;        // vtable slot (+0xfc): setAction(state, id, a, b), thiscall ret 0x10
+// The slot-63 functions that take the 4 arguments (ret 0x10). Two classes override it with 1 or 2 (0x4b17f0 ret 4,
+// 0x48ac80 ret 8); a call with the wrong count would unbalance the stack, so only these are ever called.
+constexpr std::array<uintptr_t, 5> kEnemySetActionFunctions = {0x4cc670, 0x44d820, 0x4650f0, 0x480c20, 0x4bbc70};
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, float distance, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
