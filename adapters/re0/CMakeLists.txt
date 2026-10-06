@@ -69,6 +69,8 @@ add_library(re0_adapter SHARED
     src/save_redirect.cpp
     src/remote_storage_proxy.cpp
     src/damage_thunk.cpp
+    src/update_thunk.cpp
+    src/enemy_update_hook.cpp
     src/enemy_registry.cpp
     src/enemy_damage_hook.cpp
     src/enemy_net.cpp
@@ -105,6 +107,10 @@ add_executable(door_phase_test tests/door_phase_test.cpp)
 
 add_executable(position_blend_test tests/position_blend_test.cpp)
 
+add_executable(enemy_puppet_rule_test tests/enemy_puppet_rule_test.cpp)
+
+add_executable(update_thunk_test tests/update_thunk_test.cpp src/update_thunk.cpp)
+
 add_executable(flag_diff_test tests/flag_diff_test.cpp)
 
 add_executable(jitter_target_test tests/jitter_target_test.cpp)
@@ -113,6 +119,6 @@ add_executable(pad_buffer_test tests/pad_buffer_test.cpp)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test door_phase_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_puppet_rule_test update_thunk_test door_phase_test flag_diff_test jitter_target_test pad_buffer_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

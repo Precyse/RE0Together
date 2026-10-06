@@ -8,7 +8,7 @@ namespace enemy_protocol {
 
 constexpr uint16_t kMsgHitRequest = proto::kFirstGameType + 0x10;   // guest to host, reliable
 constexpr uint16_t kMsgHitApplied = proto::kFirstGameType + 0x11;   // host to all, reliable
-constexpr uint16_t kMsgEnemyState = proto::kFirstGameType + 0x12;   // host to all, unreliable, 10 Hz
+constexpr uint16_t kMsgEnemyState = proto::kFirstGameType + 0x12;   // host to all, unreliable, 20 Hz
 
 // Payload of HIT_REQUEST and HIT_APPLIED: a HitInfo without its attacker pointer.
 struct HitPayload {

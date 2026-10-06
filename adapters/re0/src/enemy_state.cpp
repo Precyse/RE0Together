@@ -8,6 +8,7 @@
 
 #include "debug_stats.h"
 #include "enemy_protocol.h"
+#include "enemy_puppet_rule.h"
 #include "enemy_registry.h"
 #include "game.h"
 #include "game_tick.h"
@@ -22,8 +23,7 @@ namespace {
 using Clock = std::chrono::steady_clock;
 using enemy_protocol::EnemyEntry;
 
-constexpr float kEnemySnapDistance = 80.0f;
-constexpr auto kSendInterval = std::chrono::milliseconds(100);
+constexpr auto kSendInterval = std::chrono::milliseconds(50);
 constexpr auto kLogInterval = std::chrono::seconds(1);
 
 NetClient* g_net = nullptr;
@@ -39,6 +39,7 @@ std::mutex g_mutex;
 Snapshot g_latest;     // guarded by g_mutex
 bool g_fresh = false;  // guarded by g_mutex
 std::array<bool, game::kEnemyPoolSlots> g_mismatchLogged{};
+std::array<enemy_puppet_rule::Track, game::kEnemyPoolSlots> g_tracks{};  // game thread only: what the owner last said
 
 bool logDue() {
     const auto now = Clock::now();
@@ -76,28 +77,59 @@ void logOnce(const EnemyEntry& entry, const char* reason) {
     logger::write("enemy_state: slot %u %s (host vtable 0x%x)", entry.slot, reason, entry.vtable);
 }
 
-void applyEntry(const EnemyEntry& entry) {
-    if (entry.slot >= game::kEnemyPoolSlots) return;
-    const uintptr_t enemy = enemy_registry::enemyAt(entry.slot);
-    if (!enemy) return logOnce(entry, "has no local enemy");
-    if (game::readPointer(enemy) != entry.vtable) return logOnce(entry, "spawned a different class");
-
-    int32_t hp = 0;
-    if (game::readMemory(enemy + game::kEnemyHpOffset, hp) && hp != entry.hp) {
-        player_damage::setHp(enemy, entry.hp);
-        if (logDue()) logger::write("enemy_state: slot %u hp %d -> %d", entry.slot, hp, entry.hp);
-    }
-    float pos[3];
-    float quat[4];
-    if (!game::readTransform(enemy, pos, quat)) return;
-    const float drift = position_blend::distance(pos, entry.pos);
-    if (drift <= kEnemySnapDistance) return;
-    game::writeTransform(enemy, entry.pos, entry.quat);
-    debug_stats::count(debug_stats::Counter::Snaps);
-    if (logDue()) logger::write("enemy_state: snapped slot %u, drift=%.1f", entry.slot, drift);
+int64_t nowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
 }
 
-void applyLatest() {
+// This machine shows enemies owned by the peer: it has a peer, is not apart from it, and the peer runs the room.
+bool puppetActive() {
+    return net_pad::active() && !split_rooms::apart() && !split_rooms::localEnemyAuthority();
+}
+
+void applyHp(const EnemyEntry& entry, uintptr_t enemy) {
+    int32_t hp = 0;
+    if (!game::readMemory(enemy + game::kEnemyHpOffset, hp) || hp == entry.hp) return;
+    player_damage::setHp(enemy, entry.hp);
+    if (logDue()) logger::write("enemy_state: slot %u hp %d -> %d", entry.slot, hp, entry.hp);
+}
+
+void applyEntry(const EnemyEntry& entry) {
+    if (entry.slot >= game::kEnemyPoolSlots) return;
+    enemy_puppet_rule::Track& track = g_tracks[entry.slot];
+    const uintptr_t enemy = enemy_registry::enemyAt(entry.slot);
+    if (!enemy || game::readPointer(enemy) != entry.vtable) {
+        track.valid = false;
+        return logOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
+    }
+    applyHp(entry, enemy);
+    enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, nowMs());
+}
+
+// Moves a puppet toward where the owner's enemy is now: blended while it lags, snapped only after a jump.
+void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
+    const uintptr_t enemy = enemy_registry::enemyAt(slot);
+    float pos[3];
+    float quat[4];
+    if (!enemy || track.hp <= 0 || !game::readTransform(enemy, pos, quat)) return;
+    float aim[3];
+    enemy_puppet_rule::aim(track, now, aim);
+    const float drift = position_blend::distance(pos, aim);
+    const enemy_puppet_rule::Step step = enemy_puppet_rule::stepFor(drift);
+    if (step == enemy_puppet_rule::Step::Hold) return;
+    if (step == enemy_puppet_rule::Step::Snap) {
+        game::writeTransform(enemy, aim, track.quat);
+        debug_stats::count(debug_stats::Counter::Snaps);
+        if (logDue()) logger::write("enemy_state: snapped slot %d, drift=%.1f", slot, drift);
+        return;
+    }
+    float blendedPos[3];
+    float blendedQuat[4];
+    position_blend::blendPosition(pos, aim, blendedPos);
+    position_blend::blendRotation(quat, track.quat, blendedQuat);
+    game::writeTransform(enemy, blendedPos, blendedQuat);
+}
+
+void takeLatest() {
     Snapshot snapshot;
     {
         std::lock_guard lock(g_mutex);
@@ -108,9 +140,18 @@ void applyLatest() {
     for (uint8_t i = 0; i < snapshot.count; ++i) applyEntry(snapshot.entries[i]);
 }
 
+void driveTracks() {
+    takeLatest();
+    const int64_t now = nowMs();
+    for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
+        if (g_tracks[slot].valid) followTrack(slot, g_tracks[slot], now);
+    }
+}
+
 void onTick() {
+    if (puppetActive()) return driveTracks();
+    for (auto& track : g_tracks) track.valid = false;
     if (!net_pad::active() || split_rooms::apart()) return;  // apart, each machine runs its own room's enemies
-    if (!split_rooms::localEnemyAuthority()) return applyLatest();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;
@@ -137,6 +178,12 @@ void onFrame(const GameFrame& frame) {
     std::memcpy(g_latest.entries.data(), frame.payload.data() + enemy_protocol::kStateHeaderSize,
                 count * sizeof(EnemyEntry));
     g_fresh = true;
+}
+
+bool puppetSkipsUpdate(uintptr_t enemy) {
+    if (!puppetActive()) return false;
+    const int slot = enemy_registry::slotOf(enemy);
+    return slot != enemy_registry::kNoSlot && enemy_puppet_rule::skipsUpdate(g_tracks[slot], nowMs());
 }
 
 void enable(NetClient& net) {
