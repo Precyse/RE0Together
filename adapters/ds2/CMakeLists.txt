@@ -120,6 +120,7 @@ add_library(ds2_adapter SHARED
     src/ds2/warp.cpp
     src/ds2/cargo_defer.cpp
     src/ds2/loading_screen.cpp
+    src/ds2/player_system_guard.cpp
     src/ds2/world_pause.cpp
     src/ds2/bt_events.cpp
     src/ds2/enemy_spawn.cpp

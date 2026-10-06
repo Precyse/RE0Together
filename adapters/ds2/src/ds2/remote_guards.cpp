@@ -54,6 +54,15 @@ constexpr uint32_t kCountMask = 0x3FF;
 constexpr uintptr_t kPlayerComponentUpdate = 0x14080ade0;
 constexpr const char* kPlayerComponent = "DSPlayerComponent";
 
+// The removal handlers that clear DSPlayerSystem's singleton pointers (see player_system_guard, which diverts the init's
+// stores): the remote's removal would clear Sam's.
+struct Removal {
+    const char* component;
+    uintptr_t function;
+};
+constexpr Removal kSingletonRemovals[] = {{"DSPlayerEquipmentManageComponent", 0x140F7A930},
+                                          {"DSPlayerFacialRigManagerComponent", 0x140EE3EE0}};
+
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
 using PartToggleFn = void (*)(uintptr_t holder, uint8_t id);
 InitTableFn g_initTable = nullptr;
@@ -118,6 +127,9 @@ void silenceRemote() {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(name)));
     }
     silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(kPlayerComponent)), ds2::at(kPlayerComponentUpdate));
+    for (const Removal& removal : kSingletonRemovals) {
+        silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(removal.component)), ds2::at(removal.function));
+    }
 }
 
 }  // namespace remote_guards
