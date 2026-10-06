@@ -155,6 +155,7 @@ void bindOrphans(ULONGLONG now) {
 
 // A guest's announced cutscene its own graph did not start: start the network, then adopt the entity.
 void chaseAnnounced(ULONGLONG now, Actions& actions) {
+    std::vector<uint32_t> unplayable;
     for (Playback& p : g_table.playbacks) {
         if (p.phase != Phase::Announced || now - p.createdMs < kOwnStartGraceMs) continue;
         if (!isZero(p.start.network) && p.networkStartedMs == 0) {
@@ -170,10 +171,12 @@ void chaseAnnounced(ULONGLONG now, Actions& actions) {
                 logger::write("cutscene: adopted Sequence %p of cutscene %u by its entity UUID", reinterpret_cast<void*>(sequence), p.start.id);
                 g_table.bind(p, sequence, info, now);
             } else {
-                logger::write("cutscene: cutscene %u could not be started here (network and entity not found)", p.start.id);
+                logger::write("cutscene: cutscene %u could not be started here (network and entity not found), the host is told ready", p.start.id);
+                unplayable.push_back(p.start.id);
             }
         }
     }
+    for (const uint32_t id : unplayable) g_table.giveUp(id);
 }
 
 void releaseStale(ULONGLONG now, Actions& actions) {
@@ -184,12 +187,17 @@ void releaseStale(ULONGLONG now, Actions& actions) {
     }
 }
 
-// The host's END: a copy that is still running is cut short when the host stopped before the end; a copy still held plays.
+// The host's END: a copy that is running or still held is cut short when the host stopped before the end (a skip); a held
+// copy of a cutscene the host played to its end plays.
 void applyEnds(ULONGLONG now, Actions& actions) {
     for (const cutscene_wire::End& end : g_table.inEnds) {
         Playback* p = g_table.byId(end.id);
         if (!p) continue;
-        if (p->phase == Phase::Playing && cutscene_wire::endedEarly(end, p->start.stopFrame, kEndSlackFrames)) {
+        const bool skipped = cutscene_wire::endedEarly(end, p->start.stopFrame, kEndSlackFrames);
+        if (p->phase == Phase::Playing && skipped) {
+            actions.forceStop.emplace_back(p->sequence, cutscene_wire::kStopScripted);
+        } else if (p->phase == Phase::Held && skipped) {  // started and cut at once: its end nodes run, as the host's skip ran them
+            actions.forceStart.push_back(p->sequence);
             actions.forceStop.emplace_back(p->sequence, cutscene_wire::kStopScripted);
         } else if (p->phase == Phase::Held) {
             p->phase = Phase::Released;

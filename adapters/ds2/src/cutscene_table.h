@@ -122,6 +122,15 @@ public:
         }
     }
 
+    // Guest: this machine cannot play the announced cutscene (its Sequence is not loaded here, e.g. the guest is far away):
+    // the host is told ready at once so it does not wait for the timeout, and the playback is forgotten.
+    void giveUp(uint32_t id) {
+        Playback* p = byId(id);
+        if (!p || p->phase != Phase::Announced) return;
+        outReady.push_back(id);
+        erase(p);
+    }
+
     // Host: every guest is ready; the cutscene may start `delayMs` from now.
     void release(uint32_t id, uint64_t now, uint32_t delayMs) {
         Playback* p = byId(id);

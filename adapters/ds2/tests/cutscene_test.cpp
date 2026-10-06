@@ -154,6 +154,19 @@ void tableTests() {
     early.guestDecide(kSeq, info, 1600);
     check(!early.guestDecide(kSeq, info, 1616).hold, "a go that arrived before the copy was held releases it at once");
 
+    Table far;
+    far.arm(start, 1000);
+    far.giveUp(1);
+    check(far.outReady.size() == 1 && far.outReady[0] == 1 && far.playbacks.empty(), "a guest that cannot play it tells the host ready at once and forgets it");
+    far.giveUp(1);
+    check(far.outReady.size() == 1, "giving up an unknown cutscene says nothing");
+    Table bound;
+    bound.arm(start, 1000);
+    bound.guestDecide(kSeq, info, 1100);
+    bound.outReady.clear();
+    bound.giveUp(1);
+    check(bound.outReady.empty() && bound.playbacks.size() == 1, "a cutscene already held here is not given up");
+
     // The failure seen live: a guest's announcement with the host's own id 1 left over from an earlier role swallowed the release.
     Table stale;
     stale.arm(start, 1000);
