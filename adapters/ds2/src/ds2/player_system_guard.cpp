@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 
@@ -35,6 +36,7 @@ constexpr uintptr_t kNearStep = 0x10000;  // allocation granularity
 constexpr uintptr_t kNearLimit = 0x60000000;
 
 using HandlerFn = void (*)(uintptr_t component, uintptr_t message);
+std::atomic<bool> g_skipEquipmentUpdate{true};
 HandlerFn g_equipmentInit = nullptr, g_facialRigInit = nullptr, g_equipmentUpdate = nullptr;
 
 // What the patched loads read: Sam's DSPlayerSystem, or a scratch block for the remote's init, whose stores
@@ -94,7 +96,7 @@ void facialRigInit(uintptr_t component, uintptr_t message) { runInit(g_facialRig
 // The per-frame update reads the player state's equipment records (state +0x56e0 -> +0xce8), which the remote's state does
 // not have (-1 there, a read fault at 0x140F75E12); the body's gear comes from equip_sync.
 void equipmentUpdate(uintptr_t component, uintptr_t message) {
-    if (!ownedByRemote(component)) g_equipmentUpdate(component, message);
+    if (!g_skipEquipmentUpdate.load() || !ownedByRemote(component)) g_equipmentUpdate(component, message);
 }
 
 // Hooks the init first (it sets the cell before every run), then points its loads at the cell.
@@ -106,6 +108,8 @@ void install(const Handler& handler, void* detour, HandlerFn* original) {
 }  // namespace
 
 namespace player_system_guard {
+
+void setEquipmentUpdateSkipped(bool skipped) { g_skipEquipmentUpdate = skipped; }
 
 void installEarly() {
     uint8_t* block = allocateNearImage(kScratchSize + sizeof(uintptr_t));
