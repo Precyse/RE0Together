@@ -8,6 +8,7 @@
 #include "ds2/remote_player.h"
 #include "hooks.h"
 #include "log.h"
+#include "msvc_rtti.h"
 
 namespace {
 
@@ -31,6 +32,8 @@ enum Call : uint32_t {
 };
 
 thread_local bool t_remoteUpdate = false;
+std::atomic<bool> g_dropMissionNotify{false};
+uintptr_t g_missionNotify[2] = {};
 std::atomic<uint32_t> g_skip{0};
 
 bool skipped(Call call) { return t_remoteUpdate && (g_skip.load() & call) != 0; }
@@ -135,12 +138,24 @@ void hook(const char* name, uintptr_t address, void* detour, Fn* original) {
 
 namespace remote_update {
 
+void setDropMissionNotify(bool drop) {
+    g_dropMissionNotify = drop;
+    logger::write("remote_update: mission notifications of the remote's update are %s", drop ? "dropped" : "dispatched");
+}
+
+bool dropsMessage(uintptr_t messageVtable) {
+    return t_remoteUpdate && g_dropMissionNotify.load() && messageVtable &&
+           (messageVtable == g_missionNotify[0] || messageVtable == g_missionNotify[1]);
+}
+
 void setSkipMask(uint32_t mask) {
     g_skip = mask;
     logger::write("remote_update: the remote's player update skips mask %08x", mask);
 }
 
 void installEarly() {
+    g_missionNotify[0] = msvc_rtti::vtableOf("MsgMissionPlayerNotify");
+    g_missionNotify[1] = msvc_rtti::vtableOf("MsgMissionPlayerVoiceEventNotify");
     hook("player component update", kPlayerComponentUpdate, reinterpret_cast<void*>(&updateDetour), &g_update);
     hook("player update: entity step", 0x1401201a0, reinterpret_cast<void*>(&entityStepDetour), &g_entityStep);
     hook("player update: stance sync", 0x1407eeea0, reinterpret_cast<void*>(&stanceSyncDetour), &g_stanceSync);

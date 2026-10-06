@@ -9,6 +9,14 @@ namespace remote_update {
 
 constexpr uint32_t kSkipWholeUpdate = uint32_t{1} << 31;
 
+// Test toggle: the mission-player notifications (MsgMissionPlayerNotify, MsgMissionPlayerVoiceEventNotify) sent while the
+// remote's update runs are not dispatched. The mission or HUD side may take each one as "the player changed" and rebuild the
+// prompt widget.
+void setDropMissionNotify(bool drop);
+
+// Whether the message with this vtable, sent now on this thread, must not be dispatched (see setDropMissionNotify).
+bool dropsMessage(uintptr_t messageVtable);
+
 // Start-up, before the world loads.
 void installEarly();
 
