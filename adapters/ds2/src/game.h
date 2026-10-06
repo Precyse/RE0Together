@@ -132,8 +132,8 @@ std::vector<Cargo> backpackCargo(uint64_t playerKey);
 AddResult addBackpackCargo(uint64_t playerKey, const Cargo& piece);
 
 // Marks the baggage owner with this key (a remote body's network id) and its child owners active or not. An inactive
-// owner is skipped by the cargo menus' gather, so a partner's rack is not listed as the local player's. Refuses the
-// local player's own key. Any thread.
+// owner is skipped by the cargo menus' gather and their move check; an active one is listed and movable like any other
+// owner within reach (a move is reported by partner_cargo). Refuses the local player's own key. Any thread.
 void setOwnerActive(uint64_t ownerKey, bool active);
 
 // The address of the baggage owner with this key (0 = the local player's), 0 when there is none. Any thread.
