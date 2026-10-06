@@ -59,9 +59,17 @@ void onStart(uintptr_t sequence, const sequence_info::Info& info, const char* de
     hex(info.resource, resource);
     hex(info.entity, entity);
     hex(info.network, network);
-    logger::write("cutscene_log: Sequence start %p %s frame %d stop %d category %u resource %s entity %s network %s",
+    logger::writeUnlessRepeated("cutscene_log: Sequence start %p %s frame %d stop %d category %u resource %s entity %s network %s",
                   reinterpret_cast<void*>(sequence), decision, sequence_info::frame(sequence), info.stopFrame, info.category,
                   resource, entity, network);
+}
+
+void onUnread(uintptr_t sequence) {
+    if (!g_enabled) return;
+    const sequence_info::Probe p = sequence_info::probe(sequence);
+    logger::write("cutscene_log: Sequence start %p unread: ref %p flags %016llx holder %p resource %p vtable %p", reinterpret_cast<void*>(sequence),
+                  reinterpret_cast<void*>(p.ref), static_cast<unsigned long long>(p.flags), reinterpret_cast<void*>(p.holder),
+                  reinterpret_cast<void*>(p.resource), reinterpret_cast<void*>(p.resourceVtable));
 }
 
 }  // namespace cutscene_log

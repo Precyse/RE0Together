@@ -12,4 +12,7 @@ void enable();
 // One shared Sequence start the cutscene hook saw; `decision` says whether it was held or let start.
 void onStart(uintptr_t sequence, const sequence_info::Info& info, const char* decision);
 
+// A Sequence start whose resource could not be read as a SequenceResource: the raw walk, so the walk can be corrected.
+void onUnread(uintptr_t sequence);
+
 }  // namespace cutscene_log
