@@ -7,6 +7,7 @@
 
 namespace remote_update {
 
+// Bit 9 (200) makes the motion call run whole for the remote; by default the remote runs only its state step.
 constexpr uint32_t kSkipWholeUpdate = uint32_t{1} << 31;
 
 // Start-up, before the world loads.
