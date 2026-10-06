@@ -21,6 +21,9 @@ constexpr uintptr_t kOwnerActiveCheck = 0x14119b2e0;  // (owner) -> whether the 
 constexpr uintptr_t kCarrierPanel = 0x141569dc0;  // (menu controller): shows the selected carrier; it asks the headline getter
 constexpr uintptr_t kControllerModel = 0xE0, kModelSelected = 0xC1C, kModelOwnerCount = 0x48, kModelOwners = 0x50;
 constexpr uintptr_t kOwnerCarrierType = 0x10, kOwnerKey = 0x18;
+constexpr uintptr_t kMissionComplete = 0x141396730;  // (processor, mission, flag): an order in progress succeeds
+constexpr uintptr_t kTrackerSetState = 0x1413e2890;  // (tracker, mission id, bag id, state, ...): a piece record's state
+constexpr uintptr_t kMissionStateField = 0x22, kMissionIdField = 0x28;
 constexpr size_t kMaxCallersLogged = 24;
 
 std::atomic<bool> g_enabled{false};
@@ -39,6 +42,8 @@ bool firstTime(std::set<uintptr_t>& seen, uintptr_t address) {
 
 using GetterFn = uintptr_t (*)(uintptr_t ui);
 using ActiveFn = uint64_t (*)(uintptr_t owner);
+using Fn8 = uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+Fn8 g_originalComplete = nullptr, g_originalTrackerState = nullptr;
 using PanelFn = void (*)(uintptr_t controller, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 PanelFn g_originalPanel = nullptr;
 GetterFn g_originalGetter = nullptr;
@@ -62,6 +67,26 @@ uint64_t activeDetour(uintptr_t owner) {
         }
     }
     return answer;
+}
+
+// The delivery's own effects, in order: every piece record state change and the order's completion.
+uintptr_t completeDetour(uintptr_t a1, uintptr_t mission, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6, uintptr_t a7,
+                         uintptr_t a8) {
+    uint16_t state = 0;
+    uint64_t id = 0;
+    decima::safeRead(mission + kMissionStateField, state);
+    decima::safeRead(mission + kMissionIdField, id);
+    logger::write("orders_diag: order %llx completes (state %u) from %p", static_cast<unsigned long long>(id), state,
+                  reinterpret_cast<void*>(fileVa(_ReturnAddress())));
+    return g_originalComplete(a1, mission, a3, a4, a5, a6, a7, a8);
+}
+
+uintptr_t trackerStateDetour(uintptr_t a1, uintptr_t missionId, uintptr_t bagId, uintptr_t state, uintptr_t a5, uintptr_t a6,
+                             uintptr_t a7, uintptr_t a8) {
+    logger::write("orders_diag: piece record of order %llx bag %llx set to state %llu from %p",
+                  static_cast<unsigned long long>(missionId), static_cast<unsigned long long>(bagId),
+                  static_cast<unsigned long long>(state & 0xFF), reinterpret_cast<void*>(fileVa(_ReturnAddress())));
+    return g_originalTrackerState(a1, missionId, bagId, state, a5, a6, a7, a8);
 }
 
 // The owner the carrier panel is about to show (the controller's selected entry), logged once per distinct owner.
@@ -94,6 +119,10 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_originalGetter));
     hooks::install("orders carrier panel", ds2::at(kCarrierPanel), reinterpret_cast<void*>(&panelDetour),
                    reinterpret_cast<void**>(&g_originalPanel));
+    hooks::install("orders completion", ds2::at(kMissionComplete), reinterpret_cast<void*>(&completeDetour),
+                   reinterpret_cast<void**>(&g_originalComplete));
+    hooks::install("orders piece record state", ds2::at(kTrackerSetState), reinterpret_cast<void*>(&trackerStateDetour),
+                   reinterpret_cast<void**>(&g_originalTrackerState));
     hooks::install("orders owner-active check", ds2::at(kOwnerActiveCheck), reinterpret_cast<void*>(&activeDetour),
                    reinterpret_cast<void**>(&g_originalActive));
 }
@@ -102,6 +131,12 @@ void noteHandOverGather(uintptr_t query, uintptr_t remoteOwner, bool appended) {
     if (!g_enabled.load()) return;
     logger::write("orders_diag: the hand-over gather %p finished, the remote's owner %s", reinterpret_cast<void*>(query),
                   !remoteOwner ? "does not exist" : appended ? "was missing and carries order pieces: appended" : "was left as it is");
+}
+
+void noteTerminalAdd(uint32_t type, uint64_t orderId, uintptr_t terminal) {
+    if (!g_enabled.load()) return;
+    logger::write("orders_diag: piece kind %u (order %llx) added to the terminal owner %p", type,
+                  static_cast<unsigned long long>(orderId), reinterpret_cast<void*>(terminal));
 }
 
 void noteCarriedSet(const void* caller, uint32_t added) {
