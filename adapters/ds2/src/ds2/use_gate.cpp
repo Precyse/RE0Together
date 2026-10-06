@@ -17,8 +17,10 @@
 #include "decima/entity.h"
 #include "decima/localized_text.h"
 #include "decima/safe_read.h"
+#include "ds2/engine.h"
 #include "ds2/player.h"
 #include "ds2/remote_context.h"
+#include "ds2/remote_update.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -110,6 +112,7 @@ void dispatchDetour(uintptr_t handlers, uintptr_t lock, uintptr_t message, uint3
             g_sequenceNodes.erase(node);
         }
     }
+    if (remote_update::running() && remote_update::onMessage(type, handlers - ds2::kEntityHandlerList)) return;
     const bool toRemote = remote_context::enter(handlers);
     g_dispatch(handlers, lock, message, flags);
     remote_context::leave(toRemote);
