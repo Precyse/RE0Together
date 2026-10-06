@@ -324,6 +324,9 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
         g_held.id = weapon_wire::kHolstered;
         g_held.retryAt = now + kRetryDelayMs;
     }
+    // The engine clears the equipped byte of a weapon its owner's state did not equip, and some behaviors' update (the
+    // boomerang's, 0x142025f30) only reaches the fire gate while it is set, so it is put back every tick.
+    if (g_held.weapon && weaponAlive()) ds2::field<uint8_t>(g_held.weapon, kWeaponActive) = 1;
     if (g_held.fireCheckAt && now >= g_held.fireCheckAt) {
         g_held.fireCheckAt = 0;
         const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
