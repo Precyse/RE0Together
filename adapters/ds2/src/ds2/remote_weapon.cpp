@@ -39,6 +39,7 @@ constexpr uintptr_t kEntityParent = 0x80, kEntityFlags = 0x98;
 constexpr uintptr_t kWeaponUpdateGate = 0x142000790;  // DSWeaponBehaviorComponent slot 41(behavior, dt): runs the shot when +0x4D1 is set
 constexpr uintptr_t kWeaponEnabled = 0x363;     // byte: the weapon entity's update (0x141fa9850, 0x141fa9760) runs its behaviors only when set
 constexpr uintptr_t kWeaponBehaviorsReady = 0x21E0;  // byte: set by the entity's slot 38 (0x141fa9f60), which prepares its behaviors
+constexpr uintptr_t kWeaponAmmoReady = 0x24B9;  // byte: the behavior's can't-fire check (slot 60, 0x14202a500) refuses a weapon whose ammo flag is 0
 constexpr size_t kWeaponEnableSlot = 28, kWeaponPrepareSlot = 38;  // DSWeaponEntity vtable slots: enable (0x141fa99e0), prepare behaviors
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
 constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: what the weapon's update made of it
@@ -304,10 +305,11 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
         logger::write("remote_weapon: the first shot, %llu ms later: the engine ran %u shots and made %u bullets",
                       static_cast<unsigned long long>(kFireCheckDelayMs), g_engineShots.load(), bulletsMade() - g_held.bulletsAtFire);
         if (behavior) {
-            logger::write("remote_weapon: the update gate ran %u times for the body's weapon; fire state %u, request %u, pellets %u",
+            logger::write("remote_weapon: the update gate ran %u times for the body's weapon; fire state %u, request %u, pellets %u, weapon ammo byte %u",
                           g_gateRuns.load(), ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorState),
                           ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorRequest),
-                          ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorPellets));
+                          ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorPellets),
+                          ds2::field<uint8_t>(g_held.weapon, kWeaponAmmoReady));
         }
     }
     if (g_held.probeAt && now >= g_held.probeAt) {
