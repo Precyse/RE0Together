@@ -1,16 +1,20 @@
 #include "floor_items_sync.h"
 
+#include <intrin.h>
+
 #include <cstring>
 #include <mutex>
 #include <vector>
 
 #include "debug_stats.h"
 #include "floor_pending.h"
+#include "floor_snapshot.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
 #include "hooks.h"
 #include "input_redirect.h"
+#include "log.h"
 #include "protocol.h"
 
 namespace {
@@ -23,7 +27,7 @@ using floor_pending::Event;
 using floor_pending::kMatchDistance;
 using Records = std::array<game::ItemPutRecord, game::kItemPutRecordCount>;
 
-constexpr size_t kMaxIncoming = 64;
+constexpr size_t kMaxIncoming = floor_snapshot::kMaxEvents + 64;  // a snapshot arrives in one burst
 constexpr uint32_t kSettleFramesAfterArrival = 30;
 
 using PutFunction = void*(__fastcall*)(void* self, void* edx, const game::ItemDesc* desc, const Vec3* pos,
@@ -43,6 +47,7 @@ bool g_applying = false;  // game thread only: a network event is being applied,
 std::mutex g_mutex;
 std::vector<Incoming> g_incoming;  // guarded by g_mutex
 floor_pending::Queue g_pending;    // game thread only: events for rooms that are not loaded and settled
+floor_pending::Queue g_journal;    // game thread only: floor changes since the last save or load, for a joining guest
 uint32_t g_settleFrames = 0;       // game thread only: frames left before the arrived room takes events
 
 bool readRecords(Records& out) {
@@ -107,8 +112,12 @@ void sendTake(uint32_t itemId, const Vec3& pos) {
 }
 
 // A remote-owned character's replayed input must not change the floor here: its own machine decides and announces.
+// The room script puts the map items itself on every machine that loads the room: announcing those would duplicate
+// them for a peer already there (and a pending put would duplicate them at its next load). Only their pickup crosses.
 void* __fastcall putDetour(void* self, void* edx, const game::ItemDesc* desc, const Vec3* pos, const Vec3* rot) {
-    if (g_applying) return g_originalPut(self, edx, desc, pos, rot);
+    if (g_applying || reinterpret_cast<uintptr_t>(_ReturnAddress()) == game::kScriptItemPutReturn) {
+        return g_originalPut(self, edx, desc, pos, rot);
+    }
     if (input_redirect::replayingRemoteInput()) return nullptr;
     game::ItemDesc descCopy{};
     Vec3 posCopy{};
@@ -117,7 +126,10 @@ void* __fastcall putDetour(void* self, void* edx, const game::ItemDesc* desc, co
                           game::readMemory(reinterpret_cast<uintptr_t>(pos), posCopy) &&
                           game::readMemory(reinterpret_cast<uintptr_t>(rot), rotCopy);
     void* item = g_originalPut(self, edx, desc, pos, rot);
-    if (item && readable) sendPut(descCopy, posCopy, rotCopy);
+    if (item && readable) {
+        sendPut(descCopy, posCopy, rotCopy);
+        g_journal.add(game_state::currentRoom(), {false, descCopy.itemId, descCopy.count, posCopy, rotCopy});
+    }
     return item;
 }
 
@@ -129,11 +141,15 @@ void* __fastcall removeDetour(void* self, void* edx, void* item) {
     Vec3 pos{};
     const bool known = itemIdOf(address, itemId) && readPosition(address, pos);
     void* result = g_originalRemove(self, edx, item);
-    if (known) sendTake(itemId, pos);
+    if (known) {
+        sendTake(itemId, pos);
+        g_journal.add(game_state::currentRoom(), {true, itemId, 0, pos, {}});
+    }
     return result;
 }
 
 void applyPut(const Event& event) {
+    if (event.onlyIfAbsent && findItem(event.itemId, event.pos)) return;
     const uintptr_t table = game::readPointer(game::kItemPutGlobal);
     const game::ItemDesc desc{event.itemId, event.count, 0};
     g_applying = true;
@@ -185,6 +201,7 @@ void onTick() {
     const bool ready = roomReady();
     if (ready) applyPending(room);
     for (const Incoming& item : incoming) {
+        g_journal.add(item.room, item.event);
         if (ready && item.room == room) {
             apply(item.event);
             continue;
@@ -213,7 +230,20 @@ void onFrame(const GameFrame& frame) {
         FloorTake message;
         std::memcpy(&message, frame.payload.data(), sizeof(message));
         enqueue(message.room, {true, message.itemId, 0, message.pos, {}});
+    } else if (frame.type == proto::kMsgFloorSnapshot) {
+        const auto events = floor_snapshot::decode(frame.payload);
+        if (!events) return;
+        for (const floor_pending::RoomEvent& item : *events) enqueue(item.room, item.event);
     }
+}
+
+void clearJournal() { g_journal.clear(); }
+
+void sendJournal() {
+    const std::vector<floor_pending::RoomEvent> events = g_journal.all();
+    if (events.empty()) return;
+    g_net->send(proto::kMsgFloorSnapshot, true, proto::kSlotAll, floor_snapshot::encode(events));
+    logger::write("floor_items_sync: %zu floor changes sent to the joining guest", events.size());
 }
 
 void onArrival() { g_settleFrames = kSettleFramesAfterArrival; }

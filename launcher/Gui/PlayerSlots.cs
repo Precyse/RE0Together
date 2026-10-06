@@ -4,10 +4,10 @@ namespace CoopLauncher.Gui;
 /// and the partner's ping. An empty seat reads Open.</summary>
 internal sealed class PlayerSlots : Control
 {
-    private const int CardHeight = 64;
-    private const int PadX = 14;
-    private const int NameX = PadX + Theme.LampSize + 12;
-    private const int MetaLineHeight = 16;
+    private static readonly int CardHeight = Theme.Scale(64);
+    private static readonly int PadX = Theme.Scale(14);
+    private static readonly int NameX = PadX + Theme.LampSize + Theme.Scale(12);
+    private static readonly int MetaLineHeight = Theme.Scale(16);
     private const string OpenSeat = "Open";
 
     private IReadOnlyList<PlayerSlot> _players = Array.Empty<PlayerSlot>();

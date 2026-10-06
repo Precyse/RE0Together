@@ -150,6 +150,13 @@ void drawToasts(const std::vector<toast_queue::Visible>& toasts, float displayWi
     }
 }
 
+// The partner status line, top-right, always on while it has text.
+void drawPartnerLine(const std::string& line, float displayWidth) {
+    ImGui::SetNextWindowPos(ImVec2(displayWidth - kMargin, kMargin), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    if (ImGui::Begin("partner", nullptr, kPanelFlags)) ImGui::TextUnformatted(line.c_str());
+    ImGui::End();
+}
+
 // Mod name in the bottom-right corner while no player is loaded (title screen and main menu).
 void drawTitleMark(const ImVec2& display) {
     ImGui::SetNextWindowPos(ImVec2(display.x - kMargin, display.y - kMargin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
@@ -160,7 +167,8 @@ void drawTitleMark(const ImVec2& display) {
     ImGui::End();
 }
 
-void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>& toasts, bool showTitle) {
+void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>& toasts, const std::string& partnerLine,
+               bool showTitle) {
     ImVec2 size;
     if (!backbufferSize(device, size) || !ensureImGui(device)) return;
     ImGuiIO& io = ImGui::GetIO();
@@ -179,6 +187,7 @@ void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>
         ImGui::End();
     }
     if (showTitle) drawTitleMark(size);
+    if (!partnerLine.empty()) drawPartnerLine(partnerLine, size.x);
     drawToasts(toasts, size.x);
     ImGui::Render();
     ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
@@ -189,8 +198,9 @@ void frame(IDirect3DDevice9* device) {
     pollToggle();
     pollScroll();
     const auto toasts = toast_queue::visible();
+    const std::string partnerLine = debug_stats::partnerLine();
     const bool showTitle = game::controlled() == 0;
-    if (g_visible || showTitle || !toasts.empty()) drawFrame(device, toasts, showTitle);
+    if (g_visible || showTitle || !toasts.empty() || !partnerLine.empty()) drawFrame(device, toasts, partnerLine, showTitle);
 }
 
 void invalidate(IDirect3DDevice9*) {

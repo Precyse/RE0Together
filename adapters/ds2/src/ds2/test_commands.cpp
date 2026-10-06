@@ -6,6 +6,8 @@
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
+//   attach.txt     "mode"     attaches the body's weapon again with that SetParent mode and logs the weapon's and the body's position
+//   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   mission.txt    "id"      logs the mission object (hex id) and its resource as qwords, and 0x60 bytes behind each pointer in the
 //                             resource, to find a delivery's destination (a position for tp.txt)
@@ -17,16 +19,19 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <set>
 #include <string>
 
 #include "decima/safe_read.h"
+#include "ds2/camp_alert.h"
 #include "ds2/engine.h"
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/health_watch.h"
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
+#include "ds2/remote_weapon.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
 #include "equip_sync.h"
@@ -273,6 +278,8 @@ void tick() {
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
+    if (const std::string text = takeCommand(L"attach.txt"); !text.empty()) remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, 10));
+    if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"mission.txt"); !text.empty()) logMission(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);

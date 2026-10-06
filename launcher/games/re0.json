@@ -1,5 +1,5 @@
 { "id": "re0", "name": "Resident Evil 0 HD", "steamAppId": 339340, "exe": "re0hd.exe",
-  "maxPlayers": 2, "port": 27960, "characters": ["Rebecca", "Billy"],
+  "maxPlayers": 2, "port": 27960, "characters": ["Rebecca", "Billy"], "supportedBuilds": [17178773],
   "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", "adapterIni": "coop/adapter.ini" },
   "adapterLog": "coop/adapter.log" }

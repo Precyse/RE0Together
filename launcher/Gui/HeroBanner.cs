@@ -5,11 +5,11 @@ namespace CoopLauncher.Gui;
 /// <summary>The selected game's Steam hero art, shaded from the left so its logo reads on top of it.</summary>
 internal sealed class HeroBanner : Control
 {
-    private const int BannerHeight = 170;
-    private const int LogoPadX = 20;
-    private const int LogoPadBottom = 18;
-    private const int LogoMaxWidth = 260;
-    private const int LogoMaxHeight = 90;
+    private static readonly int BannerHeight = Theme.Scale(170);
+    private static readonly int LogoPadX = Theme.Scale(20);
+    private static readonly int LogoPadBottom = Theme.Scale(18);
+    private static readonly int LogoMaxWidth = Theme.Scale(260);
+    private static readonly int LogoMaxHeight = Theme.Scale(90);
     private const int ShadeLeftAlpha = 235;
     private const int ShadeMidAlpha = 140;
     private const float ShadeMid = 0.45f;

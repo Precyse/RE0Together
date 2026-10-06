@@ -27,9 +27,11 @@
 #include "net_pad.h"
 #include "net_trace.h"
 #include "pad_frame.h"
+#include "partner_hud.h"
 #include "party_mode.h"
 #include "phase_watch.h"
 #include "player_damage.h"
+#include "resync.h"
 #include "session_slot.h"
 #include "scene.h"
 #include "state_correction.h"
@@ -42,23 +44,39 @@ constexpr const char* kGameId = "re0";
 constexpr auto kSendInterval = std::chrono::microseconds(static_cast<int>(1'000'000 / state_sync::kSendHz));
 constexpr auto kLogInterval = std::chrono::seconds(1);
 constexpr float kPeerToastSeconds = 4.0f;
+constexpr float kHostLeftToastSeconds = 10.0f;
 
 Clock::time_point g_lastSend;
 Clock::time_point g_lastLog;
 uint32_t g_seq = 0;
 std::map<uint8_t, std::string> g_knownPeers;  // slot -> name, as of the last tick
+SessionSnapshot g_lastSession;                // the previous tick's session without its peers
+
+// This guest's host went away: nothing played from here on reaches the host's save.
+void announceHostLeft(const std::string& name) {
+    debug_overlay::toast("Host left: not saved", kHostLeftToastSeconds);
+    partner_hud::onHostLeft();
+    logger::write("state_sync: host %s left, this game is not saved", name.c_str());
+}
 
 // Toasts peers that appeared or disappeared since the previous tick.
 void announcePeerChanges(const SessionSnapshot& session) {
     std::map<uint8_t, std::string> now;
     for (const PeerInfo& peer : session.peers) now[peer.slot] = peer.name;
     for (const auto& [slot, name] : now) {
-        if (!g_knownPeers.contains(slot)) debug_overlay::toast(("Co-op player joined: " + name).c_str(), kPeerToastSeconds);
+        if (g_knownPeers.contains(slot)) continue;
+        debug_overlay::toast(("Co-op player joined: " + name).c_str(), kPeerToastSeconds);
+        partner_hud::onPeerJoined();
     }
     for (const auto& [slot, name] : g_knownPeers) {
-        if (!now.contains(slot)) debug_overlay::toast("Co-op player left", kPeerToastSeconds);
+        if (now.contains(slot)) continue;
+        debug_overlay::toast(("Co-op player left: " + name).c_str(), kPeerToastSeconds);
+        const bool wasGuest = g_lastSession.localSlot != g_lastSession.hostSlot;
+        if (g_lastSession.linked && wasGuest && slot == g_lastSession.hostSlot) announceHostLeft(name);
     }
     g_knownPeers = std::move(now);
+    g_lastSession = session;
+    g_lastSession.peers.clear();
 }
 
 void sendLocalState(NetClient& net) {
@@ -149,7 +167,11 @@ void onFrame(const GameFrame& frame) {
         inventory_sync::onFrame(frame);
         return;
     }
-    if (frame.type == proto::kMsgFloorPut || frame.type == proto::kMsgFloorTake) {
+    if (frame.type == proto::kMsgResyncRequest) {
+        resync::onFrame(frame);
+        return;
+    }
+    if (frame.type == proto::kMsgFloorPut || frame.type == proto::kMsgFloorTake || frame.type == proto::kMsgFloorSnapshot) {
         floor_items_sync::onFrame(frame);
         return;
     }
@@ -164,12 +186,14 @@ void tick(NetClient& net) {
     announcePeerChanges(session);
     net_pad::onSession(session);
     character_owner::onSession(session);
+    partner_hud::onNetTick(session);
     menu_mirror::onNetTick(net);
     command_input::onNetTick();
     door_travel::onNetTick();
     phase_watch::onNetTick();
     session_slot::onNetTick(net);
     auto_join::onNetTick();
+    resync::onNetTick();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

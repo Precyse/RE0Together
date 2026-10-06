@@ -7,14 +7,15 @@
 
 #include "enemy_state.h"
 #include "game.h"
+#include "hooks.h"
 #include "log.h"
-#include "set_action_thunk.h"
+#include "slot_thunk.h"
 
 namespace {
 
 struct Patched {
     uintptr_t vtable;
-    uintptr_t original;
+    uintptr_t original;  // setAction
     size_t argc;
 };
 
@@ -47,6 +48,26 @@ void __stdcall onSetAction(void* enemy, uintptr_t original, const int32_t* args)
     callOriginal(original, argcOf(original), enemy, args);
 }
 
+// The enemy's per-frame update. What the think hook does not cover (the per-action updates of every class, the
+// decisions of the other 12 update implementations) also writes the record directly, bypassing setAction, so a
+// puppet's record is put back as the update found it: only the owner's record, applied through setAction, changes it.
+void __stdcall onUpdate(void* enemy, uintptr_t original, const int32_t*) {
+    const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
+    enemy_action_rule::Action before;
+    const bool hold = enemy_state::puppetOwnsAction(self) && enemy_action::read(self, before);
+    game::callThiscall<void>(original, enemy);
+    if (hold) game::writeMemory(self + game::kEnemyActionOffset, before.word);
+}
+
+using ThinkFunction = void(__fastcall*)(void* enemy, void* edx);
+ThinkFunction g_originalThink = nullptr;
+
+// The AI's decision step (game.h kEnemyThinkFunction): on a puppet the owner decides, so it does not run at all.
+void __fastcall onThink(void* enemy, void* edx) {
+    if (enemy_state::puppetOwnsAction(reinterpret_cast<uintptr_t>(enemy))) return;
+    g_originalThink(enemy, edx);
+}
+
 bool requestUnguarded(uintptr_t enemy, const enemy_action_rule::Action& action) {
     const Patched* patched = patchedFor(game::readPointer(enemy));
     if (!patched) return false;
@@ -63,21 +84,28 @@ bool read(uintptr_t enemy, enemy_action_rule::Action& out) {
 }
 
 bool install() {
-    auto* memory = static_cast<uint8_t*>(VirtualAlloc(nullptr, game::kEnemyVtables.size() * set_action_thunk::kThunkSize,
-                                                      MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    constexpr size_t kThunksPerVtable = 2;  // setAction and update
+    auto* memory = static_cast<uint8_t*>(VirtualAlloc(
+        nullptr, game::kEnemyVtables.size() * kThunksPerVtable * slot_thunk::kThunkSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
     if (!memory) return false;
     size_t skipped = 0;
     for (const uintptr_t vtable : game::kEnemyVtables) {
+        uint8_t* thunks = memory + g_patchedCount * kThunksPerVtable * slot_thunk::kThunkSize;
         const size_t argc = argcOf(game::readPointer(vtable + game::kEnemySetActionSlot * sizeof(uint32_t)));
         const uintptr_t original =
-            argc ? set_action_thunk::patchVtable(vtable, memory + g_patchedCount * set_action_thunk::kThunkSize, argc,
-                                                 onSetAction)
-                 : 0;
-        if (original) g_patched[g_patchedCount++] = {vtable, original, argc};
+            argc ? slot_thunk::patchVtable(vtable, game::kEnemySetActionSlot, thunks, argc, onSetAction) : 0;
+        const uintptr_t update =
+            original ? slot_thunk::patchVtable(vtable, game::kEnemyUpdateSlot, thunks + slot_thunk::kThunkSize, 0,
+                                               onUpdate)
+                     : 0;
+        if (update) g_patched[g_patchedCount++] = {vtable, original, argc};
         else ++skipped;
     }
     logger::write("enemy_action: patched %zu of %zu vtables", g_patchedCount, game::kEnemyVtables.size());
-    return skipped == 0;
+    const bool thinkHooked = hooks::install("enemy think", game::kEnemyThinkFunction, reinterpret_cast<void*>(onThink),
+                                            reinterpret_cast<void**>(&g_originalThink));
+    return skipped == 0 && thinkHooked;
 }
 
 bool request(uintptr_t enemy, const enemy_action_rule::Action& action) {

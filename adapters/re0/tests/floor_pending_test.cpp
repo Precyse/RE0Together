@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../src/floor_pending.h"
+#include "../src/floor_snapshot.h"
 
 namespace {
 
@@ -78,12 +79,60 @@ void testTakeReturnsOrderAndClears() {
 
 }  // namespace
 
+void testAllAndClear() {
+    Queue queue;
+    queue.add(kRoomA, put(kHerb));
+    queue.add(kRoomA, put(kKnife));
+    queue.add(kRoomB, take(kHerb));
+    const auto all = queue.all();
+    check(all.size() == 3 && queue.total() == 3, "all lists every event and leaves them stored");
+    queue.clear();
+    check(queue.total() == 0 && queue.all().empty(), "clear empties every room");
+}
+
+void testSnapshotRoundTrip() {
+    Queue queue;
+    queue.add(kRoomA, {false, kHerb, 3, {1.0f, 2.0f, 3.0f}, {0.0f, 0.5f, 0.0f}});
+    queue.add(kRoomB, take(kKnife, {4.0f, 5.0f, 6.0f}));
+    const std::vector<uint8_t> bytes = floor_snapshot::encode(queue.all());
+    const auto decoded = floor_snapshot::decode(bytes);
+    check(decoded && decoded->size() == 2, "snapshot decodes both events");
+    if (!decoded) return;
+    bool sawPut = false;
+    bool sawTake = false;
+    for (const auto& [room, event] : *decoded) {
+        check(event.onlyIfAbsent, "decoded events are marked onlyIfAbsent");
+        sawPut |= room == kRoomA && !event.isTake && event.itemId == kHerb && event.count == 3 && event.pos[2] == 3.0f &&
+                  event.rot[1] == 0.5f;
+        sawTake |= room == kRoomB && event.isTake && event.itemId == kKnife && event.pos[0] == 4.0f;
+    }
+    check(sawPut && sawTake, "snapshot keeps room, item, count, position and rotation");
+}
+
+void testSnapshotRejectsBadSizes() {
+    check(!floor_snapshot::decode({}), "empty payload rejected");
+    std::vector<uint8_t> bytes = floor_snapshot::encode({{kRoomA, put(kHerb)}});
+    bytes.pop_back();
+    check(!floor_snapshot::decode(bytes), "truncated payload rejected");
+    check(floor_snapshot::decode(floor_snapshot::encode({}))->empty(), "empty journal round-trips");
+}
+
+void testSnapshotCapsEvents() {
+    std::vector<floor_pending::RoomEvent> many(floor_snapshot::kMaxEvents + 10, {kRoomA, put(kHerb)});
+    const auto decoded = floor_snapshot::decode(floor_snapshot::encode(many));
+    check(decoded && decoded->size() == floor_snapshot::kMaxEvents, "snapshot is capped");
+}
+
 int main() {
     testTakeCancelsMatchingPut();
     testTakeThatDoesNotMatchIsStored();
     testTakeCancelsNearestPut();
     testCapDropsOldest();
     testTakeReturnsOrderAndClears();
+    testAllAndClear();
+    testSnapshotRoundTrip();
+    testSnapshotRejectsBadSizes();
+    testSnapshotCapsEvents();
     std::printf(g_failures ? "%d failure(s)\n" : "all checks passed\n", g_failures);
     return g_failures ? 1 : 0;
 }
