@@ -63,6 +63,7 @@ using NodeFn = void (*)(uintptr_t node);
 ApplyFn g_apply = nullptr;
 
 std::atomic<game::CombatRole> g_role{game::CombatRole::None};
+std::atomic<bool> g_godMode{false};
 
 std::mutex g_mutex;  // guards everything below (the engine's threads divert hits, the net thread takes and gives)
 std::vector<combat_wire::EnemyHit> g_hitsOut;
@@ -166,6 +167,7 @@ struct Waiting {
 std::vector<Waiting> g_forwardWaiting;  // simulation thread only
 
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
+    if (g_godMode && params && victim && victim == remote_player::samEntity()) return;
     const combat_log::Snapshot snapshot = combat_log::before(victim, params);
     if (params && victim && !remote_apply::active()) {
         const game::CombatRole role = g_role;
@@ -340,6 +342,11 @@ void installEarly() {
     hooks::install("combat damage", ds2::at(kApplyDamage), reinterpret_cast<void*>(&applyDetour),
                    reinterpret_cast<void**>(&g_apply));
     sim_tick::add(&tick, "combat", sim_tick::Gate::Gameplay);
+}
+
+void setGodMode(bool on) {
+    g_godMode = on;
+    if (on) logger::write("god_mode: on (test)");
 }
 
 }  // namespace combat_hook
