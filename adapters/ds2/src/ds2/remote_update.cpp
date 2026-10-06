@@ -1,16 +1,11 @@
 #include "ds2/remote_update.h"
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
-#include <map>
-#include <mutex>
-#include <vector>
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/remote_player.h"
-#include "msvc_rtti.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -18,6 +13,7 @@ namespace {
 
 constexpr uintptr_t kPlayerComponentUpdate = 0x1407eea70;
 constexpr uintptr_t kComponentOwner = 0x48;
+constexpr uintptr_t kPlayerStateObject = 0x1b8;  // the component's player state machine object
 
 // The calls of the update, by the bit that skips them. Every hooked function is shared with other code, so a hook skips
 // only while the update of the remote's component is running on this thread.
@@ -34,12 +30,7 @@ enum Call : uint32_t {
     kMotionWhole = 1u << 9,  // not a skip: the motion call runs whole for the remote instead of its tail step only
 };
 
-constexpr auto kMessageLogEvery = std::chrono::seconds(5);
-
 thread_local bool t_remoteUpdate = false;
-std::mutex g_messageMutex;
-std::map<std::pair<uintptr_t, int>, int> g_messageCounts;  // (message vtable, target: 0 Sam, 1 the remote, 2 other) -> count
-std::chrono::steady_clock::time_point g_messageLoggedAt;
 std::atomic<uint32_t> g_skip{0};
 
 bool skipped(Call call) { return t_remoteUpdate && (g_skip.load() & call) != 0; }
@@ -61,42 +52,6 @@ QueryFn g_query = nullptr;
 TestFn g_stateTest = nullptr;
 BroadcastFn g_broadcast = nullptr;
 
-// The plugins of the player's state machine that look at use locations and terminals. They are embedded in the state object
-// (the one at the component's +0x1b8, 0xe30 bytes); a plugin's +0xa byte is its "suspended" flag.
-constexpr uintptr_t kPlayerStateObject = 0x1b8;
-constexpr uintptr_t kStateSize = 0xe30;
-constexpr uintptr_t kPluginSuspended = 0xa;
-constexpr const char* kUsePlugins[] = {"DSPlayerUseLocationActionPlugin", "DSPlayerInteractiveActionPlugin",
-                                       "DSPlayerHandTerminalActionPlugin"};
-
-// Resolved once (the RTTI lookup scans the module).
-const std::vector<uintptr_t>& usePluginVtables() {
-    static const std::vector<uintptr_t> vtables = [] {
-        std::vector<uintptr_t> found;
-        for (const char* name : kUsePlugins) {
-            if (const uintptr_t vtable = msvc_rtti::vtableOf(name)) found.push_back(vtable);
-        }
-        return found;
-    }();
-    return vtables;
-}
-
-// A plugin sits in the state object itself or is pointed at from it: both are looked at.
-void suspendUsePlugins(uintptr_t component) {
-    static bool logged = false;
-    const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
-    for (const uintptr_t vtable : usePluginVtables()) {
-        for (uintptr_t offset = 0; state && offset < kStateSize; offset += sizeof(uintptr_t)) {
-            const uintptr_t word = ds2::field<uintptr_t>(state, offset);
-            const uintptr_t plugin = word == vtable ? state + offset : decima::readPointer(word) == vtable ? word : 0;
-            if (!plugin) continue;
-            ds2::field<uint8_t>(plugin, kPluginSuspended) = 1;
-            if (!logged) logger::write("remote_update: use plugin %p suspended (state +0x%llx)", reinterpret_cast<void*>(plugin), static_cast<unsigned long long>(offset));
-        }
-    }
-    logged = true;
-}
-
 // Diagnostic: logs every change of the remote's state object or of its vtable (file VA) with what the body is doing then, to
 // name the window in which the object stops being a player state.
 void noteState(const char* when, uintptr_t component) {
@@ -115,7 +70,6 @@ uint64_t updateDetour(uintptr_t component, uintptr_t message) {
     const uintptr_t remote = remote_player::entity();
     if (!remote || ds2::field<uintptr_t>(component, kComponentOwner) != remote) return g_update(component, message);
     if (g_skip.load() & remote_update::kSkipWholeUpdate) return 0;
-    if (g_skip.load() & remote_update::kSuspendUsePlugins) suspendUsePlugins(component);
     noteState("before", component);
     t_remoteUpdate = true;
     const uint64_t result = g_update(component, message);
@@ -180,26 +134,6 @@ void hook(const char* name, uintptr_t address, void* detour, Fn* original) {
 }  // namespace
 
 namespace remote_update {
-
-bool running() { return t_remoteUpdate; }
-
-bool onMessage(uintptr_t messageVtable, uintptr_t target) {
-    if (!t_remoteUpdate) return false;
-    const int kind = target == remote_player::samEntity() ? 0 : target == remote_player::entity() ? 1 : 2;
-    std::lock_guard lock(g_messageMutex);
-    ++g_messageCounts[{messageVtable, kind}];
-    const auto now = std::chrono::steady_clock::now();
-    if (now - g_messageLoggedAt >= kMessageLogEvery) {
-        g_messageLoggedAt = now;
-        for (const auto& [key, count] : g_messageCounts) {
-            logger::write("remote_update: messages from the remote's update: vtable %p to %s x%d",
-                          reinterpret_cast<void*>(key.first - ds2::at(ds2::kImageBase) + ds2::kImageBase),
-                          key.second == 0 ? "Sam" : key.second == 1 ? "the remote" : "another entity", count);
-        }
-        g_messageCounts.clear();
-    }
-    return kind == 0 && (g_skip.load() & kBlockMessagesToSam) != 0;
-}
 
 void setSkipMask(uint32_t mask) {
     g_skip = mask;
