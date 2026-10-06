@@ -251,9 +251,7 @@ bool replayAreaChange(const story_wire::Event& event) {
 
 void replayMission(const story_wire::Event& event) {
     const auto kind = static_cast<story_wire::Kind>(event.kind);
-    const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
-    const uintptr_t mission =
-        system ? reinterpret_cast<uintptr_t (*)(uintptr_t, uint64_t)>(ds2::at(kMissionById))(system, event.missionId) : 0;
+    const uintptr_t mission = game::missionById(event.missionId);
     const uintptr_t c = controller();
     if (!mission || !c) {
         logger::write("story: mission %llx not found here, event dropped", static_cast<unsigned long long>(event.missionId));
@@ -343,6 +341,11 @@ void installEarly() {
 }  // namespace story
 
 namespace game {
+
+uintptr_t missionById(uint64_t id) {
+    const uintptr_t system = decima::readPointer(ds2::at(kMissionSystemGlobal));
+    return system ? reinterpret_cast<uintptr_t (*)(uintptr_t, uint64_t)>(ds2::at(kMissionById))(system, id) : 0;
+}
 
 void setStoryRole(bool host, bool guest) {
     g_host = host;

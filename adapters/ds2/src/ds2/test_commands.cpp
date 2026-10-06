@@ -7,6 +7,8 @@
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
+//   mission.txt    "id"      logs the mission object (hex id) and its resource as qwords, and 0x60 bytes behind each pointer in the
+//                             resource, to find a delivery's destination (a position for tp.txt)
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -46,6 +48,8 @@ constexpr uintptr_t kWeaponCount = 0x30, kWeaponEntries = 0x38, kWeaponId = 0x20
 constexpr uintptr_t kBaggageCatalogue = 0x14623E540;  // +0x18 count, +0x20 the DSGameBaggageListItem pointers
 constexpr uintptr_t kCatalogueCount = 0x18, kCatalogueItems = 0x20, kItemContents = 0x50, kItemKind = 0x44;
 constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: the player's current area
+constexpr uintptr_t kMissionResource = 0x10;
+constexpr size_t kMissionDumpBytes = 0x80, kResourceDumpBytes = 0x108, kPointeeDumpBytes = 0x60;
 constexpr int kMaxListedConfigs = 40;
 constexpr size_t kMaxFaultsLogged = 30;
 constexpr size_t kStackWordsScanned = 96;
@@ -223,6 +227,35 @@ void logBodyPieces() {
 }
 
 
+void logQwords(const char* what, uintptr_t address, size_t bytes) {
+    for (size_t offset = 0; offset < bytes; offset += 4 * sizeof(uint64_t)) {
+        uint64_t q[4] = {};
+        for (size_t i = 0; i < 4 && offset + i * sizeof(uint64_t) < bytes; ++i) decima::safeRead(address + offset + i * sizeof(uint64_t), q[i]);
+        logger::write("test_commands: %s +%03zx %016llx %016llx %016llx %016llx", what, offset, static_cast<unsigned long long>(q[0]),
+                      static_cast<unsigned long long>(q[1]), static_cast<unsigned long long>(q[2]), static_cast<unsigned long long>(q[3]));
+    }
+}
+
+void logMission(const std::string& text) {
+    unsigned long long id = 0;
+    if (sscanf(text.c_str(), "%llx", &id) != 1) return;
+    const uintptr_t mission = game::missionById(id);
+    const uintptr_t resource = mission ? decima::readPointer(mission + kMissionResource) : 0;
+    logger::write("test_commands: mission %llx at %p, resource %p", id, reinterpret_cast<void*>(mission), reinterpret_cast<void*>(resource));
+    if (!resource) return;
+    logQwords("mission", mission, kMissionDumpBytes);
+    logQwords("resource", resource, kResourceDumpBytes);
+    for (size_t offset = 0; offset < kResourceDumpBytes; offset += sizeof(uintptr_t)) {
+        const uintptr_t target = decima::readPointer(resource + offset);
+        uint64_t probe = 0;
+        if (target > 0x10000 && decima::safeRead(target, probe)) {
+            char label[24];
+            snprintf(label, sizeof(label), "res+%zx->", offset);
+            logQwords(label, target, kPointeeDumpBytes);
+        }
+    }
+}
+
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
     if (sscanf(text.c_str(), "%llx", &address) == 1) health_watch::arm(static_cast<uintptr_t>(address));
@@ -241,6 +274,7 @@ void tick() {
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
+    if (const std::string text = takeCommand(L"mission.txt"); !text.empty()) logMission(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }
 
