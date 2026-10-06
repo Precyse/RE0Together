@@ -49,6 +49,8 @@ constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: th
 constexpr int kMaxListedConfigs = 40;
 constexpr size_t kMaxFaultsLogged = 30;
 constexpr size_t kStackWordsScanned = 96;
+constexpr uintptr_t kComponentOwner = 0x48;  // a component's entity
+constexpr uintptr_t kComponentLink = 0x98;   // the component its owner's update reads (what the BB pod caches)
 constexpr int kReturnsLogged = 10;
 constexpr ULONGLONG kPollMs = 500;
 constexpr uintptr_t kImageSpan = 0x20000000;
@@ -260,6 +262,26 @@ void logStackReturns(uintptr_t stack, uintptr_t base) {
     logger::write("test_commands:   stack returns:%s", line.c_str());
 }
 
+// Where the likely component registers point: the object, its vtable (file va, `disasm.py vtname` gives the class), its
+// owner entity (+0x48) and the remote body's entity.
+void logRegisters(const CONTEXT& context, uintptr_t base) {
+    const struct { const char* name; DWORD64 value; } registers[] = {{"rcx", context.Rcx}, {"rdx", context.Rdx}, {"rbx", context.Rbx},
+                                                                       {"rsi", context.Rsi}, {"rdi", context.Rdi}, {"r8", context.R8}};
+    for (const auto& reg : registers) {
+        uintptr_t vtable = 0, owner = 0;
+        decima::safeRead(reg.value, vtable);
+        decima::safeRead(reg.value + kComponentOwner, owner);
+        uintptr_t linked = 0, linkedVtable = 0;
+        decima::safeRead(reg.value + kComponentLink, linked);
+        decima::safeRead(linked, linkedVtable);
+        logger::write("test_commands:   %s=%p vtable=%p owner=%p, +0x98 -> %p (vtable %p); Sam's entity %p, remote entity %p", reg.name,
+                      reinterpret_cast<void*>(reg.value), reinterpret_cast<void*>(vtable - base + ds2::kImageBase),
+                      reinterpret_cast<void*>(owner), reinterpret_cast<void*>(linked),
+                      reinterpret_cast<void*>(linkedVtable - base + ds2::kImageBase), reinterpret_cast<void*>(remote_player::samEntity()),
+                      reinterpret_cast<void*>(remote_player::entity()));
+    }
+}
+
 LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
     static size_t logged = 0;
     const uintptr_t at = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
@@ -272,6 +294,7 @@ LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
         logger::write("test_commands: fault %08lx in the game at file va %p, address %p", code,
                       reinterpret_cast<void*>(at - base + ds2::kImageBase), reinterpret_cast<void*>(target));
         logStackReturns(info->ContextRecord->Rsp, base);
+        logRegisters(*info->ContextRecord, base);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }

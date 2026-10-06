@@ -113,7 +113,12 @@ void dispatchDetour(uintptr_t handlers, uintptr_t lock, uintptr_t message, uint3
     const bool toRemote = remote_context::enter(handlers);
     g_dispatch(handlers, lock, message, flags);
     remote_context::leave(toRemote);
-    if (!g_blocking.load() || type != g_vtables.claimQuery) return;
+    if (type != g_vtables.claimQuery) return;
+    if (toRemote) {  // the remote body never claims a use location: its controller is silenced, the query is refused too
+        *reinterpret_cast<uint8_t*>(message + kVeto) = kRefused;
+        return;
+    }
+    if (!g_blocking.load()) return;
     const uintptr_t player = ds2::localPlayerEntity();
     if (lock - kEntityLock != player) return;
     const uintptr_t location = sequenceLocationInReach(player);
