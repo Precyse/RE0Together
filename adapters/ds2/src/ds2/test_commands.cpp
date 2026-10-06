@@ -10,6 +10,7 @@
 //   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
+//   sequence.txt   "uuid"     starts the loaded SequenceNetwork with that UUID (32 hex digits, as cutscene_log prints it): a cutscene without walking to its trigger
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
 #include "ds2/test_commands.h"
@@ -30,6 +31,7 @@
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
 #include "ds2/remote_weapon.h"
+#include "ds2/sequence_info.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
 #include "equip_sync.h"
@@ -147,6 +149,20 @@ void addWeapon(const std::string& text) {
     guardedCall([](const int* a) { reinterpret_cast<void (*)(uint16_t)>(ds2::at(kAddWeapon))(static_cast<uint16_t>(*a)); }, &id);
 }
 
+void startSequenceNetwork(const std::string& text) {
+    uint8_t uuid[sequence_info::kUuidSize];
+    for (size_t i = 0; i < sizeof(uuid); ++i) {
+        unsigned byte = 0;
+        if (text.size() < (i + 1) * 2 || sscanf(text.c_str() + i * 2, "%2x", &byte) != 1) {
+            logger::write("test_commands: sequence.txt needs 32 hex digits");
+            return;
+        }
+        uuid[i] = static_cast<uint8_t>(byte);
+    }
+    sequence_info::startNetwork(uuid);
+    logger::write("test_commands: started the SequenceNetwork %.32s", text.c_str());
+}
+
 void fastTravel(const std::string& text) {
     double x = 0, y = 0, z = 0;
     decima::WorldTransform where{};
@@ -244,6 +260,7 @@ void tick() {
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
+    if (const std::string text = takeCommand(L"sequence.txt"); !text.empty()) startSequenceNetwork(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"attach.txt"); !text.empty()) remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, 10));
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
