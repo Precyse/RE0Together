@@ -92,9 +92,11 @@ namespace marker_overlay {
 
 void setSelfMarker(bool enabled) { g_selfMarker = enabled; }
 
+void drawToasts(float width) { ::drawToasts(ImGui::GetBackgroundDrawList(), width); }
+
 void draw(float width, float height) {
     ImDrawList* list = ImGui::GetBackgroundDrawList();
-    drawToasts(list, width);
+    ::drawToasts(list, width);
     const auto camera = game::camera();
     if (!camera) return;
     const auto partner = cargo_transfer::partner();

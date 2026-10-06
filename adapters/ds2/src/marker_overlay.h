@@ -7,6 +7,9 @@ namespace marker_overlay {
 
 void setSelfMarker(bool enabled);
 
+// Session messages, stacked top-centre.
+void drawToasts(float width);
+
 // dx12_hook draw callback (render thread).
 void draw(float width, float height);
 
