@@ -179,6 +179,15 @@ struct SetActionFunction {
 };
 constexpr std::array<SetActionFunction, 7> kEnemySetActionFunctions = {
     {{0x4cc670, 4}, {0x44d820, 4}, {0x4650f0, 4}, {0x480c20, 4}, {0x4bbc70, 4}, {0x48ac80, 2}, {0x4b17f0, 1}}};
+constexpr size_t kEnemyUpdateSlot = 41;  // vtable slot (+0xa4): per-frame update, thiscall with no arguments
+// The target an enemy chases: the 15 classes sharing update 0x420f70 choose it in 0x421b20 (thiscall, no arguments;
+// the nearer of sPlayer's controlled and partner characters, the controlled one on a tie or when flags 6 / 2 are set).
+constexpr uintptr_t kEnemyTargetSelectFunction = 0x421b20;
+constexpr uintptr_t kEnemyTargetOffset = 0x6b80;          // uPlayerBase* the enemy chases
+constexpr uintptr_t kEnemyTargetHeightOffset = 0x6b84;    // f32 target y minus own y
+constexpr uintptr_t kEnemyTargetDistanceOffset = 0x6b88;  // f32 distance to the target
+constexpr uintptr_t kEnemyDistanceControlledOffset = 0x67cc;  // f32 distance to sPlayer's controlled character
+constexpr uintptr_t kEnemyDistancePartnerOffset = 0x67d0;     // f32 distance to sPlayer's partner
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, float distance, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {

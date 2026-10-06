@@ -1,10 +1,10 @@
-// Checks the setAction thunk with fake classes whose slot takes 4, 2 and 1 stack arguments.
+// Checks the slot thunk with fake classes whose slot takes 4, 2, 1 and 0 stack arguments.
 // Exit 0 when the handler and the original get the right arguments and the stack is balanced on every path.
 #include <windows.h>
 
 #include <cstdio>
 
-#include "../src/set_action_thunk.h"
+#include "../src/slot_thunk.h"
 
 namespace {
 
@@ -37,6 +37,11 @@ void __fastcall original2(Fake* self, void*, int32_t a, int32_t b) {
     ++g_originalCalls;
 }
 
+void __fastcall original0(Fake* self, void*) {
+    g_originalSelf = self;
+    ++g_originalCalls;
+}
+
 void __fastcall original1(Fake* self, void*, int32_t a) {
     g_originalSelf = self;
     g_originalArgs[0] = a;
@@ -52,7 +57,8 @@ void __stdcall handler(void* enemy, uintptr_t original, const int32_t* args) {
     auto* self = reinterpret_cast<void*>(enemy);
     if (g_argc == 4) game::callThiscall<void>(original, self, args[0], args[1], args[2], args[3]);
     else if (g_argc == 2) game::callThiscall<void>(original, self, args[0], args[1]);
-    else game::callThiscall<void>(original, self, args[0]);
+    else if (g_argc == 1) game::callThiscall<void>(original, self, args[0]);
+    else game::callThiscall<void>(original, self);
 }
 
 // Calls the slot with argc arguments and returns esp after minus esp before (0 when the thunk popped exactly them).
@@ -81,10 +87,10 @@ int runCase(size_t argc, void* function) {
     table[game::kEnemySetActionSlot] = function;
     Fake fake{table};
     auto* memory = static_cast<uint8_t*>(
-        VirtualAlloc(nullptr, set_action_thunk::kThunkSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+        VirtualAlloc(nullptr, slot_thunk::kThunkSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
     if (!memory) return fail("VirtualAlloc");
     const uintptr_t original =
-        set_action_thunk::patchVtable(reinterpret_cast<uintptr_t>(table), memory, argc, handler);
+        slot_thunk::patchVtable(reinterpret_cast<uintptr_t>(table), game::kEnemySetActionSlot, memory, argc, handler);
     if (original != reinterpret_cast<uintptr_t>(function)) return fail("patchVtable did not return the original");
     g_argc = argc;
     reset();
@@ -94,8 +100,10 @@ int runCase(size_t argc, void* function) {
         unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*, int32_t, int32_t, int32_t, int32_t)>(table[game::kEnemySetActionSlot]), &fake, kArg[0], kArg[1], kArg[2], kArg[3]);
     } else if (argc == 2) {
         unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*, int32_t, int32_t)>(table[game::kEnemySetActionSlot]), &fake, kArg[0], kArg[1]);
-    } else {
+    } else if (argc == 1) {
         unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*, int32_t)>(table[game::kEnemySetActionSlot]), &fake, kArg[0]);
+    } else {
+        unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*)>(table[game::kEnemySetActionSlot]), &fake);
     }
     if (unbalanced != 0) return fail("stack unbalanced (pass-through)");
     if (g_handlerCalls != 1 || g_originalCalls != 1) return fail("call counts");
@@ -108,8 +116,10 @@ int runCase(size_t argc, void* function) {
         unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*, int32_t, int32_t, int32_t, int32_t)>(table[game::kEnemySetActionSlot]), &fake, kArg[0], kArg[1], kArg[2], kArg[3]);
     } else if (argc == 2) {
         unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*, int32_t, int32_t)>(table[game::kEnemySetActionSlot]), &fake, kArg[0], kArg[1]);
-    } else {
+    } else if (argc == 1) {
         unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*, int32_t)>(table[game::kEnemySetActionSlot]), &fake, kArg[0]);
+    } else {
+        unbalanced = callSlot(reinterpret_cast<void(__fastcall*)(void*, void*)>(table[game::kEnemySetActionSlot]), &fake);
     }
     if (unbalanced != 0) return fail("stack unbalanced (blocked)");
     if (g_handlerCalls != 2 || g_originalCalls != 1) return fail("a blocked call ran the original");
@@ -122,6 +132,7 @@ int main() {
     if (runCase(4, reinterpret_cast<void*>(original4)) != 0) return 1;
     if (runCase(2, reinterpret_cast<void*>(original2)) != 0) return 1;
     if (runCase(1, reinterpret_cast<void*>(original1)) != 0) return 1;
+    if (runCase(0, reinterpret_cast<void*>(original0)) != 0) return 1;
     std::printf("PASS\n");
     return 0;
 }
