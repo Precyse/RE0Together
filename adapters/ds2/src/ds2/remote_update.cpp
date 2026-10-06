@@ -97,14 +97,30 @@ void suspendUsePlugins(uintptr_t component) {
     logged = true;
 }
 
+// Diagnostic: logs every change of the remote's state object or of its vtable (file VA) with what the body is doing then, to
+// name the window in which the object stops being a player state.
+void noteState(const char* when, uintptr_t component) {
+    static std::atomic<uintptr_t> lastState{0}, lastVtable{0};
+    const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
+    const uintptr_t vtable = decima::readPointer(state);
+    if (state == lastState.load() && vtable == lastVtable.load()) return;
+    lastState = state;
+    lastVtable = vtable;
+    logger::write("remote_update: %s the update: state %p, vtable %p; the body is %s", when, reinterpret_cast<void*>(state),
+                  reinterpret_cast<void*>(vtable - ds2::at(ds2::kImageBase) + ds2::kImageBase),
+                  remote_player::isParked() ? "parked" : remote_player::isLive() ? "live" : "spawning");
+}
+
 uint64_t updateDetour(uintptr_t component, uintptr_t message) {
     const uintptr_t remote = remote_player::entity();
     if (!remote || ds2::field<uintptr_t>(component, kComponentOwner) != remote) return g_update(component, message);
     if (g_skip.load() & remote_update::kSkipWholeUpdate) return 0;
     if (g_skip.load() & remote_update::kSuspendUsePlugins) suspendUsePlugins(component);
+    noteState("before", component);
     t_remoteUpdate = true;
     const uint64_t result = g_update(component, message);
     t_remoteUpdate = false;
+    noteState("after", component);
     return result;
 }
 
