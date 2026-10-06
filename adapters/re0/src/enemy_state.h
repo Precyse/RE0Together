@@ -6,6 +6,9 @@
 // after a jump; enemy_puppet_rule.h). The enemy's own update keeps running so it keeps animating.
 namespace enemy_state {
 
+// Game thread: this enemy is a living puppet with an owner's record, so its own setAction calls (its AI) are refused.
+bool puppetOwnsAction(uintptr_t enemy);
+
 // Net thread: stores the latest ENEMY_STATE from the host for the game thread.
 void onFrame(const GameFrame& frame);
 

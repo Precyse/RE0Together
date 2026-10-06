@@ -1,16 +1,13 @@
 #pragma once
 #include <cstdint>
 
-// Pure rule of the enemy animation match (no game access, unit tested). An enemy's behaviour is the record
+// Pure rule of the enemy AI replication (no game access, unit tested). An enemy's behaviour is the record
 // {state, action id, a, b} the class's setAction (vtable slot 63) stores at +0x67a4; the class's own handlers turn a
-// new record into a motion. A puppet is told the owner's record through that same call, but only when the owner's
-// record has settled, the puppet's own differs for a while, and the last request is not recent: its local AI keeps
-// choosing too, and answering every flip would restart motions forever.
+// new record into a motion. On a puppet the enemy's own setAction calls are refused, so the owner's record is applied
+// as soon as it differs; the cooldown only covers handlers that write the state word directly (they bypass setAction).
 namespace enemy_action_rule {
 
-constexpr int64_t kOwnerStableMs = 120;  // the owner's record must have been the same this long
-constexpr int64_t kMismatchMs = 200;     // the puppet must have differed from it this long
-constexpr int64_t kCooldownMs = 400;     // minimum time between two requests for one enemy
+constexpr int64_t kCooldownMs = 100;  // minimum time between two applications for one enemy
 constexpr int64_t kNeverMs = -1000000000;
 constexpr int kWords = 4;
 
@@ -31,24 +28,15 @@ public:
     void reset() { *this = Sync(); }
 
     // The owner's record from a snapshot.
-    void observeOwner(const Action& owner, int64_t nowMs) {
-        if (!hasOwner_ || owner != owner_) ownerSinceMs_ = nowMs;
+    void observeOwner(const Action& owner) {
         owner_ = owner;
         hasOwner_ = true;
     }
 
-    // True when the puppet (whose own record is `local`) should now be told the owner's.
+    // True when the puppet (whose own record is `local`) should now be given the owner's.
     bool due(const Action& local, int64_t nowMs) {
-        if (!hasOwner_ || local == owner_) {
-            mismatchSinceMs_ = kNeverMs;
-            return false;
-        }
-        if (mismatchSinceMs_ == kNeverMs) mismatchSinceMs_ = nowMs;
-        if (nowMs - ownerSinceMs_ < kOwnerStableMs || nowMs - mismatchSinceMs_ < kMismatchMs ||
-            nowMs - lastRequestMs_ < kCooldownMs) {
-            return false;
-        }
-        lastRequestMs_ = nowMs;
+        if (!hasOwner_ || local == owner_ || nowMs - lastApplyMs_ < kCooldownMs) return false;
+        lastApplyMs_ = nowMs;
         return true;
     }
 
@@ -57,9 +45,7 @@ public:
 private:
     Action owner_;
     bool hasOwner_ = false;
-    int64_t ownerSinceMs_ = 0;
-    int64_t mismatchSinceMs_ = kNeverMs;
-    int64_t lastRequestMs_ = kNeverMs;
+    int64_t lastApplyMs_ = kNeverMs;
 };
 
 }  // namespace enemy_action_rule

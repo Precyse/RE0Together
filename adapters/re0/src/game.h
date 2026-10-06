@@ -171,9 +171,14 @@ constexpr int kEnemyPoolSlots = 37;
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
 constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, a, b}, written by the class setAction
 constexpr size_t kEnemySetActionSlot = 63;        // vtable slot (+0xfc): setAction(state, id, a, b), thiscall ret 0x10
-// The slot-63 functions that take the 4 arguments (ret 0x10). Two classes override it with 1 or 2 (0x4b17f0 ret 4,
-// 0x48ac80 ret 8); a call with the wrong count would unbalance the stack, so only these are ever called.
-constexpr std::array<uintptr_t, 5> kEnemySetActionFunctions = {0x4cc670, 0x44d820, 0x4650f0, 0x480c20, 0x4bbc70};
+// The slot-63 implementations and their stack argument counts (the ret size tells: 0x10 = 4, 8 = 2, 4 = 1). A thunk or
+// call with the wrong count would unbalance the stack, so only these are ever patched or called.
+struct SetActionFunction {
+    uintptr_t function;
+    size_t argc;
+};
+constexpr std::array<SetActionFunction, 7> kEnemySetActionFunctions = {
+    {{0x4cc670, 4}, {0x44d820, 4}, {0x4650f0, 4}, {0x480c20, 4}, {0x4bbc70, 4}, {0x48ac80, 2}, {0x4b17f0, 1}}};
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, float distance, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
