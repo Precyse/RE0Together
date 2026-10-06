@@ -69,6 +69,7 @@ inline constexpr ShotFunction kShotFunctions[] = {
     {0x14201ded0, weapon_wire::Kind::GrenadeLauncher},
     {0x14201f260, weapon_wire::Kind::HandGrenade},
     {0x141ff6120, weapon_wire::Kind::SingleShotBeam},
+    {0x142009b40, weapon_wire::Kind::Boomerang},
 };
 
 // Reads of a DSWeaponEntity (kHolstered / 0 when unreadable).
