@@ -14,7 +14,6 @@
 
 #include <windows.h>
 
-#include <atomic>
 #include <vector>
 
 #include "decima/safe_read.h"
@@ -28,6 +27,9 @@
 #include "log.h"
 
 namespace {
+
+using partner_focus::partnerPosition;
+using partner_focus::squaredDistance;
 
 constexpr uintptr_t kCategoryUpdate = 0x140171d90;  // (category table*)
 
@@ -52,14 +54,8 @@ constexpr float kNearStreamRadius = 4.0f, kMidStreamRadius = 2.0f;  // the radii
 
 constexpr ULONGLONG kLogEveryMs = 5000;
 
-constexpr uint8_t kStreamedIn = 2;
-
 using UpdateFn = void (*)(uintptr_t table);
-using StreamTestFn = uint8_t (*)(uintptr_t manager, uintptr_t position, float radius);
 UpdateFn g_original = nullptr;
-StreamTestFn g_streamTest = nullptr;
-std::atomic<bool> g_streamedTestOverride{false};  // test toggle: members near the partner count as streamed in
-bool g_judgingPartnerPart = false;                 // the original update is running on the partner's members
 
 // Reused every call; the update runs on one thread, one table at a time.
 std::vector<uintptr_t> g_nearThis;
@@ -72,16 +68,6 @@ size_t g_lastSweepTotal = 0;
 ULONGLONG g_nextLogAt = 0;
 bool g_diagnostics = false;
 bool g_logSweep = false;  // this sweep prints its tables' sleepers
-
-bool partnerPosition(decima::WorldPosition& out) {
-    const uintptr_t body = remote_player::entity();
-    return body && remote_player::isLive() && decima::safeRead(body + ds2::kEntityTransform, out);
-}
-
-double squaredDistance(const decima::WorldPosition& a, const decima::WorldPosition& b) {
-    const double dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz;
-}
 
 // Splits the table's members by the nearer focus. Members without a readable position stay with this machine's player.
 void splitMembers(uintptr_t table, const decima::WorldPosition& partner) {
@@ -96,14 +82,6 @@ void splitMembers(uintptr_t table, const decima::WorldPosition& partner) {
                                  squaredDistance(at, partner) < squaredDistance(at, focus);
         (nearPartner ? g_nearPartner : g_nearThis).push_back(members[i]);
     }
-}
-
-// The update asks the streaming manager whether the tile data at a member is loaded; it follows this machine's one
-// observer, so around a far partner the answer is "not streamed in" and the member would sleep. With the test toggle on,
-// the partner's members are judged as streamed in.
-uint8_t streamTestDetour(uintptr_t manager, uintptr_t position, float radius) {
-    const uint8_t result = g_streamTest(manager, position, radius);
-    return g_judgingPartnerPart && g_streamedTestOverride.load() ? kStreamedIn : result;
 }
 
 void runOnMembers(uintptr_t table, std::vector<uintptr_t>& members) {
@@ -121,9 +99,7 @@ void updateBothFoci(uintptr_t table, const decima::WorldPosition& partner) {
     runOnMembers(table, g_nearThis);
     const auto awakeNearThis = ds2::field<int32_t>(table, kTableAwakeCount);
     ds2::field<decima::WorldPosition>(table, kTableFocus) = partner;
-    g_judgingPartnerPart = true;
     runOnMembers(table, g_nearPartner);
-    g_judgingPartnerPart = false;
     ds2::field<int32_t>(table, kTableAwakeCount) += awakeNearThis;
 
     ds2::field<decima::WorldPosition>(table, kTableFocus) = savedFocus;
@@ -208,17 +184,20 @@ void categoryUpdateDetour(uintptr_t table) {
 
 namespace partner_focus {
 
-void installEarly(bool diagnostics) {
-    g_diagnostics = diagnostics;
-    hooks::install("streaming stream test", ds2::at(kStreamTest), reinterpret_cast<void*>(&streamTestDetour),
-                   reinterpret_cast<void**>(&g_streamTest));
-    hooks::install("entity activity update", ds2::at(kCategoryUpdate), reinterpret_cast<void*>(&categoryUpdateDetour),
-                   reinterpret_cast<void**>(&g_original));
+bool partnerPosition(decima::WorldPosition& out) {
+    const uintptr_t body = remote_player::entity();
+    return body && remote_player::isLive() && decima::safeRead(body + ds2::kEntityTransform, out);
 }
 
-void setStreamedInOverride(bool on) {
-    g_streamedTestOverride = on;
-    logger::write("partner_focus: members near the partner %s judged as streamed in", on ? "are" : "are no longer");
+double squaredDistance(const decima::WorldPosition& a, const decima::WorldPosition& b) {
+    const double dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+    return dx * dx + dy * dy + dz * dz;
+}
+
+void installEarly(bool diagnostics) {
+    g_diagnostics = diagnostics;
+    hooks::install("entity activity update", ds2::at(kCategoryUpdate), reinterpret_cast<void*>(&categoryUpdateDetour),
+                   reinterpret_cast<void**>(&g_original));
 }
 
 }  // namespace partner_focus
