@@ -6,12 +6,12 @@ public static class GameBuilds
 {
     public const int Unknown = 0;
 
-    /// <summary>The installed build id from Steam's appmanifest; <see cref="Unknown"/> when Steam has none.</summary>
-    public static int Installed(GameProfile profile)
+    /// <summary>The installed build id from Steam's appmanifest of that game folder; <see cref="Unknown"/> when Steam has none.</summary>
+    public static int Installed(GameProfile profile, string? gameDir)
     {
         try
         {
-            return SteamLibrary.InstalledBuild(profile.SteamAppId) ?? Unknown;
+            return SteamLibrary.InstalledBuild(profile.SteamAppId, gameDir) ?? Unknown;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

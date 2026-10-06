@@ -23,10 +23,15 @@ public static class SteamLibrary
         return null;
     }
 
-    /// <summary>The Steam build id of the installed game (the appmanifest's buildid), or null when Steam has no manifest for it.</summary>
-    public static int? InstalledBuild(int appId)
+    /// <summary>The Steam build id of the installed game (the appmanifest's buildid): from the manifest beside the given game
+    /// folder (steamapps\common\game, so a folder chosen in the settings reports its own build), else from any Steam
+    /// library. Null when there is no manifest.</summary>
+    public static int? InstalledBuild(int appId, string? gameDir)
     {
-        foreach (var (_, manifest) in Manifests(appId))
+        var beside = gameDir == null ? null : Path.GetFullPath(Path.Combine(gameDir, "..", "..", $"appmanifest_{appId}.acf"));
+        var manifests = (beside != null && File.Exists(beside) ? new[] { beside } : Array.Empty<string>())
+            .Concat(Manifests(appId).Select(m => m.Manifest));
+        foreach (var manifest in manifests)
         {
             var match = BuildIdEntry.Match(File.ReadAllText(manifest));
             if (match.Success && int.TryParse(match.Groups[1].Value, out var build)) return build;

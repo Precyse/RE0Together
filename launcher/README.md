@@ -27,7 +27,7 @@ With any argument the launcher runs as a command-line program (it attaches to th
 
 ## Window
 
-The window is a native app: icon, title `Co-op Launcher`, remembered size and position, DPI aware (system DPI), one window per user session (a second start brings the running window forward and exits; a running copy that does not answer is closed and replaced). Closing the window leaves the session and shuts Steam down once. When Steam is not running the state reads Offline and the launcher retries every 3 seconds.
+The window is a native app: icon, title `Co-op Launcher`, remembered size and position, DPI aware (system DPI), one window per user session (a second start brings the running window forward and exits; a running copy that does not answer is closed and replaced). Closing the window leaves the session and shuts Steam down once. Closing the window with a session open asks first. A guest follows its host into a new lobby (host crashed or relaunched) through the host's Steam rich presence (`cf_lobby`, `cf_game`). When Steam is not running the state reads Offline and the launcher retries every 3 seconds.
 
 ## Settings
 

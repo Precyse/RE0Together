@@ -11,7 +11,7 @@ public static class GameLauncher
     /// <summary>False when the game's mod is not installed, the installed game build is not supported or Steam could not start the game, so the session cannot go on.</summary>
     public static bool Launch(GameProfile profile, string? gameDir)
     {
-        var build = GameBuilds.Installed(profile);
+        var build = GameBuilds.Installed(profile, gameDir);
         if (!GameBuilds.IsSupported(profile, build))
         {
             Log.Info(GameBuilds.Describe(profile, build));

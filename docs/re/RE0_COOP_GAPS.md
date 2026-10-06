@@ -131,4 +131,4 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | A game started outside the launcher (vanilla, no adapter link) is skipped with a log line only; after 20 s with the game running and no HELLO, say so in the status | missing | `App.cs`, `LoopbackBridge.cs`, `Gui/StatusText.cs` | S |
 | The launcher's own log is never written to a file | missing | `Log.cs` | S |
 | One action that zips adapter.log, peer logs, crash dumps, the launcher log, adapter.ini and version.txt for sending | missing | new `ReportBundle.cs` | S |
-| Host crash: the guest must get a new lobby code; follow the host into its next lobby through Steam rich presence (check with launcher-join first) | missing | `SteamBootstrap.cs`, `SteamLobby.cs` | M |
+| Host crash: the guest must get a new lobby code; follow the host into its next lobby through Steam rich presence (check with launcher-join first) | done in launcher-app (HostFollow, rich presence); untested with two accounts | `SteamBootstrap.cs`, `SteamLobby.cs` | M |

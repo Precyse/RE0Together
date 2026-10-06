@@ -26,6 +26,7 @@ public sealed class App
     private bool _launchPending;
     private BuildCheck? _buildCheck;
     private Rejoin? _rejoin;
+    private HostFollow? _follow;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -141,6 +142,7 @@ public sealed class App
                 if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId);
                 else if (!_interactive) return 1;
             }
+            FollowHost();
             if (_session == null && _lobby is { IsReady: true }) StartSession();
             _bridge?.Pump();
             _session?.Pump();
@@ -156,6 +158,16 @@ public sealed class App
             Thread.Sleep(PumpIntervalMs);
         }
         return 0;
+    }
+
+    /// <summary>A guest whose host opened a new lobby (it crashed or relaunched) leaves the old one and joins the new one,
+    /// through the same retrying path as a lost connection.</summary>
+    private void FollowHost()
+    {
+        if (_follow?.MovedTo(_lobby!.Id) is not { } lobbyId) return;
+        Log.Info($"The host opened lobby {lobbyId}, following");
+        EndSession();
+        _rejoin ??= new Rejoin(lobbyId);
     }
 
     /// <summary>Drives a pending rejoin. False when it gave up and the CLI should exit.</summary>
@@ -209,12 +221,13 @@ public sealed class App
         _gameDir = ResolveGameDir(_profile);
         _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
         _session = new Session(_profile, _lobby, _transport!, _bridge);
-        _buildCheck = BuildCheck.Create(_profile, _session, _transport!, _lobby);
+        _buildCheck = BuildCheck.Create(_profile, _gameDir, _session, _transport!, _lobby);
         if (_gameDir != null)
         {
             _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby);
             _logForwarder = LogForwarder.Create(_profile, _gameDir, _session, _transport!, _lobby);
         }
+        _follow = _steam != null && _lobby.OwnerId != _transport!.LocalId ? new HostFollow(_lobby.OwnerId, _profile.Id) : null;
         _launchPending = true;
     }
 
@@ -237,6 +250,7 @@ public sealed class App
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
     private void EndSession()
     {
+        _follow = null;
         _buildCheck = null;
         _logForwarder = null;
         _saveSync?.Dispose();

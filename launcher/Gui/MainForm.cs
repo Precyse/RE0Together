@@ -8,6 +8,7 @@ namespace CoopLauncher.Gui;
 public sealed class MainForm : Form
 {
     private const string WindowTitle = "Co-op Launcher";
+    private const string ConfirmCloseText = "Leave the session and close?";
     private const int LogMaxChars = 60_000;
     private const int LogKeepChars = 40_000;
     private const int DwmUseImmersiveDarkMode = 20;
@@ -98,13 +99,31 @@ public sealed class MainForm : Form
         _top.UpdateButton.Click += (_, _) => CheckForUpdate();
         _top.SettingsButton.Click += (_, _) => ShowSettings(!_settings!.Visible);
         _app.StatusChanged += OnStatusChanged;
-        FormClosing += (_, _) => WindowMemory.Save(this);
+        FormClosing += (_, e) => OnClosing(e);
         FormClosed += (_, _) =>
         {
             _watchTimer.Dispose();
             _app.StatusChanged -= OnStatusChanged;
             Log.Unsubscribe(OnLogWritten);
         };
+    }
+
+    /// <summary>Closing the window with a session open asks first; closing ends the session (GuiHost stops the app loop,
+    /// which leaves the lobby and shuts Steam down) and leaves the game running.</summary>
+    private void OnClosing(FormClosingEventArgs e)
+    {
+        var inSession = _app.Status.State is not (AppState.Idle or AppState.Offline);
+        if (inSession && e.CloseReason == CloseReason.UserClosing)
+        {
+            var answer = MessageBox.Show(this, ConfirmCloseText, WindowTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.Yes)
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+        if (inSession) Log.Info("Leaving the session, the window was closed");
+        WindowMemory.Save(this);
     }
 
     /// <summary>A second start of the launcher asks this window to come forward (called from any thread).</summary>
@@ -207,7 +226,7 @@ public sealed class MainForm : Form
         foreach (var game in _rail.Games.ToList())
         {
             var gameDir = GameFolders.Find(game);
-            var gameBuild = GameBuilds.Installed(game);
+            var gameBuild = GameBuilds.Installed(game, gameDir);
             _rail.SetStatus(game.Id, new GameStatus(
                 ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild(), gameBuild, GameBuilds.IsSupported(game, gameBuild)));
         }
