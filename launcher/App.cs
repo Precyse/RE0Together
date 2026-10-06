@@ -217,8 +217,7 @@ public sealed class App
         if (_saveSync?.Ready == false) return true;
         _launchPending = false;
         _saveSync?.EnableAdapter();
-        if (!_options.NoLaunch) GameLauncher.Launch(_profile!, _gameDir);
-        return true;
+        return _options.NoLaunch || GameLauncher.Launch(_profile!, _gameDir);
     }
 
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>

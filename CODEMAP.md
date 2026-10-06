@@ -10,14 +10,17 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | CliOptions.cs | argument parsing | `CliOptions.Parse`, `Usage` |
 | App.cs | wiring and ~100 Hz main loop; CLI runs one session, interactive (GUI) takes commands and returns to idle | `Run`, `Host`, `Join`, `Leave`, `Invite`, `Stop`, `StatusChanged`, `EndSession` |
 | AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT) | `AppStatus`, `AppState` |
-| Updater.cs | self-update from the rolling GitHub release `latest` (`update.json` repo, `version.txt` build): download, rename old files to `*.old`, copy new, relaunch; skipped silently on any failure or outside the packaged layout | `TryInstall` |
+| Updater.cs | self-update from the rolling release `latest` (`version.txt` build): download the whole package (launcher, game profiles, every game's adapter), rename old files to `*.old`, copy new, relaunch; skipped silently on any failure or outside the packaged layout | `TryInstall` |
+| ReleaseFeed.cs | the one cached read of the GitHub release (`update.json` repo): read at startup, forced only by the Update button; a failed read is logged and keeps the old result; also the shared HTTP client | `Read`, `Get`, `AssetName` |
+| ModInstaller.cs | a game's mod = its profile adapterFiles in the game folder: `Status` (not installed / installed / update available; marker `.cfown` detects installs), `Install` (also the update re-copy; backs up originals as `.cfbak`, records the build in `.cfbuild`), `Uninstall` (restores backups) | `Status`, `Install`, `Uninstall` |
 | Gui/GuiHost.cs | GUI entry: hides the console, runs App on a background thread, window on the STA thread | `Run` |
-| Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
+| Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires the mod button (Install/Update/Uninstall; Host needs the mod installed), Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
 | Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed) | `Theme` |
 | Gui/Draw.cs | shared painting: text, captions, lamps, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Wrapped` |
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
-| Gui/TopBar.cs | top strip: brand, build, state lamp and state, Update button (idle only) | `TopBar.Show`, `UpdateButton` |
-| Gui/GameRail.cs | left rail of games with capsule art; selection, Running mark, locks during a session | `GameRail`, `SelectionChanged` |
+| Gui/TopBar.cs | top strip: brand, newer launcher build on GitHub, build, state lamp and state, Update button (idle only) | `TopBar.Show`, `ShowAvailable`, `UpdateButton` |
+| Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus` |
+| Gui/GameStatus.cs | rail line and mod button label for a game's `ModStatus` (Not installed, Installed (Build N), Update available (Build M)) | `GameStatus.Line`, `Action` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character, partner ping | `PlayerSlots.Show` |
 | Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
@@ -47,7 +50,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest | `OnFrame`, `Complete` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest` |
 | AdapterSettings.cs | `coop=` in the adapter ini, session dir cleanup | `EnableCoop`, `Reset` |
-| GameLauncher.cs | adapter install (sha256, `.cfbak`) and Steam game start | `Launch` |
+| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs) | `Launch` |
 | SteamLibrary.cs | game folder from libraryfolders.vdf + appmanifest | `FindGameDir` |
 | RepoPaths.cs | repo root / games dir discovery | |
 | Log.cs | timestamped console log; `Written` event feeds the GUI log pane | `Info` |
