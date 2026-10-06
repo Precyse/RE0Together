@@ -36,6 +36,9 @@ constexpr ImU32 kLabelText = IM_COL32(240, 240, 240, 255);
 constexpr float kToastTop = 40.0f;
 constexpr float kToastSpacing = 8.0f;
 constexpr float kSnapMetres = 10.0f;  // a jump this large (teleport, respawn) moves the marker at once
+// The host simulates the world within about 800 m of its own player (the entity tables' far radius, partner_focus.cpp); a
+// partner beyond this leaves the loaded world, where enemies stay asleep and nothing is streamed in.
+constexpr double kBeyondLoadedWorldMetres = 700.0;
 
 std::atomic<bool> g_selfMarker{false};
 std::map<uint8_t, std::array<float, 3>> g_shown;  // per peer slot: the position drawn last frame (render thread)
@@ -114,8 +117,8 @@ void drawMarker(ImDrawList* list, const world_to_screen::Camera& camera, const w
     drawLabel(list, ImVec2(c.x - size.x * 0.5f, c.y - kDiamondRadius - kLabelGap - size.y), text.c_str(), size);
 }
 
-// Session messages (peer joined / left), stacked top-centre, fading out.
-void drawToasts(ImDrawList* list, float width) {
+// Session messages (peer joined / left), stacked top-centre, fading out. Returns the y below the last one.
+float drawToasts(ImDrawList* list, float width) {
     ImFont* font = ImGui::GetFont();
     float y = kToastTop;
     for (const toast_queue::Visible& toast : toast_queue::visible()) {
@@ -126,6 +129,24 @@ void drawToasts(ImDrawList* list, float width) {
                             ImVec2(at.x + size.x + kLabelPadding, at.y + size.y + kLabelPadding),
                             IM_COL32(0, 0, 0, alpha * 170 / 255));
         list->AddText(font, kLabelSize, at, IM_COL32(240, 240, 240, alpha), toast.text.c_str());
+        y += size.y + 2 * kLabelPadding + kToastSpacing;
+    }
+    return y;
+}
+
+// One line per partner beyond the loaded world, under the toasts, for as long as it holds.
+void drawFarNotices(ImDrawList* list, float width, float y, const world_to_screen::Vec3& self) {
+    ImFont* font = ImGui::GetFont();
+    for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
+        const double metres = std::hypot(peer.position[0] - self.x, peer.position[1] - self.y);
+        if (metres <= kBeyondLoadedWorldMetres) continue;
+        char text[96];
+        std::snprintf(text, sizeof(text), "%s  %.0f m  too far", peer.name.c_str(), metres);
+        const ImVec2 size = font->CalcTextSizeA(kLabelSize, FLT_MAX, 0.0f, text);
+        const ImVec2 at((width - size.x) * 0.5f, y);
+        list->AddRectFilled(ImVec2(at.x - kLabelPadding, at.y - kLabelPadding),
+                            ImVec2(at.x + size.x + kLabelPadding, at.y + size.y + kLabelPadding), kLabelBack);
+        list->AddText(font, kLabelSize, at, kLabelText, text);
         y += size.y + 2 * kLabelPadding + kToastSpacing;
     }
 }
@@ -141,6 +162,8 @@ void drawToasts(float width) { ::drawToasts(ImGui::GetBackgroundDrawList(), widt
 void draw(float width, float height) {
     ImDrawList* list = ImGui::GetBackgroundDrawList();
     ::drawToasts(list, width);
+    const float noticeTop = drawToasts(list, width);
+    if (const auto self = game::localPlayer()) drawFarNotices(list, width, noticeTop, self->position);
     const auto camera = game::camera();
     if (!camera) return;
     const auto partner = cargo_transfer::partner();
