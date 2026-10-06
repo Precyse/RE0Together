@@ -122,6 +122,7 @@ def main():
     p.add_argument("--drive", type=lambda v: int(v, 16), help="vehicle id (hex) the peer drives, parked at --drive-pos")
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
+    p.add_argument("--at", default="", help="X,Y,Z: the peer's circle centre is this world point, whatever the local player does (not with --follow)")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
@@ -246,7 +247,8 @@ def serve(sock, a):
         if local and (centre is None or a.follow):
             fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])  # forward (yaw = atan2(forward.x, forward.y))
             first = centre is None
-            centre = (local["x"] + fx * a.offset + a.radius, local["y"] + fy * a.offset, local["z"])
+            centre = (tuple(float(v) for v in a.at.split(",")) if a.at else
+                      (local["x"] + fx * a.offset + a.radius, local["y"] + fy * a.offset, local["z"]))
             if first:
                 start = now
                 print(f"circle centre {centre}", flush=True)
