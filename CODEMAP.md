@@ -303,6 +303,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tools/ds2/savefmt.py | DS2 save container on copies: 32-byte header, XOR key from a Murmur hash of the header seed, index / size table / chunks (chunk 0 text, chunk 1 PNG); `segments` decrypts, `assemble` re-encrypts | `segments`, `assemble`, `key_for` |
 | tools/ds2/savefmt_test.py | decrypt then re-encrypt equals the save, PNG in chunk 1 (on the copies in G:/coop-scratch/ds2/savefmt or given files) | |
 | tools/ds2/gear_pair.py | live: copies the session saves, gives Sam a weapon (test command), presses F at a terminal (autosave), copies again and lists the changed saves, for the gear-only diff | |
+| tools/ds2/qol_verify.py | live re-check of the qol features: build guard line, health label, edge arrow, death toast shots, F9 resync log | |
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |
 | tests/overlay_test.cpp | real D3D12 swap chain created after the hooks: every Present draws, also after the swap chain is recreated on a new queue and format | |
 
