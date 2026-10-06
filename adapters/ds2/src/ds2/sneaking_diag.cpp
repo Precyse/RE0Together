@@ -12,6 +12,7 @@
 #include "ds2/entity_wake.h"
 #include "ds2/partner_focus.h"
 #include "ds2/sneaking_focus.h"
+#include "ds2/sim_tick.h"
 #include "ds2/sneaking_groups.h"
 #include "log.h"
 
@@ -66,6 +67,7 @@ int sleepers(const Group& group) {
 namespace sneaking_diag {
 
 void logGroups(uintptr_t manager) {
+    if (!sim_tick::inWorld()) return;  // a load frees the members the groups hold
     static ULONGLONG nextLog = 0;
     const ULONGLONG now = GetTickCount64();
     if (now < nextLog) return;
