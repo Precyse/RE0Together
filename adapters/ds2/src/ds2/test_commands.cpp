@@ -4,7 +4,7 @@
 //   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
-//   npcpartner.txt "budget predicate"  the camp NPC update's test switches (words on, none = off; sneaking_focus)
+//   npcpartner.txt "wake"  a sleeping camp NPC nearer the partner is not held asleep by the component's wake test (sneaking_focus)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
@@ -227,9 +227,7 @@ void logBodyPieces() {
 }
 
 
-void setNpcPartnerSwitches(const std::string& text) {
-    sneaking_focus::setSwitches(text.find("budget") != std::string::npos, text.find("predicate") != std::string::npos);
-}
+void setNpcPartnerSwitch(const std::string& text) { sneaking_focus::setSkipWakeBlock(text.find("wake") != std::string::npos); }
 
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
@@ -251,7 +249,7 @@ void tick() {
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
-    if (const std::string text = takeCommand(L"npcpartner.txt"); !text.empty()) setNpcPartnerSwitches(text);
+    if (const std::string text = takeCommand(L"npcpartner.txt"); !text.empty()) setNpcPartnerSwitch(text);
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.
