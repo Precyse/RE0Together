@@ -4,7 +4,6 @@
 //   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
-//   observer.txt   "on"/"off"  the streaming observer moves toward a partner beyond the loaded world (observer_midpoint)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
@@ -26,7 +25,6 @@
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/health_watch.h"
-#include "ds2/observer_midpoint.h"
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
@@ -227,8 +225,6 @@ void logBodyPieces() {
 }
 
 
-void setObserverMidpoint(const std::string& text) { observer_midpoint::setEnabled(text.rfind("on", 0) == 0); }
-
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
     if (sscanf(text.c_str(), "%llx", &address) == 1) health_watch::arm(static_cast<uintptr_t>(address));
@@ -249,7 +245,6 @@ void tick() {
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
-    if (const std::string text = takeCommand(L"observer.txt"); !text.empty()) setObserverMidpoint(text);
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.
