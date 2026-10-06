@@ -7,7 +7,7 @@ struct Config {
     bool selfMarker = false;   // also mark the local player (checks the projection against the game's own view)
     bool mirrorAnimation = false;  // loopback test: the partner body copies the local player animation
     bool logFacts = false;         // log every FactDatabase write (mapping which facts an action changes)
-    bool enemySync = false;    // enemies: the host reports them, a guest tames its own and the host's reports drive them
+    bool enemySync = true;     // enemies: the host reports them, a guest tames its own and the host's reports drive them (adapter.ini enemy_sync=0 turns it off)
     bool diagnostics = false;  // log-only damage and weapon instruments (ds2/damage_diag.h, remote_weapon's comparison with Sam's weapon); never on in a shipped config
     bool ordersDiagnostics = false;  // log-only instruments for the partner-cargo checks (ds2/orders_diag.h); never on in a shipped config
     bool testCommands = false;  // command files in the coop folder for live checks (teleport, area, weapon, BT region)
@@ -15,7 +15,7 @@ struct Config {
     bool cutsceneLog = false;   // log every cutscene (Sequence) start and game-state change
     uint32_t cutsceneShareMinFrames = 0;  // test only (needs test_commands=1): every Sequence of at least this many frames counts as a shared cutscene; 0 off
     bool cutsceneSync = false;  // cutscenes watched together: the host holds a story cutscene until the guests are ready
-    bool weaponSync = false;   // weapons: the partner's body holds and fires the weapon the partner has drawn
+    bool weaponSync = true;    // weapons: the partner's body holds and fires the weapon the partner has drawn (adapter.ini weapon_sync=0 turns it off)
     uint8_t weaponAttachMode = 1;  // SetParent mode of the body's weapon (1 = the engine's own), to try other attach variants live
     bool remoteBody = true;    // the partner's body: a second player entity that walks and rides (adapter.ini remote_body=0 turns it off)
 };
