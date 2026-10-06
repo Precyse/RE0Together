@@ -26,6 +26,7 @@
 #include "ds2/remote_marker.h"
 #include "ds2/remote_player.h"
 #include "ds2/remote_ride.h"
+#include "ds2/remote_update.h"
 #include "ds2/setdriver_guard.h"
 #include "ds2/sim_tick.h"
 #include "game.h"
@@ -381,6 +382,7 @@ void installEarly() {
     remote_baggage::installEarly();
     setdriver_guard::install();
     remote_guards::installEarly();
+    remote_update::installEarly();
     remote_camera::installEarly();
     remote_appearance::installEarly();
     remote_animation::installEarly();
