@@ -103,6 +103,27 @@ bool stopRecorded(uintptr_t sequence) {
     return root && decima::safeRead(root + kStopReason, reason) && reason != 0;
 }
 
+std::vector<LoadedNetwork> loadedNetworks() {
+    std::vector<LoadedNetwork> out;
+    const uintptr_t manager = decima::readPointer(ds2::at(kNetworkManagerGlobal));
+    int32_t count = 0;
+    if (!manager || !decima::safeRead(manager + kManagerCount, count) || count <= 0 || count > kMaxInstances) return out;
+    const uintptr_t instances = decima::readPointer(manager + kManagerArray);
+    for (int32_t i = 0; instances && i < count; ++i) {
+        const uintptr_t instance = decima::readPointer(instances + i * sizeof(uintptr_t));
+        const uintptr_t resource = instance ? decima::readPointer(instance + kInstanceResource) : 0;
+        LoadedNetwork network{};
+        if (!resource || !decima::safeCopy(network.uuid, resource + kObjectUuid, kUuidSize)) continue;
+        const uintptr_t main = decima::readPointer(instance + kInstanceRootSequence);
+        if (main) {
+            decima::safeRead(main - kSecondaryBase + kStopFrame, network.stopFrame);
+            network.started = started(main - kSecondaryBase);
+        }
+        out.push_back(network);
+    }
+    return out;
+}
+
 void startNetwork(const uint8_t* uuid) {
     alignas(16) std::array<uint8_t, kUuidSize> key;
     std::copy(uuid, uuid + kUuidSize, key.begin());
