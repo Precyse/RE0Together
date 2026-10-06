@@ -7,6 +7,8 @@
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
+//   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
+//                             paused-update request, 0x140131420), flags (logs the entity flags)
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
@@ -225,6 +227,22 @@ void logBodyPieces() {
 }
 
 
+constexpr uintptr_t kRequestPausedUpdate = 0x140131420;  // (entity): MsgEntityRequestPausedUpdate to it and its children
+constexpr uintptr_t kEntityFlags = 0x98;
+
+void tryParking(const std::string& mode) {
+    const uintptr_t body = remote_player::entity();
+    if (!body) {
+        logger::write("test_commands: no remote body");
+        return;
+    }
+    if (mode.rfind("hide", 0) == 0) ds2::setEntityVisible(body, false);
+    else if (mode.rfind("show", 0) == 0) ds2::setEntityVisible(body, true);
+    else if (mode.rfind("pause", 0) == 0) reinterpret_cast<void (*)(uintptr_t)>(ds2::at(kRequestPausedUpdate))(body);
+    logger::write("test_commands: park '%s', the body's entity flags %llx", mode.c_str(),
+                  static_cast<unsigned long long>(ds2::field<uint64_t>(body, kEntityFlags)));
+}
+
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
     if (sscanf(text.c_str(), "%llx", &address) == 1) health_watch::arm(static_cast<uintptr_t>(address));
@@ -243,6 +261,7 @@ void tick() {
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
+    if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }
 

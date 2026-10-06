@@ -22,6 +22,8 @@ struct Velocity {
 };
 using SetWorldTransformFn = void (*)(uintptr_t entity, const decima::WorldTransform* transform);
 using SetVelocityFn = void (*)(uintptr_t mover, const Velocity* velocity);
+constexpr uintptr_t kSetVisible = 0x140134440;  // Entity::SetVisible(entity, visible)
+using SetVisibleFn = void (*)(uintptr_t entity, bool visible);
 using PlaceOnWorldFn = void (*)(uintptr_t entity, const decima::WorldTransform* transform, bool a, bool b);
 
 SetWorldTransformFn setWorldTransform() {
@@ -64,6 +66,15 @@ bool placeEntity(uintptr_t entity, const decima::WorldTransform& transform, cons
     const SetWorldTransformFn set = setWorldTransform();
     const Velocity v{static_cast<float>(velocity.x), static_cast<float>(velocity.y), static_cast<float>(velocity.z), 0};
     return entity && set && guardedPlace(set, entity, &transform, &v);
+}
+
+bool setEntityVisible(uintptr_t entity, bool visible) {
+    __try {
+        reinterpret_cast<SetVisibleFn>(at(kSetVisible))(entity, visible);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
 bool entityTransform(uintptr_t entity, decima::WorldTransform& out) {

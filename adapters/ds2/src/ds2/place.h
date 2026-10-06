@@ -16,6 +16,9 @@ bool placeEntity(uintptr_t entity, const decima::WorldTransform& transform, cons
 // a player entity is written back by the mover). False when the call faulted.
 bool teleportEntity(uintptr_t entity, const decima::WorldTransform& transform);
 
+// Entity::SetVisible: the entity flag and the visibility change message to its components. False when the call faulted.
+bool setEntityVisible(uintptr_t entity, bool visible);
+
 // An entity's current transform, or false when unreadable.
 bool entityTransform(uintptr_t entity, decima::WorldTransform& out);
 
