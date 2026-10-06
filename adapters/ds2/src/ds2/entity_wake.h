@@ -6,8 +6,7 @@
 
 namespace ds2 {
 
-// Whether the entity's flags (+0x98) have the asleep bit (9) set; false for memory that cannot be read (the group tables and
-// the enemy lists still hold freed entities while a load tears the world down).
+// Whether the entity's flags (+0x98) have the asleep bit (9) set.
 bool entityAsleep(uintptr_t entity);
 
 // Asks the engine to wake it (Entity wake 0x1401312b0(entity, 0, 0): sets a wake request, flags bit 36, that the engine serves

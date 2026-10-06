@@ -3,7 +3,6 @@
 
 #include <windows.h>
 
-#include "decima/safe_read.h"
 #include "ds2/engine.h"
 
 namespace {
@@ -16,10 +15,7 @@ constexpr uintptr_t kWakeEntity = 0x1401312b0;
 
 namespace ds2 {
 
-bool entityAsleep(uintptr_t entity) {
-    uint64_t flags = 0;
-    return decima::safeRead(entity + kEntityFlags, flags) && ((flags >> kAsleepBit) & 1);
-}
+bool entityAsleep(uintptr_t entity) { return (field<uint64_t>(entity, kEntityFlags) >> kAsleepBit) & 1; }
 
 bool wakeEntity(uintptr_t entity) {
     __try {
