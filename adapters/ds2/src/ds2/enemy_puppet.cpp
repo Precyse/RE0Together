@@ -36,7 +36,7 @@ constexpr uintptr_t kKill = 0x14013bef0;    // Entity::Kill(entity, attacker, pa
 constexpr uintptr_t kRemove = 0x14014ba20;  // Entity::Remove(entity, immediate)
 constexpr uintptr_t kAiComponentRecord = 0x1442A1160;  // AIIndividualComponent
 constexpr uintptr_t kAiIndividual = 0x50, kAiActivity = 0x23;  // AIIndividual = component + 0x50; its activity byte
-constexpr uint8_t kAiAsleep = 2;  // 0 none, 2 asleep, 3 awake: the AI manager does not decide for a sleeping individual
+constexpr uint8_t kAiAsleep = 2, kAiAwake = 3;  // 0 none, 2 asleep, 3 awake: the AI manager does not decide for a sleeping individual
 constexpr uintptr_t kEntityUuid = 0x10;
 constexpr ULONGLONG kPruneMs = 500;
 constexpr ULONGLONG kAsleepEveryMs = 250;  // the engine puts the AI awake only on a wake event
@@ -61,6 +61,7 @@ struct UuidHash {
 struct Tamed {
     uintptr_t entity;
     ULONGLONG at;
+    Uuid resourceUuid;
 };
 
 struct Puppet {
@@ -74,6 +75,7 @@ struct Puppet {
 };
 
 std::atomic<bool> g_adoptExisting{false};
+std::atomic<bool> g_releaseToHost{false};
 std::mutex g_animationMutex;  // guards g_animation: the pose evaluation reads it on other threads
 std::unordered_map<uintptr_t, remote_animation::VariableValues> g_animation;  // puppet entity -> the host's variables
 std::mutex g_mutex;  // guards the queues and the tamed table (spawn workers and the net thread fill them)
@@ -104,6 +106,12 @@ bool killGuarded(uintptr_t entity) {
 void sleepAi(uintptr_t entity) {
     const uintptr_t component = ds2::componentByRecord(entity, kAiComponentRecord);
     if (component) ds2::field<uint8_t>(component + kAiIndividual, kAiActivity) = kAiAsleep;
+}
+
+// Gives the AI back (the engine's own wake sets this byte) so the enemy fights on this machine again.
+void wakeAi(uintptr_t entity) {
+    const uintptr_t component = ds2::componentByRecord(entity, kAiComponentRecord);
+    if (component) ds2::field<uint8_t>(component + kAiIndividual, kAiActivity) = kAiAwake;
 }
 
 bool removeGuarded(uintptr_t entity) {
@@ -227,6 +235,26 @@ void removeUnmatched(ULONGLONG now) {
     if (removed) logger::write("enemy_puppet: removed %d enemies of this world that the host does not have", removed);
 }
 
+// This machine is the host now: the enemies it had tamed fight here again and are tracked and announced by enemy_host; what
+// the old host announced is forgotten. Simulation thread.
+void handOverToHost() {
+    std::lock_guard lock(g_mutex);
+    int handed = 0;
+    for (const auto& [id, tamed] : g_tamed) {
+        if (!ds2::entityExists(id.data())) continue;
+        wakeAi(tamed.entity);
+        enemy_host::add(tamed.entity, tamed.resourceUuid);
+        ++handed;
+    }
+    g_tamed.clear();
+    for (const auto& [netId, puppet] : g_puppets) forgetAnimation(puppet.entity);
+    g_puppets.clear();
+    g_pending.clear();
+    g_announced.clear();
+    g_lastAnnouncementAt = 0;
+    logger::write("enemy_puppet: %d tamed enemies handed to the host side", handed);
+}
+
 // Guest, simulation thread.
 void tick() {
     static ULONGLONG lastPrune = 0, lastReport = 0, lastAsleep = 0;
@@ -242,8 +270,9 @@ void tick() {
         anims.swap(g_anims);
     }
     if (g_adoptExisting.exchange(false)) {
-        for (const uintptr_t entity : enemy_host::release()) enemy_puppet::adopt(entity);
+        for (const enemy_host::Handover& enemy : enemy_host::release()) enemy_puppet::adopt(enemy.entity, enemy.resourceUuid);
     }
+    if (g_releaseToHost.exchange(false)) handOverToHost();
     if (const ULONGLONG at = GetTickCount64(); at - lastAsleep >= kAsleepEveryMs) {
         lastAsleep = at;
         keepAiAsleep();
@@ -306,12 +335,14 @@ bool animate(uintptr_t manager, uintptr_t owner) {
 
 void adoptExisting() { g_adoptExisting = true; }
 
-void adopt(uintptr_t entity) {
+void releaseToHost() { g_releaseToHost = true; }
+
+void adopt(uintptr_t entity, const std::array<uint8_t, 16>& resourceUuid) {
     sleepAi(entity);
     Uuid id{};
     decima::safeCopy(id.data(), entity + kEntityUuid, id.size());
     std::lock_guard lock(g_mutex);
-    g_tamed[id] = {entity, GetTickCount64()};
+    g_tamed[id] = {entity, GetTickCount64(), resourceUuid};
 }
 
 }  // namespace enemy_puppet
