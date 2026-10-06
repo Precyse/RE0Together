@@ -7,6 +7,7 @@
 //   npcpartner.txt "wake"  a sleeping camp NPC nearer the partner is not held asleep by the component's wake test (sneaking_focus)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
+//   attach.txt     "mode"     attaches the body's weapon again with that SetParent mode and logs the weapon's and the body's position
 //   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
@@ -25,6 +26,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <set>
 #include <string>
 
@@ -40,6 +42,7 @@
 #include "ds2/sneaking_focus.h"
 #include "ds2/remote_player.h"
 #include "ds2/sequence_info.h"
+#include "ds2/remote_weapon.h"
 #include "ds2/sim_tick.h"
 #include "enemy_directory.h"
 #include "equip_sync.h"
@@ -329,6 +332,7 @@ void tick() {
     if (const std::string text = takeCommand(L"sequence.txt"); !text.empty()) startSequenceNetwork(text);
     if (const std::string text = takeCommand(L"networks.txt"); !text.empty()) logNetworks();
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
+    if (const std::string text = takeCommand(L"attach.txt"); !text.empty()) remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, 10));
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
