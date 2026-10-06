@@ -15,9 +15,6 @@ void installEarly();
 // pieces and the game left it out): logs whether the owner exists and whether it had to be appended.
 void noteHandOverGather(uintptr_t query, uintptr_t remoteOwner, bool appended);
 
-// Called by partner_cargo's slot-add detour when a piece goes into a terminal's owner (a delivery or a shelf move). Logs it.
-void noteTerminalAdd(uint32_t type, uint64_t orderId, uintptr_t terminal);
-
 // Called by partner_cargo's carried-set detour: `caller` is the return address into the game, `added` the number of pieces the
 // walk of the remote's owner added to the collector. Logs each distinct caller once, with how many pieces the remote's owner
 // holds (to compare with `added`: equal means the walk reaches the child owners too). No-ops when disabled.
