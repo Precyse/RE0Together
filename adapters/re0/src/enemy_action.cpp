@@ -7,6 +7,7 @@
 
 #include "enemy_state.h"
 #include "game.h"
+#include "hooks.h"
 #include "log.h"
 #include "slot_thunk.h"
 
@@ -47,7 +48,8 @@ void __stdcall onSetAction(void* enemy, uintptr_t original, const int32_t* args)
     callOriginal(original, argcOf(original), enemy, args);
 }
 
-// The enemy's per-frame update. Its handlers also write the record directly, bypassing setAction (55 sites), so a
+// The enemy's per-frame update. What the think hook does not cover (the per-action updates of every class, the
+// decisions of the other 12 update implementations) also writes the record directly, bypassing setAction, so a
 // puppet's record is put back as the update found it: only the owner's record, applied through setAction, changes it.
 void __stdcall onUpdate(void* enemy, uintptr_t original, const int32_t*) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
@@ -55,6 +57,15 @@ void __stdcall onUpdate(void* enemy, uintptr_t original, const int32_t*) {
     const bool hold = enemy_state::puppetOwnsAction(self) && enemy_action::read(self, before);
     game::callThiscall<void>(original, enemy);
     if (hold) game::writeMemory(self + game::kEnemyActionOffset, before.word);
+}
+
+using ThinkFunction = void(__fastcall*)(void* enemy, void* edx);
+ThinkFunction g_originalThink = nullptr;
+
+// The AI's decision step (game.h kEnemyThinkFunction): on a puppet the owner decides, so it does not run at all.
+void __fastcall onThink(void* enemy, void* edx) {
+    if (enemy_state::puppetOwnsAction(reinterpret_cast<uintptr_t>(enemy))) return;
+    g_originalThink(enemy, edx);
 }
 
 bool requestUnguarded(uintptr_t enemy, const enemy_action_rule::Action& action) {
@@ -92,7 +103,9 @@ bool install() {
         else ++skipped;
     }
     logger::write("enemy_action: patched %zu of %zu vtables", g_patchedCount, game::kEnemyVtables.size());
-    return skipped == 0;
+    const bool thinkHooked = hooks::install("enemy think", game::kEnemyThinkFunction, reinterpret_cast<void*>(onThink),
+                                            reinterpret_cast<void**>(&g_originalThink));
+    return skipped == 0 && thinkHooked;
 }
 
 bool request(uintptr_t enemy, const enemy_action_rule::Action& action) {
