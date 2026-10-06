@@ -13,6 +13,10 @@ constexpr uint32_t kSkipWholeUpdate = uint32_t{1} << 31;
 // Bit 10 (400): the update's messages to Sam's entity are not dispatched (the use prompt is Sam's HUD state).
 constexpr uint32_t kBlockMessagesToSam = uint32_t{1} << 10;
 
+// Bit 11 (800): the remote's use-location, interactive and hand-terminal action plugins are suspended (they evaluate the
+// terminals and prompts around the body, which is Sam's HUD state).
+constexpr uint32_t kSuspendUsePlugins = uint32_t{1} << 11;
+
 // Whether this thread is inside the remote's update.
 bool running();
 

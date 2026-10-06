@@ -9,6 +9,7 @@
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/remote_player.h"
+#include "msvc_rtti.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -59,10 +60,33 @@ QueryFn g_query = nullptr;
 TestFn g_stateTest = nullptr;
 BroadcastFn g_broadcast = nullptr;
 
+// The plugins of the player's state machine that look at use locations and terminals. They are embedded in the state object
+// (the one at the component's +0x1b8, 0xe30 bytes); a plugin's +0xa byte is its "suspended" flag.
+constexpr uintptr_t kPlayerStateObject = 0x1b8;
+constexpr uintptr_t kStateSize = 0xe30;
+constexpr uintptr_t kPluginSuspended = 0xa;
+constexpr const char* kUsePlugins[] = {"DSPlayerUseLocationActionPlugin", "DSPlayerInteractiveActionPlugin",
+                                       "DSPlayerHandTerminalActionPlugin"};
+
+void suspendUsePlugins(uintptr_t component) {
+    static bool logged = false;
+    const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
+    for (const char* name : kUsePlugins) {
+        const uintptr_t vtable = msvc_rtti::vtableOf(name);
+        for (uintptr_t offset = 0; vtable && state && offset < kStateSize; offset += sizeof(uintptr_t)) {
+            if (ds2::field<uintptr_t>(state, offset) != vtable) continue;
+            ds2::field<uint8_t>(state + offset, kPluginSuspended) = 1;
+            if (!logged) logger::write("remote_update: %s suspended at state +0x%llx", name, static_cast<unsigned long long>(offset));
+        }
+    }
+    logged = true;
+}
+
 uint64_t updateDetour(uintptr_t component, uintptr_t message) {
     const uintptr_t remote = remote_player::entity();
     if (!remote || ds2::field<uintptr_t>(component, kComponentOwner) != remote) return g_update(component, message);
     if (g_skip.load() & remote_update::kSkipWholeUpdate) return 0;
+    if (g_skip.load() & remote_update::kSuspendUsePlugins) suspendUsePlugins(component);
     t_remoteUpdate = true;
     const uint64_t result = g_update(component, message);
     t_remoteUpdate = false;
@@ -78,7 +102,6 @@ void stanceSyncDetour(uintptr_t component) {
 // The motion call (0x1407f2570) has two parts: a block that looks up the player's current ability and re-selects it (what
 // flickers Sam's use prompt when it runs for the remote) and, as its tail, the player state machine's step (vtable slot 8
 // of the object at +0x1b8), which is what starts a ride. The remote runs the tail only.
-constexpr uintptr_t kPlayerStateObject = 0x1b8;
 constexpr uintptr_t kStateStepSlot = 0x40;
 
 void motionTail(uintptr_t component, float dt) {
