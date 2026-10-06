@@ -12,6 +12,9 @@ uintptr_t samEntity();   // the local player's DSPlayerEntity
 // The slot of the peer it stands for.
 uint8_t slot();
 
+// Whether the body is hidden because its peer is gone (see remote_player.cpp).
+bool isParked();
+
 // Whether the remote has its controller and camera mode (the spawn has finished).
 bool isLive();
 

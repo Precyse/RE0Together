@@ -112,6 +112,7 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_marker.cpp
     src/ds2/remote_guards.cpp
     src/ds2/remote_update.cpp
+    src/ds2/queue_diag.cpp
     src/ds2/remote_appearance.cpp
     src/ds2/remote_animation.cpp
     src/ds2/remote_ride.cpp
