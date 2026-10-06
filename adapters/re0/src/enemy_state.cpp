@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "debug_stats.h"
-#include "model_motion.h"
 #include "enemy_protocol.h"
 #include "enemy_puppet_rule.h"
 #include "enemy_registry.h"
@@ -57,13 +56,10 @@ void sendState() {
         EnemyEntry entry{};
         entry.slot = static_cast<uint8_t>(slot);
         entry.vtable = static_cast<uint32_t>(game::readPointer(enemy));
-        model_motion::State motion;
         if (!enemy_registry::isEnemy(enemy) || !game::readMemory(enemy + game::kEnemyHpOffset, entry.hp) ||
-            !game::readTransform(enemy, entry.pos, entry.quat) || !model_motion::read(enemy, motion)) {
+            !game::readTransform(enemy, entry.pos, entry.quat)) {
             continue;
         }
-        entry.motion = motion.motion;
-        entry.motionFrame = motion.frame;
         const auto* bytes = reinterpret_cast<const uint8_t*>(&entry);
         payload.insert(payload.end(), bytes, bytes + sizeof(entry));
         ++count;
@@ -106,10 +102,7 @@ void applyEntry(const EnemyEntry& entry) {
         return logOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
     }
     applyHp(entry, enemy);
-    enemy_puppet_rule::Snapshot snapshot{{}, {}, entry.hp, entry.motion, entry.motionFrame};
-    std::memcpy(snapshot.pos, entry.pos, sizeof(snapshot.pos));
-    std::memcpy(snapshot.quat, entry.quat, sizeof(snapshot.quat));
-    enemy_puppet_rule::observe(track, snapshot, nowMs());
+    enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, nowMs());
 }
 
 // Moves a puppet toward where the owner's enemy is now: blended while it lags, snapped only after a jump.
@@ -135,12 +128,11 @@ void followPose(uintptr_t enemy, int slot, const enemy_puppet_rule::Track& track
     game::writeTransform(enemy, blendedPos, blendedQuat);
 }
 
-// Pose and animation of a living puppet follow the owner's.
+// The pose of a living puppet follows the owner's.
 void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
     const uintptr_t enemy = enemy_registry::enemyAt(slot);
     if (!enemy || track.hp <= 0) return;
     followPose(enemy, slot, track, now);
-    model_motion::play(enemy, track.motion, enemy_puppet_rule::aimFrame(track, now));
 }
 
 void takeLatest() {
@@ -194,11 +186,6 @@ void onFrame(const GameFrame& frame) {
     g_fresh = true;
 }
 
-bool puppetSkipsUpdate(uintptr_t enemy) {
-    if (!puppetActive()) return false;
-    const int slot = enemy_registry::slotOf(enemy);
-    return slot != enemy_registry::kNoSlot && enemy_puppet_rule::skipsUpdate(g_tracks[slot], nowMs());
-}
 
 void enable(NetClient& net) {
     g_net = &net;

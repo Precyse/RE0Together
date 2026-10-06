@@ -28,14 +28,12 @@ static_assert(sizeof(HitPayload) == 24);
 constexpr size_t kStateHeaderSize = 1;
 struct EnemyEntry {
     uint8_t slot;
-    uint8_t reserved;
-    uint16_t motion;  // the enemy's current motion number (uModel mMotionNo)
+    uint8_t reserved[3];
     uint32_t vtable;
     int32_t hp;
     float pos[3];
     float quat[4];
-    float motionFrame;  // current frame of that motion
 };
-static_assert(sizeof(EnemyEntry) == 44);
+static_assert(sizeof(EnemyEntry) == 40);
 
 }  // namespace enemy_protocol

@@ -106,18 +106,17 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/input_record.cpp | per frame: evaluates the original pad vtable queries, sends last 3 frames | `input_record::captureOriginals`, `enable` |
 | src/net_pad.cpp | jitter buffer of the peer's frames, cloned pad object with thunk vtable (its "action pressed" query slot 18 always answers 0: the owner runs every interaction), peer slot; buffer target from JitterTarget (F8 pad buffer/target); buffering lives in PadBuffer | `net_pad::onPacket`, `advance`, `object`, `analog` |
 | src/input_redirect.cpp | MinHook on getPad and the analog getter: inside a character's move, Remote reads the NetPad, Locked reads the game's blocked pad, else the real pad | `input_redirect::install`, `realPad`, `realAnalog`, `replayingRemoteInput` |
-| src/state_correction.cpp | remote-owned character position: after its move (game_tick post-move hook) it is pulled toward the owner's newest PLAYER_STATE extrapolated by velocity (dead zone 3, blend 0.5 per tick up to 60, snap beyond; same room only); applies its HP (setHP); forces its motion to the owner's (`followMotion`: a drifted frame at once, another motion number after 400 ms); `requestForcedCheck` snaps once regardless of distance | `state_correction::onFrame`, `enable`, `requestForcedCheck` |
+| src/state_correction.cpp | remote-owned character position: after its move (game_tick post-move hook) it is pulled toward the owner's newest PLAYER_STATE extrapolated by velocity (dead zone 3, blend 0.5 per tick up to 60, snap beyond; same room only); applies its HP (setHP) `requestForcedCheck` snaps once regardless of distance | `state_correction::onFrame`, `enable`, `requestForcedCheck` |
 | src/position_blend.h | pure blend/extrapolation/classify math (no game, unit tested) | `position_blend::classify`, `blendPosition`, `blendRotation`, `extrapolate` |
 | src/enemy_registry.cpp | sEnemy pool reads: slot to enemy, enemy to slot, enemy vtable check | `enemy_registry::enemyAt`, `slotOf`, `isEnemy` |
 | src/damage_thunk.cpp | generated thunk for enemy vtable slot 35 (thiscall ret 0xC in, one stdcall handler out) | `damage_thunk::patchVtable`, `callOriginal` |
 | src/enemy_damage_hook.cpp | patches all 38 enemy vtables; ownership rules for local/remote/host/guest hits; reentrancy flag | `enemy_damage_hook::install`, `applyNetworkHit` |
 | src/enemy_protocol.h | HIT_REQUEST 0x0110, HIT_APPLIED 0x0111, ENEMY_STATE 0x0112 constants and payload structs | `HitPayload`, `EnemyEntry` |
 | src/enemy_net.cpp | hit messages: guest request, host apply and announce, guest apply; game thread queue | `enemy_net::requestHit`, `announceHit`, `onFrame` |
-| src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) and `puppetSkipsUpdate` | `enemy_state::onFrame`, `enable`, `puppetSkipsUpdate` |
-| src/model_motion.cpp | a model's motion block (uModel +0x4a0: motion number u16 +4, frame f32 +0x40): `read` for the snapshot, `play` on a puppet (the game's own setter 0x73ef50 for another motion, a frame write when the frame drifted) | `model_motion::read`, `play` |
-| src/motion_rule.h | pure animation-sync rules (unit tested): `advancedFrame`, `stepFor` (keep, re-time, switch motion), `MismatchClock` (a character's motion must differ 400 ms before it is forced) | `motion_rule::stepFor` |
-| src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe`, `aim`, `aimFrame`, `skipsUpdate` (alive, snapshot under 500 ms old, no HP drop in the last 700 ms), `stepFor` | `enemy_puppet_rule::skipsUpdate`, `stepFor` |
-| src/enemy_update_hook.cpp, src/update_thunk.cpp | patches enemy vtable slot 41 (the per-frame update, AI state dispatch) of all 38 vtables; on a puppet the update is skipped | `enemy_update_hook::install`, `update_thunk::patchVtable` |
+| src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) | `enemy_state::onFrame`, `enable` |
+| tools/re0/motion_probe.py | read-only: the uModel motion block of live enemies (or the player with -1), sampled five times | |
+| tools/re0/equip_trace.py | read-only before/after snapshot of sItem, sPlayer, both characters and the weapon-class objects they point at; prints every changed dword (for finding what an equip changes) | `before`, `after`, `show` |
+| src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe` (velocity from two snapshots), `aim` (extrapolated target), `stepFor` (hold, blend, snap beyond 300) | `enemy_puppet_rule::stepFor` |
 | src/player_damage.cpp | HP/death ownership: MinHook gates on `setHP` 0x529310 and `cPlayerThink::onDeath` 0x4fcea0 (remote-owned characters only change via the owner); PLAYER_DIED 0x0120 replays remote deaths; authoritative `setHp` for all sync code | `player_damage::install` |
 | src/vtable_tracer.cpp | counting thunks patched into vtables, 2 s report | `vtable_tracer::install`, `uninstall` |
 | src/thunk_emit.h | shared x86 byte writers for generated thunks | `thunk::emit`, `emitAddress` |
@@ -138,8 +137,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/jitter_target_test.cpp | x86 exe: jitter target growth, cap, calm shrink, floor | |
 | tests/pad_buffer_test.cpp | x86 exe: PadBuffer waiting, order, stale frames, underrun, skip-ahead, cap, clear | |
 | tests/position_blend_test.cpp | x86 exe: classify thresholds, blend convergence, extrapolation cap, quaternion shorter arc (no game) | |
-| tests/enemy_puppet_rule_test.cpp | x86 exe: puppet track velocity and capped aim, motion frame extrapolation and keep/re-time/switch decision, update skipping (fresh, stale, dead, hit reaction window), snap versus blend | |
-| tests/update_thunk_test.cpp | x86 exe: the update thunk passes the enemy and the original, balances the stack, and a skipping handler does not run the original | |
+| tests/enemy_puppet_rule_test.cpp | x86 exe: puppet track velocity, capped aim, hold/blend/snap steps | |
 | tests/settled_copy_test.cpp | x86 exe: settle delay, resend, adopt and reset of `SettledCopy` (no game) | |
 | tests/floor_pending_test.cpp | x86 exe: put/take coalescing, per-room cap and drop, ordering, room isolation of `floor_pending::Queue` (no game) | |
 | tests/overlay_test.cpp | x86 exe: real windowed D3D9 device, installs the overlay hook, renders frames with fake stats, toasts (panel hidden and shown) and a Reset, checks the hook fires (skips without a device) | |
