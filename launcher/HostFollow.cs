@@ -18,13 +18,15 @@ public sealed class HostFollow
         _gameId = gameId;
     }
 
-    /// <summary>The host's new lobby for the same game, or null while it is still in <paramref name="currentLobby"/> (or publishes none).</summary>
-    public ulong? MovedTo(ulong currentLobby)
+    /// <summary>The host's new lobby for the same game, or null while the host is still a member of <paramref name="current"/>
+    /// (a presence value read just after joining can be stale) or publishes none.</summary>
+    public ulong? MovedTo(ILobby current)
     {
+        if (current.Members.Any(member => member.Id == _hostId)) return null;
         var now = Environment.TickCount64;
         if (now < _nextPollMs) return null;
         _nextPollMs = now + PollIntervalMs;
         var (lobby, game) = LobbyPresence.Read(_hostId);
-        return lobby != 0 && lobby != currentLobby && game == _gameId ? lobby : null;
+        return lobby != 0 && lobby != current.Id && game == _gameId ? lobby : null;
     }
 }

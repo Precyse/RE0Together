@@ -164,7 +164,7 @@ public sealed class App
     /// through the same retrying path as a lost connection.</summary>
     private void FollowHost()
     {
-        if (_follow?.MovedTo(_lobby!.Id) is not { } lobbyId) return;
+        if (_follow?.MovedTo(_lobby!) is not { } lobbyId) return;
         Log.Info($"The host opened lobby {lobbyId}, following");
         EndSession();
         _rejoin ??= new Rejoin(lobbyId);
