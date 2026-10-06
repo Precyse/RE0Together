@@ -43,6 +43,7 @@ CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END = 0x012A, 0x012B, 0x01
 CUTSCENE_START_FORMAT = struct.Struct("<IB3xi16s16s16s")  # id, category, reserved, stop frame, resource, entity, network (cutscene_wire.h)
 CUTSCENE_END_FORMAT = struct.Struct("<IiB3x")  # id, host frame, stop reason, reserved
 CUTSCENE_FRAMES_PER_SECOND = 120
+CUTSCENE_STOP_SCRIPTED = 3
 CUTSCENE_CATEGORY_STORY = 1
 STORY_EVENT_FORMAT = struct.Struct("<B3xIiIQ16s64s")  # kind, a, b, flags, mission id, section, transform (story_wire.h, 104 bytes)
 ENEMY_HIT = 0x0120
@@ -167,6 +168,7 @@ def main():
     p.add_argument("--hold-order", action="store_true", help="the peer reports carrying the order piece Special Plant Seeds (CARGO_LIST once a second)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
     p.add_argument("--story", default="", help="SECONDS:KIND:MISSION_ID_HEX: replay a host story event once (kind 1 start, 2 success, 3 fail)")
+    p.add_argument("--cutscene-skip", action="store_true", help="with --cutscene as the host: answer the guest's READY with an early END (a skip) instead of GO")
     p.add_argument("--cutscene", default="", help="SECONDS[:RESOURCE_HEX[:NETWORK_HEX[:FRAMES]]]: as the host (use --guest), announce a story cutscene (CUTSCENE_START) after that long, send GO once the adapter answers READY and END when it has played FRAMES (default 720); as the guest, answer each CUTSCENE_START with READY after SECONDS (negative: never); every cutscene message is printed")
     p.add_argument("--enemy-record", default="", help="FILE: write the host's ENEMY_* messages the adapter sends, with their times (play as the host, near a camp)")
     p.add_argument("--enemy-replay", default="", help="FILE: send a recording made with --enemy-record as the host (use --guest)")
@@ -275,6 +277,10 @@ def serve(sock, a):
             delay = float(a.cutscene.split(":")[0])
             if delay >= 0:
                 threading.Timer(delay, lambda: sock.sendall(encode(CUTSCENE_READY, peer_slot, struct.pack("<I", cutscene_id)))).start()
+        elif msg_type == CUTSCENE_READY and a.guest and cutscene["id"] and a.cutscene_skip:
+            sock.sendall(encode(CUTSCENE_END, peer_slot, CUTSCENE_END_FORMAT.pack(cutscene["id"], 1, CUTSCENE_STOP_SCRIPTED)))
+            cutscene["ended"] = True
+            print("cutscene: END (a skip) sent instead of GO", flush=True)
         elif msg_type == CUTSCENE_READY and a.guest and cutscene["id"]:
             sock.sendall(encode(CUTSCENE_GO, peer_slot, struct.pack("<I", cutscene["id"])))
             cutscene["go"] = time.monotonic()
