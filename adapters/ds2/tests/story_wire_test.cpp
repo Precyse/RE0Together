@@ -48,6 +48,13 @@ int main() {
     area.transform[kTransformSize - 1] = 9;
     check(decode(bytes(area), got) && std::memcmp(&got, &area, sizeof(area)) == 0, "an area change round trips");
 
+    Event delivered{};
+    delivered.kind = static_cast<uint8_t>(Kind::OrderDelivered);
+    delivered.missionId = 0x1000071000018eull;
+    check(decode(bytes(delivered), got) && isMission(static_cast<Kind>(got.kind)) && isGuestRequest(static_cast<Kind>(got.kind)) &&
+              got.missionId == delivered.missionId,
+          "a delivered order round trips and is a guest request");
+
     std::vector<uint8_t> shorter = bytes(mission);
     shorter.pop_back();
     check(!decode(shorter, got), "a short payload is rejected");
@@ -55,7 +62,7 @@ int main() {
     longer.push_back(0);
     check(!decode(longer, got), "a long payload is rejected");
     Event unknown = mission;
-    unknown.kind = 9;
+    unknown.kind = 10;
     check(!decode(bytes(unknown), got), "an unknown kind is rejected");
     unknown.kind = 0;
     check(!decode(bytes(unknown), got), "kind zero is rejected");

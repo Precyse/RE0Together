@@ -114,13 +114,14 @@ game::Cargo readPiece(uintptr_t piece) {
 }
 
 // Where a piece being added came from: the owner it was just removed from, or (an add with no remove) the slot it still points at.
-uintptr_t originOf(uintptr_t piece) {
+// A move that stops in a staging owner on its way (neither player's, nor a terminal) keeps its record for the next add.
+uintptr_t originOf(uintptr_t piece, bool finalStop) {
     std::optional<Leaving> left;
     {
         std::lock_guard lock(g_mutex);
         if (const auto found = g_leaving.find(piece); found != g_leaving.end()) {
             left = found->second;
-            g_leaving.erase(found);
+            if (finalStop) g_leaving.erase(found);
         }
     }
     if (!left) return slotRoot(decima::readPointer(piece + kPieceSlot));
@@ -197,9 +198,9 @@ void removeDetour(uintptr_t slot, uintptr_t piece) {
 void addDetour(uintptr_t slot, uintptr_t piece) {
     const uintptr_t remote = remoteOwner();
     if (remote) {
-        const uintptr_t origin = originOf(piece);
         const uintptr_t destination = slotRoot(slot);
         const uintptr_t local = game::baggageOwner(kLocalPlayerKey);
+        const uintptr_t origin = originOf(piece, destination == remote || destination == local || isTerminal(destination));
         if (destination == remote || destination == local) {
             orders_diag::noteSlotAdd(destination == remote, origin, origin == remote, origin == local);
         }
