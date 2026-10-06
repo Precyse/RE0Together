@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 
+#include "decima/safe_read.h"
 #include "ds2/engine.h"
 #include "ds2/remote_player.h"
 #include "hooks.h"
@@ -25,10 +26,11 @@ enum Call : uint32_t {
     kQuery = 1u << 6,        // 0x140249b60 (entity), result used by the state change test
     kStateTest = 1u << 7,    // 0x1402fcfd0 (object, global, flag), result used by the state change test
     kBroadcast = 1u << 8,    // 0x140148d40 (global, id, value, flag), twice
+    kMotionWhole = 1u << 9,  // not a skip: the motion call runs whole for the remote instead of its tail step only
 };
 
 thread_local bool t_remoteUpdate = false;
-std::atomic<uint32_t> g_skip{remote_update::kSkipWholeUpdate};
+std::atomic<uint32_t> g_skip{0};
 
 bool skipped(Call call) { return t_remoteUpdate && (g_skip.load() & call) != 0; }
 
@@ -65,8 +67,28 @@ void entityStepDetour(uintptr_t entity) {
 void stanceSyncDetour(uintptr_t component) {
     if (!skipped(kStanceSync)) g_stanceSync(component);
 }
+// The motion call (0x1407f2570) has two parts: a block that looks up the player's current ability and re-selects it (what
+// flickers Sam's use prompt when it runs for the remote) and, as its tail, the player state machine's step (vtable slot 8
+// of the object at +0x1b8), which is what starts a ride. The remote runs the tail only.
+constexpr uintptr_t kPlayerStateObject = 0x1b8;
+constexpr uintptr_t kStateStepSlot = 0x40;
+
+void motionTail(uintptr_t component, float dt) {
+    const uintptr_t state = ds2::field<uintptr_t>(component, kPlayerStateObject);
+    const uintptr_t vtable = decima::readPointer(state);
+    const uintptr_t step = vtable ? ds2::field<uintptr_t>(vtable, kStateStepSlot) : 0;
+    if (step) reinterpret_cast<void (*)(uintptr_t, float)>(step)(state, dt);
+}
+
 void motionDetour(uintptr_t component, float dt) {
-    if (!skipped(kMotion)) g_motion(component, dt);
+    if (!t_remoteUpdate) {
+        g_motion(component, dt);
+        return;
+    }
+    const uint32_t skip = g_skip.load();
+    if (skip & kMotion) return;
+    if (skip & kMotionWhole) g_motion(component, dt);
+    else motionTail(component, dt);
 }
 void stateTailDetour(uintptr_t component) {
     if (!skipped(kStateTail)) g_stateTail(component);
