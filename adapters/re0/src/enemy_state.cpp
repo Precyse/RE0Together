@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "debug_stats.h"
+#include "enemy_motion.h"
 #include "enemy_protocol.h"
 #include "enemy_puppet_rule.h"
 #include "enemy_registry.h"
@@ -56,10 +57,13 @@ void sendState() {
         EnemyEntry entry{};
         entry.slot = static_cast<uint8_t>(slot);
         entry.vtable = static_cast<uint32_t>(game::readPointer(enemy));
+        enemy_motion::State motion;
         if (!enemy_registry::isEnemy(enemy) || !game::readMemory(enemy + game::kEnemyHpOffset, entry.hp) ||
-            !game::readTransform(enemy, entry.pos, entry.quat)) {
+            !game::readTransform(enemy, entry.pos, entry.quat) || !enemy_motion::read(enemy, motion)) {
             continue;
         }
+        entry.motion = motion.motion;
+        entry.motionFrame = motion.frame;
         const auto* bytes = reinterpret_cast<const uint8_t*>(&entry);
         payload.insert(payload.end(), bytes, bytes + sizeof(entry));
         ++count;
@@ -102,15 +106,17 @@ void applyEntry(const EnemyEntry& entry) {
         return logOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
     }
     applyHp(entry, enemy);
-    enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, nowMs());
+    enemy_puppet_rule::Snapshot snapshot{{}, {}, entry.hp, entry.motion, entry.motionFrame};
+    std::memcpy(snapshot.pos, entry.pos, sizeof(snapshot.pos));
+    std::memcpy(snapshot.quat, entry.quat, sizeof(snapshot.quat));
+    enemy_puppet_rule::observe(track, snapshot, nowMs());
 }
 
 // Moves a puppet toward where the owner's enemy is now: blended while it lags, snapped only after a jump.
-void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
-    const uintptr_t enemy = enemy_registry::enemyAt(slot);
+void followPose(uintptr_t enemy, int slot, const enemy_puppet_rule::Track& track, int64_t now) {
     float pos[3];
     float quat[4];
-    if (!enemy || track.hp <= 0 || !game::readTransform(enemy, pos, quat)) return;
+    if (!game::readTransform(enemy, pos, quat)) return;
     float aim[3];
     enemy_puppet_rule::aim(track, now, aim);
     const float drift = position_blend::distance(pos, aim);
@@ -127,6 +133,14 @@ void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
     position_blend::blendPosition(pos, aim, blendedPos);
     position_blend::blendRotation(quat, track.quat, blendedQuat);
     game::writeTransform(enemy, blendedPos, blendedQuat);
+}
+
+// Pose and animation of a living puppet follow the owner's.
+void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
+    const uintptr_t enemy = enemy_registry::enemyAt(slot);
+    if (!enemy || track.hp <= 0) return;
+    followPose(enemy, slot, track, now);
+    enemy_motion::play(enemy, track.motion, enemy_puppet_rule::aimFrame(track, now));
 }
 
 void takeLatest() {
