@@ -269,9 +269,12 @@ void applyEnemyHitNow(const combat_wire::EnemyHit& hit) {
 
 // Simulation thread: the partner's hits on enemies, built with the bullet attack type of the weapon the body holds.
 void runForwarded() {
-    const uint16_t attackType = remote_weapon::attackType();
+    const uint16_t weaponType = remote_weapon::attackType();
     const ULONGLONG now = GetTickCount64();
     std::erase_if(g_forwardWaiting, [&](Waiting& waiting) {
+        // A bullet's damage type is the weapon's own ammo type; a weapon without one (a thrown grenade's explosion) brings
+        // the type its hit had on the guest.
+        const uint16_t attackType = weaponType ? weaponType : waiting.hit.hit.attackType;
         if (!attackType) return now - waiting.since > kWaitingMs;  // the body's weapon may still be on its way
         const uintptr_t enemy = ds2::entityByUuid(waiting.hit.enemy.uuid);
         if (!enemy || enemy_vitals::isDead(enemy)) return true;
