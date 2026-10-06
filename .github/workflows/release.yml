@@ -31,6 +31,17 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target re0_adapter
 
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build DS2 adapter
+        shell: pwsh
+        working-directory: adapters/ds2
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target ds2_adapter
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -39,9 +50,10 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
-          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0 | Out-Null
-          Copy-Item launcher/games/re0.json pkg/launcher/games/
+          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/ds2 | Out-Null
+          Copy-Item launcher/games/*.json pkg/launcher/games/
           Copy-Item adapters/re0/dinput8.dll pkg/adapters/re0/
+          Copy-Item adapters/ds2/version.dll pkg/adapters/ds2/
           Copy-Item launcher/package/README.txt pkg/
           Set-Content -NoNewline -Path pkg/launcher/app/version.txt -Value $env:GITHUB_RUN_NUMBER
           Set-Content -Path pkg/launcher/app/update.json -Value '{ "repo": "${{ github.repository }}" }'

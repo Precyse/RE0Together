@@ -7,15 +7,20 @@ internal sealed class GameRail : Control
     private const int RailWidth = 220;
     private const int PadX = 14;
     private const int HeaderHeight = 36;
-    private const int RowHeight = 76;
+    private const int RowHeight = 100;
     private const int ArtWidth = 40;
     private const int ArtHeight = 60;
     private const int NameMaxLines = 2;
     private const int NameSubGap = 2;
 
-    private readonly List<(GameProfile Profile, SteamArt Art)> _games = new();
+    private readonly List<Entry> _games = new();
     private int _selected = -1;
     private string? _runningId;
+
+    private sealed record Entry(GameProfile Profile, SteamArt Art)
+    {
+        public GameStatus Status { get; set; } = GameStatus.Unknown;
+    }
 
     public event Action<GameProfile>? SelectionChanged;
 
@@ -32,10 +37,21 @@ internal sealed class GameRail : Control
 
     public SteamArt? SelectedArt => _selected >= 0 ? _games[_selected].Art : null;
 
+    public GameStatus SelectedStatus => _selected >= 0 ? _games[_selected].Status : GameStatus.Unknown;
+
+    public IEnumerable<GameProfile> Games => _games.Select(g => g.Profile);
+
     public void Add(GameProfile profile, SteamArt art)
     {
-        _games.Add((profile, art));
+        _games.Add(new Entry(profile, art));
         if (_selected < 0) Select(0);
+        Invalidate();
+    }
+
+    /// <summary>Sets what a game's row says about its mod.</summary>
+    public void SetStatus(string gameId, GameStatus status)
+    {
+        foreach (var game in _games.Where(g => g.Profile.Id == gameId)) game.Status = status;
         Invalidate();
     }
 
@@ -79,7 +95,8 @@ internal sealed class GameRail : Control
 
     private void PaintRow(Graphics g, int index, Rectangle row)
     {
-        var (profile, art) = _games[index];
+        var profile = _games[index].Profile;
+        var art = _games[index].Art;
         var selected = index == _selected;
         var faded = !Enabled && !selected;
         if (selected)
@@ -99,10 +116,17 @@ internal sealed class GameRail : Control
         var textX = artBox.Right + 12;
         var textWidth = row.Right - textX - PadX;
         var sub = profile.Id == _runningId ? "Running" : $"{profile.MaxPlayers} players";
+        var status = _games[index].Status;
+        var statusHeight = Draw.WrappedHeight(status.Line, Theme.Small, textWidth, NameMaxLines);
         var nameHeight = Draw.WrappedHeight(profile.Name, Theme.Strong, textWidth, NameMaxLines);
-        var blockTop = row.Y + (row.Height - nameHeight - NameSubGap - Theme.Small.Height) / 2;
-        Draw.Wrapped(g, profile.Name, Theme.Strong, faded ? Theme.Dim : Theme.Text, new Rectangle(textX, blockTop, textWidth, nameHeight));
-        Draw.Wrapped(g, sub, Theme.Small, selected ? Theme.Muted : Theme.Dim,
-            new Rectangle(textX, blockTop + nameHeight + NameSubGap, textWidth, Theme.Small.Height));
+        var blockHeight = nameHeight + NameSubGap + Theme.Small.Height + NameSubGap + statusHeight;
+        var y = row.Y + (row.Height - blockHeight) / 2;
+        Draw.Wrapped(g, profile.Name, Theme.Strong, faded ? Theme.Dim : Theme.Text, new Rectangle(textX, y, textWidth, nameHeight));
+        y += nameHeight + NameSubGap;
+        var quiet = selected ? Theme.Muted : Theme.Dim;
+        Draw.Wrapped(g, sub, Theme.Small, quiet, new Rectangle(textX, y, textWidth, Theme.Small.Height));
+        y += Theme.Small.Height + NameSubGap;
+        var statusColor = status.UpdateAvailable && !faded ? Theme.Armed : quiet;
+        Draw.Wrapped(g, status.Line, Theme.Small, statusColor, new Rectangle(textX, y, textWidth, statusHeight));
     }
 }

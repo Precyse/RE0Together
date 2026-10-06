@@ -13,6 +13,7 @@ public sealed class MainForm : Form
     private const int CaptionGap = 26;
     private const int HostWidth = 140;
     private const int ToolWidth = 84;
+    private const int ModWidth = 100;
     private const int DwmUseImmersiveDarkMode = 20;
 
     private readonly App _app;
@@ -30,6 +31,7 @@ public sealed class MainForm : Form
     };
 
     private readonly FlatButton _host = new("Host", ButtonKind.Primary);
+    private readonly FlatButton _mod = new("Install", ButtonKind.Normal);
     private readonly FieldBox _joinCode = new();
     private readonly FlatButton _join = new("Join", ButtonKind.Ghost);
     private readonly TableLayoutPanel _idleRow;
@@ -51,14 +53,17 @@ public sealed class MainForm : Form
         ForeColor = Theme.Text;
         ClientSize = new Size(WindowWidth, WindowHeight);
         MinimumSize = Size;
-        _idleRow = Row(new[] { (Control)_host, _joinCode, _join }, HostWidth, -1, ToolWidth);
+        _idleRow = Row(new[] { (Control)_host, _mod, _joinCode, _join }, HostWidth, ModWidth, -1, ToolWidth);
         _lobbyRow = Row(new[] { (Control)_lobbyCode, _copy, _invite, _leave }, -1, ToolWidth, ToolWidth, ToolWidth);
         BuildLayout();
         LoadGames();
+        RefreshMods();
         Apply(app.Status);
 
         _rail.SelectionChanged += _ => Apply(_app.Status);
+        Shown += (_, _) => ReadReleaseInBackground();
         _host.Click += (_, _) => { if (_rail.Selected is { } game) _app.Host(game.Id); };
+        _mod.Click += (_, _) => ChangeMod();
         _join.Click += (_, _) => JoinTypedCode();
         _joinCode.Input.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) JoinTypedCode(); };
         _copy.Click += (_, _) => Clipboard.SetText(_lobbyCode.Text);
@@ -133,8 +138,9 @@ public sealed class MainForm : Form
         }
     }
 
-    /// <summary>Installs a newer release in the background without starting it: relaunching while this process holds a
-    /// Steam session leaves the new copy with a broken one, so the player reopens the launcher.</summary>
+    /// <summary>Installs a newer release in the background without starting it (the one forced read of the release):
+    /// relaunching while this process holds a Steam session leaves the new copy with a broken one, so the player reopens
+    /// the launcher. Otherwise the mod states are re-read.</summary>
     private void CheckForUpdate()
     {
         _top.UpdateButton.Enabled = false;
@@ -142,8 +148,40 @@ public sealed class MainForm : Form
         {
             _updateStaged = task.Result;
             if (_updateStaged) Log.Info("Update installed. Close the launcher and open it again to use it");
-            _top.UpdateButton.Enabled = !_updateStaged && _app.Status.State == AppState.Idle;
+            ShowLauncherUpdate();
+            RefreshMods();
+            Apply(_app.Status);
         }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>The startup read of the release (cached; the updater's read already filled it when packaged).</summary>
+    private void ReadReleaseInBackground() =>
+        Task.Run(() => ReleaseFeed.Read()).ContinueWith(_ => ShowLauncherUpdate(), TaskScheduler.FromCurrentSynchronizationContext());
+
+    private void ShowLauncherUpdate()
+    {
+        var latest = ReleaseFeed.Read()?.Build;
+        _top.ShowAvailable(latest is { } build && build > BuildCheck.LocalBuild() ? $"Build {build} available" : null);
+    }
+
+    /// <summary>Reads every game's mod state: installed or not, and whether the package holds a newer copy.</summary>
+    private void RefreshMods()
+    {
+        foreach (var game in _rail.Games.ToList())
+        {
+            var gameDir = SteamLibrary.FindGameDir(game.SteamAppId);
+            _rail.SetStatus(game.Id, new GameStatus(ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild()));
+        }
+    }
+
+    /// <summary>The mod button: Install, Update (re-copy) or Uninstall for the selected game.</summary>
+    private void ChangeMod()
+    {
+        if (_rail.Selected is not { } game || SteamLibrary.FindGameDir(game.SteamAppId) is not { } gameDir) return;
+        if (_rail.SelectedStatus.ModInstalled && !_rail.SelectedStatus.UpdateAvailable) ModInstaller.Uninstall(game, gameDir);
+        else ModInstaller.Install(game, gameDir);
+        RefreshMods();
+        Apply(_app.Status);
     }
 
     private void JoinTypedCode()
@@ -200,7 +238,11 @@ public sealed class MainForm : Form
         _idleRow.Visible = !inLobby;
         _lobbyRow.Visible = inLobby;
         _lobbyCode.Text = inLobby ? status.LobbyId.ToString() : string.Empty;
-        _host.Enabled = idle && _rail.Selected != null;
+        var mod = _rail.SelectedStatus;
+        _host.Enabled = idle && mod.ModInstalled;
+        _mod.Text = mod.Action.Label;
+        _mod.Enabled = idle && mod.Action.Enabled;
+        _mod.Invalidate();
         _join.Enabled = idle;
         _joinCode.Enabled = idle;
         _leave.Enabled = !idle;

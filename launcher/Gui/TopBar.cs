@@ -12,6 +12,7 @@ internal sealed class TopBar : Control
 
     private string _build = string.Empty;
     private string _state = string.Empty;
+    private string? _available;
     private Color _lamp = Theme.Dim;
 
     public TopBar()
@@ -31,6 +32,13 @@ internal sealed class TopBar : Control
     {
         UpdateButton.Location = new Point(Width - PadX - UpdateButtonWidth, (Height - UpdateButtonHeight) / 2);
         base.OnResize(e);
+    }
+
+    /// <summary>A newer launcher build on GitHub, shown beside the build; null clears it.</summary>
+    public void ShowAvailable(string? text)
+    {
+        _available = text;
+        Invalidate();
     }
 
     public void Show(string build, string state, Color lamp)
@@ -54,7 +62,13 @@ internal sealed class TopBar : Control
         var lampX = stateX - Theme.Gap - Theme.LampSize;
         Draw.Lamp(g, _lamp, lampX, middle);
         var buildWidth = Draw.Width(_build, Theme.Mono);
-        Draw.Text(g, _build, Theme.Mono, Theme.Dim, new Rectangle(lampX - Theme.Gap * 2 - buildWidth, 0, buildWidth, Height));
+        var buildX = lampX - Theme.Gap * 2 - buildWidth;
+        Draw.Text(g, _build, Theme.Mono, Theme.Dim, new Rectangle(buildX, 0, buildWidth, Height));
+        if (_available is { } available)
+        {
+            var availableWidth = Draw.Width(available, Theme.Mono);
+            Draw.Text(g, available, Theme.Mono, Theme.Armed, new Rectangle(buildX - Theme.Gap * 2 - availableWidth, 0, availableWidth, Height));
+        }
 
         Draw.HorizontalLine(g, 0, Width, Height - 1);
     }
