@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 
+#include "motion_rule.h"
 #include "position_blend.h"
 
 // Pure rules of an enemy that this machine does not own (a puppet): it follows the owner's snapshots and decides
@@ -11,9 +12,6 @@ constexpr int64_t kStateFreshMs = 500;     // a snapshot older than this no long
 constexpr int64_t kReactionMs = 700;       // after the owner's HP dropped the update runs so the hit reaction plays
 constexpr int64_t kNeverMs = -1000000000;  // "no HP drop seen yet"
 constexpr float kSnapDistance = 300.0f;    // a bigger gap is a teleport, not lag
-constexpr float kMotionFramesPerSecond = 30.0f;  // motion frames the owner's animation advances per second
-constexpr float kFrameTolerance = 4.0f;          // a puppet frame this close to the owner's is left alone
-constexpr float kMaxFrameExtrapolationSeconds = 0.1f;
 
 // One enemy as the owner reported it.
 struct Snapshot {
@@ -63,19 +61,7 @@ inline void aim(const Track& track, int64_t nowMs, float (&out)[3]) {
 
 // The owner's motion frame now: the last frame advanced at playback speed (capped like the position).
 inline float aimFrame(const Track& track, int64_t nowMs) {
-    float seconds = static_cast<float>(nowMs - track.stateMs) / 1000.0f;
-    if (seconds < 0.0f) seconds = 0.0f;
-    if (seconds > kMaxFrameExtrapolationSeconds) seconds = kMaxFrameExtrapolationSeconds;
-    return track.frame + seconds * kMotionFramesPerSecond;
-}
-
-enum class MotionStep { Keep, SetFrame, SetMotion };
-
-// A different motion number is switched; the same one is only re-timed when its frame drifted.
-inline MotionStep motionStepFor(uint16_t localMotion, float localFrame, uint16_t targetMotion, float targetFrame) {
-    if (localMotion != targetMotion) return MotionStep::SetMotion;
-    const float drift = localFrame > targetFrame ? localFrame - targetFrame : targetFrame - localFrame;
-    return drift > kFrameTolerance ? MotionStep::SetFrame : MotionStep::Keep;
+    return motion_rule::advancedFrame(track.frame, static_cast<float>(nowMs - track.stateMs) / 1000.0f);
 }
 
 // The owner's enemy is alive, freshly reported and not reacting to a hit: its local update (AI) is skipped, so it

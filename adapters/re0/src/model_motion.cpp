@@ -1,4 +1,4 @@
-#include "enemy_motion.h"
+#include "model_motion.h"
 
 #include <windows.h>
 
@@ -6,9 +6,9 @@
 
 namespace {
 
-using enemy_puppet_rule::MotionStep;
+using motion_rule::Step;
 
-uintptr_t blockOf(uintptr_t enemy) { return enemy + game::kEnemyMotionBlockOffset; }
+uintptr_t blockOf(uintptr_t model) { return model + game::kModelMotionBlockOffset; }
 
 void setFrame(uintptr_t block, float frame) {
     game::writeMemory(block + game::kMotionFrameOffset, frame);
@@ -31,22 +31,27 @@ bool setMotion(uintptr_t block, uint16_t motion) {
 
 }  // namespace
 
-namespace enemy_motion {
+namespace model_motion {
 
-bool read(uintptr_t enemy, State& out) {
-    const uintptr_t block = blockOf(enemy);
+bool read(uintptr_t model, State& out) {
+    const uintptr_t block = blockOf(model);
     return game::readMemory(block + game::kMotionNumberOffset, out.motion) &&
            game::readMemory(block + game::kMotionFrameOffset, out.frame);
 }
 
-void play(uintptr_t enemy, uint16_t motion, float frame) {
+Step stepFor(uintptr_t model, uint16_t motion, float frame) {
     State local;
-    if (!read(enemy, local)) return;
-    const MotionStep step = enemy_puppet_rule::motionStepFor(local.motion, local.frame, motion, frame);
-    if (step == MotionStep::Keep) return;
-    const uintptr_t block = blockOf(enemy);
-    if (step == MotionStep::SetMotion && !setMotion(block, motion)) return;
+    if (!read(model, local)) return Step::Keep;
+    return motion_rule::stepFor(local.motion, local.frame, motion, frame);
+}
+
+void apply(uintptr_t model, Step step, uint16_t motion, float frame) {
+    if (step == Step::Keep) return;
+    const uintptr_t block = blockOf(model);
+    if (step == Step::SetMotion && !setMotion(block, motion)) return;
     setFrame(block, frame);
 }
 
-}  // namespace enemy_motion
+void play(uintptr_t model, uint16_t motion, float frame) { apply(model, stepFor(model, motion, frame), motion, frame); }
+
+}  // namespace model_motion

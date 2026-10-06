@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "debug_stats.h"
-#include "enemy_motion.h"
+#include "model_motion.h"
 #include "enemy_protocol.h"
 #include "enemy_puppet_rule.h"
 #include "enemy_registry.h"
@@ -57,9 +57,9 @@ void sendState() {
         EnemyEntry entry{};
         entry.slot = static_cast<uint8_t>(slot);
         entry.vtable = static_cast<uint32_t>(game::readPointer(enemy));
-        enemy_motion::State motion;
+        model_motion::State motion;
         if (!enemy_registry::isEnemy(enemy) || !game::readMemory(enemy + game::kEnemyHpOffset, entry.hp) ||
-            !game::readTransform(enemy, entry.pos, entry.quat) || !enemy_motion::read(enemy, motion)) {
+            !game::readTransform(enemy, entry.pos, entry.quat) || !model_motion::read(enemy, motion)) {
             continue;
         }
         entry.motion = motion.motion;
@@ -140,7 +140,7 @@ void followTrack(int slot, const enemy_puppet_rule::Track& track, int64_t now) {
     const uintptr_t enemy = enemy_registry::enemyAt(slot);
     if (!enemy || track.hp <= 0) return;
     followPose(enemy, slot, track, now);
-    enemy_motion::play(enemy, track.motion, enemy_puppet_rule::aimFrame(track, now));
+    model_motion::play(enemy, track.motion, enemy_puppet_rule::aimFrame(track, now));
 }
 
 void takeLatest() {

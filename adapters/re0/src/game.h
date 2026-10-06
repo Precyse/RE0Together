@@ -158,7 +158,7 @@ constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
 // uModel's motion block (the property "mMotion", a DTI-headed record 0xd1d0dc embedded at +0x4a0): +4 u16 motion
 // number (property mMotionNo; its setter 0x73ef50 is thiscall(u16), ret 4, marks the block dirty and copies the
 // frame to the previous frame), +0x40 f32 current frame, +0x44 f32 previous frame. Read live: motion 0x1b/0x04 idle.
-constexpr uintptr_t kEnemyMotionBlockOffset = 0x4a0;
+constexpr uintptr_t kModelMotionBlockOffset = 0x4a0;
 constexpr uintptr_t kMotionNumberOffset = 4;
 constexpr uintptr_t kMotionFrameOffset = 0x40;
 constexpr uintptr_t kMotionPreviousFrameOffset = 0x44;

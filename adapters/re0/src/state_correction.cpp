@@ -10,6 +10,8 @@
 #include "game_state.h"
 #include "game_tick.h"
 #include "log.h"
+#include "model_motion.h"
+#include "motion_rule.h"
 #include "net_pad.h"
 #include "player_damage.h"
 #include "position_blend.h"
@@ -40,6 +42,7 @@ bool g_hasPrevious = false;  // guarded by g_mutex
 bool g_freshHp = false;  // guarded by g_mutex
 Clock::time_point g_lastLog;
 Clock::time_point g_forcedUntil;  // game thread only
+motion_rule::MismatchClock g_motionMismatch;  // game thread only
 
 // The owner's newest state, plus the one before it when it gives a usable velocity.
 struct Reported {
@@ -104,6 +107,19 @@ void blend(uintptr_t target, const float (&pos)[3], const float (&quat)[4], cons
     debug_stats::count(debug_stats::Counter::Blends);
 }
 
+// The replayed input animates a remote-owned character, so its motion is only forced when it stays different from the
+// owner's for kMismatchHoldMs (a stuck animation); a drifted frame of the same motion is re-timed at once.
+void followMotion(uintptr_t player, const Reported& report) {
+    const state_sync::PlayerState& remote = report.last.state;
+    const float elapsed = std::chrono::duration<float>(Clock::now() - report.last.arrived).count();
+    const float frame = motion_rule::advancedFrame(remote.motionFrame, elapsed);
+    const motion_rule::Step step = model_motion::stepFor(player, remote.motion, frame);
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    if (step == motion_rule::Step::SetMotion && !g_motionMismatch.due(true, now)) return;
+    if (step != motion_rule::Step::SetMotion) g_motionMismatch.due(false, now);
+    model_motion::apply(player, step, remote.motion, frame);
+}
+
 // After a character's own move (so the game's collision push from the local player is undone in the same frame):
 // pull a remote-owned character toward its owner's reported position, extrapolated by the reported velocity.
 void afterMove(uintptr_t player) {
@@ -126,6 +142,7 @@ void afterMove(uintptr_t player) {
     } else {
         std::memcpy(goalPos, remote.pos, sizeof(goalPos));
     }
+    followMotion(player, report);
     const float drift = position_blend::distance(pos, goalPos);
     const bool forced = Clock::now() < g_forcedUntil;
     const Action action = forced ? Action::Snap : position_blend::classify(drift);

@@ -64,14 +64,23 @@ void testMotion() {
     check(track.motion == 7 && near(track.frame, 10.0f), "snapshot keeps the motion number and frame");
     check(near(rule::aimFrame(track, 50), 11.5f), "frame advances at playback speed");
     check(near(rule::aimFrame(track, 5000),
-               10.0f + rule::kMotionFramesPerSecond * rule::kMaxFrameExtrapolationSeconds),
+               10.0f + motion_rule::kFramesPerSecond * motion_rule::kMaxExtrapolationSeconds),
           "frame extrapolation is capped");
-    using Step = rule::MotionStep;
-    check(rule::motionStepFor(3, 0.0f, 7, 0.0f) == Step::SetMotion, "another motion is switched");
-    check(rule::motionStepFor(7, 10.0f, 7, 10.0f + rule::kFrameTolerance) == Step::Keep, "close frame is kept");
-    check(rule::motionStepFor(7, 10.0f, 7, 10.0f + rule::kFrameTolerance + 1.0f) == Step::SetFrame,
+    using Step = motion_rule::Step;
+    check(motion_rule::stepFor(3, 0.0f, 7, 0.0f) == Step::SetMotion, "another motion is switched");
+    check(motion_rule::stepFor(7, 10.0f, 7, 10.0f + motion_rule::kFrameTolerance) == Step::Keep, "close frame is kept");
+    check(motion_rule::stepFor(7, 10.0f, 7, 10.0f + motion_rule::kFrameTolerance + 1.0f) == Step::SetFrame,
           "drifted frame is re-timed");
-    check(rule::motionStepFor(7, 30.0f, 7, 10.0f) == Step::SetFrame, "a puppet ahead of the owner is re-timed too");
+    check(motion_rule::stepFor(7, 30.0f, 7, 10.0f) == Step::SetFrame, "a puppet ahead of the owner is re-timed too");
+}
+
+void testMismatchClock() {
+    motion_rule::MismatchClock clock;
+    check(!clock.due(true, 1000), "a fresh mismatch is not due");
+    check(!clock.due(true, 1000 + motion_rule::kMismatchHoldMs - 1), "a short mismatch is not due");
+    check(clock.due(true, 1000 + motion_rule::kMismatchHoldMs), "a persistent mismatch is due");
+    check(!clock.due(false, 2000), "a match clears it");
+    check(!clock.due(true, 2100), "and the hold starts over");
 }
 
 void testSteps() {
@@ -88,6 +97,7 @@ int main() {
     testSkipsUpdate();
     testHitReaction();
     testMotion();
+    testMismatchClock();
     testSteps();
     if (g_failures == 0) std::printf("enemy_puppet_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

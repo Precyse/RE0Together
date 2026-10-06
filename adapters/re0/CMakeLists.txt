@@ -71,7 +71,7 @@ add_library(re0_adapter SHARED
     src/damage_thunk.cpp
     src/update_thunk.cpp
     src/enemy_update_hook.cpp
-    src/enemy_motion.cpp
+    src/model_motion.cpp
     src/enemy_registry.cpp
     src/enemy_damage_hook.cpp
     src/enemy_net.cpp

@@ -25,6 +25,7 @@
 #include "join_sync.h"
 #include "log.h"
 #include "menu_mirror.h"
+#include "model_motion.h"
 #include "net_pad.h"
 #include "net_trace.h"
 #include "pad_frame.h"
@@ -72,7 +73,10 @@ void sendLocalState(NetClient& net) {
     }
     state.characterId = static_cast<uint8_t>(owned);
     state.focusedCharacterId = static_cast<uint8_t>(character_owner::identify(game::controlled()));
-    if (!game::readMemory(player + game::kPlayerHpOffset, state.hp)) return;
+    model_motion::State motion;
+    if (!game::readMemory(player + game::kPlayerHpOffset, state.hp) || !model_motion::read(player, motion)) return;
+    state.motion = motion.motion;
+    state.motionFrame = motion.frame;
     state.senderIsHost = character_owner::isHost();
     state.room = scene::current();
     state.seq = ++g_seq;
