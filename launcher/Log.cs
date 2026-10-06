@@ -3,7 +3,6 @@ namespace CoopLauncher;
 public static class Log
 {
     private const int HistoryLines = 500;
-    private const string PreviousExtension = ".prev.log";
     private static readonly object Gate = new();
     private static readonly Queue<string> History = new();
     private static StreamWriter? _file;
@@ -24,16 +23,16 @@ public static class Log
         listeners?.Invoke(line);
     }
 
-    /// <summary>Also writes every line to the file from now on (the lines so far first). The previous run's file is kept as
-    /// <c>.prev.log</c>. A file that cannot be written is skipped: logging must never stop the launcher.</summary>
-    public static void WriteToFile(string path)
+    /// <summary>Also writes every line to the file from now on (the lines so far first). The previous run's file is kept
+    /// as <paramref name="previousPath"/>. A file that cannot be written is skipped: logging must never stop the launcher.</summary>
+    public static void WriteToFile(string path, string previousPath)
     {
         lock (Gate)
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                if (File.Exists(path)) File.Move(path, Path.ChangeExtension(path, PreviousExtension), overwrite: true);
+                if (File.Exists(path)) File.Move(path, previousPath, overwrite: true);
                 _file = new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
                 foreach (var line in History) _file.WriteLine(line);
             }

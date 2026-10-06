@@ -31,7 +31,7 @@ The window is a native app: icon, title `Co-op Launcher`, remembered size and po
 
 ## Settings
 
-The Settings button (top bar) opens the settings view. Stored as JSON in `%AppData%\CoopLauncher\settings.json`, read once at start, written on every change: `CheckForUpdates` (check for a newer build at start; the Update button always checks), `GameFolders` (per-game folder chosen with Browse, else Steam's), `Window` (restored bounds). The launcher's own log is `%AppData%\CoopLauncher\logs\launcher.log` (the previous run as `launcher.prev.log`); the settings view opens that folder. A game's adapter log is `coopdapter.log` in its game folder.
+The Settings button (top bar) opens the settings view. Stored as JSON in `%AppData%\CoopLauncher\settings.json`, read once at start, written on every change: `CheckForUpdates` (check for a newer build at start; the Update button always checks), `GameFolders` (per-game folder chosen with Browse, else Steam's), `Window` (restored bounds). The launcher's own log is `%AppData%\CoopLauncher\logs\launcher.log` (the previous run as `launcher.prev.log`); the settings view opens that folder and also creates `report-<time>.zip` there (launcher logs, version.txt, per game the coop folder's adapter.log/ini, peer logs and crash dumps). A game's adapter log is `coopdapter.log` in its game folder.
 
 The host log prints `Lobby created: <id>`; friends can also join from the overlay invite.
 
@@ -59,4 +59,4 @@ python ..\tools\spoof_peer.py --peer-port 27962 --launcher-port 27961   (instead
 - `--game-dir <dir>` game folder override (default resolved through Steam)
 - `--no-launch` do not install adapters or start the game
 
-Profiles live in `games/<id>.json`. Adapter files are copied into the game folder (found via Steam's libraryfolders.vdf); a differing foreign file is backed up once to `<dst>.cfbak`.
+Profiles live in `games/<id>.json`; `supportedBuilds` lists the Steam build ids the adapter fits (the installed one is read from the appmanifest; Host and Join refuse another build, and BUILD_INFO makes host and guest match). Adapter files are copied into the game folder (found via Steam's libraryfolders.vdf); a differing foreign file is backed up once to `<dst>.cfbak`.

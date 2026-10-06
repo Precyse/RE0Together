@@ -9,7 +9,7 @@ public static class GuiHost
 
     public static int Run(CliOptions options, SingleInstance instance)
     {
-        Log.WriteToFile(AppData.LogFile);
+        Log.WriteToFile(AppData.LogFile, AppData.PreviousLogFile);
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) => Log.Info($"Error: {e.Exception.Message}");

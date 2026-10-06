@@ -44,7 +44,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 | 0x0042 | FILE_END | launcher->launcher | u32 transfer id |
 | 0x0043 | FILE_ACK | launcher->launcher | u32 transfer id, u8 ok (sha256 matched) |
 | 0x0044 | FILE_MANIFEST | host launcher->guest launcher | u8 count, then per file u8 length + ascii name; sent before the files when the profile sends by `filePattern`; the guest then expects exactly these files |
-| 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 build number (version.txt; 0 = dev build); sent as a peer joins, before the save files; a guest on a different build refuses to start the game |
+| 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 build number (version.txt; 0 = dev build), then i32 installed game build (Steam buildid; 0 = unknown; absent from older launchers); sent as a peer joins, before the save files; a guest on a different launcher build or game build refuses to start the game |
 | 0x0060 | SAVE_CHANGED | adapter->own launcher | ascii name of a save file the game just wrote to the Steam cloud; the host launcher re-sends the profile's save files to every peer (same FILE_* transfer as at join) |
 | 0x0051 | CRASH_DUMP | guest launcher->host launcher | u8 name length, ascii name (`crash-*.dmp`), u32 offset, bytes (≤ 32 KiB); a dump the adapter wrote during the session, sent in order; the host writes `peer_<steamid>_<name>` beside its adapter log |
 | 0x0050 | LOG_APPEND | guest launcher->host launcher | raw bytes newly appended to the guest's adapter log (≤ 32 KiB, every 2 s); the host appends them to `peer_<steamid>.log` beside its own adapter log |

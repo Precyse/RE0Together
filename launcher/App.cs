@@ -209,7 +209,7 @@ public sealed class App
         _gameDir = ResolveGameDir(_profile);
         _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
         _session = new Session(_profile, _lobby, _transport!, _bridge);
-        _buildCheck = BuildCheck.Create(_session, _transport!, _lobby);
+        _buildCheck = BuildCheck.Create(_profile, _session, _transport!, _lobby);
         if (_gameDir != null)
         {
             _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby);

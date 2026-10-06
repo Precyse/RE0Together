@@ -134,7 +134,7 @@ internal sealed class GameRail : Control
         var quiet = selected ? Theme.Muted : Theme.Dim;
         Draw.Wrapped(g, sub, Theme.Small, quiet, new Rectangle(textX, y, textWidth, Theme.Small.Height));
         y += Theme.Small.Height + NameSubGap;
-        var statusColor = status.UpdateAvailable && !faded ? Theme.Armed : quiet;
+        var statusColor = status.NeedsAttention && !faded ? Theme.Armed : quiet;
         Draw.Wrapped(g, status.Line, Theme.Small, statusColor, new Rectangle(textX, y, textWidth, statusHeight));
     }
 }

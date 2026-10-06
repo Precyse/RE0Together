@@ -15,7 +15,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | ModInstaller.cs | a game's mod = its profile adapterFiles in the game folder: `Status` (not installed / installed / update available; marker `.cfown` detects installs), `Install` (also the update re-copy; backs up originals as `.cfbak`, records the build in `.cfbuild`), `Uninstall` (restores backups) | `Status`, `Install`, `Uninstall` |
 | InstanceGuard.cs | closes other launcher processes (stale or older copies holding Steam); run by SingleInstance when this start becomes the window | `CloseOtherLaunchers` |
 | SingleInstance.cs | one launcher window per user session: named mutex; a second start asks the running window to come forward (events) and exits; an unresponsive copy is closed through InstanceGuard and replaced; an update relaunch waits for its predecessor (`COOP_LAUNCHER_PREDECESSOR`) | `Acquire`, `OnShowRequested` |
-| AppData.cs | `%AppData%\CoopLauncher` paths: `settings.json`, `logs\launcher.log` | `SettingsFile`, `LogsDir`, `LogFile` |
+| AppData.cs | `%AppData%\CoopLauncher` paths: `settings.json`, `logs\launcher.log` (previous run `launcher.prev.log`) | `SettingsFile`, `LogsDir`, `LogFile`, `PreviousLogFile` |
 | AppSettings.cs | the launcher's settings (check for updates at start, per-game game folder, window bounds): read once, written on every change | `AppSettings.Current`, `Update`, `WithGameFolder` |
 | GameFolders.cs | a game's folder: the settings override, else Steam's (`SteamLibrary.FindGameDir`) | `Find` |
 | ParentConsole.cs | command-line starts attach to the starting console (the exe is windowed, no console flash) | `Attach` |
@@ -26,7 +26,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
 | Gui/TopBar.cs | top strip: brand, newer launcher build on GitHub, build, state lamp and state, Settings (Back while open) and Update buttons (Update idle only) | `TopBar.Show`, `ShowAvailable`, `ShowSettingsOpen`, `SettingsButton`, `UpdateButton` |
 | Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus` |
-| Gui/GameStatus.cs | rail line and mod button label for a game's `ModStatus` (Not installed, Installed (Build N), Update available (Build M)) | `GameStatus.Line`, `Action` |
+| Gui/GameStatus.cs | rail line and mod button label for a game (Game not found, Game build N unsupported, Not installed, Installed (Build N), Update available (Build M)); `CanHost` needs the mod and a supported game build | `GameStatus.Line`, `Action`, `CanHost` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character, partner ping | `PlayerSlots.Show` |
 | Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
@@ -34,10 +34,10 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/FlatToggle.cs | flat squared on/off switch with a label | `FlatToggle.Checked`, `Flipped` |
 | Gui/SectionPanel.cs | captioned pane section with a separator, sized to its content on request | `SectionPanel`, `FitToContent` |
 | Gui/ControlRow.cs | a row of controls at control height, spacers, top-down stacking | `ControlRow.Create`, `Spacer`, `Stack` |
-| Gui/SettingsView.cs | the settings pane: each game's folder (Browse / Reset), check for updates at start, open the logs folder; saved on change | `SettingsView`, `GameFolderChanged` |
+| Gui/SettingsView.cs | the settings pane: each game's folder (Browse / Reset), check for updates at start, open the logs folder, create the report zip; saved on change | `SettingsView`, `GameFolderChanged` |
 | Gui/WindowMemory.cs | restores and saves the window rectangle and maximized state | `Restore`, `Save` |
 | Gui/LogFooter.cs | newest log line; arrow toggles the full log drawer | `LogFooter.Toggled` |
-| Gui/StatusText.cs | state words and the state lamp colour | `Format`, `Lamp` |
+| Gui/StatusText.cs | state words and the state lamp colour; a game problem (exited, not linked) replaces the state | `Format`, `Lamp` |
 | Session.cs | slots, epochs, membership diffs, frame routing | `ApplyMembership`, `OnPeerFrame`, `OnAdapterFrame`, `End` |
 | SlotAssigner.cs | owner = 0, rest sorted by id | `Assign` |
 | LoopbackBridge.cs | adapter TCP link: HELLO check, heartbeat, timeout, relay; `SaveChanged` event for SAVE_CHANGED 0x0060 | `Pump`, `Send`, `AdapterReady`, `GameFrame` |
@@ -51,20 +51,23 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SteamLobby.cs | Steam lobby create/join, cf_* data; a request Steam rejects or never answers (30 s) becomes `Failure` | `Create`, `Join`, `Pump` |
 | LocalLobby.cs | fake lobby for local testing | |
 | SteamBootstrap.cs | SteamAPI init/callbacks, overlay invites | `PendingInviteLobby` |
-| GameProfile.cs | `games/<id>.json` loader, optional `saveSync` block (fixed Steam-cloud files, or `hostSaveDir`/`guestSaveDir`/`filePattern`) | `Load`, `ListIds` |
+| GameProfile.cs | `games/<id>.json` loader, optional `supportedBuilds` (Steam build ids the adapter fits), optional `saveSync` block (fixed Steam-cloud files, or `hostSaveDir`/`guestSaveDir`/`filePattern`) | `Load`, `ListIds` |
 | SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate, 60 s timeout; host re-sends the save to every peer on SAVE_CHANGED | `Create`, `Ready`, `TimedOut`, `EnableAdapter` |
 | LogForwarder.cs | guest diagnostics to the host: new adapter-log bytes every 2 s (LOG_APPEND 0x0050) and any crash-*.dmp written during the session (CRASH_DUMP 0x0051, 32 KiB chunks, retried while still being written); host writes `peer_<steamid>.log` and `peer_<steamid>_<dump>` beside its adapter log | `Create`, `Pump` |
-| BuildCheck.cs | same build on every machine: host sends BUILD_INFO 0x0013 as a peer joins; a guest on a different build stops before the game starts (dev builds only warn); shared `LocalBuild` reads version.txt (also used by Updater) | `BuildCheck.Create`, `LocalBuild`, `Ready`, `Mismatch` |
+| BuildCheck.cs | same build on every machine: host sends BUILD_INFO 0x0013 as a peer joins; a guest on a different build stops before the game starts (dev builds only warn); shared `LocalBuild` reads version.txt (also used by Updater); BUILD_INFO also carries the installed game build id (Steam buildid); a guest on another game build stops before the game starts | `BuildCheck.Create`, `LocalBuild`, `Ready`, `Mismatch` |
 | Rejoin.cs | a guest whose lobby fails (Steam: no longer listed in the lobby = dropped) retries joining the same lobby every 5 s for 2 min; the running game is left alone (GameLauncher skips launch and install while it runs) and the join snapshot catches it up | `Rejoin`, `App.TryRejoin` |
 | SaveSender.cs | host: paced FILE_BEGIN/CHUNK/END per new peer, resend until ACK ok; with a profile `filePattern` it sends every matching file after a FILE_MANIFEST 0x0044 | `SendTo`, `OnAck`, `Pump` |
 | SavePaths.cs | save folder templates: `{documents}`, `{steamid64}` (Steam's ActiveUser registry value) | `Expand` |
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest | `OnFrame`, `Complete` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest` |
 | AdapterSettings.cs | `coop=` in the adapter ini, session dir cleanup | `EnableCoop`, `Reset` |
-| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs); a failed Steam start is logged | `Launch` |
-| SteamLibrary.cs | game folder from libraryfolders.vdf + appmanifest | `FindGameDir` |
+| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs) or the installed game build is not supported; a failed Steam start is logged | `Launch` |
+| GameBuilds.cs | the installed Steam build of a game against the profile's `supportedBuilds` (the adapter's addresses fit one executable); a known build outside a non-empty list is unsupported | `Installed`, `IsSupported`, `Describe` |
+| GameWatch.cs | polled by the window while a session is open: the game exited or crashed (Relaunch is offered), or has run 20 s without the adapter link (started outside the launcher); the main loop is untouched | `GameWatch.Update`, `GameCondition` |
+| ReportBundle.cs | one zip for sending: launcher logs, version.txt, per game the coop folder's adapter.log/ini, peer logs and crash dumps | `Create` |
+| SteamLibrary.cs | game folder and installed build id from libraryfolders.vdf + appmanifest | `FindGameDir`, `InstalledBuild` |
 | RepoPaths.cs | repo root / games dir discovery | |
-| Log.cs | timestamped console log; `Written` event feeds the GUI log pane; the window also writes `%AppData%\CoopLauncher\logs\launcher.log` (previous run kept as `launcher.prev.log`) | `Info`, `WriteToFile` |
+| Log.cs | timestamped console log; `Written` event feeds the GUI log pane; the window also writes `AppData.LogFile` | `Info`, `WriteToFile` |
 
 ## adapters/re0/ (C++20, x86, dinput8.dll proxy)
 

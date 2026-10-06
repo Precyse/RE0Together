@@ -11,22 +11,21 @@ internal sealed class SettingsView : Panel
     private static readonly int BrowseWidth = Theme.Scale(84);
     private static readonly int ResetWidth = Theme.Scale(72);
     private static readonly int LogsButtonWidth = Theme.Scale(170);
-
-    private readonly List<GameFolderRow> _rows = new();
+    private static readonly int ReportButtonWidth = Theme.Scale(150);
 
     public SettingsView(IEnumerable<GameProfile> games)
     {
+        var gameList = games.ToList();
         BackColor = Theme.Bg;
         Dock = DockStyle.Fill;
         var gamesSection = new SectionPanel("Games");
         var launcherSection = new SectionPanel("Launcher") { BottomLine = false, Dock = DockStyle.Fill };
 
         var parts = new List<Control>();
-        foreach (var game in games)
+        foreach (var game in gameList)
         {
             var row = new GameFolderRow(game);
             row.Changed += () => GameFolderChanged?.Invoke();
-            _rows.Add(row);
             parts.Add(row.Name);
             parts.Add(row.Row);
             parts.Add(ControlRow.Spacer(Theme.Gap * 2));
@@ -38,7 +37,9 @@ internal sealed class SettingsView : Panel
         updates.Flipped += SetCheckForUpdates;
         var logs = new FlatButton("Open logs folder", ButtonKind.Normal);
         logs.Click += (_, _) => OpenLogsFolder();
-        var logsRow = ControlRow.Create(new Control[] { logs, new Panel() }, LogsButtonWidth, -1);
+        var report = new FlatButton("Create report", ButtonKind.Normal);
+        report.Click += (_, _) => CreateReport(gameList);
+        var logsRow = ControlRow.Create(new Control[] { logs, report, new Panel() }, LogsButtonWidth, ReportButtonWidth, -1);
         ControlRow.Stack(launcherSection, updates, ControlRow.Spacer(Theme.Gap), logsRow);
 
         Controls.Add(launcherSection);
@@ -60,11 +61,30 @@ internal sealed class SettingsView : Panel
         try
         {
             Directory.CreateDirectory(AppData.LogsDir);
-            Process.Start(new ProcessStartInfo(AppData.LogsDir) { UseShellExecute = true });
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Log.Info($"Could not open the logs folder: {e.Message}");
+            Log.Info($"Could not create the logs folder: {e.Message}");
+            return;
+        }
+        StartExplorer($"\"{AppData.LogsDir}\"");
+    }
+
+    /// <summary>Zips the logs for sending and shows the zip in Explorer.</summary>
+    private static void CreateReport(IEnumerable<GameProfile> games)
+    {
+        if (ReportBundle.Create(games) is { } path) StartExplorer($"/select,\"{path}\"");
+    }
+
+    private static void StartExplorer(string arguments)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", arguments));
+        }
+        catch (Win32Exception e)
+        {
+            Log.Info($"Could not open Explorer: {e.Message}");
         }
     }
 

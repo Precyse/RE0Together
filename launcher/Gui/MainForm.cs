@@ -11,6 +11,8 @@ public sealed class MainForm : Form
     private const int LogMaxChars = 60_000;
     private const int LogKeepChars = 40_000;
     private const int DwmUseImmersiveDarkMode = 20;
+    private const int WatchIntervalMs = 1000;
+    private const int RelaunchColumn = 1;
 
     private static readonly int WindowWidth = Theme.Scale(840);
     private static readonly int WindowHeight = Theme.Scale(540);
@@ -19,6 +21,7 @@ public sealed class MainForm : Form
     private static readonly int HostWidth = Theme.Scale(140);
     private static readonly int ToolWidth = Theme.Scale(84);
     private static readonly int ModWidth = Theme.Scale(100);
+    private static readonly int RelaunchWidth = Theme.Scale(110);
 
     private readonly App _app;
     private readonly TopBar _top = new();
@@ -44,6 +47,9 @@ public sealed class MainForm : Form
     {
         AutoSize = false, Dock = DockStyle.Fill, Font = Theme.Code, ForeColor = Theme.Text, TextAlign = ContentAlignment.MiddleLeft,
     };
+    private readonly FlatButton _relaunch = new("Relaunch", ButtonKind.Primary) { Visible = false };
+    private readonly GameWatch _watch = new();
+    private readonly System.Windows.Forms.Timer _watchTimer = new() { Interval = WatchIntervalMs };
     private readonly FlatButton _copy = new("Copy", ButtonKind.Normal);
     private readonly FlatButton _invite = new("Invite", ButtonKind.Normal);
     private bool _updateStaged;
@@ -63,7 +69,7 @@ public sealed class MainForm : Form
         MinimumSize = Size;
         WindowMemory.Restore(this);
         _idleRow = ControlRow.Create(new[] { (Control)_host, _mod, _joinCode, _join }, HostWidth, ModWidth, -1, ToolWidth);
-        _lobbyRow = ControlRow.Create(new[] { (Control)_lobbyCode, _copy, _invite, _leave }, -1, ToolWidth, ToolWidth, ToolWidth);
+        _lobbyRow = ControlRow.Create(new[] { (Control)_lobbyCode, _relaunch, _copy, _invite, _leave }, -1, 0, ToolWidth, ToolWidth, ToolWidth);
         LoadGames();
         BuildLayout();
         RefreshMods();
@@ -82,6 +88,9 @@ public sealed class MainForm : Form
         _mod.Click += (_, _) => ChangeMod();
         _join.Click += (_, _) => JoinTypedCode();
         _joinCode.Input.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) JoinTypedCode(); };
+        _relaunch.Click += (_, _) => RelaunchGame();
+        _watchTimer.Tick += (_, _) => WatchGame();
+        _watchTimer.Start();
         _copy.Click += (_, _) => CopyLobbyCode();
         _invite.Click += (_, _) => _app.Invite();
         _leave.Click += (_, _) => _app.Leave();
@@ -92,6 +101,7 @@ public sealed class MainForm : Form
         FormClosing += (_, _) => WindowMemory.Save(this);
         FormClosed += (_, _) =>
         {
+            _watchTimer.Dispose();
             _app.StatusChanged -= OnStatusChanged;
             Log.Unsubscribe(OnLogWritten);
         };
@@ -197,8 +207,28 @@ public sealed class MainForm : Form
         foreach (var game in _rail.Games.ToList())
         {
             var gameDir = GameFolders.Find(game);
-            _rail.SetStatus(game.Id, new GameStatus(ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild()));
+            var gameBuild = GameBuilds.Installed(game);
+            _rail.SetStatus(game.Id, new GameStatus(
+                ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild(), gameBuild, GameBuilds.IsSupported(game, gameBuild)));
         }
+    }
+
+    /// <summary>Once a second: notices the game of an open session exiting, or running without the adapter link.</summary>
+    private void WatchGame()
+    {
+        var status = _app.Status;
+        var game = _rail.Games.FirstOrDefault(g => g.Id == status.GameId);
+        if (!_watch.Update(status, game, Environment.TickCount64)) return;
+        if (game != null && _watch.Condition == GameCondition.Exited) Log.Info($"{game.Name} exited");
+        if (game != null && _watch.Condition == GameCondition.Unlinked) Log.Info($"{game.Name} is running without the co-op link (started outside the launcher?)");
+        Apply(status);
+    }
+
+    /// <summary>Starts the game again for the open session; the session folder is kept, so it catches up as it joins.</summary>
+    private void RelaunchGame()
+    {
+        var game = _rail.Games.FirstOrDefault(g => g.Id == _app.Status.GameId);
+        if (game != null) GameLauncher.Launch(game, GameFolders.Find(game));
     }
 
     /// <summary>The mod button: Install, Update (re-copy) or Uninstall for the selected game.</summary>
@@ -273,7 +303,10 @@ public sealed class MainForm : Form
         var inLobby = status.LobbyId != 0;
         var running = status.State is AppState.GameRunning or AppState.PeerConnected;
 
-        _top.Show(BuildLabel(), StatusText.Format(status), StatusText.Lamp(status.State));
+        var exited = _watch.Condition == GameCondition.Exited;
+        _top.Show(BuildLabel(), StatusText.Format(status, _watch.Condition), StatusText.Lamp(status.State, _watch.Condition));
+        _relaunch.Visible = exited;
+        _lobbyRow.ColumnStyles[RelaunchColumn].Width = exited ? RelaunchWidth : 0;
         _rail.Enabled = free;
         _rail.SetRunning(running ? _rail.Selected?.Id : null);
         if (_rail.Selected is { } game)
@@ -287,7 +320,7 @@ public sealed class MainForm : Form
         _lobbyRow.Visible = inLobby;
         _lobbyCode.Text = inLobby ? status.LobbyId.ToString() : string.Empty;
         var mod = _rail.SelectedStatus;
-        _host.Enabled = idle && mod.ModInstalled;
+        _host.Enabled = idle && mod.CanHost;
         _mod.Text = mod.Action.Label;
         _mod.Enabled = free && mod.Action.Enabled;
         _mod.Invalidate();
