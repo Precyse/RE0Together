@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 
+#include "enemy_protocol.h"
 #include "position_blend.h"
 
 // Pure rules of an enemy that this machine does not own (a puppet): its pose follows the owner's snapshots. No game
@@ -13,6 +14,7 @@ constexpr float kSnapDistance = 300.0f;  // a bigger gap is a teleport, not lag
 struct Track {
     bool valid = false;
     int32_t hp = 0;
+    uint8_t target = enemy_protocol::kNoTarget;
     float pos[3] = {};
     float quat[4] = {};
     float velocity[3] = {};
@@ -20,7 +22,8 @@ struct Track {
 };
 
 // Folds a received snapshot into the track.
-inline void observe(Track& track, const float (&pos)[3], const float (&quat)[4], int32_t hp, int64_t nowMs) {
+inline void observe(Track& track, const float (&pos)[3], const float (&quat)[4], int32_t hp, uint8_t target,
+                    int64_t nowMs) {
     if (track.valid) {
         position_blend::velocity(track.pos, pos, static_cast<float>(nowMs - track.stateMs) / 1000.0f, track.velocity);
     } else {
@@ -29,6 +32,7 @@ inline void observe(Track& track, const float (&pos)[3], const float (&quat)[4],
     for (int i = 0; i < 3; ++i) track.pos[i] = pos[i];
     for (int i = 0; i < 4; ++i) track.quat[i] = quat[i];
     track.hp = hp;
+    track.target = target;
     track.stateMs = nowMs;
     track.valid = true;
 }

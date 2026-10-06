@@ -10,15 +10,18 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | CliOptions.cs | argument parsing | `CliOptions.Parse`, `Usage` |
 | App.cs | wiring and ~100 Hz main loop; CLI runs one session, interactive (GUI) takes commands and returns to idle | `Run`, `Host`, `Join`, `Leave`, `Invite`, `Stop`, `StatusChanged`, `EndSession` |
 | AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT) | `AppStatus`, `AppState` |
-| Updater.cs | self-update from the rolling GitHub release `latest` (`update.json` repo, `version.txt` build): download, rename old files to `*.old`, copy new; start-up relaunches (`TryInstall`), the window's Update button only stages (`Stage`: no relaunch while a Steam session is open, the player reopens); skipped silently on any failure or outside the packaged layout | `TryInstall`, `Stage` |
+| Updater.cs | self-update from the rolling release `latest` (`version.txt` build, read through ReleaseFeed): download the whole package (launcher, game profiles, every game's adapter), rename old files to `*.old`, copy new; start-up relaunches (`TryInstall`), the window's Update button only stages (`Stage`: no relaunch while a Steam session is open, the player reopens); skipped silently on any failure or outside the packaged layout | `TryInstall`, `Stage` |
 | InstanceGuard.cs | one window launcher at a time: a new window launcher closes older launcher processes | `CloseOtherLaunchers` |
+| ReleaseFeed.cs | the one cached read of the GitHub release (`update.json` repo): read at startup, forced only by the Update button; a failed read is logged and keeps the old result; also the shared HTTP client | `Read`, `Get`, `AssetName` |
+| ModInstaller.cs | a game's mod = its profile adapterFiles in the game folder: `Status` (not installed / installed / update available; marker `.cfown` detects installs), `Install` (also the update re-copy; backs up originals as `.cfbak`, records the build in `.cfbuild`), `Uninstall` (restores backups) | `Status`, `Install`, `Uninstall` |
 | Gui/GuiHost.cs | GUI entry: hides the console, runs App on a background thread, window on the STA thread | `Run` |
-| Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
+| Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires the mod button (Install/Update/Uninstall; Host needs the mod installed), Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
 | Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed) | `Theme` |
 | Gui/Draw.cs | shared painting: text, captions, lamps, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Wrapped` |
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
-| Gui/TopBar.cs | top strip: brand, build, state lamp and state, Update button (idle only) | `TopBar.Show`, `UpdateButton` |
-| Gui/GameRail.cs | left rail of games with capsule art; selection, Running mark, locks during a session | `GameRail`, `SelectionChanged` |
+| Gui/TopBar.cs | top strip: brand, newer launcher build on GitHub, build, state lamp and state, Update button (idle only) | `TopBar.Show`, `ShowAvailable`, `UpdateButton` |
+| Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus` |
+| Gui/GameStatus.cs | rail line and mod button label for a game's `ModStatus` (Not installed, Installed (Build N), Update available (Build M)) | `GameStatus.Line`, `Action` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character, partner ping | `PlayerSlots.Show` |
 | Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
@@ -48,7 +51,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest | `OnFrame`, `Complete` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest` |
 | AdapterSettings.cs | `coop=` in the adapter ini, session dir cleanup | `EnableCoop`, `Reset` |
-| GameLauncher.cs | adapter install (sha256, `.cfbak`) and Steam game start | `Launch` |
+| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs) | `Launch` |
 | SteamLibrary.cs | game folder from libraryfolders.vdf + appmanifest | `FindGameDir` |
 | RepoPaths.cs | repo root / games dir discovery | |
 | Log.cs | timestamped console log; `Written` event feeds the GUI log pane | `Info` |
@@ -80,8 +83,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/auto_join.cpp | net thread: a guest at game over (always) or outside gameplay (boot, title, load list; only with `auto_join=1`) with the host in game gets virtual Enter every 2.5 s and a muted keyboard until a character is controlled; waits muted while the host is not in game (60 s at most, then the keyboard is the guest's); the decision is `session_rule::joinMode` | `auto_join::onNetTick` |
 | src/partner_status.cpp | pure text of the partner status line (unit tested): name, condition Fine / Caution / Danger from hp against the highest hp seen (floor 150), same room or `room 0x..`, `in menu`; "Host left / not saved" | `partner_status::text`, `condition` |
 | src/partner_hud.cpp | net thread: gathers the status line from the session, `state_correction::latestState`, `door_travel::peerPlace` and `menu_mirror::peerMenuOpen`, hands it to `debug_stats::setPartnerLine` on change; remembers a host that left | `partner_hud::onNetTick`, `onPeerJoined`, `onHostLeft` |
-| src/resync.cpp | resync on demand: `coop
-esync_now.txt` (polled every second, deleted when taken) and `request` (door_travel's persisting desync): a guest asks for a new join snapshot (`join_sync::requestResync`), a host sends RESYNC_REQUEST 0x0114 and the guest does | `resync::request`, `onFrame`, `onNetTick` |
+| src/resync.cpp | resync on demand: `coopesync_now.txt` (polled every second, deleted when taken) and `request` (door_travel's persisting desync): a guest asks for a new join snapshot (`join_sync::requestResync`), a host sends RESYNC_REQUEST 0x0114 and the guest does | `resync::request`, `onFrame`, `onNetTick` |
 | src/session_rule.h | pure session-flow rules (unit tested): where a save request goes (`saveRoute`: pass, co-op slot, refuse for a guest) and what the automatic join does (`joinMode`: idle, waiting, confirming) | `session_rule::saveRoute`, `joinMode` |
 | src/virtual_keys.cpp | virtual keyboard on DirectInput: the proxy hands over IDirectInput8, CreateDevice is hooked, the keyboard's GetDeviceState gets tapped keys, optional muting and two hidden keys | `virtual_keys::onDirectInput`, `tap`, `setRealKeyboardMuted`, `setHiddenKeys` |
 | src/jitter_target.h | adaptive remote-pad buffer target (2..8 frames: +1 per underrun, -1 after ~10 s calm; skip beyond target + 6), unit tested | `JitterTarget` |
@@ -123,12 +125,14 @@ esync_now.txt` (polled every second, deleted when taken) and `request` (door_tra
 | src/enemy_protocol.h | HIT_REQUEST 0x0110, HIT_APPLIED 0x0111, ENEMY_STATE 0x0112 constants and payload structs | `HitPayload`, `EnemyEntry` |
 | src/enemy_net.cpp | hit messages: guest request, host apply and announce, guest apply; game thread queue | `enemy_net::requestHit`, `announceHit`, `onFrame` |
 | src/enemy_state.cpp | the room owner sends a 20 Hz enemy snapshot; the other machine keeps a track per slot (HP from the owner via setHP, pose blended every tick toward the extrapolated target, snapped only after a >300 jump) | `enemy_state::onFrame`, `enable` |
+| tools/re0/field_refs.py, slot_funcs.py | static (image.bin): every instruction with a given field offset (writers of +0x67a4, +0x6b80); the function each enemy vtable has in a slot and what its returns pop | |
 | tools/re0/motion_probe.py | read-only: the uModel motion block of live enemies (or the player with -1), sampled five times | |
 | tools/re0/enemy_state_probe.py | read-only: per live enemy the AI record (+0x67a4..), motion number, frame, HP and position, printed on every change (`frames` prints every sample) | |
 | tools/re0/enemy_target_probe.py | read-only: which offsets of a live enemy hold the controlled or partner player pointer (its target) | |
 | tools/re0/equip_trace.py | read-only before/after snapshot of sItem, sPlayer, both characters and the weapon-class objects they point at; prints every changed dword (for finding what an equip changes) | `before`, `after`, `show` |
 | src/spot_rule.h | pure choice of the door-entry spot (mode 0 door, 2 follower behind, 1 side) for a character placed by `scene::move`: a distinct spot when the other character already stands in the room | `spot_rule::modeFor` |
-| src/enemy_action.cpp, src/set_action_thunk.cpp, src/enemy_action_rule.h | an enemy's behaviour record {state, id, a, b} at +0x67a4 (read/sent in ENEMY_STATE, 56 bytes per entry). `enemy_action::install` patches the setAction slot 63 of the enemy vtables (thunks for the 4-, 2- and 1-argument implementations); on a living puppet with an owner record its own AI calls are refused (`enemy_state::puppetOwnsAction`); `request` applies the owner's record through the original setAction as soon as it differs (100 ms cooldown, `enemy_action_rule::Sync`) | `enemy_action::install`, `request`, `enemy_action_rule::Sync::due` |
+| src/enemy_action.cpp, src/slot_thunk.cpp, src/enemy_action_rule.h | an enemy's behaviour record {state, id, a, b} at +0x67a4 (read/sent in ENEMY_STATE, 56 bytes per entry). `enemy_action::install` patches slot 63 (setAction; thunks for the 4-, 2- and 1-argument implementations) and slot 41 (per-frame update, no arguments) of the enemy vtables; on a living puppet with an owner record its own setAction calls are refused (`enemy_state::puppetOwnsAction`), the AI think step 0x41db20 (shared by the 15 base classes; MinHook) does not run, and the record is put back as it was before each update, which undoes the handlers' direct writes of the state word; `request` applies the owner's record through the original setAction as soon as it differs (100 ms cooldown, `enemy_action_rule::Sync`) | `enemy_action::install`, `request`, `enemy_action_rule::Sync::due`, `slot_thunk::patchVtable` |
+| src/enemy_target.cpp | which player an enemy chases (+0x6b80): hooks the base classes' selector 0x421b20 and the own-class selector 0x439e90; the owner's choice (a character id in ENEMY_STATE) replaces the puppet's own (target, height, distance fields) | `enemy_target::install`, `read` |
 | src/enemy_puppet_rule.h | pure puppet rules (unit tested): `Track`, `observe` (velocity from two snapshots), `aim` (extrapolated target), `stepFor` (hold, blend, snap beyond 300) | `enemy_puppet_rule::stepFor` |
 | src/player_damage.cpp | HP/death ownership: MinHook gates on `setHP` 0x529310 and `cPlayerThink::onDeath` 0x4fcea0 (remote-owned characters only change via the owner); PLAYER_DIED 0x0120 replays remote deaths; authoritative `setHp` for all sync code | `player_damage::install` |
 | src/vtable_tracer.cpp | counting thunks patched into vtables, 2 s report | `vtable_tracer::install`, `uninstall` |
@@ -151,7 +155,7 @@ esync_now.txt` (polled every second, deleted when taken) and `request` (door_tra
 | tests/pad_buffer_test.cpp | x86 exe: PadBuffer waiting, order, stale frames, underrun, skip-ahead, cap, clear | |
 | tests/position_blend_test.cpp | x86 exe: classify thresholds, blend convergence, extrapolation cap, quaternion shorter arc (no game) | |
 | tests/enemy_action_rule_test.cpp | x86 exe: apply at once, cooldown, matching record left alone, owner change followed | |
-| tests/set_action_thunk_test.cpp | x86 exe: the setAction thunk for 4, 2 and 1 argument classes passes enemy, original and arguments, balances the stack, and a blocking handler keeps the original from running | |
+| tests/slot_thunk_test.cpp | x86 exe: the slot thunk for 4, 2, 1 and 0 argument slots passes enemy, original and arguments, balances the stack, and a blocking handler keeps the original from running | |
 | tests/spot_rule_test.cpp | x86 exe: which door-entry spot a character is placed on (door, follower, side, alike) | |
 | tests/equip_rule_test.cpp | x86 exe: equipped slot read and the refresh decision | |
 | tests/enemy_puppet_rule_test.cpp | x86 exe: puppet track velocity, capped aim, hold/blend/snap steps | |

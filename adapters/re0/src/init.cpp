@@ -16,6 +16,7 @@
 #include "enemy_damage_hook.h"
 #include "enemy_net.h"
 #include "enemy_state.h"
+#include "enemy_target.h"
 #include "event_place.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
@@ -87,6 +88,7 @@ void enableCoop() {
     state_correction::enable();
     enemy_damage_hook::install();
     enemy_action::install();
+    enemy_target::install();
     player_damage::install(g_net);
     menu_mirror::enable();
 }

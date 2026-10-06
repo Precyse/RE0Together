@@ -11,6 +11,7 @@
 #include "enemy_protocol.h"
 #include "enemy_puppet_rule.h"
 #include "enemy_registry.h"
+#include "enemy_target.h"
 #include "game.h"
 #include "game_tick.h"
 #include "log.h"
@@ -66,6 +67,7 @@ void sendState() {
         EnemyEntry entry{};
         entry.slot = static_cast<uint8_t>(slot);
         entry.vtable = static_cast<uint32_t>(game::readPointer(enemy));
+        entry.target = enemy_target::read(enemy);
         if (!enemy_registry::isEnemy(enemy) || !game::readMemory(enemy + game::kEnemyHpOffset, entry.hp) ||
             !game::readTransform(enemy, entry.pos, entry.quat) || !readAction(enemy, entry.action)) {
             continue;
@@ -113,7 +115,7 @@ void applyEntry(const EnemyEntry& entry) {
         return logOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
     }
     applyHp(entry, enemy);
-    enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, nowMs());
+    enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, entry.target, nowMs());
     enemy_action_rule::Action owner;
     std::memcpy(owner.word, entry.action, sizeof(owner.word));
     g_actions[entry.slot].observeOwner(owner);
@@ -189,6 +191,14 @@ void onTick() {
     sendState();
 }
 
+// The owner's last word on a living puppet, or null.
+const enemy_puppet_rule::Track* ownedTrack(uintptr_t enemy) {
+    if (!puppetActive()) return nullptr;
+    const int slot = enemy_registry::slotOf(enemy);
+    if (slot == enemy_registry::kNoSlot || !g_tracks[slot].valid || g_tracks[slot].hp <= 0) return nullptr;
+    return &g_tracks[slot];
+}
+
 }  // namespace
 
 namespace enemy_state {
@@ -212,10 +222,11 @@ void onFrame(const GameFrame& frame) {
 }
 
 
-bool puppetOwnsAction(uintptr_t enemy) {
-    if (!puppetActive()) return false;
-    const int slot = enemy_registry::slotOf(enemy);
-    return slot != enemy_registry::kNoSlot && g_tracks[slot].valid && g_tracks[slot].hp > 0;
+bool puppetOwnsAction(uintptr_t enemy) { return ownedTrack(enemy) != nullptr; }
+
+uint8_t puppetTarget(uintptr_t enemy) {
+    const enemy_puppet_rule::Track* track = ownedTrack(enemy);
+    return track ? track->target : enemy_protocol::kNoTarget;
 }
 
 void enable(NetClient& net) {
