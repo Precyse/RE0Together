@@ -25,7 +25,7 @@ void onFrame(const GameFrame& frame) {
         logger::write("story_sync: dropped a malformed STORY_EVENT (%zu bytes)", frame.payload.size());
         return;
     }
-    const bool request = story_wire::isOrderRequest(static_cast<story_wire::Kind>(event.kind));
+    const bool request = story_wire::isGuestRequest(static_cast<story_wire::Kind>(event.kind));
     if (request ? g_host : (g_guest && frame.slot == g_hostSlot)) {
         game::replayStoryEvent(event);
     }

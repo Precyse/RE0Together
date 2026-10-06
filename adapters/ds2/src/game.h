@@ -305,6 +305,9 @@ void setStoryRole(bool host, bool guest);
 // Host: the next poll also reports every mission in progress (a joined or resynced guest). Any thread.
 void requestStorySnapshot();
 
+// The mission object (DSMissionSystem's map entry, +0x10 its resource) with this full mission id, 0 when there is none.
+uintptr_t missionById(uint64_t id);
+
 // Guest: the order starts the player asked for at a terminal (refused locally, the host runs them). Any thread.
 std::vector<story_wire::Event> takeStoryRequests();
 
