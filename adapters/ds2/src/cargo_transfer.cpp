@@ -42,18 +42,19 @@ Clock::time_point g_lastRefresh;
 Clock::time_point g_lastReport;
 
 cargo_transfer::CargoEntry toEntry(const game::Cargo& piece) {
-    cargo_transfer::CargoEntry entry{piece.handle, piece.type, {}};
+    cargo_transfer::CargoEntry entry{piece.handle, piece.type, {}, piece.orderId, piece.secondId, piece.durability, piece.category, {}};
     std::memcpy(entry.name, piece.name.data(), std::min(piece.name.size(), sizeof(entry.name)));
     return entry;
 }
 
 game::Cargo fromEntry(const cargo_transfer::CargoEntry& entry) {
-    return {entry.handle, entry.type, std::string(entry.name, strnlen(entry.name, sizeof(entry.name)))};
+    return {entry.handle, entry.type, std::string(entry.name, strnlen(entry.name, sizeof(entry.name))), entry.orderId,
+            entry.secondId, entry.category, entry.durability};
 }
 
 bool sameEntries(const std::vector<cargo_transfer::CargoEntry>& a, const std::vector<cargo_transfer::CargoEntry>& b) {
     return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const auto& x, const auto& y) {
-               return x.handle == y.handle && x.type == y.type;
+               return x.handle == y.handle && x.type == y.type && x.orderId == y.orderId;
            });
 }
 
@@ -73,11 +74,6 @@ std::optional<cargo_transfer::Partner> parseList(uint8_t slot, const std::vector
     return partner;
 }
 
-void sendAdd(NetClient& net, uint8_t slot, const game::Cargo& piece) {
-    const cargo_transfer::CargoAdd add{piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
-    net.send(cargo_transfer::kMsgCargoAdd, true, slot, proto::bytesOf(add));
-}
-
 game::Cargo pieceOf(const cargo_transfer::CargoAdd& add) {
     return {0, add.type, {}, add.orderId, add.secondId, add.category, add.durability};
 }
@@ -90,7 +86,7 @@ void giveUp(NetClient& net, uint8_t hostSlot, uint64_t handle) {
         logger::write("cargo: host asked for %llx, not carried", static_cast<unsigned long long>(handle));
         return;
     }
-    sendAdd(net, hostSlot, *piece);
+    cargo_transfer::sendPiece(net, hostSlot, *piece);
     logger::write("cargo: gave %s (%u) to the host", piece->name.c_str(), piece->type);
 }
 
@@ -196,7 +192,7 @@ void runRequests(NetClient& net) {
     for (const Request& request : requests) {
         if (request.action == Action::Give) {
             if (!game::removeCargo(request.piece.handle)) continue;
-            sendAdd(net, partnerSlot, request.piece);
+            cargo_transfer::sendPiece(net, partnerSlot, request.piece);
             logger::write("cargo: gave %s (%u) to the guest", request.piece.name.c_str(), request.piece.type);
         } else {
             g_awaited.push_back(request.piece.type);
@@ -209,6 +205,11 @@ void runRequests(NetClient& net) {
 }  // namespace
 
 namespace cargo_transfer {
+
+void sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece) {
+    const CargoAdd add{piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
+    net.send(kMsgCargoAdd, true, slot, proto::bytesOf(add));
+}
 
 void onFrame(NetClient& net, const GameFrame& frame) {
     const bool host = g_host.load();

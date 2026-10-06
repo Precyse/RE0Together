@@ -20,6 +20,8 @@
 #include "log.h"
 #include "pattern_scan.h"
 
+using game::isOrderId;
+
 namespace {
 
 template <class T>
@@ -204,8 +206,6 @@ bool inSlots(const std::vector<SlotRange>& slots, uintptr_t slot) {
     return false;
 }
 
-bool isOrderId(uint64_t id);
-
 struct PoolEntry {
     uint64_t handle;
     uintptr_t item;
@@ -309,21 +309,19 @@ bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& 
     return handle != kFreeHandle;
 }
 
-bool isOrderId(uint64_t id) { return (id & kOrderNumberMask) != 0 && (id & kOrderTypeMask) != 0; }
-
 // Where the pieces with this order id (and piece index) are in this world. Deleting an order piece deletes every
 // piece sharing its id, so a second one with the same id must never be created.
 struct OrderPieces {
-    bool carried = false;             // one is in the local backpack
-    std::vector<uint64_t> elsewhere;  // handles of the others (a locker, a shelf, the ground)
+    bool carried = false;             // one is in the local backpack or in the target's slots
+    std::vector<uint64_t> elsewhere;  // handles of the others (a locker, a shelf, the ground, a partner's rack)
 };
 
-OrderPieces findOrderPieces(uintptr_t manager, uint64_t orderId) {
+OrderPieces findOrderPieces(uintptr_t manager, uint64_t orderId, const std::vector<SlotRange>& target) {
     OrderPieces found;
     const std::vector<SlotRange> backpack = backpackSlots(manager);
     for (const PoolEntry& entry : livePool(manager)) {
         if (entry.orderId != orderId) continue;
-        if (inSlots(backpack, entry.slot)) {
+        if (inSlots(backpack, entry.slot) || inSlots(target, entry.slot)) {
             found.carried = true;
         } else {
             found.elsewhere.push_back(entry.handle);
@@ -331,6 +329,26 @@ OrderPieces findOrderPieces(uintptr_t manager, uint64_t orderId) {
     }
     return found;
 }
+
+// Done: `piece` may be created now. Refused: this world already holds it in the local backpack or `target`. Retry: this
+// world still held it elsewhere (both worlds start from one save, so the piece the partner has is also in a locker here):
+// those stale copies were removed, and the creation must be asked again once the game has served the deletions.
+game::AddResult orderCopyGuard(uintptr_t manager, const game::Cargo& piece, const std::vector<SlotRange>& target) {
+    if (!isOrderId(piece.orderId)) return game::AddResult::Done;
+    const OrderPieces existing = findOrderPieces(manager, piece.orderId, target);
+    if (existing.carried) {
+        logger::write("cargo: refused to create order piece %llx: this world already holds it",
+                      static_cast<unsigned long long>(piece.orderId));
+        return game::AddResult::Refused;
+    }
+    if (existing.elsewhere.empty()) return game::AddResult::Done;
+    for (const uint64_t handle : existing.elsewhere) game::removeCargo(handle);
+    logger::write("cargo: removed %zu stale copies of order piece %llx before creating it", existing.elsewhere.size(),
+                  static_cast<unsigned long long>(piece.orderId));
+    return game::AddResult::Retry;
+}
+
+bool linkedToOrder(const game::Cargo& piece) { return isOrderId(piece.orderId) || isOrderId(piece.secondId); }
 
 // The local player's backpack owner: its child owner that has a slot of the main-load kind.
 uintptr_t backpackOwner(uintptr_t manager, uint64_t playerKey = kLocalPlayerKey) {
@@ -344,9 +362,23 @@ uintptr_t backpackOwner(uintptr_t manager, uint64_t playerKey = kLocalPlayerKey)
     return 0;
 }
 
+// Creates `piece` in the main load of the backpack owner `owner` (whose slots are `slots`) with the manager's own create,
+// which takes the order link and the durability.
+game::AddResult createInBackpack(uintptr_t baggage, uintptr_t owner, const std::vector<SlotRange>& slots,
+                                 const game::Cargo& piece) {
+    if (!owner) return game::AddResult::Refused;
+    if (const game::AddResult guard = orderCopyGuard(baggage, piece, slots); guard != game::AddResult::Done) return guard;
+    const bool custom = linkedToOrder(piece) || piece.durability > 0;
+    return createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, custom ? &piece : nullptr)
+               ? game::AddResult::Done
+               : game::AddResult::Refused;
+}
+
 }  // namespace
 
 namespace game {
+
+bool isOrderId(uint64_t id) { return (id & kOrderNumberMask) != 0 && (id & kOrderTypeMask) != 0; }
 
 std::vector<Cargo> carriedCargo() {
     const uintptr_t baggage = manager();
@@ -361,11 +393,11 @@ std::vector<Cargo> backpackCargo(uint64_t playerKey) {
     return piecesIn(baggage, slotsOfKind(owner, kBackpackSlotKind));
 }
 
-bool addBackpackCargo(uint64_t playerKey, uint32_t type) {
+AddResult addBackpackCargo(uint64_t playerKey, const Cargo& piece) {
     const uintptr_t baggage = manager();
     const uintptr_t owner = baggage ? backpackOwner(baggage, playerKey) : 0;
-    return owner && !sharesWithLocalPlayer(baggage, playerKey, owner) &&
-           createPiece(baggage, type, {}, owner, kBackpackSlotKind);
+    if (!owner || sharesWithLocalPlayer(baggage, playerKey, owner)) return AddResult::Refused;
+    return createInBackpack(baggage, owner, slotsOfKind(owner, kBackpackSlotKind), piece);
 }
 
 void setOwnerActive(uint64_t ownerKey, bool active) {
@@ -469,7 +501,7 @@ bool addVehicleCargo(uint64_t vehicle, uint32_t type) { return addSlotPiece(vehi
 std::optional<uint64_t> findOrderPiece(uint64_t orderId) {
     const uintptr_t baggage = manager();
     if (!baggage || !isOrderId(orderId)) return std::nullopt;
-    const OrderPieces found = findOrderPieces(baggage, orderId);
+    const OrderPieces found = findOrderPieces(baggage, orderId, {});
     if (found.elsewhere.empty()) return std::nullopt;
     return found.elsewhere.front();
 }
@@ -492,42 +524,24 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
 AddResult addCargo(const Cargo& piece) {
     const uintptr_t baggage = manager();
     if (!baggage) return AddResult::Retry;
-    if (isOrderId(piece.orderId) || isOrderId(piece.secondId)) {
-        if (isOrderId(piece.orderId)) {
-            const OrderPieces existing = findOrderPieces(baggage, piece.orderId);
-            if (existing.carried) {
-                logger::write("cargo: refused to create order piece %llx: the backpack already holds it",
-                              static_cast<unsigned long long>(piece.orderId));
-                return AddResult::Refused;
-            }
-            if (!existing.elsewhere.empty()) {
-                // This world still holds the piece the partner gave away (both worlds start from one save): remove
-                // that stale copy, then create the real one once the game has served the deletion.
-                for (const uint64_t handle : existing.elsewhere) removeCargo(handle);
-                logger::write("cargo: removed %zu stale copies of order piece %llx before receiving it",
-                              existing.elsewhere.size(), static_cast<unsigned long long>(piece.orderId));
-                return AddResult::Retry;
-            }
-        }
-        const uintptr_t owner = backpackOwner(baggage);
-        return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece) ? AddResult::Done
-                                                                                            : AddResult::Refused;
-    }
-    if (piece.durability > 0) {
-        // A damaged or partly used piece keeps its durability: it is created with the manager's own create, which takes
-        // it, instead of the request queue's create (a fresh piece).
-        const uintptr_t owner = backpackOwner(baggage);
-        return owner && createPiece(baggage, piece.type, {}, owner, kBackpackSlotKind, &piece) ? AddResult::Done
-                                                                                            : AddResult::Refused;
+    if (linkedToOrder(piece) || piece.durability > 0) {
+        // An order piece keeps its link, a damaged or partly used one its durability: they are created with the
+        // manager's own create, which takes them, instead of the request queue's create (a fresh plain piece).
+        return createInBackpack(baggage, backpackOwner(baggage), backpackSlots(baggage), piece);
     }
     if (!code().createAndAdd) return AddResult::Refused;
     code().createAndAdd(piece.type, kToBackpack);
     return AddResult::Done;
 }
 
-bool placeCargo(uint32_t type, const world_to_screen::Vec3& at) {
+AddResult placeCargo(const Cargo& piece, const world_to_screen::Vec3& at) {
     const uintptr_t baggage = manager();
-    return baggage && createPiece(baggage, type, {at.x, at.y, at.z + kPlaceLiftMetres}, 0, kNoSlotKind);
+    if (!baggage) return AddResult::Retry;
+    if (const AddResult guard = orderCopyGuard(baggage, piece, {}); guard != AddResult::Done) return guard;
+    const world_to_screen::Vec3 lifted{at.x, at.y, at.z + kPlaceLiftMetres};
+    return createPiece(baggage, piece.type, lifted, 0, kNoSlotKind, linkedToOrder(piece) ? &piece : nullptr)
+               ? AddResult::Done
+               : AddResult::Refused;
 }
 
 bool removeCargo(uint64_t handle) {

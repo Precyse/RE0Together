@@ -22,11 +22,22 @@ constexpr auto kRemember = std::chrono::seconds(10);  // a piece passes through 
 constexpr double kWatchMetres = 8.0;  // loose pieces this close are watched (a pickup reaches about 2 m)
 constexpr double kMatchMetres = 3.0;  // the other world's copy is looked for this far around the reported spot
 constexpr double kPlaceMetres = 300.0;  // a partner's drop is placed once this player is this close (terrain loaded)
+constexpr int kMaxPlaceAttempts = 20;   // a drop that has to wait for a stale copy to go is given up after this many watches
 constexpr float kToastSeconds = 4.0f;
 
 struct SeenLoose {
     game::LooseCargo piece;
     Clock::time_point at;
+};
+
+struct SeenCarried {
+    game::Cargo piece;
+    Clock::time_point at;
+};
+
+struct FarDrop {
+    cargo_ground::Spot spot;
+    int attempts = 0;
 };
 
 std::atomic<bool> g_host{false};
@@ -35,10 +46,10 @@ std::atomic<uint8_t> g_hostSlot{0};
 // Net thread only.
 Clock::time_point g_lastWatch;
 std::map<uint64_t, SeenLoose> g_recentLoose;            // loose pieces seen around the player lately
-std::map<uint64_t, Clock::time_point> g_recentCarried;  // pieces seen in the backpack lately
+std::map<uint64_t, SeenCarried> g_recentCarried;        // pieces seen in the backpack lately
 std::set<uint64_t> g_carried;                           // handles in the backpack at the last watch
 std::map<uint32_t, game::Cargo> g_pending;              // guest: pickups waiting for the host, by request number
-std::vector<cargo_ground::Spot> g_farDrops;             // partner drops waiting until this player comes near
+std::vector<FarDrop> g_farDrops;                        // partner drops waiting until this player comes near
 uint32_t g_nextRequest = 1;
 
 double distanceSquared(const world_to_screen::Vec3& a, const world_to_screen::Vec3& b) {
@@ -46,8 +57,13 @@ double distanceSquared(const world_to_screen::Vec3& a, const world_to_screen::Ve
     return world_to_screen::dot(d, d);
 }
 
-cargo_ground::Spot spot(uint32_t request, uint32_t type, const world_to_screen::Vec3& at, uint64_t orderId) {
-    return {request, type, {static_cast<float>(at.x), static_cast<float>(at.y), static_cast<float>(at.z)}, 0, orderId};
+cargo_ground::Spot spot(uint32_t request, const game::Cargo& piece, const world_to_screen::Vec3& at) {
+    return {request, piece.type, {static_cast<float>(at.x), static_cast<float>(at.y), static_cast<float>(at.z)},
+            piece.durability, piece.orderId, piece.secondId, piece.category, {}};
+}
+
+game::Cargo pieceAt(const cargo_ground::Spot& spot) {
+    return {0, spot.type, {}, spot.orderId, spot.secondId, spot.category, spot.durability};
 }
 
 world_to_screen::Vec3 where(const cargo_ground::Spot& spot) {
@@ -69,16 +85,15 @@ std::optional<uint64_t> findLoose(uint32_t type, const world_to_screen::Vec3& at
 }
 
 void ask(NetClient& net, uint8_t hostSlot, const game::Cargo& piece, const world_to_screen::Vec3& at) {
-    const cargo_ground::Spot request = spot(g_nextRequest++, piece.type, at, piece.orderId);
+    const cargo_ground::Spot request = spot(g_nextRequest++, piece, at);
     if (!net.send(cargo_ground::kMsgPickup, true, hostSlot, proto::bytesOf(request))) return;
     g_pending[request.request] = piece;
     logger::write("cargo_ground: asked the host for %s (%u)", piece.name.c_str(), piece.type);
 }
 
-void announce(NetClient& net, uint16_t type, const char* what, uint32_t kind, const world_to_screen::Vec3& at,
-              uint64_t orderId) {
-    net.send(type, true, proto::kSlotAll, proto::bytesOf(spot(0, kind, at, orderId)));
-    logger::write("cargo_ground: %s %u at (%.1f, %.1f, %.1f)", what, kind, at.x, at.y, at.z);
+void announce(NetClient& net, uint16_t type, const char* what, const game::Cargo& piece, const world_to_screen::Vec3& at) {
+    net.send(type, true, proto::kSlotAll, proto::bytesOf(spot(0, piece, at)));
+    logger::write("cargo_ground: %s %u at (%.1f, %.1f, %.1f)", what, piece.type, at.x, at.y, at.z);
 }
 
 // Compares the backpack and the loose pieces around the player with what was seen lately: a piece seen loose that is
@@ -91,20 +106,22 @@ void watch(NetClient& net, const SessionSnapshot& session, bool host, Clock::tim
     for (const game::LooseCargo& piece : game::looseCargo(player->position, kWatchMetres)) {
         const bool newlyLoose = !g_recentLoose.contains(piece.handle);
         g_recentLoose[piece.handle] = {piece, now};
-        if (newlyLoose && g_recentCarried.erase(piece.handle)) {
-            announce(net, cargo_ground::kMsgDrop, "put down", piece.type, piece.position, piece.orderId);
+        const auto carried = g_recentCarried.find(piece.handle);
+        if (newlyLoose && carried != g_recentCarried.end()) {
+            announce(net, cargo_ground::kMsgDrop, "put down", carried->second.piece, piece.position);
+            g_recentCarried.erase(carried);
         }
     }
     std::set<uint64_t> carriedNow;
     for (const game::Cargo& piece : game::carriedCargo()) {
         carriedNow.insert(piece.handle);
-        g_recentCarried[piece.handle] = now;
+        g_recentCarried[piece.handle] = {piece, now};
         const auto loose = g_recentLoose.find(piece.handle);
         if (g_carried.contains(piece.handle) || loose == g_recentLoose.end()) continue;
         const world_to_screen::Vec3 at = loose->second.piece.position;
         g_recentLoose.erase(loose);
         if (host) {
-            announce(net, cargo_ground::kMsgHostPickup, "host picked up", piece.type, at, piece.orderId);
+            announce(net, cargo_ground::kMsgHostPickup, "host picked up", piece, at);
         } else {
             ask(net, session.hostSlot, piece, at);
         }
@@ -112,7 +129,7 @@ void watch(NetClient& net, const SessionSnapshot& session, bool host, Clock::tim
     g_carried = std::move(carriedNow);
     const Clock::time_point cutoff = now - kRemember;
     std::erase_if(g_recentLoose, [cutoff](const auto& seen) { return seen.second.at < cutoff; });
-    std::erase_if(g_recentCarried, [cutoff](const auto& seen) { return seen.second < cutoff; });
+    std::erase_if(g_recentCarried, [cutoff](const auto& seen) { return seen.second.at < cutoff; });
 }
 
 // Host: takes the guest's piece out of this world if it lies here too.
@@ -138,11 +155,13 @@ void follow(const cargo_ground::Spot& pickup) {
 void placeNearDrops() {
     const auto player = game::localPlayer();
     if (!player || g_farDrops.empty()) return;
-    std::erase_if(g_farDrops, [&](const cargo_ground::Spot& drop) {
-        if (distanceSquared(where(drop), player->position) > kPlaceMetres * kPlaceMetres) return false;
-        const bool placed = game::placeCargo(drop.type, where(drop));
-        logger::write("cargo_ground: partner put down %u at (%.1f, %.1f, %.1f), %s here", drop.type, drop.position[0],
-                      drop.position[1], drop.position[2], placed ? "placed" : "not placed");
+    std::erase_if(g_farDrops, [&](FarDrop& drop) {
+        const cargo_ground::Spot& at = drop.spot;
+        if (distanceSquared(where(at), player->position) > kPlaceMetres * kPlaceMetres) return false;
+        const game::AddResult result = game::placeCargo(pieceAt(at), where(at));
+        if (result == game::AddResult::Retry && ++drop.attempts < kMaxPlaceAttempts) return false;
+        logger::write("cargo_ground: partner put down %u at (%.1f, %.1f, %.1f), %s here", at.type, at.position[0],
+                      at.position[1], at.position[2], result == game::AddResult::Done ? "placed" : "not placed");
         return true;
     });
 }
@@ -174,7 +193,7 @@ namespace cargo_ground {
 void onFrame(NetClient& net, const GameFrame& frame) {
     const bool host = g_host.load();
     if (frame.type == kMsgDrop) {
-        if (const auto drop = payloadAs<Spot>(frame)) g_farDrops.push_back(*drop);
+        if (const auto drop = payloadAs<Spot>(frame)) g_farDrops.push_back({*drop});
         return;
     }
     if (frame.type == kMsgPickup && host) {
