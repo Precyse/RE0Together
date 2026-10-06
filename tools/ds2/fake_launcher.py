@@ -39,6 +39,7 @@ CUTSCENE_START_FORMAT = struct.Struct("<IB3xi16s16s16s")  # id, category, reserv
 CUTSCENE_END_FORMAT = struct.Struct("<IiB3x")  # id, host frame, stop reason, reserved
 CUTSCENE_FRAMES_PER_SECOND = 120
 CUTSCENE_CATEGORY_STORY = 1
+STORY_EVENT_FORMAT = struct.Struct("<B3xIiIQ16s64s")  # kind, a, b, flags, mission id, section, transform (story_wire.h, 104 bytes)
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
@@ -321,7 +322,7 @@ def serve(sock, a):
             seconds, kind, mission = a.story.split(":")
             if now - start >= float(seconds):
                 told_story = True
-                sock.sendall(encode(0x0119, peer_slot, struct.pack("<B3xIiIQ16s", int(kind), 0, -1, 0, int(mission, 16), bytes(16))))
+                sock.sendall(encode(0x0119, peer_slot, STORY_EVENT_FORMAT.pack(int(kind), 0, -1, 0, int(mission, 16), bytes(16), bytes(64))))
                 print("story: event sent", flush=True)
         if a.cutscene and a.guest and start is not None:
             fields = a.cutscene.split(":")
