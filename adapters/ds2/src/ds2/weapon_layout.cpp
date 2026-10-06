@@ -42,6 +42,9 @@ uint16_t bulletAttackType(uintptr_t behavior) {
     return ids[kBulletTypeEntry];
 }
 
-uintptr_t shotBehavior(uintptr_t weapon) { return decima::findComponentWhere(weapon, makesShots); }
+uintptr_t shotBehavior(uintptr_t weapon) {
+    const uintptr_t current = decima::readPointer(weapon + kWeaponCurrentBehavior);
+    return current && makesShots(current) ? current : decima::findComponentWhere(weapon, makesShots);
+}
 
 }  // namespace ds2::weapon

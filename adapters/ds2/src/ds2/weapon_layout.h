@@ -39,6 +39,7 @@ constexpr size_t kBulletTypeEntry = 1;  // the entry whose id is the attack type
 constexpr uintptr_t kWeaponEntityFlags = 0x98;  // Entity flags; live: bit 1 and bit 16 differ between a drawn and a holstered weapon
 
 // A weapon's behavior component (DSWeaponBehaviorComponent and its subclasses).
+constexpr uintptr_t kWeaponCurrentBehavior = 0x21C0;  // the behavior of the weapon's current mode (a rifle has a Gun and a GrenadeLauncher behavior)
 constexpr uintptr_t kBehaviorWeapon = 0x50;        // the DSWeaponEntity it belongs to
 constexpr uintptr_t kBehaviorPellets = 0x5BC;      // u32, Gun and ShotGun
 constexpr uintptr_t kBehaviorFireRequest = 0x4D1;  // byte: the update runs the shot when it is set, then clears it
@@ -75,7 +76,8 @@ void ammoIds(uintptr_t behavior, uint16_t (&ids)[3]);
 // The attack type of the damage hit the behavior's bullets make (0 when unknown).
 uint16_t bulletAttackType(uintptr_t behavior);
 
-// The weapon's behavior component that makes shots (one whose slot 46 is in kShotFunctions), or 0.
+// The weapon's behavior component that makes shots (one whose slot 46 is in kShotFunctions), or 0. A weapon with several
+// modes updates and fires only its current behavior, so that one is preferred.
 uintptr_t shotBehavior(uintptr_t weapon);
 
 }  // namespace ds2::weapon

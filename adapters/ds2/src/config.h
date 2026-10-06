@@ -11,6 +11,7 @@ struct Config {
     bool diagnostics = false;  // log-only damage and weapon instruments (ds2/damage_diag.h, remote_weapon's comparison with Sam's weapon); never on in a shipped config
     bool ordersDiagnostics = false;  // log-only instruments for the partner-cargo checks (ds2/orders_diag.h); never on in a shipped config
     bool testCommands = false;  // command files in the coop folder for live checks (teleport, area, weapon, BT region)
+    bool godMode = false;       // test only (needs test_commands=1): every hit on the local player is dropped; never on in a shipped config
     bool cutsceneLog = false;   // log every cutscene (Sequence) start and game-state change
     bool cutsceneSync = false;  // cutscenes watched together: the host holds a story cutscene until the guests are ready
     bool weaponSync = false;   // weapons: the partner's body holds and fires the weapon the partner has drawn

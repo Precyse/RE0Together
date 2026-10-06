@@ -13,7 +13,9 @@ internal static class Program
             return 2;
         }
         if (Updater.TryInstall(args)) return 0;
-        return args.Length == 0 ? GuiHost.Run(options) : RunCli(options);
+        if (args.Length != 0) return RunCli(options);  // tools and tests run several command-line launchers side by side
+        InstanceGuard.CloseOtherLaunchers();
+        return GuiHost.Run(options);
     }
 
     private static int RunCli(CliOptions options)

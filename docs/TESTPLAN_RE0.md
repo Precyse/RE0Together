@@ -7,8 +7,8 @@ Run with two players on the latest release. F8 shows the counters named below.
 | # | Do | Expect | F8 / log |
 | --- | --- | --- | --- |
 | 1 | Host in TEAM, same room, goes through a door | door animation on both screens, both arrive in the new room, Billy beside Rebecca | doors sent/run/blocked: host sent +1, guest run +1; `door_sync: ran the peer's door` in the guest log |
-| 2 | Guest walks Billy to a door, presses action | camera moves to Billy on both screens, both go through | guest sent +1; `acted on a trigger as the partner` |
-| 3 | E (LEAVE_BEHIND, toast "Split up") in the same room, both walk around | each screen follows its own player's character; both move at once; V does nothing | `camera_parity: independent play`, `switch ... ignored: independent play` |
+| 2 | Guest walks Billy to a door, presses action | both go through, each camera on its own character | guest sent +1; `acted on a trigger as the partner` |
+| 3 | E (LEAVE_BEHIND, toast "Split up") in the same room, both walk around | each screen follows its own player's character; both move at once; V does nothing | `camera_parity: focus back on` |
 | 4 | Guest opens the inventory while Rebecca has the camera | Billy's inventory is shown; the camera returns to Rebecca on close | `menu_mirror: menu opened for Billy` |
 | 5 | Exchange an item Billy to Rebecca from the guest's menu | both screens show the item on Rebecca after the menu closes | inventory exchanges +1 on the guest, inventory applied on the host |
 | 6 | Unlock a door / use a key item / pick up a story item | the other machine shows the same world state after re-entering the room | flag words sent/applied |
@@ -16,7 +16,7 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 8 | Trigger a cutscene; one player skips | the skipper waits until the other finishes | phase lines in the log (`phase: Main -> EventDemo`) |
 | 9 | Host saves at a typewriter | the guest's launcher logs `Save sync: received data0.bin` | host log `save data0.bin written, sharing it` |
 | 10 | A character dies, both continue | both reload the host's last save | phase `-> Dead` on both |
-| 11 | Back to TEAM (E) while in the same room | the guest's camera goes to the host's character; doors carry both again | party mode = team |
+| 11 | Back to TEAM (E) while in the same room | each camera stays on its own character; doors carry both again, each camera follows its own character into the new room | party mode = team |
 | 12 | Guest starts the game after the host is already playing (any room) | guest goes through the menus by itself (keys ignored), loads the host's slot, then is teleported into the host's room with the host's inventories | `auto_join:` lines, `session_slot: load of slot N turned into the host's slot`, `join_sync: teleporting`, `join_sync: in the host's room` |
 | 13 | Die, host picks Continue | guest waits muted on game over, then continues by itself into the host's save | `auto_join: waiting for the host to be in game` |
 | 14 | Play with some lag (Wi-Fi) | Billy's input stays smooth; the target settles | pad buffer/target, pad underruns |
@@ -29,8 +29,8 @@ Run with two players on the latest release. F8 shows the counters named below.
 | 21 | Apart, the guest walks Billy through a door into Rebecca's room | Billy appears at that door on the host's screen; both in the same room on both screens; the host keeps the room's enemies | `door_travel: arrived ..., first here` on the host earlier |
 | 22 | Apart, the guest disconnects and rejoins | the guest's Billy comes back in his own room, not the host's | `join_sync: travelling to scene`, `join_sync: caught up` |
 | 23 | A cutscene on one machine moves the other player's character | that character stands where the cutscene left it on both screens | `event_place:` lines in both logs |
-| 24 | On a controller: Y in TEAM, LT anywhere | Y switches through the host like V; LT toggles Team / Split up like E; the game never switches or orders the partner by itself | `command: switch pressed`, `command: party pressed` |
-| 25 | Split up, save at a typewriter while the other player is in another room, then load that save | both characters are where they were when saved | `party_state.py` || 26 | Guest loads into a save where the two characters are in different rooms | after about 2 s the guest's screen switches to Billy's room | `camera_parity: independent play, focus back on Billy`, `phase: Main -> Change` |
+| 24 | On a controller: Y in TEAM, LT anywhere | Y does nothing (no camera switch); LT toggles Team / Split up like E; the game never switches or orders the partner by itself | `command: party pressed` |
+| 25 | Split up, save at a typewriter while the other player is in another room, then load that save | both characters are where they were when saved | `party_state.py` || 26 | Guest loads into a save where the two characters are in different rooms | after about 2 s the guest's screen switches to Billy's room | `camera_parity: focus back on Billy`, `phase: Main -> Change` |
 | 27 | One player opens the status screen just as the other walks through a door together (TEAM) | the door runs once the screen closes; nobody is left behind | `door_sync: ran the peer's door` after `SubScreen -> Main` |
 
 Report any row that fails, together with both logs.

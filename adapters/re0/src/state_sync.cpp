@@ -6,7 +6,6 @@
 #include <string>
 
 #include "auto_join.h"
-#include "camera_parity.h"
 #include "character_owner.h"
 #include "command_input.h"
 #include "debug_overlay.h"
@@ -156,7 +155,6 @@ void onFrame(const GameFrame& frame) {
     }
     if (frame.type == state_sync::kMsgPlayerState) debug_stats::count(debug_stats::Counter::PlayerStateReceived);
     logRemoteState(frame);
-    camera_parity::onFrame(frame);
     state_correction::onFrame(frame);
 }
 

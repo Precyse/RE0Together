@@ -16,6 +16,7 @@
 #include "net_pad.h"
 #include "protocol.h"
 #include "scene.h"
+#include "split_rooms.h"
 #include "state_correction.h"
 
 namespace {
@@ -62,6 +63,7 @@ void pollDoorStart() {
 void onArrival() {
     g_enemyClaim = door_travel::peerPlace() != PeerPlace::Here;
     sendRoomState();
+    split_rooms::onArrival();
     state_correction::requestForcedCheck();
     floor_items_sync::onArrival();
     logger::write("door_travel: arrived in scene 0x%02x%s", scene::current(), g_enemyClaim ? ", first here" : "");

@@ -13,8 +13,14 @@ void installEarly();
 // Any thread (spawn workers): `entity` was just built from an entity resource with this UUID.
 void add(uintptr_t entity, const std::array<uint8_t, 16>& resourceUuid);
 
+// An enemy changing hands: the entity and the UUID of the resource it was built from.
+struct Handover {
+    uintptr_t entity;
+    std::array<uint8_t, 16> resourceUuid;
+};
+
 // This machine became a guest: the tracked enemies that still exist (they spawned before it was told so), no longer
 // tracked. Simulation thread.
-std::vector<uintptr_t> release();
+std::vector<Handover> release();
 
 }  // namespace enemy_host
