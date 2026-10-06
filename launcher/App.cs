@@ -26,6 +26,7 @@ public sealed class App
     private bool _launchPending;
     private BuildCheck? _buildCheck;
     private Rejoin? _rejoin;
+    private HostFollow? _follow;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -40,6 +41,14 @@ public sealed class App
 
     public void Stop() => _stopRequested = true;
 
+    /// <summary>The window's loop host could not start the loop (Steam not running): shown until the loop runs again.</summary>
+    public void MarkOffline()
+    {
+        if (Status.State == AppState.Offline) return;
+        Status = new AppStatus(AppState.Offline);
+        StatusChanged?.Invoke(Status);
+    }
+
     public void Host(string gameId) => _commands.Enqueue(() => Open(Command.Host, gameId));
 
     public void Join(ulong lobbyId) => _commands.Enqueue(() => Open(Command.Join, lobbyId.ToString()));
@@ -52,7 +61,13 @@ public sealed class App
 
     public void Invite() => _commands.Enqueue(() =>
     {
-        if (_lobby is { IsReady: true } lobby) _steam?.ShowInviteDialog(lobby.Id);
+        if (_lobby is not { IsReady: true } lobby)
+        {
+            Log.Info("No lobby to invite to");
+            return;
+        }
+        _steam?.ShowInviteDialog(lobby.Id);
+        Log.Info("Invite dialog opened");
     });
 
     public int Run()
@@ -127,6 +142,7 @@ public sealed class App
                 if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId);
                 else if (!_interactive) return 1;
             }
+            FollowHost();
             if (_session == null && _lobby is { IsReady: true }) StartSession();
             _bridge?.Pump();
             _session?.Pump();
@@ -142,6 +158,16 @@ public sealed class App
             Thread.Sleep(PumpIntervalMs);
         }
         return 0;
+    }
+
+    /// <summary>A guest whose host opened a new lobby (it crashed or relaunched) leaves the old one and joins the new one,
+    /// through the same retrying path as a lost connection.</summary>
+    private void FollowHost()
+    {
+        if (_follow?.MovedTo(_lobby!.Id) is not { } lobbyId) return;
+        Log.Info($"The host opened lobby {lobbyId}, following");
+        EndSession();
+        _rejoin ??= new Rejoin(lobbyId);
     }
 
     /// <summary>Drives a pending rejoin. False when it gave up and the CLI should exit.</summary>
@@ -195,12 +221,13 @@ public sealed class App
         _gameDir = ResolveGameDir(_profile);
         _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
         _session = new Session(_profile, _lobby, _transport!, _bridge);
-        _buildCheck = BuildCheck.Create(_session, _transport!, _lobby);
+        _buildCheck = BuildCheck.Create(_profile, _gameDir, _session, _transport!, _lobby);
         if (_gameDir != null)
         {
             _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby);
             _logForwarder = LogForwarder.Create(_profile, _gameDir, _session, _transport!, _lobby);
         }
+        _follow = _steam != null && _lobby.OwnerId != _transport!.LocalId ? new HostFollow(_lobby.OwnerId, _profile.Id) : null;
         _launchPending = true;
     }
 
@@ -223,6 +250,7 @@ public sealed class App
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
     private void EndSession()
     {
+        _follow = null;
         _buildCheck = null;
         _logForwarder = null;
         _saveSync?.Dispose();
@@ -255,7 +283,7 @@ public sealed class App
             : _bridge?.IsReady == true ? AppState.GameRunning
             : _lobby.OwnerId == _transport!.LocalId ? AppState.Hosting
             : AppState.Joined;
-        return new AppStatus(state, _lobby.Id, _session?.RttMs) { Players = PlayerSlots(_lobby) };
+        return new AppStatus(state, _lobby.Id, _session?.RttMs) { Players = PlayerSlots(_lobby), GameId = _lobby.GameId };
     }
 
     private IReadOnlyList<PlayerSlot> PlayerSlots(ILobby lobby) =>
@@ -264,7 +292,7 @@ public sealed class App
             .Select(member => new PlayerSlot(member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId))
             .ToList();
 
-    private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? SteamLibrary.FindGameDir(profile.SteamAppId);
+    private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? GameFolders.Find(profile);
 
     /// <summary>Crash recovery and cleanup: every profile with save sync goes back to coop=0 and loses its session folder.
     /// A game that is running keeps both: its session folder holds the saves it is playing from.</summary>

@@ -4,14 +4,15 @@ namespace CoopLauncher.Gui;
 /// fill; the rail locks while a session is open.</summary>
 internal sealed class GameRail : Control
 {
-    private const int RailWidth = 220;
-    private const int PadX = 14;
-    private const int HeaderHeight = 36;
-    private const int RowHeight = 100;
-    private const int ArtWidth = 40;
-    private const int ArtHeight = 60;
+    private static readonly int RailWidth = Theme.Scale(220);
+    private static readonly int PadX = Theme.Scale(14);
+    private static readonly int HeaderHeight = Theme.Scale(36);
+    private static readonly int RowHeight = Theme.Scale(100);
+    private static readonly int ArtWidth = Theme.Scale(40);
+    private static readonly int ArtHeight = Theme.Scale(60);
+    private static readonly int ArtTextGap = Theme.Scale(12);
+    private static readonly int NameSubGap = Theme.Scale(2);
     private const int NameMaxLines = 2;
-    private const int NameSubGap = 2;
 
     private readonly List<Entry> _games = new();
     private int _selected = -1;
@@ -46,6 +47,13 @@ internal sealed class GameRail : Control
         _games.Add(new Entry(profile, art));
         if (_selected < 0) Select(0);
         Invalidate();
+    }
+
+    /// <summary>Selects a game by id (the game of a lobby that was joined); an unknown id changes nothing.</summary>
+    public void SelectGame(string gameId)
+    {
+        var index = _games.FindIndex(g => g.Profile.Id == gameId);
+        if (index >= 0) Select(index);
     }
 
     /// <summary>Sets what a game's row says about its mod.</summary>
@@ -113,7 +121,7 @@ internal sealed class GameRail : Control
             g.FillRectangle(placeholder, artBox);
         }
 
-        var textX = artBox.Right + 12;
+        var textX = artBox.Right + ArtTextGap;
         var textWidth = row.Right - textX - PadX;
         var sub = profile.Id == _runningId ? "Running" : $"{profile.MaxPlayers} players";
         var status = _games[index].Status;
@@ -126,7 +134,7 @@ internal sealed class GameRail : Control
         var quiet = selected ? Theme.Muted : Theme.Dim;
         Draw.Wrapped(g, sub, Theme.Small, quiet, new Rectangle(textX, y, textWidth, Theme.Small.Height));
         y += Theme.Small.Height + NameSubGap;
-        var statusColor = status.UpdateAvailable && !faded ? Theme.Armed : quiet;
+        var statusColor = status.NeedsAttention && !faded ? Theme.Armed : quiet;
         Draw.Wrapped(g, status.Line, Theme.Small, statusColor, new Rectangle(textX, y, textWidth, statusHeight));
     }
 }

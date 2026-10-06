@@ -8,19 +8,33 @@ public static class SteamLibrary
 {
     private const string DefaultSteamPath = @"C:\Program Files (x86)\Steam";
     private static readonly Regex PathEntry = new("\"path\"\\s+\"([^\"]+)\"", RegexOptions.Compiled);
+    private static readonly Regex BuildIdEntry = new("\"buildid\"\\s+\"(\\d+)\"", RegexOptions.Compiled);
     private static readonly Regex InstallDirEntry = new("\"installdir\"\\s+\"([^\"]+)\"", RegexOptions.Compiled);
 
     public static string? FindGameDir(int appId)
     {
-        foreach (var library in LibraryPaths())
+        foreach (var (steamApps, manifest) in Manifests(appId))
         {
-            var steamApps = Path.Combine(library, "steamapps");
-            var manifest = Path.Combine(steamApps, $"appmanifest_{appId}.acf");
-            if (!File.Exists(manifest)) continue;
             var match = InstallDirEntry.Match(File.ReadAllText(manifest));
             if (!match.Success) continue;
             var dir = Path.Combine(steamApps, "common", match.Groups[1].Value);
             if (Directory.Exists(dir)) return dir;
+        }
+        return null;
+    }
+
+    /// <summary>The Steam build id of the installed game (the appmanifest's buildid): from the manifest beside the given game
+    /// folder (steamapps\common\game, so a folder chosen in the settings reports its own build), else from any Steam
+    /// library. Null when there is no manifest.</summary>
+    public static int? InstalledBuild(int appId, string? gameDir)
+    {
+        var beside = gameDir == null ? null : Path.GetFullPath(Path.Combine(gameDir, "..", "..", $"appmanifest_{appId}.acf"));
+        var manifests = (beside != null && File.Exists(beside) ? new[] { beside } : Array.Empty<string>())
+            .Concat(Manifests(appId).Select(m => m.Manifest));
+        foreach (var manifest in manifests)
+        {
+            var match = BuildIdEntry.Match(File.ReadAllText(manifest));
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var build)) return build;
         }
         return null;
     }
@@ -36,6 +50,16 @@ public static class SteamLibrary
     private static string SteamRoot() =>
         (Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam")?.GetValue("SteamPath") as string ?? DefaultSteamPath)
         .Replace('/', '\\');
+
+    private static IEnumerable<(string SteamApps, string Manifest)> Manifests(int appId)
+    {
+        foreach (var library in LibraryPaths())
+        {
+            var steamApps = Path.Combine(library, "steamapps");
+            var manifest = Path.Combine(steamApps, $"appmanifest_{appId}.acf");
+            if (File.Exists(manifest)) yield return (steamApps, manifest);
+        }
+    }
 
     private static IEnumerable<string> LibraryPaths()
     {

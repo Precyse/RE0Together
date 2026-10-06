@@ -12,15 +12,20 @@ public sealed class BuildCheck
     public const string VersionFile = "version.txt";
     private const long WaitMs = 10_000;
     private const int DevBuild = 0;
+    private const int LauncherBuildBytes = sizeof(int);
 
+    private readonly GameProfile _profile;
+    private readonly string? _gameDir;
     private readonly ITransport _transport;
     private readonly Func<ulong> _hostId;
     private readonly bool _isHost;
     private readonly long _startedMs = Environment.TickCount64;
     private bool _heard;
 
-    private BuildCheck(ITransport transport, Func<ulong> hostId, bool isHost)
+    private BuildCheck(GameProfile profile, string? gameDir, ITransport transport, Func<ulong> hostId, bool isHost)
     {
+        _profile = profile;
+        _gameDir = gameDir;
         _transport = transport;
         _hostId = hostId;
         _isHost = isHost;
@@ -34,9 +39,9 @@ public sealed class BuildCheck
     }
 
     /// <summary>Subscribe before the save sync, so BUILD_INFO goes out ahead of the save files.</summary>
-    public static BuildCheck Create(Session session, ITransport transport, ILobby lobby)
+    public static BuildCheck Create(GameProfile profile, string? gameDir, Session session, ITransport transport, ILobby lobby)
     {
-        var check = new BuildCheck(transport, () => lobby.OwnerId, lobby.OwnerId == transport.LocalId);
+        var check = new BuildCheck(profile, gameDir, transport, () => lobby.OwnerId, lobby.OwnerId == transport.LocalId);
         session.PeerJoined += check.SendTo;
         session.BuildInfoReceived += check.OnBuildInfo;
         return check;
@@ -51,15 +56,17 @@ public sealed class BuildCheck
     private void SendTo(ulong peer)
     {
         if (!_isHost) return;
-        var payload = new byte[sizeof(int)];
+        var payload = new byte[LauncherBuildBytes + sizeof(int)];
         BinaryPrimitives.WriteInt32LittleEndian(payload, LocalBuild());
+        BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(LauncherBuildBytes), GameBuilds.Installed(_profile, _gameDir));
         _transport.Send(peer, new Frame(Msg.BuildInfo, Framing.FlagReliable, 0, payload));
     }
 
     private void OnBuildInfo(ulong sender, Frame frame)
     {
-        if (_isHost || sender != _hostId() || frame.Payload.Length != sizeof(int)) return;
+        if (_isHost || sender != _hostId() || frame.Payload.Length < LauncherBuildBytes) return;
         _heard = true;
+        CheckGameBuild(frame.Payload);
         var host = BinaryPrimitives.ReadInt32LittleEndian(frame.Payload);
         var local = LocalBuild();
         if (host == local) return;
@@ -70,6 +77,17 @@ public sealed class BuildCheck
         }
         var older = host < local ? "The host" : "You";
         Mismatch = $"Build mismatch: host is on build {host}, you are on build {local}. {older} should restart the launcher to update.";
+        Log.Info(Mismatch);
+    }
+
+    /// <summary>The host's game build (the second field of BUILD_INFO, absent from older launchers) must equal this machine's.</summary>
+    private void CheckGameBuild(byte[] payload)
+    {
+        if (payload.Length < LauncherBuildBytes + sizeof(int)) return;
+        var host = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(LauncherBuildBytes));
+        var local = GameBuilds.Installed(_profile, _gameDir);
+        if (host == GameBuilds.Unknown || local == GameBuilds.Unknown || host == local) return;
+        Mismatch = $"Game build mismatch: host has {_profile.Name} build {host}, you have build {local}. Both players need the same game version.";
         Log.Info(Mismatch);
     }
 }

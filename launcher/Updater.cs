@@ -4,7 +4,7 @@ using System.IO.Compression;
 namespace CoopLauncher;
 
 /// <summary>
-/// Installs a newer build from the rolling GitHub release `latest` (read through ReleaseFeed), then relaunches the
+/// Installs a newer build from the rolling GitHub release `latest` (read through ReleaseFeed); at start-up it also relaunches the
 /// launcher. The package is replaced whole: launcher, every game profile and every adapter. Only runs from a packaged
 /// layout (root\launcher\app\coop-launcher.exe) and only ever writes below that root. Any failure means "no update".
 /// </summary>
@@ -38,11 +38,19 @@ public static class Updater
     /// keeps going until the user reopens the launcher.</summary>
     public static bool Stage()
     {
-        if (FindPackageRoot() is not { } root) return false;
+        if (FindPackageRoot() is not { } root)
+        {
+            Log.Info("Updates install only from the packaged launcher");
+            return false;
+        }
         DeleteOldFiles(root);
         try
         {
-            if (ReleaseFeed.Read(force: true) is not { Build: { } build, ZipUrl: { } zipUrl }) return false;
+            if (ReleaseFeed.Read(force: true) is not { Build: { } build, ZipUrl: { } zipUrl })
+            {
+                Log.Info("No release to update from");
+                return false;
+            }
             if (build <= BuildCheck.LocalBuild())
             {
                 Log.Info($"Up to date (build {BuildCheck.LocalBuild()})");
@@ -110,6 +118,7 @@ public static class Updater
     private static void Relaunch(string[] args)
     {
         var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+        start.Environment[SingleInstance.PredecessorVariable] = Environment.ProcessId.ToString();
         foreach (var arg in args) start.ArgumentList.Add(arg);
         Process.Start(start);
     }
