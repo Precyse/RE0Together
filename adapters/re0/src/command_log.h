@@ -1,6 +1,6 @@
 #pragma once
 
-// Observability of the party commands (switch character, party mode): every press, request and host decision goes
+// Observability of the party commands (party mode): every press, request and host decision goes
 // to adapter.log and the panel. Any thread. Identical lines repeated within a second are logged once.
 namespace command_log {
 

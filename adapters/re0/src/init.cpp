@@ -77,7 +77,7 @@ void enableCoop() {
     command_input::enable();
     pad_commands::install();
     party_mode::enable(g_net);
-    camera_parity::enable(g_net);
+    camera_parity::enable();
     partner_think::enable();
     game_tick::addCallback("net_pad", net_pad::advance);
     input_record::enable(g_net);
