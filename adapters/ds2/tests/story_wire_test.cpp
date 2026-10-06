@@ -3,6 +3,7 @@
 #include <cstring>
 #include <vector>
 
+#include "../src/story_replay.h"
 #include "../src/story_wire.h"
 
 namespace {
@@ -57,6 +58,14 @@ int main() {
     check(!decode(bytes(unknown), got), "an unknown kind is rejected");
     unknown.kind = 0;
     check(!decode(bytes(unknown), got), "kind zero is rejected");
+
+    using namespace story_replay;
+    check(applies(Kind::MissionStart, 10) && !applies(Kind::MissionStart, 20) && !applies(Kind::MissionStart, 40),
+          "a start replays only for a mission not started here");
+    check(applies(Kind::OrderRequest, 0) && !applies(Kind::OrderRequest, 20), "an order request is a start");
+    check(applies(Kind::MissionSuccess, 20) && !applies(Kind::MissionSuccess, 10) && !applies(Kind::MissionSuccess, 40),
+          "a success replays only for a mission in progress");
+    check(applies(Kind::MissionFail, 20) && !applies(Kind::MissionFail, 30), "a failure replays once");
 
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
