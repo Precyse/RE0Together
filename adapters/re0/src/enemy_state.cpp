@@ -116,7 +116,7 @@ void applyEntry(const EnemyEntry& entry) {
     enemy_puppet_rule::observe(track, entry.pos, entry.quat, entry.hp, nowMs());
     enemy_action_rule::Action owner;
     std::memcpy(owner.word, entry.action, sizeof(owner.word));
-    g_actions[entry.slot].observeOwner(owner, nowMs());
+    g_actions[entry.slot].observeOwner(owner);
 }
 
 // Moves a puppet toward where the owner's enemy is now: blended while it lags, snapped only after a jump.
@@ -211,6 +211,12 @@ void onFrame(const GameFrame& frame) {
     g_fresh = true;
 }
 
+
+bool puppetOwnsAction(uintptr_t enemy) {
+    if (!puppetActive()) return false;
+    const int slot = enemy_registry::slotOf(enemy);
+    return slot != enemy_registry::kNoSlot && g_tracks[slot].valid && g_tracks[slot].hp > 0;
+}
 
 void enable(NetClient& net) {
     g_net = &net;
