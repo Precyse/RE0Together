@@ -44,7 +44,6 @@ constexpr uintptr_t kPrepareBehaviors = 0x141faa350;  // (weapon): runs vtable s
 constexpr size_t kWeaponEnableSlot = 28, kWeaponPrepareSlot = 38;  // DSWeaponEntity vtable slots: enable (0x141fa99e0), prepare behaviors
 constexpr double kAimDistanceMetres = 100.0;  // how far along the partner's shot direction the body's aim target is put
 constexpr ULONGLONG kFireCheckDelayMs = 300;  // after a fire request: what the weapon's update made of it
-constexpr ULONGLONG kTriggerHoldMs = 150;     // how long the body's trigger stays held for one of the partner's shots
 constexpr ULONGLONG kShotLogWarmupMs = 4000;  // a shot sooner after the weapon is made is not the one logged (its behavior is not set up yet)
 constexpr uintptr_t kBulletSystemGlobal = 0x14623fa48;  // the bullet pool (0x141fb5c70 adds a bullet per pellet)
 constexpr uintptr_t kBulletsMade = 0x299f28;            // u32: bullets created so far
@@ -62,12 +61,24 @@ weapon_wire::WeaponState g_wanted{weapon_wire::kHolstered, 0, 0};
 std::vector<weapon_wire::WeaponFire> g_fires;
 std::atomic<uintptr_t> g_madeWeapon{0};  // the weapon entity made for the body, for the shot detours on other threads
 std::atomic<uint32_t> g_engineShots{0};
+std::atomic<bool> g_shotPending{false};  // a partner's shot waits for the body weapon's next update gate
 std::atomic<uint32_t> g_gateRuns{0};  // the engine's update gate called for the weapon made for the body
 void (*g_originalGate)(uintptr_t behavior, float dt) = nullptr;
 
+// The partner's shot: the behavior's own state machine would count the pellets, but it runs the player's fire callback
+// (0x140ea5f00), which reads the owner's current-weapon reference the body does not have (a null read crashed the game). So
+// the shot is handed to the gate directly: one pellet with no spread and the fire request, which the gate turns into the
+// shot (slots 44, 45, 46) and clears.
 void gateDetour(uintptr_t behavior, float dt) {
     const uintptr_t made = g_madeWeapon.load();
-    if (made && decima::readPointer(behavior + ds2::weapon::kBehaviorWeapon) == made) ++g_gateRuns;
+    if (made && decima::readPointer(behavior + ds2::weapon::kBehaviorWeapon) == made) {
+        ++g_gateRuns;
+        if (behavior == ds2::weapon::shotBehavior(made) && g_shotPending.exchange(false)) {
+            ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorPellets) = 1;
+            ds2::field<float>(behavior, ds2::weapon::kBehaviorPelletSpread) = 0.0f;
+            ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorFireRequest) = 1;
+        }
+    }
     g_originalGate(behavior, dt);
 }
 
@@ -87,7 +98,6 @@ struct Held {
     ULONGLONG retryAt = 0;
     ULONGLONG madeAt = 0;
     ULONGLONG probeAt = 0;  // when the weapon's state is logged a second time, 0 when it is not pending
-    ULONGLONG triggerOffAt = 0;  // when the held trigger is let go, 0 when it is not held
     ULONGLONG fireCheckAt = 0;  // when the first fire request is looked at again, 0 when none is pending
     uint32_t bulletsAtFire = 0;
     bool shotLogged = false;
@@ -305,12 +315,6 @@ void follow(uintptr_t body, const weapon_wire::WeaponState& wanted) {
         g_held.id = weapon_wire::kHolstered;
         g_held.retryAt = now + kRetryDelayMs;
     }
-    if (g_held.triggerOffAt && now >= g_held.triggerOffAt) {
-        g_held.triggerOffAt = 0;
-        if (const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0) {
-            ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorTrigger) = 0;
-        }
-    }
     if (g_held.fireCheckAt && now >= g_held.fireCheckAt) {
         g_held.fireCheckAt = 0;
         const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
@@ -353,9 +357,7 @@ void playShot(const weapon_wire::WeaponFire& fire) {
     const uintptr_t behavior = ds2::weapon::shotBehavior(g_held.weapon);
     if (!behavior) return;
     aimAlong(behavior, fire);
-    ds2::field<uint8_t>(behavior, ds2::weapon::kBehaviorTrigger) = 1;
-    ds2::field<uint32_t>(behavior, ds2::weapon::kBehaviorRequest) = ds2::weapon::kFireRequestMode;
-    g_held.triggerOffAt = GetTickCount64() + kTriggerHoldMs;
+    g_shotPending = true;
     if (g_held.shotLogged || GetTickCount64() - g_held.madeAt < kShotLogWarmupMs) return;
     g_held.shotLogged = true;
     g_held.fireCheckAt = GetTickCount64() + kFireCheckDelayMs;
