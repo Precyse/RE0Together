@@ -121,7 +121,7 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.cutsceneLog) cutscene_log::enable();
     if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync);
     partner_cargo::installEarly();
-    partner_focus::installEarly();
+    partner_focus::installEarly(config.diagnostics);
     structures::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
