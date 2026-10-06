@@ -7,6 +7,7 @@
 #include "enemy_wire.h"
 #include "game.h"
 #include "log.h"
+#include "peer_joins.h"
 #include "resync.h"
 
 namespace {
@@ -15,7 +16,7 @@ namespace {
 bool g_guest = false;
 bool g_requestedAtGameplay = false;
 uint8_t g_hostSlot = 0;
-size_t g_knownPeers = 0;
+PeerJoins g_joins;  // host: which peer joins have been sent the enemies
 
 void sendStates(NetClient& net, const std::vector<enemy_wire::EnemyState>& states) {
     for (size_t first = 0; first < states.size(); first += enemy_wire::kMaxStatesPerMessage) {
@@ -72,14 +73,12 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_hostSlot = session.hostSlot;
     game::shareEnemies(host);
     if (host) {
-        if (session.peers.size() > g_knownPeers || !resync::takeRequests(resync::kEnemies).empty()) {
-            game::requestEnemySnapshot();
-        }
-        g_knownPeers = session.peers.size();
+        const bool joined = !g_joins.takeNew(session).empty();
+        if (joined || !resync::takeRequests(resync::kEnemies).empty()) game::requestEnemySnapshot();
         sendHostReports(net);
         return;
     }
-    g_knownPeers = 0;
+    g_joins.clear();
     if (!g_guest || !game::gameplaySettled()) {
         g_requestedAtGameplay = false;
     } else if (!g_requestedAtGameplay && resync::request(net, g_hostSlot, resync::kEnemies)) {

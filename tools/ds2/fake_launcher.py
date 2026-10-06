@@ -53,7 +53,7 @@ ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
 PLAYER_HIT = 0x0121
-RESYNC, RESYNC_ENEMIES = 0x0118, 16  # resync.h: a request for the host's enemy announcements
+RESYNC, RESYNC_ENEMIES, RESYNC_STRUCTURES = 0x0118, 16, 32  # resync.h: a request for the host's enemy announcements / placed structures
 PLAYER_HIT_FORMAT = struct.Struct("<HH16sfIiHH12f")  # attacker ref (none: all zero), amount, flags, part, attack type, reserved, 3 vectors
 ENEMY_HIT_FORMAT = struct.Struct("<HH16sfIiI12f")  # enemy ref {net id, reserved, uuid} + hit fields (combat_wire.h)
 ENEMY_RECORD = struct.Struct("<dHI")  # seconds since the first record, message type, payload size
@@ -154,6 +154,7 @@ def main():
     p.add_argument("--drive-pos", default="0,0,0", help="x,y,z the driven vehicle is reported at")
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
     p.add_argument("--at", default="", help="X,Y,Z: the peer's circle centre is this world point, whatever the local player does (not with --follow)")
+    p.add_argument("--resync-structures", action="store_true", help="after the first local state ask the host for the structures it placed (RESYNC kStructures)")
     p.add_argument("--resync-enemies", action="store_true", help="after the first local state ask the host for every enemy again (a peer that joins a running host gets the enemy list this way)")
     p.add_argument("--throw-at", action="store_true", help="with --weapon and --fire: each throw is a lob at the announced enemy nearest the peer (needs the enemy list: add --resync-enemies)")
     p.add_argument("--status", type=lambda v: int(v, 16), default=0, help="HEX: the peer's PLAYER_STATE status word (partner_status.h: bits 0-7 health 0-254, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 reports)")
@@ -305,7 +306,7 @@ def serve(sock, a):
     seq, start, last_hb, centre = 0, None, 0.0, None
     last_held, last_equip, last_env = None, 0.0, 0.0
     hit_target = None  # the net id --enemy-hit keeps hitting
-    enemies_listed = enemies_asked = False
+    enemies_listed = enemies_asked = structures_asked = False
 
     def far(net_id):
         at = announced[net_id][1]
@@ -333,6 +334,10 @@ def serve(sock, a):
             if first:
                 start = now
                 print(f"circle centre {centre}", flush=True)
+        if a.resync_structures and start is not None and not structures_asked:
+            structures_asked = True
+            sock.sendall(encode(RESYNC, peer_slot, struct.pack("<I", RESYNC_STRUCTURES)))
+            print("struct: snapshot requested", flush=True)
         if a.resync_enemies and start is not None and not enemies_asked:
             enemies_asked = True
             sock.sendall(encode(RESYNC, peer_slot, struct.pack("<I", RESYNC_ENEMIES)))

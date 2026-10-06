@@ -190,6 +190,7 @@ endfunction()
 
 add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
 add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
+add_unit_test(peer_joins_test)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)

@@ -2,6 +2,7 @@
 
 #include "game.h"
 #include "log.h"
+#include "peer_joins.h"
 #include "resync.h"
 #include "story_wire.h"
 
@@ -12,7 +13,7 @@ bool g_guest = false;
 bool g_host = false;
 bool g_requestedAtGameplay = false;
 uint8_t g_hostSlot = 0;
-size_t g_knownPeers = 0;
+PeerJoins g_joins;  // host: which peer joins have been sent the story
 
 }  // namespace
 
@@ -51,9 +52,12 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     } else {
         g_requestedAtGameplay = false;
     }
-    if (!host) return;
-    if (session.peers.size() > g_knownPeers || !resync::takeRequests(resync::kStory).empty()) game::requestStorySnapshot();
-    g_knownPeers = session.peers.size();
+    if (!host) {
+        g_joins.clear();
+        return;
+    }
+    const bool joined = !g_joins.takeNew(session).empty();
+    if (joined || !resync::takeRequests(resync::kStory).empty()) game::requestStorySnapshot();
     for (const story_wire::Event& event : game::takeStoryEvents()) {
         if (!net.send(story_wire::kMsgStoryEvent, true, proto::kSlotAll, proto::bytesOf(event))) {
             logger::write("story_sync: could not send a story event");
