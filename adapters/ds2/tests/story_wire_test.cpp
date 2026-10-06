@@ -73,6 +73,7 @@ int main() {
     check(applies(Kind::OrderRequest, 0) && !applies(Kind::OrderRequest, 20), "an order request is a start");
     check(applies(Kind::MissionSuccess, 20) && !applies(Kind::MissionSuccess, 10) && !applies(Kind::MissionSuccess, 40),
           "a success replays only for a mission in progress");
+    check(applies(Kind::OrderDelivered, 20) && !applies(Kind::OrderDelivered, 40), "a delivery completes only an order in progress");
     check(applies(Kind::MissionFail, 20) && !applies(Kind::MissionFail, 30), "a failure replays once");
 
     story_ledger::Ledger ledger;
