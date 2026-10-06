@@ -70,6 +70,9 @@ constexpr size_t kItemPutRecordCount = 28;
 constexpr int32_t kItemPutEmptyState = -1;
 constexpr uintptr_t kUnitPositionOffset = 0x40;  // vec3, every MT unit (uItem included)
 constexpr uintptr_t kItemPutFunction = 0x4de500;     // thiscall on sItemPut, (ItemDesc*, position*, euler rotation*), ret 0xC, returns the uItem
+// The room script's item placement loop (a script opcode at 0x581a50..0x581b7c) calls put at 0x581b53 for every map item
+// each time the room loads; the only other caller is the player's drop at 0x5e4b84. Return address of the script call:
+constexpr uintptr_t kScriptItemPutReturn = 0x581b58;
 constexpr uintptr_t kItemRemoveFunction = 0x4de730;  // thiscall, (uItem*), ret 4; loads its own `this` from [0xdcbf40], ecx is ignored
 
 // Pickup action step (reached through the handler table at 0xd8ac6c): thiscall on the action state, (player), ret 4.
