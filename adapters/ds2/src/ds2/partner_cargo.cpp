@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <intrin.h>
 
+#include <algorithm>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -31,6 +32,9 @@ constexpr uintptr_t kWalkOwner = 0x141198ae0;   // (owner, collector, filter): t
 constexpr uintptr_t kCarriedFilter = 0x14A1D3730;
 constexpr uintptr_t kSlotRemove = 0x141185ca0;  // (slot, piece): clears the piece's slot fields
 constexpr uintptr_t kSlotAdd = 0x141185b30;     // (slot, piece): sets piece +0x98 (the slot's definition) and +0xA0 (the slot)
+constexpr uintptr_t kHandOverGather = 0x14119b930;  // (query): fills the owner list the hand-over menu and delivery check use
+constexpr uintptr_t kQueryOwners = 0x12008, kQueryCount = 0x12808;  // the query's owner pointer list and its int count
+constexpr int32_t kQueryCapacity = 0x100;
 constexpr uintptr_t kCollectorCount = 0x12000;
 constexpr uintptr_t kSlotDefinition = 0x00, kDefinitionOwner = 0x08;
 constexpr uintptr_t kOwnerCarrierType = 0x10, kOwnerParent = 0x40;
@@ -46,7 +50,9 @@ constexpr size_t kMaxQueued = 64;
 using CarriedFn = uint32_t (*)(uintptr_t manager, uintptr_t collector);
 using WalkFn = void (*)(uintptr_t owner, uintptr_t collector, const void* filter);
 using SlotFn = void (*)(uintptr_t slot, uintptr_t piece);
+using GatherFn = uintptr_t (*)(uintptr_t query);
 
+GatherFn g_gather = nullptr;
 CarriedFn g_carried = nullptr;
 SlotFn g_remove = nullptr;
 SlotFn g_add = nullptr;
@@ -148,6 +154,34 @@ uint32_t carriedDetour(uintptr_t manager, uintptr_t collector) {
     return total;
 }
 
+bool holdsOrderPiece(uint64_t ownerKey) {
+    const std::vector<game::Cargo> owned = game::ownedCargo(ownerKey);
+    return std::any_of(owned.begin(), owned.end(), [](const game::Cargo& piece) { return piece.orderId != 0; });
+}
+
+// Adds the remote's owner to the query's list (past the area and active filters, which its position and its switched-off
+// state would fail) when it carries order pieces, so the hand-over menu and the delivery check see them as carried.
+bool appendRemoteOwner(uintptr_t query, uintptr_t owner, uint64_t ownerKey) {
+    int32_t count = 0;
+    if (!decima::safeRead(query + kQueryCount, count) || count < 0 || count >= kQueryCapacity) return false;
+    for (int32_t i = 0; i < count; ++i) {
+        if (decima::readPointer(query + kQueryOwners + i * sizeof(uintptr_t)) == owner) return false;
+    }
+    if (!holdsOrderPiece(ownerKey)) return false;
+    ds2::field<uintptr_t>(query, kQueryOwners + count * sizeof(uintptr_t)) = owner;
+    ds2::field<int32_t>(query, kQueryCount) = count + 1;
+    return true;
+}
+
+uintptr_t gatherDetour(uintptr_t query) {
+    const uintptr_t result = g_gather(query);
+    const auto key = remote_body::ownerKey();
+    const uintptr_t owner = key ? game::baggageOwner(*key) : 0;
+    const bool appended = owner && appendRemoteOwner(query, owner, *key);
+    orders_diag::noteHandOverGather(query, owner, appended);
+    return result;
+}
+
 void removeDetour(uintptr_t slot, uintptr_t piece) {
     const uintptr_t remote = remoteOwner();
     const uintptr_t root = remote ? slotRoot(slot) : 0;
@@ -177,6 +211,8 @@ namespace partner_cargo {
 void installEarly() {
     hooks::install("carried-by-player set", ds2::at(kCarriedSet), reinterpret_cast<void*>(&carriedDetour),
                    reinterpret_cast<void**>(&g_carried));
+    hooks::install("hand-over gather", ds2::at(kHandOverGather), reinterpret_cast<void*>(&gatherDetour),
+                   reinterpret_cast<void**>(&g_gather));
     hooks::install("baggage slot remove", ds2::at(kSlotRemove), reinterpret_cast<void*>(&removeDetour),
                    reinterpret_cast<void**>(&g_remove));
     hooks::install("baggage slot add", ds2::at(kSlotAdd), reinterpret_cast<void*>(&addDetour),

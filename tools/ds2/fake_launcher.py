@@ -266,7 +266,7 @@ def serve(sock, a):
             print("cargo: gave the order piece", flush=True)
         if a.host_picks_order and start is not None and not picked and now - start >= float(a.host_picks_order):
             picked = True
-            sock.sendall(encode(0x0106, peer_slot, struct.pack("<IIfffIQ", 0, 641900174, 0.0, 0.0, 0.0, 0, 0x1000071000018E)))
+            sock.sendall(encode(0x0106, peer_slot, struct.pack("<IIfffIQQB7x", 0, 641900174, 0.0, 0.0, 0.0, 0, 0x1000071000018E, 0, 0)))
             print("cargo: host picked up the order piece", flush=True)
         if a.give_plain and start is not None and not gave_plain and now - start >= float(a.give_plain):
             gave_plain = True
