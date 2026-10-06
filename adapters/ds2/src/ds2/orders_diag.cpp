@@ -18,14 +18,11 @@ namespace {
 
 constexpr uintptr_t kHeadlineGetter = 0x1414a13a0;  // (UI manager) -> DSUIBaggageCarrierSlotTypeResource, which names a carrier group
 constexpr uintptr_t kOwnerActiveCheck = 0x14119b2e0;  // (owner) -> whether the menus may use the owner
-constexpr uintptr_t kCarrierPanel = 0x141569dc0;  // (menu controller): shows the selected carrier; it asks the headline getter
-constexpr uintptr_t kControllerModel = 0xE0, kModelSelected = 0xC1C, kModelOwnerCount = 0x48, kModelOwners = 0x50;
-constexpr uintptr_t kOwnerCarrierType = 0x10, kOwnerKey = 0x18;
 constexpr size_t kMaxCallersLogged = 24;
 
 std::atomic<bool> g_enabled{false};
 std::mutex g_mutex;
-std::set<uintptr_t> g_headlineCallers, g_carriedCallers, g_activeCallers, g_panelOwners;
+std::set<uintptr_t> g_headlineCallers, g_carriedCallers, g_activeCallers;
 
 uintptr_t fileVa(const void* address) {
     return reinterpret_cast<uintptr_t>(address) - ds2::at(ds2::kImageBase) + ds2::kImageBase;
@@ -39,8 +36,6 @@ bool firstTime(std::set<uintptr_t>& seen, uintptr_t address) {
 
 using GetterFn = uintptr_t (*)(uintptr_t ui);
 using ActiveFn = uint64_t (*)(uintptr_t owner);
-using PanelFn = void (*)(uintptr_t controller, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
-PanelFn g_originalPanel = nullptr;
 GetterFn g_originalGetter = nullptr;
 ActiveFn g_originalActive = nullptr;
 
@@ -64,26 +59,6 @@ uint64_t activeDetour(uintptr_t owner) {
     return answer;
 }
 
-// The owner the carrier panel is about to show (the controller's selected entry), logged once per distinct owner.
-void panelDetour(uintptr_t controller, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6) {
-    const uintptr_t model = decima::readPointer(controller + kControllerModel);
-    int32_t selected = -1, count = 0;
-    decima::safeRead(model + kModelSelected, selected);
-    decima::safeRead(model + kModelOwnerCount, count);
-    const uintptr_t owners = decima::readPointer(model + kModelOwners);
-    const uintptr_t owner = selected >= 0 && selected < count && owners ? decima::readPointer(owners + selected * sizeof(uintptr_t)) : 0;
-    uint8_t type = 0;
-    uint64_t key = 0;
-    if (owner && decima::safeRead(owner + kOwnerCarrierType, type) && decima::safeRead(owner + kOwnerKey, key) &&
-        firstTime(g_panelOwners, owner)) {
-        const auto remoteKey = remote_body::ownerKey();
-        logger::write("orders_diag: the carrier panel shows owner %p (type %u, key %llx, the remote's: %s)",
-                      reinterpret_cast<void*>(owner), type, static_cast<unsigned long long>(key),
-                      remoteKey && *remoteKey == key ? "yes" : "no");
-    }
-    g_originalPanel(controller, a2, a3, a4, a5, a6);
-}
-
 }  // namespace
 
 namespace orders_diag {
@@ -92,8 +67,6 @@ void installEarly() {
     g_enabled = true;
     hooks::install("orders headline getter", ds2::at(kHeadlineGetter), reinterpret_cast<void*>(&getterDetour),
                    reinterpret_cast<void**>(&g_originalGetter));
-    hooks::install("orders carrier panel", ds2::at(kCarrierPanel), reinterpret_cast<void*>(&panelDetour),
-                   reinterpret_cast<void**>(&g_originalPanel));
     hooks::install("orders owner-active check", ds2::at(kOwnerActiveCheck), reinterpret_cast<void*>(&activeDetour),
                    reinterpret_cast<void**>(&g_originalActive));
 }
