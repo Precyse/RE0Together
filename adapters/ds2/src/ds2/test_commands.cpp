@@ -249,6 +249,8 @@ void tryParking(const std::string& mode) {
     else if (mode.rfind("pause", 0) == 0) reinterpret_cast<void (*)(uintptr_t)>(ds2::at(kRequestPausedUpdate))(body);
     logger::write("test_commands: park '%s', the body's entity flags %llx", mode.c_str(),
                   static_cast<unsigned long long>(ds2::field<uint64_t>(body, kEntityFlags)));
+}
+
 void setNpcPartnerSwitches(const std::string& text) {
     sneaking_focus::setSwitches(text.find("budget") != std::string::npos, text.find("predicate") != std::string::npos);
 }
