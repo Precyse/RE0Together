@@ -99,6 +99,7 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 | 0x010A | ANIM_STATE | all | no | AnimHeader, optional u64 sender time, entries (below) |
 | 0x010B | FACT_SET | host to all | yes | u32 count, u32 reserved, count x 24-byte facts (`fact_wire.h`) |
 | 0x010C | EQUIP_STATE | all | yes | `equip_sync.h` |
+| 0x012A | STRUCT_REQUEST | guest | host | a guest's placement: STRUCT_CREATE payload with id 0xFFFFFFFF; the host builds it and announces it as STRUCT_CREATE |
 | 0x010D-0x0110 | WORLD_ENV, ORDER_START, STRUCT_CREATE, STRUCT_REMOVE | | | reserved, not built |
 | 0x0111 | AUTH_CLAIM | owner or host to all | yes | AuthMessage |
 | 0x0112 | AUTH_DECLINE | declining owner to all | yes | AuthMessage |
