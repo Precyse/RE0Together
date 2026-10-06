@@ -7,6 +7,7 @@
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   attach.txt     "mode"     attaches the body's weapon again with that SetParent mode and logs the weapon's and the body's position
+//   env.txt        "hours [region type]"  the game's own Game_SetTimeOfDay and SetForecastTypeOfRegionDirect on this machine (the host's WORLD_ENV then carries them); any other text only logs the world env the host would send
 //   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   mission.txt    "id"      logs the mission object (hex id) and its resource as qwords, and 0x60 bytes behind each pointer in the
@@ -42,6 +43,7 @@
 #include "ds2/sim_tick.h"
 #include "ds2/story.h"
 #include "enemy_directory.h"
+#include "env_wire.h"
 #include "equip_sync.h"
 #include "game.h"
 #include "log.h"
@@ -55,6 +57,9 @@ constexpr uintptr_t kAddWeapon = 0x140d9bbc0;         // DSPlayerSystem_sExporte
 constexpr uintptr_t kFastTravel = 0x140703280;        // (FastTravelSystem*, const WorldTransform*, const GGUUID*, bool)
 constexpr uintptr_t kNullUuid = 0x142d91fd0;
 constexpr uintptr_t kGameModuleGlobal = 0x14623E338, kFastTravelSystem = 0x5A0;
+constexpr uintptr_t kSetTimeOfDay = 0x14074f240;       // Game_SetTimeOfDay(float hours)
+constexpr uintptr_t kSetRegionType = 0x141f09a40;      // SetForecastTypeOfRegionDirect(u8 region, u8 weather state type)
+constexpr int kHundredthsPerHour = 100;
 constexpr uintptr_t kSetBtRegion = 0x141f09920;       // SetBtActiveRegion(u8 region, u8 active)
 constexpr uintptr_t kWeaponConfigList = 0x14623FA50;  // +0x30 count, +0x38 entry pointers, entry +0x20 u16 id
 constexpr uintptr_t kWeaponCount = 0x30, kWeaponEntries = 0x38, kWeaponId = 0x20, kWeaponListItem = 0x28;
@@ -225,6 +230,36 @@ void setBtRegion(const std::string& text) {
     logger::write("test_commands: SetBtActiveRegion(%d, %d) %s", args[0], args[1], ok ? "done" : "faulted");
 }
 
+// The world env as the host would send it, logged for the check against what a guest reports.
+void logWorldEnv() {
+    env_wire::WorldEnv env;
+    if (!game::readWorldEnv(env)) {
+        logger::write("test_commands: no world env yet");
+        return;
+    }
+    std::string regions;
+    for (size_t i = 0; i < env_wire::kRegionCount; ++i) regions += std::to_string(env.regionType[i]) + (i + 1 < env_wire::kRegionCount ? "," : "");
+    logger::write("test_commands: world env time %.3f day %d flags %u slot %u regions %s", env.timeOfDay, env.day, env.flags, env.slot,
+                  regions.c_str());
+}
+
+void worldEnv(const std::string& text) {
+    double hours = -1;
+    int region = -1, type = -1;
+    const int fields = sscanf(text.c_str(), "%lf %d %d", &hours, &region, &type);
+    if (fields >= 1 && hours >= 0) {
+        int hundredths = static_cast<int>(hours * kHundredthsPerHour);
+        const bool ok = guardedCall([](const int* a) { reinterpret_cast<void (*)(float)>(ds2::at(kSetTimeOfDay))(static_cast<float>(*a) / kHundredthsPerHour); }, &hundredths);
+        logger::write("test_commands: Game_SetTimeOfDay(%.2f) %s", hours, ok ? "done" : "faulted");
+    }
+    if (fields == 3) {
+        int args[2] = {region, type};
+        const bool ok = guardedCall([](const int* a) { reinterpret_cast<void (*)(uint8_t, uint8_t)>(ds2::at(kSetRegionType))(static_cast<uint8_t>(a[0]), static_cast<uint8_t>(a[1])); }, args);
+        logger::write("test_commands: SetForecastTypeOfRegionDirect(%d, %d) %s", region, type, ok ? "done" : "faulted");
+    }
+    logWorldEnv();
+}
+
 void watchHealth(const std::string& text) {
     if (text.compare(0, 3, "off") == 0) return health_watch::disarm();
     const int netId = atoi(text.c_str());
@@ -327,6 +362,7 @@ void tick() {
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
+    if (const std::string text = takeCommand(L"env.txt"); !text.empty()) worldEnv(text);
     if (const std::string text = takeCommand(L"sequence.txt"); !text.empty()) startSequenceNetwork(text);
     if (const std::string text = takeCommand(L"cutscene.txt"); !text.empty()) playSequenceEntity(text);
     if (const std::string text = takeCommand(L"networks.txt"); !text.empty()) logNetworks();

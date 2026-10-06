@@ -244,6 +244,8 @@ def serve(sock, a):
             elif msg_type == STRUCT_CREATE and a.struct_request:
                 requested.update(id=struct.unpack_from('<I', body, 8)[0], at=time.time())
                 print(f"struct: STRUCT_CREATE kind {body[4]} id {requested['id']}", flush=True)
+            elif msg_type == STRUCT_REMOVE and a.struct_request:
+                print(f"struct: STRUCT_REMOVE id {struct.unpack_from('<I', body, 4)[0]}", flush=True)
             elif msg_type == ENEMY_SPAWN:
                 net_id, _, uuid = struct.unpack_from("<HH16s", body, 4)
                 announced[net_id] = (uuid, struct.unpack_from("<3d", body, 4 + 40))
