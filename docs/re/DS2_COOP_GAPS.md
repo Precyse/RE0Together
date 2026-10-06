@@ -25,7 +25,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | BT grab of the guest's body | missing | ds2-streaming | `ds2/bt_events.h` TODO |
 | Guest builds structures and roads | built, not run live (STRUCT_REQUEST, guest collapse; roads: plan in DS2_NOTES, needs live observation) | ds2-streaming | `ds2/structures.cpp` refuses the guest's placements; ladders only |
 | Guest voidout or death crater | missing | ds2-streaming | none; a world change made only in the dying player's world |
-| Partner in another region or map | partial | ds2-streaming | `ds2/remote_player.cpp` (body leaves on area change), `marker_overlay.cpp` (distance only) |
+| Partner in another region or map | partial (a "too far" line past 700 m; options in "Far partner" below) | ds2-streaming | `ds2/remote_player.cpp` (body leaves on area change), `marker_overlay.cpp` (distance only) |
 | Guest-initiated hand-over | missing | ds2-orders | `cargo_menu.cpp` is the host's (F7) |
 | Guest orders and deliveries | missing (by design for now) | ds2-orders | `ds2/order_gate.cpp` |
 | Shared locker | missing | ds2-orders | none |
@@ -108,3 +108,19 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Root change:** the save files hold world and personal state together, and every join overwrites the guest's copy with the host's, so the real fix is a merge: find which save blocks are personal (equipment, levels, private locker) and carry them from the guest's last session save into the next session's copy. First step (S): archive the guest's session save at session end instead of deleting it, so nothing is lost while the merge is worked out.
 - **Files:** `launcher/AdapterSettings.cs`, `SaveSyncCoordinator.cs`, `SavePaths.cs`, `docs/CONTRACT.md`, `docs/DS2_NOTES.md` (save layout).
 - **Verify:** `tools/ds2/save_sync_test.py`: end a session, the guest's session files are in the archive folder; the merge itself needs a save diff of two guest saves that differ only in gear.
+
+## Far partner: beyond the host's loaded world (ds2-streaming, 2026-10-06)
+
+Measured live: the engine streams tiles and simulates entities around ONE point, this machine's player (streaming manager observer, +0x20; no second observer exists, the only override is the cutscene export `GameModule SetObserverPositionOverride`). The entity tables' radii are 500 to 1000 m (table 3: 768 / 800). `partner_focus` and `sneaking_focus` make the partner count as a focus for the activity decisions, but a member only wakes when its tile data is streamed in (stream test 2): with the partner 3 km from the host's player every enemy-type member near it stayed asleep (stream test 0), 525 m away they woke (3 of 4 at a camp).
+
+| option | what it gives | cost / risk |
+|---|---|---|
+| A. Soft leash notice (built) | the player sees "name  N m  too far" past 700 m, so a missing fight is explained | no gameplay change; the world around a far partner is still not simulated |
+| B. Hard leash | warp the partner back (F6 exists) or block fast travel / vehicles past a limit | removes the problem by removing freedom; feels restrictive |
+| C. Observer at the midpoint | feed the engine's own observer override with the midpoint of the two players: both stay within about 800 m of it while up to about 1.5 km apart, doubling the supported separation | one number per frame through the engine's own setter; the detail ring around each player gets thinner; needs a live check of terrain and LOD near each player |
+| D. Each machine simulates its own area (guest authoritative for local enemies) | works at any distance | large: enemy authority per area, handover on approach, the host's world and the guest's world diverge; the authority records exist (`authority.cpp`) but nothing assigns enemies by area |
+| E. Second streaming observer | works at any distance | not available in the engine: one observer, about 60 readers of the manager; memory cost of a second ring of tiles on a PC already near its commit limit |
+
+Recommendation: A now (done), then C as the next experiment (cheapest real gain, uses the engine's own override), B as the fallback if C shows tile pop-in near either player; D only if long-range split play becomes a goal.
+
+Built: `marker_overlay.cpp` draws one line per partner farther than `kBeyondLoadedWorldMetres` (700 m, a margin under the 768 / 800 m table radii) under the toasts.
