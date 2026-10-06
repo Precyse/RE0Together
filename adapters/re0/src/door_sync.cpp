@@ -97,6 +97,7 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
         logger::write("door_sync: suppressed a local door to room 0x%x, the peer owns the focused character", room);
         return;
     }
+    split_rooms::beforeLocalDoor(static_cast<uint16_t>(room));
     g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
     send({room, entry, arg3, arg4, flag, focused, {}});
     logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);

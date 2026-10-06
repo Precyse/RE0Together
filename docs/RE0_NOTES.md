@@ -174,7 +174,8 @@ loaded room" also compares +0xff4 with the loaded record.
 So split rooms needs no replay: a peer's door moves the peer's character in place (split_rooms.cpp, always on), the
 save and later doors see the engine's own state. LEAVE_BEHIND is independent play (own camera on each machine, V does
 nothing). Enemies: the machine that was in a room first keeps simulating it when the other walks in (ROOM_STATE carries
-the claim; host on a tie). Cutscenes that move the peer's character hand the result to its owner (event_place).
+the claim; host on a tie). **A dormant record never spawns the room (2026-10-06, first two-PC session).** `0x61e0f0` returns an existing record of the scene at once (and with flag 2 makes a second one), so a record `scene::move` made dormant for the peer's door is reused by a later local door into that room: no room load runs, the room has no enemies or floor items (log: `enemy_state: slot 0 has no local enemy`). Cause inferred from the log and the disassembly, not yet seen live. `split_rooms::beforeLocalDoor` therefore moves a peer character that sits alone in the target's dormant record into the loaded room (which frees the record), the door loads the room fresh like a never-visited one, and `onArrival` moves the character back to its door entry. Enemy state then applies slot by slot as before. Retest: guest enters a room first while split, host walks in, enemies and items exist on the host.
+Cutscenes that move the peer's character hand the result to its owner (event_place).
 
 **The game's own switch (V)** is a multi-step action in the player think (0x4fec64..: states 3/4/5): in the same room it
 swaps directly (no room phase), apart it requests Change from 0x4fed48 / 0x50395e. Refusing requestPhase(Change) misses
