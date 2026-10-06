@@ -248,7 +248,6 @@ void tryParking(const std::string& mode) {
     logger::write("test_commands: park '%s', the body's entity flags %llx", mode.c_str(),
                   static_cast<unsigned long long>(ds2::field<uint64_t>(body, kEntityFlags)));
 }
-void setObserverMidpoint(const std::string& text) { observer_midpoint::setEnabled(text.rfind("on", 0) == 0); }
 
 void watchAddress(const std::string& text) {
     unsigned long long address = 0;
