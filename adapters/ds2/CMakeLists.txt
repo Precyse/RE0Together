@@ -62,6 +62,9 @@ add_library(ds2_adapter SHARED
     src/bt_sync.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
+    src/cutscene_sync.cpp
+    src/ds2/cutscene.cpp
+    src/ds2/sequence_info.cpp
     src/ds2/test_commands.cpp
     src/ds2/cutscene_log.cpp
     src/enemy_sync.cpp
@@ -184,5 +187,6 @@ add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
 add_unit_test(bt_wire_test)
+add_unit_test(cutscene_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
