@@ -10,7 +10,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | CliOptions.cs | argument parsing | `CliOptions.Parse`, `Usage` |
 | App.cs | wiring and ~100 Hz main loop; CLI runs one session, interactive (GUI) takes commands and returns to idle | `Run`, `Host`, `Join`, `Leave`, `Invite`, `Stop`, `StatusChanged`, `EndSession` |
 | AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT) | `AppStatus`, `AppState` |
-| Updater.cs | self-update from the rolling release `latest` (`version.txt` build): download the whole package (launcher, game profiles, every game's adapter), rename old files to `*.old`, copy new, relaunch; skipped silently on any failure or outside the packaged layout | `TryInstall` |
+| Updater.cs | self-update from the rolling release `latest` (`version.txt` build): download the whole package (launcher, game profiles, every game's adapter), rename old files to `*.old`, copy new; start-up relaunches (`TryInstall`), the window's Update button only stages (`Stage`: no relaunch while a Steam session is open, the player reopens); skipped silently on any failure or outside the packaged layout | `TryInstall`, `Stage` |
 | ReleaseFeed.cs | the one cached read of the GitHub release (`update.json` repo): read at startup, forced only by the Update button; a failed read is logged and keeps the old result; also the shared HTTP client | `Read`, `Get`, `AssetName` |
 | ModInstaller.cs | a game's mod = its profile adapterFiles in the game folder: `Status` (not installed / installed / update available; marker `.cfown` detects installs), `Install` (also the update re-copy; backs up originals as `.cfbak`, records the build in `.cfbuild`), `Uninstall` (restores backups) | `Status`, `Install`, `Uninstall` |
 | InstanceGuard.cs | one window launcher at a time: a new window launcher closes older launcher processes | `CloseOtherLaunchers` |
@@ -38,7 +38,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SteamTransport.cs | ISteamNetworkingMessages channel 0, member-only sessions | `Send`, `Pump` |
 | LocalTransport.cs | UDP loopback transport + presence keepalive | `PeerPresent` |
 | ILobby.cs | membership source interface | |
-| SteamLobby.cs | Steam lobby create/join, cf_* data | `Create`, `Join` |
+| SteamLobby.cs | Steam lobby create/join, cf_* data; a request Steam rejects or never answers (30 s) becomes `Failure` | `Create`, `Join`, `Pump` |
 | LocalLobby.cs | fake lobby for local testing | |
 | SteamBootstrap.cs | SteamAPI init/callbacks, overlay invites | `PendingInviteLobby` |
 | GameProfile.cs | `games/<id>.json` loader, optional `saveSync` block (fixed Steam-cloud files, or `hostSaveDir`/`guestSaveDir`/`filePattern`) | `Load`, `ListIds` |

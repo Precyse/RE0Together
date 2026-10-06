@@ -41,6 +41,7 @@ public sealed class MainForm : Form
     };
     private readonly FlatButton _copy = new("Copy", ButtonKind.Normal);
     private readonly FlatButton _invite = new("Invite", ButtonKind.Normal);
+    private bool _updateStaged;
     private readonly FlatButton _leave = new("Leave", ButtonKind.Ghost);
     private readonly TableLayoutPanel _lobbyRow;
 
@@ -137,21 +138,16 @@ public sealed class MainForm : Form
         }
     }
 
-    /// <summary>Installs a newer release in the background (the one forced read of the release); when one was
-    /// installed the new launcher is already starting, so this one closes. Otherwise the mod states are re-read.</summary>
+    /// <summary>Installs a newer release in the background without starting it: relaunching while this process holds a
+    /// Steam session leaves the new copy with a broken one, so the player reopens the launcher.</summary>
     private void CheckForUpdate()
     {
         _top.UpdateButton.Enabled = false;
-        Task.Run(() => Updater.TryInstall(Array.Empty<string>())).ContinueWith(task =>
+        Task.Run(Updater.Stage).ContinueWith(task =>
         {
-            if (task.Result)
-            {
-                Close();
-                return;
-            }
-            ShowLauncherUpdate();
-            RefreshMods();
-            Apply(_app.Status);
+            _updateStaged = task.Result;
+            if (_updateStaged) Log.Info("Update installed. Close the launcher and open it again to use it");
+            _top.UpdateButton.Enabled = !_updateStaged && _app.Status.State == AppState.Idle;
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
@@ -210,7 +206,14 @@ public sealed class MainForm : Form
 
     private void OnUiThread(Action action)
     {
-        if (IsHandleCreated && !IsDisposed) BeginInvoke(action);
+        try
+        {
+            if (IsHandleCreated && !IsDisposed) BeginInvoke(action);
+        }
+        catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException)
+        {
+            // The window closed between the check and the call; the log or status line has nowhere to go.
+        }
     }
 
     private void Apply(AppStatus status)
@@ -240,7 +243,7 @@ public sealed class MainForm : Form
         _join.Enabled = idle;
         _joinCode.Enabled = idle;
         _leave.Enabled = !idle;
-        _top.UpdateButton.Enabled = idle;
+        _top.UpdateButton.Enabled = idle && !_updateStaged;
     }
 
     private static string BuildLabel()

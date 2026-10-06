@@ -4,7 +4,7 @@ using System.IO.Compression;
 namespace CoopLauncher;
 
 /// <summary>
-/// Installs a newer build from the rolling GitHub release `latest` (read through ReleaseFeed), then relaunches the
+/// Installs a newer build from the rolling GitHub release `latest` (read through ReleaseFeed); at start-up it also relaunches the
 /// launcher. The package is replaced whole: launcher, every game profile and every adapter. Only runs from a packaged
 /// layout (root\launcher\app\coop-launcher.exe) and only ever writes below that root. Any failure means "no update".
 /// </summary>
@@ -17,8 +17,26 @@ public static class Updater
     private const string ExtractedDirName = "files";
     private const int DownloadTimeoutSeconds = 300;
 
-    /// <summary>True when a newer build was installed and started; the caller must exit. Always reads the release afresh.</summary>
+    /// <summary>Start-up: true when a newer build was installed and started; the caller must exit. Safe because no Steam
+    /// session exists yet in this process.</summary>
     public static bool TryInstall(string[] args)
+    {
+        if (!Stage()) return false;
+        try
+        {
+            Relaunch(args);
+            return true;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Log.Info($"Update installed but not started: {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Downloads and installs a newer build without starting it. True when one was installed; the running copy
+    /// keeps going until the user reopens the launcher.</summary>
+    public static bool Stage()
     {
         if (FindPackageRoot() is not { } root)
         {
@@ -41,7 +59,6 @@ public static class Updater
             Log.Info($"Installing build {build}");
             InstallFrom(zipUrl, root);
             if (BuildCheck.LocalBuild() < build) throw new InvalidDataException($"package did not update {BuildCheck.VersionFile}");
-            Relaunch(args);
             return true;
         }
         catch (Exception e)
