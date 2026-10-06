@@ -8,6 +8,8 @@
 // and the engine's own update runs once per part with that focus, so a member is judged once, against its nearest focus.
 #include "ds2/sneaking_focus.h"
 
+#include <windows.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -16,6 +18,7 @@
 #include "ds2/engine.h"
 #include "ds2/partner_focus.h"
 #include "hooks.h"
+#include "log.h"
 
 namespace {
 
@@ -84,6 +87,11 @@ void updateBothFoci(uintptr_t manager, const decima::WorldPosition& partner) {
     if (!anyNearPartner()) {
         g_original(manager);
         return;
+    }
+    static bool threadLogged = false;
+    if (!threadLogged) {
+        threadLogged = true;
+        logger::write("sneaking_focus: the update with the partner's focus runs on thread %lu", GetCurrentThreadId());
     }
     runOnParts(manager, groups, count, g_nearThis);
     focus = partner;
