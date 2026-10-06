@@ -38,6 +38,8 @@ CARGO_ASK_FORMAT = struct.Struct("<QB7x")  # handle, wants it (cargo_transfer.h)
 CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
+STRUCT_REQUEST = 0x012A  # guest to host: STRUCT_CREATE payload with the id left to the host
+ASSIGN_ID = 0xFFFFFFFF
 ENEMY_SPAWN, ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM = 0x011B, 0x011C, 0x011D, 0x011E
 CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END = 0x012A, 0x012B, 0x012C, 0x012D
 CUTSCENE_START_FORMAT = struct.Struct("<IB3xi16s16s16s")  # id, category, reserved, stop frame, resource, entity, network (cutscene_wire.h)
@@ -129,14 +131,14 @@ LADDER_AHEAD = 8.0  # metres ahead of the local player (a ladder the player grab
 LADDER_TAIL = bytes.fromhex("0100000000" "8b6abf" "6666" "1a41" "00000000" "ffffffff" "00020000")
 
 
-def ladder_payload(local, kind=10):
+def ladder_payload(local, kind=10, struct_id=None):
     """STRUCT_CREATE for a captured structure (kind 10 ladder, 11 climbing anchor), ahead of the local player and facing the way it faces."""
     fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
     tail = LADDER_TAIL if kind == 10 else ANCHOR_TAIL
     position = struct.pack("<3d", local["x"] + fx * LADDER_AHEAD, local["y"] + fy * LADDER_AHEAD, local["z"])
     rotation = struct.pack("<9f", 0.0, 0.0, -1.0, fx, fy, 0.0, fy, -fx, 0.0)  # as the captured ladder: its long axis is the first row (straight down), then heading, then the horizontal right
     transform = position + rotation + bytes(4)
-    fixed = struct.pack("<BBBBI16s", kind, 3 if kind == 10 else 14, 1, len(tail), LADDER_ID, bytes(16)) + transform + struct.pack("<f", 360000.0)
+    fixed = struct.pack("<BBBBI16s", kind, 3 if kind == 10 else 14, 1, len(tail), LADDER_ID if struct_id is None else struct_id, bytes(16)) + transform + struct.pack("<f", 360000.0)
     return fixed + tail
 
 
@@ -160,6 +162,7 @@ def main():
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
     p.add_argument("--env", default="", help="HOURS[,DAY[,REGION:TYPE...]]: as the host peer, send this WORLD_ENV once a second (types from a host capture)")
     p.add_argument("--struct", default="", help="ADD,REMOVE seconds after the first local state: replay the captured ladder 3 m ahead of the local player, then remove it")
+    p.add_argument("--struct-request", type=float, default=0.0, help="SECONDS after the first local state: as a guest, ask the host to build the captured ladder (STRUCT_REQUEST) and print the STRUCT_CREATE it answers with")
     p.add_argument("--struct-kind", type=int, default=10, help="10 = the captured ladder, 11 = the captured climbing anchor")
     p.add_argument("--give-order", default="", help="SECONDS: send CARGO_ADD of the locker order piece Special Plant Seeds (order 0x1000071000018e) after that long, as the host giving it to the guest")
     p.add_argument("--host-picks-order", default="", help="SECONDS: send HOST_PICKUP of the order piece Special Plant Seeds (matched by order id at a position nowhere near it)")
@@ -236,6 +239,8 @@ def serve(sock, a):
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
+            elif msg_type == STRUCT_CREATE and a.struct_request:
+                print(f"struct: STRUCT_CREATE kind {body[4]} id {struct.unpack_from('<I', body, 8)[0]}", flush=True)
             elif msg_type == ENEMY_SPAWN:
                 net_id, _, uuid = struct.unpack_from("<HH16s", body, 4)
                 announced[net_id] = (uuid, struct.unpack_from("<3d", body, 4 + 40))
@@ -300,7 +305,7 @@ def serve(sock, a):
     def far(net_id):
         at = announced[net_id][1]
         return sum((at[i] - local[axis]) ** 2 for i, axis in enumerate("xyz")) > ENEMY_REACH_METRES ** 2
-    struct_added = struct_removed = False
+    struct_added = struct_removed = struct_requested = False
     gave = asked = picked = gave_plain = told_story = False
     last_load = 0.0
     replay = load_enemy_recording(a.enemy_replay) if a.enemy_replay else []
@@ -336,6 +341,10 @@ def serve(sock, a):
                 struct_removed = True
                 sock.sendall(encode(STRUCT_REMOVE, peer_slot, struct.pack("<IBBBB", LADDER_ID, 1, 0, 0, 0)))
                 print("struct: ladder removed", flush=True)
+        if a.struct_request and local and start is not None and not struct_requested and now - start >= a.struct_request:
+            struct_requested = True
+            sock.sendall(encode(STRUCT_REQUEST, peer_slot, ladder_payload(local, a.struct_kind, ASSIGN_ID)))
+            print("struct: ladder requested", flush=True)
         if a.give_order and start is not None and not gave and now - start >= float(a.give_order):
             gave = True
             sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(641900174, 7, 900.0, 0, 0x1000071000018E, 0)))
