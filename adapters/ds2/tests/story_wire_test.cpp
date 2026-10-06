@@ -3,6 +3,8 @@
 #include <cstring>
 #include <vector>
 
+#include "../src/story_ledger.h"
+#include "../src/story_replay.h"
 #include "../src/story_wire.h"
 
 namespace {
@@ -57,6 +59,33 @@ int main() {
     check(!decode(bytes(unknown), got), "an unknown kind is rejected");
     unknown.kind = 0;
     check(!decode(bytes(unknown), got), "kind zero is rejected");
+
+    using namespace story_replay;
+    check(applies(Kind::MissionStart, 10) && !applies(Kind::MissionStart, 20) && !applies(Kind::MissionStart, 40),
+          "a start replays only for a mission not started here");
+    check(applies(Kind::OrderRequest, 0) && !applies(Kind::OrderRequest, 20), "an order request is a start");
+    check(applies(Kind::MissionSuccess, 20) && !applies(Kind::MissionSuccess, 10) && !applies(Kind::MissionSuccess, 40),
+          "a success replays only for a mission in progress");
+    check(applies(Kind::MissionFail, 20) && !applies(Kind::MissionFail, 30), "a failure replays once");
+
+    story_ledger::Ledger ledger;
+    Event start{};
+    start.kind = static_cast<uint8_t>(Kind::MissionStart);
+    start.missionId = 0xAB;
+    start.a = 3;
+    start.b = -2;
+    start.section[0] = 5;
+    ledger.noteStart(start);
+    Event replay = ledger.startFor(0xAB);
+    check(std::memcmp(&replay, &start, sizeof(start)) == 0, "a mission started by the script replays with its real arguments and section");
+    replay = ledger.startFor(0xCD);
+    check(replay.kind == static_cast<uint8_t>(Kind::MissionStart) && replay.a == story_ledger::kNoRow && replay.missionId == 0xCD,
+          "a mission the host never saw start replays with the no-row fallback");
+    ledger.noteEnd(0xAB);
+    check(ledger.size() == 0 && ledger.startFor(0xAB).a == story_ledger::kNoRow, "an ended mission leaves the ledger");
+    ledger.noteStart(start);
+    ledger.clear();
+    check(ledger.size() == 0, "a load clears the ledger");
 
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
