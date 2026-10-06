@@ -297,7 +297,11 @@ void replayMission(const story_wire::Event& event) {
         return;
     }
     const uint16_t state = ds2::field<uint16_t>(mission, kMissionState);
-    if (!story_replay::applies(kind, state)) return;
+    if (!story_replay::applies(kind, state)) {
+        logger::writeUnlessRepeated("story: event kind %u for mission %llx not replayed, it is in state %u here", event.kind,
+                                    static_cast<unsigned long long>(event.missionId), state);
+        return;
+    }
     const bool starts = story_replay::isStart(kind);
     if (starts) {
         if (kind == story_wire::Kind::MissionStart) ds2::field<uint32_t>(mission, kMissionFlags) |= kCargoPreparedFlag;
