@@ -51,6 +51,21 @@ VEHICLE = struct.Struct("<IIQ3f9f")  # seq, role (0 driver, 1 passenger), id, po
 SEND_HZ = 60
 
 
+THROW_ELEVATION_RADIANS = 0.35  # a thrown item leaves this far above the horizontal toward its target
+
+
+def distance(a, b):
+    return sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5
+
+
+def lob_toward(origin, target):
+    """The unit direction of a throw at `target`: the horizontal bearing raised by THROW_ELEVATION_RADIANS."""
+    dx, dy = target[0] - origin[0], target[1] - origin[1]
+    length = max((dx * dx + dy * dy) ** 0.5, 1e-6)
+    flat = math.cos(THROW_ELEVATION_RADIANS)
+    return (dx / length * flat, dy / length * flat, math.sin(THROW_ELEVATION_RADIANS))
+
+
 def encode(msg_type, slot, payload=b"", flags=FLAG_RELIABLE):
     return struct.pack("<IHBB", 4 + len(payload), msg_type, flags, slot) + payload
 
@@ -125,6 +140,7 @@ def main():
     p.add_argument("--drive-role", type=int, default=0, help="0 = the peer drives the vehicle, 1 = it rides along")
     p.add_argument("--at", default="", help="X,Y,Z: the peer's circle centre is this world point, whatever the local player does (not with --follow)")
     p.add_argument("--resync-enemies", action="store_true", help="after the first local state ask the host for every enemy again (a peer that joins a running host gets the enemy list this way)")
+    p.add_argument("--throw-at", action="store_true", help="with --weapon and --fire: each throw is a lob at the announced enemy nearest the peer (needs the enemy list: add --resync-enemies)")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
@@ -328,7 +344,9 @@ def serve(sock, a):
                 last_fire = now
                 origin = (local["x"], local["y"], local["z"] + MUZZLE_HEIGHT_METRES)
                 aim = (1.0, 0.0, 0.0)
-                if hit_target in announced:
+                if a.throw_at and announced:
+                    aim = lob_toward(origin, min((v[1] for v in announced.values()), key=lambda at: distance(origin, at)))
+                elif hit_target in announced:
                     at = announced[hit_target][1]
                     delta = (at[0] - origin[0], at[1] - origin[1], at[2] - origin[2])
                     length = max(sum(c * c for c in delta) ** 0.5, 1e-6)
