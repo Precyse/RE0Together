@@ -19,9 +19,7 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
-#include "ds2/enemy_host.h"
 #include "ds2/entity_wake.h"
-#include "ds2/health_watch.h"
 #include "ds2/remote_player.h"
 #include "hooks.h"
 #include "log.h"
@@ -47,7 +45,6 @@ constexpr uintptr_t kTableArea = 0x48;        // optional area object: members o
 constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
 constexpr uintptr_t kTables = 0x20E0;
 constexpr uintptr_t kTableSize = 0xE8;
-constexpr uintptr_t kEntityFlags = 0x98;  // the activity flags the sleep decision writes
 constexpr uintptr_t kStreamingManagerGlobal = 0x146266958;  // StreamingStrategyManagerGame*
 constexpr uintptr_t kStreamTest = 0x1426E64F0;              // (manager, position*, radius) -> 2 when streamed in
 constexpr float kNearStreamRadius = 4.0f, kMidStreamRadius = 2.0f;  // the radii the update passes (constants in the code)
@@ -124,22 +121,6 @@ void countSweep(uintptr_t table, size_t handedToPartner) {
     g_sweepTotal += handedToPartner;
 }
 
-// Once: wakes a sleeping enemy near the partner and watches its flags, so the log names the code that puts it back to sleep
-// (the write watch logs each distinct writing instruction with its stack).
-void watchEnemySleeper() {
-    static bool watched = false;
-    if (watched) return;
-    uintptr_t sleeper = 0;
-    for (const uintptr_t member : g_nearPartner) {
-        if (member && ds2::entityAsleep(member) && enemy_host::tracks(member)) sleeper = member;
-    }
-    if (!sleeper) return;
-    watched = true;
-    health_watch::arm(sleeper + kEntityFlags);
-    ds2::wakeEntity(sleeper);
-    logger::write("partner_focus: watching the flags of sleeper %p after waking it", reinterpret_cast<void*>(sleeper));
-}
-
 // Names why members near the partner are still asleep: the table's budget, radii and area decide it.
 void logSleepers(uintptr_t table) {
     size_t asleep = 0;
@@ -155,7 +136,6 @@ void logSleepers(uintptr_t table) {
     logger::write("partner_focus: a sleeper's stream test: near radius %d, mid radius %d (2 = streamed in)",
                   streamTest(manager, sample + ds2::kEntityTransform, kNearStreamRadius),
                   streamTest(manager, sample + ds2::kEntityTransform, kMidStreamRadius));
-    watchEnemySleeper();
     const uintptr_t first = decima::readPointer(ds2::at(kEntityManagerGlobal)) + kTables;
     logger::write("partner_focus: table %llu has %zu of %zu members near the partner asleep (budget %d, awake %d, near %.0f, far %.0f, area %p)",
                   static_cast<unsigned long long>((table - first) / kTableSize), asleep, g_nearPartner.size(),

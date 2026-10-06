@@ -96,7 +96,7 @@ DWORD WINAPI initThread(LPVOID) {
     bt_events::installEarly();
     if (config.enemySync) {
         enemy_spawn::installEarly();
-        enemy_host::installEarly();
+        enemy_host::installEarly(config.diagnostics);
         camp_alert::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
