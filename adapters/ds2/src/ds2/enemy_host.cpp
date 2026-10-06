@@ -46,7 +46,7 @@ constexpr ULONGLONG kAnimationSnapshotMs = 10000;  // a new enemy in range and a
 constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
 
 struct PartnerWatch {
-    int near = 0;
+    int inRange = 0;
     int asleep = 0;
 };
 
@@ -116,15 +116,15 @@ void watchNearPartner(const Tracked& enemy, const decima::WorldTransform& transf
                       PartnerWatch& watch) {
     const double dx = transform.position.x - partner.x, dy = transform.position.y - partner.y, dz = transform.position.z - partner.z;
     if (dx * dx + dy * dy + dz * dz > kPartnerWatchMetres * kPartnerWatchMetres) return;
-    ++watch.near;
+    ++watch.inRange;
     if (ds2::entityAsleep(enemy.entity)) ++watch.asleep;
 }
 
 void logPartnerWatch(const PartnerWatch& watch, ULONGLONG now) {
     static ULONGLONG lastLog = 0;
-    if (now - lastLog < kPartnerWatchLogMs || watch.near == 0) return;
+    if (now - lastLog < kPartnerWatchLogMs || watch.inRange == 0) return;
     lastLog = now;
-    logger::write("enemy_host: %d enemies within %.0f m of the partner, %d asleep", watch.near, kPartnerWatchMetres, watch.asleep);
+    logger::write("enemy_host: %d enemies within %.0f m of the partner, %d asleep", watch.inRange, kPartnerWatchMetres, watch.asleep);
 }
 
 bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
