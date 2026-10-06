@@ -64,6 +64,7 @@ public sealed class MainForm : Form
         _invite.Click += (_, _) => _app.Invite();
         _leave.Click += (_, _) => _app.Leave();
         _footer.Toggled += expanded => _log.Visible = expanded;
+        _top.UpdateButton.Click += (_, _) => CheckForUpdate();
         _app.StatusChanged += OnStatusChanged;
         Log.Written += OnLogWritten;
         FormClosed += (_, _) =>
@@ -129,6 +130,18 @@ public sealed class MainForm : Form
         }
     }
 
+    /// <summary>Installs a newer release in the background; when one was installed the new launcher is already
+    /// starting, so this one closes.</summary>
+    private void CheckForUpdate()
+    {
+        _top.UpdateButton.Enabled = false;
+        Task.Run(() => Updater.TryInstall(Array.Empty<string>())).ContinueWith(task =>
+        {
+            if (task.Result) Close();
+            else _top.UpdateButton.Enabled = _app.Status.State == AppState.Idle;
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
     private void JoinTypedCode()
     {
         if (ulong.TryParse(_joinCode.Input.Text.Trim(), out var lobbyId)) _app.Join(lobbyId);
@@ -171,6 +184,7 @@ public sealed class MainForm : Form
         _join.Enabled = idle;
         _joinCode.Enabled = idle;
         _leave.Enabled = !idle;
+        _top.UpdateButton.Enabled = idle;
     }
 
     private static string BuildLabel()

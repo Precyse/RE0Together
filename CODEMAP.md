@@ -16,7 +16,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed) | `Theme` |
 | Gui/Draw.cs | shared painting: text, captions, lamps, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Wrapped` |
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
-| Gui/TopBar.cs | top strip: brand, build, state lamp and state | `TopBar.Show` |
+| Gui/TopBar.cs | top strip: brand, build, state lamp and state, Update button (idle only) | `TopBar.Show`, `UpdateButton` |
 | Gui/GameRail.cs | left rail of games with capsule art; selection, Running mark, locks during a session | `GameRail`, `SelectionChanged` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character, partner ping | `PlayerSlots.Show` |

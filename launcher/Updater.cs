@@ -47,7 +47,12 @@ public static class Updater
         try
         {
             var release = ReadRepo() is { } repo ? FetchRelease(repo) : null;
-            if (release is not { Build: { } build, ZipUrl: { } zipUrl } || build <= BuildCheck.LocalBuild()) return false;
+            if (release is not { Build: { } build, ZipUrl: { } zipUrl }) return false;
+            if (build <= BuildCheck.LocalBuild())
+            {
+                Log.Info($"Up to date (build {BuildCheck.LocalBuild()})");
+                return false;
+            }
             Log.Info($"Installing build {build}");
             InstallFrom(zipUrl, root);
             if (BuildCheck.LocalBuild() < build) throw new InvalidDataException($"package did not update {BuildCheck.VersionFile}");
