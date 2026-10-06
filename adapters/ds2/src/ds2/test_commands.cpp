@@ -11,6 +11,7 @@
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
 //   travel.txt     "x y z"    the game's own fast travel (FastTravelPlayerToWorldTransform) after taking the remote body down
 //   sequence.txt   "uuid"     starts the loaded SequenceNetwork with that UUID (32 hex digits, as cutscene_log prints it): a cutscene without walking to its trigger
+//   cutscene.txt   "uuid"     calls the engine's Sequence start on the loaded Sequence entity with that UUID (32 hex digits): the hold, START, READY and GO of a synced cutscene
 //   missions.txt   any        logs every mission id with its state
 //   networks.txt   any        logs every loaded SequenceNetwork (UUID, main Sequence end frame, playing)
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
@@ -27,6 +28,7 @@
 #include "decima/safe_read.h"
 #include "ds2/camp_alert.h"
 #include "ds2/engine.h"
+#include "ds2/cutscene.h"
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/health_watch.h"
@@ -152,18 +154,32 @@ void addWeapon(const std::string& text) {
     guardedCall([](const int* a) { reinterpret_cast<void (*)(uint16_t)>(ds2::at(kAddWeapon))(static_cast<uint16_t>(*a)); }, &id);
 }
 
+bool parseUuid(const std::string& text, uint8_t* uuid) {
+    for (size_t i = 0; i < sequence_info::kUuidSize; ++i) {
+        unsigned byte = 0;
+        if (text.size() < (i + 1) * 2 || sscanf(text.c_str() + i * 2, "%2x", &byte) != 1) return false;
+        uuid[i] = static_cast<uint8_t>(byte);
+    }
+    return true;
+}
+
 void startSequenceNetwork(const std::string& text) {
     uint8_t uuid[sequence_info::kUuidSize];
-    for (size_t i = 0; i < sizeof(uuid); ++i) {
-        unsigned byte = 0;
-        if (text.size() < (i + 1) * 2 || sscanf(text.c_str() + i * 2, "%2x", &byte) != 1) {
-            logger::write("test_commands: sequence.txt needs 32 hex digits");
-            return;
-        }
-        uuid[i] = static_cast<uint8_t>(byte);
+    if (!parseUuid(text, uuid)) {
+        logger::write("test_commands: sequence.txt needs 32 hex digits");
+        return;
     }
     sequence_info::startNetwork(uuid);
     logger::write("test_commands: started the SequenceNetwork %.32s", text.c_str());
+}
+
+void playSequenceEntity(const std::string& text) {
+    uint8_t uuid[sequence_info::kUuidSize];
+    if (!parseUuid(text, uuid)) {
+        logger::write("test_commands: cutscene.txt needs 32 hex digits");
+        return;
+    }
+    logger::write("test_commands: Sequence entity %.32s %s", text.c_str(), cutscene::playForTest(uuid) ? "started" : "not loaded");
 }
 
 void logNetworks() {
@@ -272,6 +288,7 @@ void tick() {
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"sequence.txt"); !text.empty()) startSequenceNetwork(text);
+    if (const std::string text = takeCommand(L"cutscene.txt"); !text.empty()) playSequenceEntity(text);
     if (const std::string text = takeCommand(L"networks.txt"); !text.empty()) logNetworks();
     if (const std::string text = takeCommand(L"missions.txt"); !text.empty()) story::logMissions();
     if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
