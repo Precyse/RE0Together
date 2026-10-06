@@ -19,6 +19,13 @@ struct Info {
 // False when the Sequence does not play a SequenceResource (a network's own root Sequence) or cannot be read.
 bool read(uintptr_t sequence, Info& out);
 
+// The raw walk to the resource, for the log when `read` fails.
+struct Probe {
+    uintptr_t ref, holder, resource, resourceVtable;
+    uint64_t flags;
+};
+Probe probe(uintptr_t sequence);
+
 // Whether the entity is a Sequence (by its vtable).
 bool isSequence(uintptr_t entity);
 

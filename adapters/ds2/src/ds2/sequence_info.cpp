@@ -9,7 +9,7 @@
 namespace {
 
 constexpr uintptr_t kSequenceVtable = 0x14314A378;
-constexpr uintptr_t kSequenceResourceVtable = 0x14314C400;
+constexpr uint8_t kMaxCategory = 7;  // ESequenceCategory: anything above is not a SequenceResource
 constexpr uintptr_t kNetworkManagerGlobal = 0x14623E000;  // instance count (int) at +0, array of instance pointers at +8
 constexpr uintptr_t kStartNetworkByUuid = 0x14049DF10;    // (const GGUUID*): SequenceNetworkInstance_sExportedStartSequenceNetworkWithUUID
 constexpr uintptr_t kManagerCount = 0x0, kManagerArray = 0x8;
@@ -27,12 +27,14 @@ constexpr int kMaxTreeDepth = 16;
 constexpr int32_t kMaxInstances = 4096;
 
 // The resource the Sequence plays, found the way the engine's own start does (the ref's holder, when loaded).
-uintptr_t resourceOf(uintptr_t sequence) {
-    const uintptr_t ref = decima::readPointer(sequence + kResourceRef);
-    uint64_t flags = 0;
-    if (!ref || !decima::safeRead(ref + kRefLoadedFlags, flags) || ((flags >> kRefLoadedBit) & 1) == 0) return 0;
-    const uintptr_t holder = decima::readPointer(ref);
-    return holder ? decima::readPointer(holder + kHolderObject) : 0;
+sequence_info::Probe walkToResource(uintptr_t sequence) {
+    sequence_info::Probe p{};
+    p.ref = decima::readPointer(sequence + kResourceRef);
+    if (!p.ref || !decima::safeRead(p.ref + kRefLoadedFlags, p.flags)) return p;
+    p.holder = decima::readPointer(p.ref);
+    if (p.holder && ((p.flags >> kRefLoadedBit) & 1) != 0) p.resource = decima::readPointer(p.holder + kHolderObject);
+    if (p.resource) p.resourceVtable = decima::readPointer(p.resource);
+    return p;
 }
 
 // The topmost Sequence of the tree this one was made in (a Sequence points at its parent's secondary base).
@@ -65,20 +67,21 @@ bool networkUuidOf(uintptr_t root, uint8_t* out) {
 namespace sequence_info {
 
 bool read(uintptr_t sequence, Info& out) {
-    const uintptr_t resource = resourceOf(sequence);
-    uintptr_t vtable = 0;
-    if (!resource || !decima::safeRead(resource, vtable) || vtable != ds2::at(kSequenceResourceVtable)) return false;
+    const uintptr_t resource = walkToResource(sequence).resource;
     Info info{};
-    if (!decima::safeRead(resource + kResourceCategory, info.category) ||
+    if (!resource || !decima::safeRead(resource + kResourceCategory, info.category) || info.category > kMaxCategory ||
         !decima::safeRead(sequence + kStopFrame, info.stopFrame) ||
         !decima::safeCopy(info.resource, resource + kObjectUuid, kUuidSize) ||
         !decima::safeCopy(info.entity, sequence + kObjectUuid, kUuidSize)) {
         return false;
     }
+    if (info.stopFrame <= 0) return false;
     networkUuidOf(rootOf(sequence), info.network);
     out = info;
     return true;
 }
+
+Probe probe(uintptr_t sequence) { return walkToResource(sequence); }
 
 bool isSequence(uintptr_t entity) { return decima::readPointer(entity) == ds2::at(kSequenceVtable); }
 

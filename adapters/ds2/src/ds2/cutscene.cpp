@@ -16,6 +16,7 @@
 #include <mutex>
 #include <vector>
 
+#include "cutscene_gate.h"
 #include "cutscene_wire.h"
 #include "decima/safe_read.h"
 #include "ds2/cutscene_log.h"
@@ -37,6 +38,7 @@ constexpr ULONGLONG kOwnStartGraceMs = 1500;       // a guest waits this long fo
 constexpr ULONGLONG kAdoptWaitMs = 2000;           // ... and this long after that before adopting the Sequence entity
 constexpr ULONGLONG kLifetimeMs = 10 * 60 * 1000;  // a playback nobody ended is forgotten
 constexpr int32_t kEndSlackFrames = 24;            // a stop this close to the end frame counts as the normal end
+constexpr ULONGLONG kHoldLimitMs = cutscene_gate::kReadyTimeoutMs + 2000;  // the longest the host holds a cutscene
 constexpr size_t kMaxPlaybacks = 32;
 
 using StartFn = void (*)(uintptr_t);
@@ -157,6 +159,14 @@ bool hostDecideHold(uintptr_t sequence, const sequence_info::Info& info, ULONGLO
         updatePlaying();
         return false;
     }
+    if (now - p->createdMs > kHoldLimitMs) {  // whatever went wrong, a cutscene must not hold the game for good
+        logger::write("cutscene: cutscene %u held for %llu ms (phase %d, release in %lld ms), starting it", p->start.id,
+                      static_cast<unsigned long long>(now - p->createdMs), static_cast<int>(p->phase),
+                      static_cast<long long>(p->releaseAtMs) - static_cast<long long>(now));
+        p->phase = Phase::Playing;
+        updatePlaying();
+        return false;
+    }
     return p->phase == Phase::Held || p->phase == Phase::Released;
 }
 
@@ -182,14 +192,16 @@ bool guestDecideHold(uintptr_t sequence, const sequence_info::Info& info, ULONGL
 
 void startDetour(uintptr_t sequence) {
     sequence_info::Info info;
-    const bool shared = sequence_info::read(sequence, info) && cutscene_wire::isSharedCategory(info.category);
+    const bool readable = sequence_info::read(sequence, info);
+    const bool shared = readable && cutscene_wire::isSharedCategory(info.category);
     bool hold = false;
     if (shared && g_sync && (g_host || g_guest)) {
         std::lock_guard lock(g_mutex);
         const ULONGLONG now = GetTickCount64();
         hold = g_host ? hostDecideHold(sequence, info, now) : guestDecideHold(sequence, info, now);
     }
-    if (shared) cutscene_log::onStart(sequence, info, hold ? "held" : "started");
+    if (readable) cutscene_log::onStart(sequence, info, hold ? "held" : shared ? "started" : "not shared");
+    else cutscene_log::onUnread(sequence);
     if (!hold) g_start(sequence);
 }
 
