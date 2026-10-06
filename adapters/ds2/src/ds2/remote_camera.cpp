@@ -61,6 +61,9 @@ bool belongsToRemote(uintptr_t component) {
 }
 
 // The remote's component Init and Teleported build a mode bound to index 0 (Sam) and its Update runs Sam's AimIK.
+// The engine enters Init (0x140e39d90) with the stack 16-byte aligned instead of the ABI's 8 off, and this detour keeps that
+// relation for the original, so it must stay free of anything that needs an aligned stack (logging, the CRT, SSE locals):
+// those would fault on a movdqa in a callee, reported as a read of -1.
 void initDetour(uintptr_t component, uintptr_t message) {
     if (!belongsToRemote(component)) g_init(component, message);
 }
