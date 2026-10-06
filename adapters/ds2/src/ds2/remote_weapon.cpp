@@ -110,6 +110,14 @@ uint32_t indexOf(uintptr_t table, uintptr_t entry) {
     return static_cast<uint32_t>((entry - table - ds2::weapon::kTableFirstEntry) / ds2::weapon::kEntrySize);
 }
 
+// Where the weapon and the body are: a weapon whose attach did not take stays at the world origin or where it was made.
+void logPose(uintptr_t body) {
+    decima::WorldTransform weapon, owner;
+    if (!ds2::entityTransform(g_held.weapon, weapon) || !ds2::entityTransform(body, owner)) return;
+    logger::write("remote_weapon: weapon at (%.2f, %.2f, %.2f), body at (%.2f, %.2f, %.2f)", weapon.position.x, weapon.position.y,
+                  weapon.position.z, owner.position.x, owner.position.y, owner.position.z);
+}
+
 // The weapon's entity flags (+0x98), its parent and the table's two indices, to tell a holstered weapon (flag bit 0x2 clear)
 // from a drawn one (the weapon's transform field is not its world position while it is attached, so none is logged).
 void logWeaponState(const char* when, uintptr_t body) {
@@ -126,6 +134,7 @@ void logWeaponState(const char* when, uintptr_t body) {
                   when, g_held.id, weaponAlive(), current, requested, indexOf(g_held.table, g_held.entry),
                   reinterpret_cast<void*>(decima::readPointer(g_held.weapon + kEntityParent)), reinterpret_cast<void*>(body),
                   static_cast<unsigned long long>(flags));
+    logPose(body);
 }
 
 // The body's table is the real one, so its own update draws, holsters and attaches the weapon like Sam's: the weapon is
@@ -398,6 +407,13 @@ void noteEngineShot(uintptr_t behavior) {
 uint16_t attackType() {
     const uintptr_t behavior = weaponAlive() ? ds2::weapon::shotBehavior(g_held.weapon) : 0;
     return behavior ? ds2::weapon::bulletAttackType(behavior) : 0;
+}
+
+void reattach(uint32_t mode) {
+    if (!weaponAlive() || !g_held.owner) return;
+    const bool ok = reattachGuarded(g_held.weapon, g_held.owner, mode);
+    logger::write("remote_weapon: attached with mode %u: %s", mode, ok ? "done" : "faulted");
+    logPose(g_held.owner);
 }
 
 void installEarly(uint8_t attachMode, bool diagnostics) {

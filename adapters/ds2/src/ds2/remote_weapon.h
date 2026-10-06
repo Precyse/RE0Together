@@ -17,6 +17,10 @@ void installEarly(uint8_t attachMode, bool diagnostics);
 // the engine runs a shot of the weapon this module made for the body. Any thread.
 void noteEngineShot(uintptr_t behavior);
 
+// Test command: attaches the body's weapon again with this SetParent mode and logs where the weapon and the body are.
+// Simulation thread.
+void reattach(uint32_t mode);
+
 // The attack type of the damage hit the bullets of the weapon the body holds make (the ammo's own, so Rubber and Normal
 // differ), 0 when the body holds none or it is unknown. Simulation thread.
 uint16_t attackType();
