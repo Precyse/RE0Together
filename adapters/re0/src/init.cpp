@@ -13,7 +13,6 @@
 #include "door_sync.h"
 #include "door_travel.h"
 #include "enemy_damage_hook.h"
-#include "enemy_update_hook.h"
 #include "enemy_net.h"
 #include "enemy_state.h"
 #include "event_place.h"
@@ -84,7 +83,6 @@ void enableCoop() {
     input_record::enable(g_net);
     state_correction::enable();
     enemy_damage_hook::install();
-    enemy_update_hook::install();
     player_damage::install(g_net);
     menu_mirror::enable();
 }

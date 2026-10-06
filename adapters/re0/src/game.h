@@ -155,17 +155,8 @@ constexpr uintptr_t kEnemyPoolEntrySize = 16;
 constexpr uintptr_t kEnemyPoolObjectOffset = 0xc;  // uEnemy* inside a pool entry
 constexpr int kEnemyPoolSlots = 37;
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
-// uModel's motion block (the property "mMotion", a DTI-headed record 0xd1d0dc embedded at +0x4a0): +4 u16 motion
-// number (property mMotionNo; its setter 0x73ef50 is thiscall(u16), ret 4, marks the block dirty and copies the
-// frame to the previous frame), +0x40 f32 current frame, +0x44 f32 previous frame. Read live: motion 0x1b/0x04 idle.
-constexpr uintptr_t kModelMotionBlockOffset = 0x4a0;
-constexpr uintptr_t kMotionNumberOffset = 4;
-constexpr uintptr_t kMotionFrameOffset = 0x40;
-constexpr uintptr_t kMotionPreviousFrameOffset = 0x44;
-constexpr uintptr_t kMotionSetNumberFunction = 0x73ef50;
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, float distance, HitInfo*), thiscall ret 0xC
-constexpr size_t kEnemyUpdateSlot = 41;  // vtable slot (+0xa4): per-frame update (AI state dispatch), thiscall no arguments, plain ret
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
     0xcbdcd8, 0xcc4f28, 0xcc50a0, 0xcc5218, 0xcc5390, 0xcc5508, 0xcc5680, 0xcc57f8, 0xcc5970, 0xcc3fe8,
     0xcbf0d0, 0xcbf5f8, 0xcbf9a0, 0xcbfbc8, 0xcbfe58, 0xcc01a8, 0xcc0458, 0xcc08c0, 0xcc5ae8, 0xcc0cb0,

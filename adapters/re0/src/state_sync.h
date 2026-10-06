@@ -20,11 +20,8 @@ struct PlayerState {
     int32_t hp;                  // HP of the owned character
     uint8_t focusedCharacterId;  // the sender's camera character (sPlayer+0x2c), 0xFF when unknown
     uint8_t reserved[3];
-    uint16_t motion;             // the owned character's current motion number (uModel mMotionNo)
-    uint16_t reserved2;
-    float motionFrame;           // current frame of that motion
 };
-static_assert(sizeof(PlayerState) == 52);
+static_assert(sizeof(PlayerState) == 44);
 
 // Starts the net client and, at 30 Hz on its thread, broadcasts the state of the character the local player owns.
 void start(NetClient& net, uint16_t port);
