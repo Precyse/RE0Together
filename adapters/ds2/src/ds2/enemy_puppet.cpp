@@ -129,7 +129,7 @@ uintptr_t tamedFor(const enemy_wire::EnemySpawn& spawn) {
     std::copy(spawn.entityUuid, spawn.entityUuid + id.size(), id.begin());
     std::lock_guard lock(g_mutex);
     const auto it = g_tamed.find(id);
-    return it != g_tamed.end() && ds2::entityExists(id.data()) ? it->second.entity : 0;
+    return it != g_tamed.end() && ds2::entityIs(id.data(), it->second.entity) ? it->second.entity : 0;
 }
 
 void bind(const enemy_wire::EnemySpawn& spawn, uintptr_t entity) {
@@ -156,10 +156,10 @@ void handleGone(const enemy_wire::EnemyGone& gone) {
     Puppet& puppet = it->second;
     if (gone.reason == static_cast<uint8_t>(enemy_wire::GoneReason::Died)) {
         puppet.dead = true;
-        if (ds2::entityExists(puppet.uuid.data())) killGuarded(puppet.entity);
+        if (ds2::entityIs(puppet.uuid.data(), puppet.entity)) killGuarded(puppet.entity);
         return;
     }
-    if (ds2::entityExists(puppet.uuid.data())) removeGuarded(puppet.entity);
+    if (ds2::entityIs(puppet.uuid.data(), puppet.entity)) removeGuarded(puppet.entity);
     forgetAnimation(puppet.entity);
     g_puppets.erase(it);
 }
@@ -205,7 +205,7 @@ void place(Puppet& puppet, ULONGLONG now) {
 void keepAiAsleep() {
     std::lock_guard lock(g_mutex);
     for (const auto& [id, tamed] : g_tamed) {
-        if (ds2::entityExists(id.data())) sleepAi(tamed.entity);
+        if (ds2::entityIs(id.data(), tamed.entity)) sleepAi(tamed.entity);
     }
 }
 
@@ -213,7 +213,7 @@ void keepAiAsleep() {
 void pruneTamed(ULONGLONG now) {
     std::lock_guard lock(g_mutex);
     std::erase_if(g_tamed, [now](const auto& entry) {
-        return now - entry.second.at > kRegistrationMs && !ds2::entityExists(entry.first.data());
+        return now - entry.second.at > kRegistrationMs && !ds2::entityIs(entry.first.data(), entry.second.entity);
     });
 }
 
@@ -228,7 +228,7 @@ void removeUnmatched(ULONGLONG now) {
             ++it;
             continue;
         }
-        if (ds2::entityExists(it->first.data())) removeGuarded(it->second.entity);
+        if (ds2::entityIs(it->first.data(), it->second.entity)) removeGuarded(it->second.entity);
         it = g_tamed.erase(it);
         ++removed;
     }
@@ -241,7 +241,7 @@ void handOverToHost() {
     std::lock_guard lock(g_mutex);
     int handed = 0;
     for (const auto& [id, tamed] : g_tamed) {
-        if (!ds2::entityExists(id.data())) continue;
+        if (!ds2::entityIs(id.data(), tamed.entity)) continue;
         wakeAi(tamed.entity);
         enemy_host::add(tamed.entity, tamed.resourceUuid);
         ++handed;
@@ -305,7 +305,7 @@ void tick() {
     }
     for (auto it = g_puppets.begin(); it != g_puppets.end();) {
         Puppet& puppet = it->second;
-        if (!ds2::entityExists(puppet.uuid.data())) {  // every tick: the engine frees entities of a world it unloads
+        if (!ds2::entityIs(puppet.uuid.data(), puppet.entity)) {  // every tick: the engine frees entities of a world it unloads
             logger::write("enemy_puppet: enemy %u is gone from this world", it->first);
             forgetAnimation(puppet.entity);
             it = g_puppets.erase(it);

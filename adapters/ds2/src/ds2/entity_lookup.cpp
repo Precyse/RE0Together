@@ -33,6 +33,8 @@ bool entityExists(const uint8_t* uuid) {
     return reinterpret_cast<FindFn>(at(kFindByUuid))(manager + kEntityMap, key.data()) != kAbsent;
 }
 
+bool entityIs(const uint8_t* uuid, uintptr_t entity) { return entity && entityByUuid(uuid) == entity; }
+
 uintptr_t entityByUuid(const uint8_t* uuid) {
     if (!entityManager()) return 0;
     alignas(16) std::array<uint8_t, 16> key;
