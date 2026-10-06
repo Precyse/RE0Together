@@ -21,6 +21,7 @@
 #include "ds2/engine.h"
 #include "ds2/entity_wake.h"
 #include "ds2/remote_player.h"
+#include "ds2/sim_tick.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -146,7 +147,7 @@ void logSleepers(uintptr_t table) {
 
 void categoryUpdateDetour(uintptr_t table) {
     decima::WorldPosition partner;
-    if (!partnerPosition(partner)) {
+    if (!sim_tick::inWorld() || !partnerPosition(partner)) {
         g_original(table);
         return;
     }
