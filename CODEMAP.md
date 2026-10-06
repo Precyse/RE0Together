@@ -303,6 +303,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tools/ds2/savefmt.py | DS2 save container on copies: 32-byte header, XOR key from a Murmur hash of the header seed, index / size table / chunks (chunk 0 text, chunk 1 PNG); `segments` decrypts, `assemble` re-encrypts | `segments`, `assemble`, `key_for` |
 | tools/ds2/savefmt_test.py | decrypt then re-encrypt equals the save, PNG in chunk 1 (on the copies in G:/coop-scratch/ds2/savefmt or given files) | |
 | tools/ds2/gear_pair.py | live: copies the session saves, gives Sam a weapon (test command), presses F at a terminal (autosave), copies again and lists the changed saves, for the gear-only diff | |
+| tools/ds2/menu_path.py | sends a comma list of gamectl keys to the game with a screenshot after each (System menu to Load to a save) | |
 | tools/ds2/session_fix.py | makes Continue load a chosen save from the coop session folder: backs the session up, installs the save as autosave4 with its save-time FILETIME (chunk 0) set to now, drops the other autosaves, patches profile.dat's last-save time; `--apply` writes it (game closed) | `build`, `rewrite_time` |
 | tools/ds2/qol_verify.py | live re-check of the qol features: build guard line, health label, edge arrow, death toast shots, F9 resync log | |
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |
