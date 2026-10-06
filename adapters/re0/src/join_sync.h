@@ -38,6 +38,10 @@ static_assert(sizeof(JoinSnapshot) == 2 * 56 + 128 + flag_diff::kWords * 4);
 // older save.
 bool caughtUp();
 
+// Guest, any thread: ask for a new snapshot and apply it like the first one (resync.h). Does not hold back the
+// guest's own state: it is live.
+void requestResync();
+
 // Net thread: SNAPSHOT_REQUEST on the host, JOIN_SNAPSHOT on the guest.
 void onFrame(const GameFrame& frame);
 

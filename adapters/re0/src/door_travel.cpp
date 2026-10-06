@@ -15,6 +15,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "resync.h"
 #include "scene.h"
 #include "split_rooms.h"
 #include "state_correction.h"
@@ -26,6 +27,8 @@ using door_travel::PeerPlace;
 
 constexpr auto kRoomStateInterval = std::chrono::seconds(2);
 constexpr auto kDesyncAfter = std::chrono::seconds(3);
+constexpr auto kResyncEvery = std::chrono::seconds(10);  // a desync that lasts this long asks for a resync, again each time
+constexpr int kMaxAutoResyncs = 3;
 constexpr float kDesyncToastSeconds = 4.0f;
 
 NetClient* g_net = nullptr;
@@ -40,6 +43,7 @@ Clock::time_point g_lastSend;
 bool g_mismatching = false;
 Clock::time_point g_mismatchSince;
 bool g_desyncReported = false;
+int g_autoResyncs = 0;
 bool g_ranEnemies = false;  // game thread: the last logged enemy authority
 
 bool partnerInRoom() { return game_state::inCurrentRoom(game::partner()); }
@@ -88,6 +92,7 @@ void checkDesync(Clock::time_point now) {
     if (!mismatch) {
         g_mismatching = false;
         g_desyncReported = false;
+        g_autoResyncs = 0;
         return;
     }
     if (!g_mismatching) {
@@ -95,11 +100,16 @@ void checkDesync(Clock::time_point now) {
         g_mismatchSince = now;
         return;
     }
-    if (g_desyncReported || now - g_mismatchSince < kDesyncAfter) return;
-    g_desyncReported = true;
-    debug_stats::count(debug_stats::Counter::RoomDesyncs);
-    debug_overlay::toast("Room desync", kDesyncToastSeconds);
-    logger::write("door_travel: room desync, local scene 0x%02x peer 0x%02x", scene::current(), peer.scene);
+    if (!g_desyncReported && now - g_mismatchSince >= kDesyncAfter) {
+        g_desyncReported = true;
+        debug_stats::count(debug_stats::Counter::RoomDesyncs);
+        debug_overlay::toast("Room desync", kDesyncToastSeconds);
+        logger::write("door_travel: room desync, local scene 0x%02x peer 0x%02x", scene::current(), peer.scene);
+    }
+    if (g_autoResyncs < kMaxAutoResyncs && now - g_mismatchSince >= kResyncEvery * (g_autoResyncs + 1)) {
+        ++g_autoResyncs;
+        resync::request("room desync persists");
+    }
 }
 
 void logEnemyAuthority() {

@@ -66,6 +66,7 @@ void fillFakeStats() {
     debug_stats::set(debug_stats::Gauge::BillyOwner, 0);
     debug_stats::setError("fake error");
     debug_stats::noteCallbackDisabled("fake_callback");
+    debug_stats::setPartnerLine("Ahmad / Caution / room 0x24 / in menu");
 }
 
 int checkLines() {

@@ -12,6 +12,7 @@ constexpr float kEpsilon = 1e-3f;
 constexpr int64_t kSnapshotGapMs = 50;
 constexpr float kExpectedVelocity = 200.0f;  // 10 units in 50 ms
 constexpr int32_t kHp = 94;
+constexpr uint8_t kTarget = 1;
 int g_failures = 0;
 
 void check(bool ok, const char* what) {
@@ -26,13 +27,14 @@ const float kIdentity[4] = {0, 0, 0, 1};
 
 void observeAt(rule::Track& track, float x, int64_t nowMs) {
     const float pos[3] = {x, 0, 0};
-    rule::observe(track, pos, kIdentity, kHp, nowMs);
+    rule::observe(track, pos, kIdentity, kHp, kTarget, nowMs);
 }
 
 void testObserveAndAim() {
     rule::Track track;
     observeAt(track, 0, 0);
     check(track.valid && near(track.velocity[0], 0.0f), "first snapshot has no velocity");
+    check(track.target == kTarget && track.hp == kHp, "the owner's target and hp are kept");
     observeAt(track, 10, kSnapshotGapMs);
     check(near(track.velocity[0], kExpectedVelocity), "velocity from two snapshots 50 ms apart");
     float aim[3];

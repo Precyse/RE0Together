@@ -20,6 +20,10 @@ void onNetTick(NetClient& net);
 // The host's slot on a guest, this machine's slot on the host, or kUnknown.
 int32_t current();
 
+// This game plays the host's session copy (a guest; stays true after the host left). Its saves are refused: they would
+// land in the copy that is deleted when the launcher exits.
+bool guestSession();
+
 // Guest: the host is playing (its last announced phase is gameplay, not a title, game over or loading).
 bool hostInGame();
 

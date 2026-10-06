@@ -58,4 +58,14 @@ size_t Queue::total() const {
     return sum;
 }
 
+std::vector<RoomEvent> Queue::all() const {
+    std::vector<RoomEvent> out;
+    for (const auto& [room, events] : m_rooms) {
+        for (const Event& event : events) out.push_back({room, event});
+    }
+    return out;
+}
+
+void Queue::clear() { m_rooms.clear(); }
+
 }  // namespace floor_pending

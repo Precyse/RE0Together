@@ -3,7 +3,8 @@ using System.Diagnostics;
 
 namespace CoopLauncher;
 
-/// <summary>One window launcher at a time: a stale copy still holding the Steam session makes joining silently fail.</summary>
+/// <summary>Clears out launcher processes that are not the running window (SingleInstance calls it when it starts as the
+/// window): a stale copy still holding the Steam session makes joining silently fail.</summary>
 public static class InstanceGuard
 {
     private const int ExitWaitMs = 3000;

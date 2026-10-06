@@ -17,6 +17,7 @@ public sealed class SteamLobby : ILobby
     private readonly Callback<LobbyChatUpdate_t> _chatUpdate;
     private readonly Callback<LobbyDataUpdate_t> _dataUpdate;
     private readonly long _answerDeadlineMs = Environment.TickCount64 + AnswerTimeoutMs;
+    private bool _publishedPresence;
     private CSteamID _lobby;
     private List<LobbyMember> _members = new();
 
@@ -66,6 +67,7 @@ public sealed class SteamLobby : ILobby
 
     public void Dispose()
     {
+        if (_publishedPresence) LobbyPresence.Clear();
         if (_lobby.IsValid()) SteamMatchmaking.LeaveLobby(_lobby);
         _created.Dispose();
         _entered.Dispose();
@@ -91,6 +93,8 @@ public sealed class SteamLobby : ILobby
         SteamMatchmaking.SetLobbyData(_lobby, KeyProto, Framing.ProtocolVersion.ToString());
         SteamMatchmaking.SetLobbyData(_lobby, KeyVersion, LauncherVersion);
         Announce();
+        LobbyPresence.Publish(_lobby.m_SteamID, GameId!);
+        _publishedPresence = true;
         Log.Info($"Lobby created: {_lobby.m_SteamID}");
     }
 

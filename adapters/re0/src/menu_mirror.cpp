@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <map>
 #include <mutex>
 
@@ -14,6 +15,7 @@
 #include "hooks.h"
 #include "inventory_sync.h"
 #include "log.h"
+#include "menu_hold_rule.h"
 #include "net_pad.h"
 #include "protocol.h"
 #include "split_rooms.h"
@@ -23,13 +25,12 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr auto kResendInterval = std::chrono::seconds(2);
-constexpr auto kPeerMenuTimeout = std::chrono::seconds(6);
 constexpr float kToastSeconds = 2.5f;
 
 std::mutex g_mutex;
-std::map<uint8_t, Clock::time_point> g_peerMenuSeen;  // slot -> last MENU_STATE that said open; guarded by g_mutex
+std::map<uint8_t, menu_hold_rule::PeerMenu> g_peerMenus;  // slot -> its last MENU_STATE; guarded by g_mutex
 
-bool g_lastSentOpen = false;  // net thread only
+menu_mirror::MenuState g_lastSent{};  // net thread only
 Clock::time_point g_lastSend;
 
 bool g_frozen = false;  // game thread only
@@ -41,11 +42,11 @@ UpdateAllFunction g_originalUpdateAll = nullptr;
 OpenFunction g_originalOpen = nullptr;
 Character g_focusBeforeMenu = Character::Unknown;  // game thread: focus to give back when the menu closes
 
-bool anyPeerMenuOpen() {
+bool anyPeerMenu(bool (*test)(const menu_hold_rule::PeerMenu&, menu_hold_rule::Clock::time_point)) {
     const auto now = Clock::now();
     std::lock_guard lock(g_mutex);
-    for (const auto& [slot, seen] : g_peerMenuSeen) {
-        if (now - seen < kPeerMenuTimeout) return true;
+    for (const auto& [slot, menu] : g_peerMenus) {
+        if (test(menu, now)) return true;
     }
     return false;
 }
@@ -61,7 +62,7 @@ void setFrozen(bool frozen) {
 // Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze. A peer in another room
 // is not affected by this world, so it is held only while the two are together.
 void __fastcall updateAllDetour(void* self, void* edx) {
-    const bool freeze = anyPeerMenuOpen() && !split_rooms::apart() && !game_state::uiPausesWorld();
+    const bool freeze = anyPeerMenu(menu_hold_rule::holds) && !split_rooms::apart() && !game_state::uiPausesWorld();
     if (freeze != g_frozen) setFrozen(freeze);
     if (freeze) return;
     g_originalUpdateAll(self, edx);
@@ -90,19 +91,23 @@ void onTick() {
 namespace menu_mirror {
 
 void onFrame(const GameFrame& frame) {
-    if (frame.type != proto::kMsgMenuState || frame.payload.size() != 1) return;
+    if (frame.type != proto::kMsgMenuState || frame.payload.size() != sizeof(MenuState)) return;
+    MenuState state;
+    std::memcpy(&state, frame.payload.data(), sizeof(state));
     std::lock_guard lock(g_mutex);
-    if (frame.payload[0]) g_peerMenuSeen[frame.slot] = Clock::now();
-    else g_peerMenuSeen.erase(frame.slot);
+    menu_hold_rule::observe(g_peerMenus[frame.slot], state.open != 0, state.phase, Clock::now());
 }
+
+bool peerMenuOpen() { return anyPeerMenu(menu_hold_rule::isOpen); }
 
 void onNetTick(NetClient& net) {
     const bool open = game_state::uiPausesWorld();
+    const MenuState state{open, static_cast<uint8_t>(open ? game_state::roomPhase() : 0)};
     const auto now = Clock::now();
-    if (open == g_lastSentOpen && !(open && now - g_lastSend >= kResendInterval)) return;
-    const uint8_t payload = open;
-    if (!net.send(proto::kMsgMenuState, true, proto::kSlotAll, {&payload, sizeof(payload)})) return;
-    g_lastSentOpen = open;
+    const bool changed = state.open != g_lastSent.open || state.phase != g_lastSent.phase;
+    if (!changed && !(open && now - g_lastSend >= kResendInterval)) return;
+    if (!net.send(proto::kMsgMenuState, true, proto::kSlotAll, proto::bytesOf(state))) return;
+    g_lastSent = state;
     g_lastSend = now;
 }
 
