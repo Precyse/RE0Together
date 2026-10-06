@@ -9,7 +9,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 |---|---|---|---|---|
 | Host, join, save sync at join | done | launcher | `SaveSyncCoordinator.cs`, `games/ds2.json`, `documents_redirect.cpp` | |
 | Join catch-up: facts, story, structures, enemies | done | ds2-streaming / ds2-story | `fact_sync.cpp`, `story_sync.cpp`, `struct_sync.cpp`, `enemy_sync.cpp` | asked for at the guest's gameplay |
-| Host's later saves reach the guest | missing | new | `adapters/ds2` sends no SAVE_CHANGED | a guest that reloads or restarts after a crash loads the join-time world; snapshots patch facts, story and structures but not cargo, vehicles or ground pieces |
+| Host's later saves reach the guest | done | new | `launcher/SaveWatcher.cs`, `SaveSyncCoordinator.cs`, `SaveReceiver.cs` (CI-compiled only; logic checked with a scratch harness) | a guest that reloads or restarts after a crash loads the join-time world; snapshots patch facts, story and structures but not cargo, vehicles or ground pieces |
 | Guest's own progress (gear, equipment, levels) kept after the session | missing | new | `launcher/AdapterSettings.cs` | the session folder is deleted at launcher exit; roadmap end goal 6 |
 | Partner leaves: body | partial | ds2-live | `ds2/remote_player.cpp` | removing the entity in a running world crashes, so the body stands frozen where the link dropped; ds2-live has an unverified 5 s removal |
 | Partner rejoins: one body, gear and weapon rebuilt | unknown | ds2-live | `ds2/remote_player.cpp`, `equip_sync.cpp` | verify a second body is not built beside the frozen one |
@@ -79,7 +79,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/config.h`, `config.cpp`, `adapters/ds2/README.md`, `tools/publish_check.py` (keep rejecting test flags).
 - **Verify:** fresh `coop\adapter.ini` written by the first start shows the new defaults; publish_check passes.
 
-### 5. The host's later saves never reach the guest (M, new)
+### 5. The host's later saves never reach the guest (M, new; built: watcher on the host, staging on the guest, promoted while DS2.exe is not running)
 - **Root change:** the host launcher watches `hostSaveDir` for written `*.dat` (game-agnostic, FileSystemWatcher with a settle delay) and re-sends through the existing FILE_* path; the guest stores them in a staging folder and moves them into the session folder only while its game is not running or is on the title screen, so the guest's own autosaves are never overwritten mid-play.
 - **Files:** `launcher/SaveSyncCoordinator.cs`, `SaveSender.cs`, `SaveReceiver.cs`, `docs/CONTRACT.md`.
 - **Verify:** `tools/ds2/save_sync_test.py` with a file touched on the host side after the join: the guest's staging folder gets it and the session folder only after the fake game exits.
