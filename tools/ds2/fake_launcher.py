@@ -45,6 +45,7 @@ CUTSCENE_END_FORMAT = struct.Struct("<IiB3x")  # id, host frame, stop reason, re
 CUTSCENE_FRAMES_PER_SECOND = 120
 CUTSCENE_STOP_SCRIPTED = 3
 CUTSCENE_CATEGORY_STORY = 1
+STORY_EVENT_TYPE = 0x0119
 STORY_EVENT_FORMAT = struct.Struct("<B3xIiIQ16s64s")  # kind, a, b, flags, mission id, section, transform (story_wire.h, 104 bytes)
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
@@ -251,6 +252,9 @@ def serve(sock, a):
                 record(body)
             elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
                 on_cutscene(msg_type, body)
+            elif msg_type == STORY_EVENT_TYPE and len(body) - 4 == STORY_EVENT_FORMAT.size:
+                kind, _, _, _, mission, _, _ = STORY_EVENT_FORMAT.unpack_from(body, 4)
+                print(f"story: received kind {kind} for mission {mission:x}", flush=True)
             elif msg_type == CARGO_GONE and a.echo_cargo:
                 sock.sendall(encode(MOVE_ACK, peer_slot, body[4:]))  # CargoGone and MoveAck (gone) share their bytes
             elif msg_type == CARGO_LIST:
