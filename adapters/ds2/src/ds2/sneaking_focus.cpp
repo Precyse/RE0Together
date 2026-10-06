@@ -12,8 +12,11 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
@@ -31,6 +34,14 @@ constexpr uint8_t kBlockStart[] = {0xC5, 0xFB, 0x10, 0x44, 0x24, 0x50};  // vmov
 constexpr uint8_t kBlockEnd[] = {0xC5, 0xE8, 0x58, 0xF1};                // vaddps xmm6, xmm2, xmm1 (the block's last instruction)
 
 constexpr uintptr_t kUpdateBody = 0x141bd3d50;  // (manager*): the activity update of the NPC managers
+
+// The member's acceptance test inside the update: `call [component+0xF0]` then `test al, al`; a member it rejects is treated
+// as out of range and slept. Replaced by a jump into the spare bytes of the distance patch that calls acceptsMember.
+constexpr uintptr_t kAcceptSite = 0x141bd4094;
+constexpr size_t kAcceptSiteBytes = 12;
+constexpr uintptr_t kAcceptReturn = 0x141bd40a0;  // the `test al, al` after the call
+constexpr uint8_t kAcceptSiteCode[] = {0x48, 0x8B, 0x03, 0x48, 0x8B, 0xCB, 0xFF, 0x90, 0xF0, 0x00, 0x00, 0x00};
+constexpr size_t kAcceptSlot = 0xF0 / sizeof(uintptr_t);  // vtable slot of the acceptance test
 
 // Manager fields the update reads per group index (diagnostics only): per-group arrays and the group records.
 constexpr uintptr_t kGroupBudgets = 0x30;   // uint32*: awake budget
@@ -50,6 +61,11 @@ struct Group {
 static_assert(sizeof(Group) == 0x10);
 
 void (*g_original)(uintptr_t manager) = nullptr;
+
+// Test switches (test command npcpartner.txt), off by default: the partner's members get their own awake budget / are not
+// rejected by the acceptance test. They exist to tell which of the two keeps a member next to the partner asleep.
+std::atomic<bool> g_ownBudget{false};
+std::atomic<bool> g_skipAcceptance{false};
 
 constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
 constexpr uintptr_t kFocusOffset = 0xA0;  // WorldPosition: the point the update measures from
@@ -72,6 +88,10 @@ constexpr uint8_t kMovRaxImm[] = {0x48, 0xB8};
 constexpr uint8_t kCallRax[] = {0xFF, 0xD0};
 constexpr uint8_t kMoveResult[] = {0xC5, 0xF8, 0x28, 0xF0};
 constexpr uint8_t kLoadOwnerFlags[] = {0x48, 0x8B, 0x43, 0x48, 0x48, 0x8B, 0x88, 0x98, 0x00, 0x00, 0x00, 0x48, 0xC1, 0xE9, 0x09, 0xF6, 0xD1};
+constexpr uint8_t kMovRcxRbx[] = {0x48, 0x89, 0xD9};
+constexpr uint8_t kMovRdxItemEntity[] = {0x48, 0x8B, 0x97, 0x88, 0x00, 0x00, 0x00};  // mov rdx, [rdi+0x88]
+constexpr uint8_t kJumpNear = 0xE9;
+constexpr uint8_t kNop = 0x90;
 constexpr uint8_t kJumpShort = 0xEB;
 constexpr uint8_t kFiller = 0xCC;
 
@@ -91,6 +111,22 @@ float nearestSquaredDistance(uintptr_t entity) {
     decima::WorldPosition partner;
     if (partner_focus::partnerPosition(partner)) nearest = std::fmin(nearest, squaredDistanceToFocus(partner, at));
     return nearest;
+}
+
+// Whether the entity stands nearer the partner's body than this machine's player.
+bool nearerPartner(uintptr_t entity) {
+    decima::WorldPosition at, partner;
+    const uintptr_t manager = decima::readPointer(ds2::at(kEntityManagerGlobal));
+    if (!manager || !decima::safeRead(entity + ds2::kEntityTransform, at) || !partner_focus::partnerPosition(partner)) return false;
+    return squaredDistanceToFocus(partner, at) < squaredDistanceToFocus(ds2::field<decima::WorldPosition>(manager, kFocusOffset), at);
+}
+
+// Called from the patched acceptance site: the engine's own test, unless the switch says a member nearer the partner passes.
+bool acceptsMember(uintptr_t component, uintptr_t entity) {
+    using Accepts = bool (*)(uintptr_t component);
+    const auto accepts = reinterpret_cast<const Accepts*>(decima::readPointer(component))[kAcceptSlot];
+    const bool accepted = accepts(component);
+    return accepted || (g_skipAcceptance.load() && nearerPartner(entity));
 }
 
 constexpr double kPartnerSightMetres = 80.0;  // members this close to the partner get a line of their own
@@ -154,14 +190,46 @@ void logGroups(uintptr_t manager) {
     }
 }
 
-void updateDetour(uintptr_t manager) {
+// With the budget switch on, the partner's members come on top of the budgets: every group's budget is doubled for the call.
+void runWithOwnBudget(uintptr_t manager) {
+    decima::WorldPosition partner;
+    if (!g_ownBudget.load() || !partner_focus::partnerPosition(partner)) {
+        g_original(manager);
+        return;
+    }
+    const int count = ds2::field<int32_t>(manager, kGroupCount);
+    auto* budget = ds2::field<uint32_t*>(manager, kGroupBudgets);
+    const std::vector<uint32_t> saved(budget, budget + count);
+    for (int g = 0; g < count; ++g) budget[g] *= 2;
     g_original(manager);
+    std::copy(saved.begin(), saved.end(), budget);
+}
+
+void updateDetour(uintptr_t manager) {
+    runWithOwnBudget(manager);
     logGroups(manager);
 }
 
 bool blockIsAsExpected(const uint8_t* block) {
     return std::memcmp(block, kBlockStart, sizeof(kBlockStart)) == 0 &&
-           std::memcmp(block + kDistanceBlockBytes - sizeof(kBlockEnd), kBlockEnd, sizeof(kBlockEnd)) == 0;
+           std::memcmp(block + kDistanceBlockBytes - sizeof(kBlockEnd), kBlockEnd, sizeof(kBlockEnd)) == 0 &&
+           std::memcmp(reinterpret_cast<const void*>(ds2::at(kAcceptSite)), kAcceptSiteCode, sizeof(kAcceptSiteCode)) == 0;
+}
+
+void writeCode(void* address, const uint8_t* bytes, size_t count) {
+    DWORD protection = 0;
+    VirtualProtect(address, count, PAGE_EXECUTE_READWRITE, &protection);
+    std::memcpy(address, bytes, count);
+    VirtualProtect(address, count, protection, &protection);
+    FlushInstructionCache(GetCurrentProcess(), address, count);
+}
+
+// Appends a near jump from `from` (the address its opcode will have) to `target`.
+uint8_t* appendJump(uint8_t* to, uintptr_t from, uintptr_t target) {
+    *to++ = kJumpNear;
+    const int32_t displacement = static_cast<int32_t>(target - (from + 5));
+    std::memcpy(to, &displacement, sizeof(displacement));
+    return to + sizeof(displacement);
 }
 
 // Appends `bytes` to the patch under construction.
@@ -187,26 +255,46 @@ void writePatch(uint8_t* block) {
     *at++ = kJumpShort;
     *at++ = static_cast<uint8_t>(kDistanceBlockBytes - used);  // lands on the `test cl, 1` after the block
 
-    DWORD protection = 0;
-    VirtualProtect(block, kDistanceBlockBytes, PAGE_EXECUTE_READWRITE, &protection);
-    std::memcpy(block, patch, kDistanceBlockBytes);
-    VirtualProtect(block, kDistanceBlockBytes, protection, &protection);
-    FlushInstructionCache(GetCurrentProcess(), block, kDistanceBlockBytes);
+    // The spare bytes after that jump hold the acceptance call: acceptsMember(component = rbx, entity = [rdi+0x88]), whose
+    // result the engine's `test al, al` reads.
+    const uintptr_t cave = ds2::at(kDistanceBlock) + static_cast<size_t>(at - patch);
+    at = append(at, kMovRcxRbx, sizeof(kMovRcxRbx));
+    at = append(at, kMovRdxItemEntity, sizeof(kMovRdxItemEntity));
+    at = append(at, kVzeroupper, sizeof(kVzeroupper));
+    at = append(at, kMovRaxImm, sizeof(kMovRaxImm));
+    const uintptr_t accepts = reinterpret_cast<uintptr_t>(&acceptsMember);
+    at = append(at, reinterpret_cast<const uint8_t*>(&accepts), sizeof(accepts));
+    at = append(at, kCallRax, sizeof(kCallRax));
+    appendJump(at, ds2::at(kDistanceBlock) + static_cast<size_t>(at - patch), ds2::at(kAcceptReturn));
+
+    uint8_t site[kAcceptSiteBytes];
+    std::memset(site, kNop, sizeof(site));
+    appendJump(site, ds2::at(kAcceptSite), cave);
+
+    writeCode(block, patch, kDistanceBlockBytes);
+    writeCode(reinterpret_cast<void*>(ds2::at(kAcceptSite)), site, sizeof(site));
 }
 
 }  // namespace
 
 namespace sneaking_focus {
 
-void installEarly(bool diagnostics) {
+void setSwitches(bool ownBudget, bool skipAcceptance) {
+    g_ownBudget = ownBudget;
+    g_skipAcceptance = skipAcceptance;
+    logger::write("sneaking_focus: own budget %s, acceptance test skipped for the partner's members %s", ownBudget ? "on" : "off",
+                  skipAcceptance ? "on" : "off");
+}
+
+void installEarly(bool diagnostics, bool testCommands) {
     uint8_t* block = reinterpret_cast<uint8_t*>(ds2::at(kDistanceBlock));
     if (!blockIsAsExpected(block)) {
         logger::write("sneaking_focus: the NPC managers' distance block is not the expected code, left alone");
         return;
     }
     writePatch(block);
-    if (diagnostics) {
-        hooks::install("npc manager update (diagnostics)", ds2::at(kUpdateBody), reinterpret_cast<void*>(&updateDetour),
+    if (diagnostics || testCommands) {
+        hooks::install("npc manager update (diagnostics, test switches)", ds2::at(kUpdateBody), reinterpret_cast<void*>(&updateDetour),
                        reinterpret_cast<void**>(&g_original));
     }
     logger::write("sneaking_focus: the NPC managers' distance is the nearer of the player and the partner");
