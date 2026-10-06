@@ -1,0 +1,41 @@
+name: launcher-preview
+
+# Builds the launcher from a launcher-* branch into the launcher-preview prerelease. The package has no
+# update.json, so a preview never updates itself onto (or off) the rolling `latest` release.
+on:
+  push:
+    branches: ['launcher-*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: launcher-preview
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Assemble package
+        shell: pwsh
+        run: |
+          dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
+          New-Item -ItemType Directory -Force pkg/launcher/games | Out-Null
+          Copy-Item launcher/games/*.json pkg/launcher/games/
+          Remove-Item pkg/launcher/app/update.json
+          Compress-Archive -Path pkg/* -DestinationPath Launcher-Preview.zip
+
+      - name: Publish preview release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete launcher-preview --cleanup-tag --yes
+          gh release create launcher-preview Launcher-Preview.zip --prerelease --target $env:GITHUB_SHA --title "Launcher preview $env:GITHUB_RUN_NUMBER" --notes "Preview of $env:GITHUB_REF_NAME at $env:GITHUB_SHA"

@@ -29,6 +29,10 @@ public static class SteamLibrary
     public static string UserRemoteDir(int appId, uint accountId) =>
         Path.Combine(SteamRoot(), "userdata", accountId.ToString(), appId.ToString(), "remote");
 
+    /// <summary>Steam's local artwork cache for a game: capsule, hero and logo images, some in hashed subfolders.</summary>
+    public static string LibraryCacheDir(int appId) =>
+        Path.Combine(SteamRoot(), "appcache", "librarycache", appId.ToString());
+
     private static string SteamRoot() =>
         (Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam")?.GetValue("SteamPath") as string ?? DefaultSteamPath)
         .Replace('/', '\\');

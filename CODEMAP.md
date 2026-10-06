@@ -12,8 +12,18 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT) | `AppStatus`, `AppState` |
 | Updater.cs | self-update from the rolling GitHub release `latest` (`update.json` repo, `version.txt` build): download, rename old files to `*.old`, copy new, relaunch; skipped silently on any failure or outside the packaged layout | `TryInstall` |
 | Gui/GuiHost.cs | GUI entry: hides the console, runs App on a background thread, window on the STA thread | `Run` |
-| Gui/MainForm.cs | the window: game picker, Host, code + Join, lobby code + Copy + Invite, status, Leave, log pane | `MainForm` |
-| Gui/StatusText.cs | status line text | `Format` |
+| Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
+| Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed) | `Theme` |
+| Gui/Draw.cs | shared painting: text, captions, lamps, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Wrapped` |
+| Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
+| Gui/TopBar.cs | top strip: brand, build, state lamp and state | `TopBar.Show` |
+| Gui/GameRail.cs | left rail of games with capsule art; selection, Running mark, locks during a session | `GameRail`, `SelectionChanged` |
+| Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
+| Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character, partner ping | `PlayerSlots.Show` |
+| Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
+| Gui/FieldBox.cs | dark one-line text field with focus border | `FieldBox.Input` |
+| Gui/LogFooter.cs | newest log line; arrow toggles the full log drawer | `LogFooter.Toggled` |
+| Gui/StatusText.cs | state words and the state lamp colour | `Format`, `Lamp` |
 | Session.cs | slots, epochs, membership diffs, frame routing | `ApplyMembership`, `OnPeerFrame`, `OnAdapterFrame`, `End` |
 | SlotAssigner.cs | owner = 0, rest sorted by id | `Assign` |
 | LoopbackBridge.cs | adapter TCP link: HELLO check, heartbeat, timeout, relay; `SaveChanged` event for SAVE_CHANGED 0x0060 | `Pump`, `Send`, `AdapterReady`, `GameFrame` |
@@ -283,7 +293,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 
 ## Where to look for
 
-- GUI: `launcher/Gui/MainForm.cs`; session logic stays in `App.cs`
+- GUI: `launcher/Gui/MainForm.cs` composes the views in `launcher/Gui/`; session logic stays in `App.cs`; preview builds of `launcher-*` branches: `.github/workflows/launcher-preview.yml` (prerelease `launcher-preview`)
 - Auto-update or release packaging: `Updater.cs`, `.github/workflows/release.yml`
 - Wire format or control messages: `Framing.cs`, `ControlMessages.cs`
 - Slot / epoch rules: `Session.cs`, `SlotAssigner.cs`

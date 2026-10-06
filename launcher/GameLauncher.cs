@@ -9,9 +9,12 @@ public static class GameLauncher
     private const string BackupSuffix = ".cfbak";
     private const string OwnershipSuffix = ".cfown";
 
+    public static bool IsRunning(GameProfile profile) =>
+        Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe)).Length > 0;
+
     public static void Launch(GameProfile profile, string? gameDir)
     {
-        if (Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe)).Length > 0)
+        if (IsRunning(profile))
         {
             Log.Info($"{profile.Name} is already running, not starting it again");
             return;
