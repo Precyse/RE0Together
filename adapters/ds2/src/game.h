@@ -45,6 +45,10 @@ bool watchInteractions();
 // the world's progress; vehicles, cargo and other interactions stay usable. Needs watchInteractions(). Any thread.
 void blockScriptedInteractions(bool block);
 
+// The local player's use location claim candidates (count and the first one), for a test log. False when its controller is
+// not readable.
+bool localUseCandidates(int32_t& count, uintptr_t& first);
+
 // Guest restriction on orders: hooks the terminal menus' accept and turn-in callbacks (once, at start-up), and while
 // `block` is true they refuse with a toast. Terminals themselves stay usable. Any thread.
 void watchOrders();

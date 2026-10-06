@@ -19,6 +19,7 @@
 #include "decima/safe_read.h"
 #include "ds2/player.h"
 #include "ds2/remote_context.h"
+#include "ds2/remote_update.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -110,6 +111,7 @@ void dispatchDetour(uintptr_t handlers, uintptr_t lock, uintptr_t message, uint3
             g_sequenceNodes.erase(node);
         }
     }
+    if (remote_update::dropsMessage(type)) return;
     const bool toRemote = remote_context::enter(handlers);
     g_dispatch(handlers, lock, message, flags);
     remote_context::leave(toRemote);
@@ -148,6 +150,13 @@ bool install() {
 namespace game {
 
 bool watchInteractions() { return install(); }
+
+bool localUseCandidates(int32_t& count, uintptr_t& first) {
+    const uintptr_t controller = decima::findComponent(ds2::localPlayerEntity(), g_vtables.controller);
+    const uintptr_t data = controller ? decima::readPointer(controller + kCandidateData) : 0;
+    first = data ? decima::readPointer(data) : 0;
+    return controller && decima::safeRead(controller + kCandidateCount, count);
+}
 
 void blockScriptedInteractions(bool block) {
     if (g_blocking.exchange(block) == block) return;

@@ -7,6 +7,8 @@
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
+//   candlog.txt    "on|off"   logs every change of the local player's use location candidates (count, first)
+//   dropnotify.txt "on|off"   the mission-player notifications of the remote body's update are not dispatched
 //   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
 //                             paused-update request, 0x140131420), flags (logs the entity flags)
 //   equpdate.txt   "on|off"   whether the remote body's equipment component skips its update (on by default)
@@ -233,6 +235,22 @@ void logBodyPieces() {
 constexpr uintptr_t kRequestPausedUpdate = 0x140131420;  // (entity): MsgEntityRequestPausedUpdate to it and its children
 constexpr uintptr_t kEntityFlags = 0x98;
 
+bool g_logCandidates = false;
+
+// Every frame while candlog is on: a change of the local player's claim candidates is logged (the log lines carry the time,
+// to be set beside what the HUD showed).
+void logCandidateChanges() {
+    static int32_t lastCount = -1;
+    static uintptr_t lastFirst = 0;
+    int32_t count = 0;
+    uintptr_t first = 0;
+    if (!g_logCandidates || !game::localUseCandidates(count, first)) return;
+    if (count == lastCount && first == lastFirst) return;
+    lastCount = count;
+    lastFirst = first;
+    logger::write("test_commands: use candidates: %d, first %p", count, reinterpret_cast<void*>(first));
+}
+
 void tryParking(const std::string& mode) {
     const uintptr_t body = remote_player::entity();
     if (!body) {
@@ -252,6 +270,7 @@ void watchAddress(const std::string& text) {
 }
 
 void tick() {
+    logCandidateChanges();
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last < kPollMs) return;
@@ -266,6 +285,8 @@ void tick() {
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
     if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
     if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_update::setSkipMask(static_cast<uint32_t>(strtoul(text.c_str(), nullptr, 16)));
+    if (const std::string text = takeCommand(L"candlog.txt"); !text.empty()) g_logCandidates = text.rfind("off", 0) != 0;
+    if (const std::string text = takeCommand(L"dropnotify.txt"); !text.empty()) remote_update::setDropMissionNotify(text.rfind("off", 0) != 0);
     if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
 }
