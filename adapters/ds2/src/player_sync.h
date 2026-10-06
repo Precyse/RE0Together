@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "net_client.h"
+#include "partner_status.h"
 #include "protocol.h"
 
 namespace player_sync {
@@ -17,7 +18,7 @@ struct PlayerState {
     uint32_t seq;
     float pos[3];
     float yaw;  // radians about the up axis
-    uint32_t reserved;
+    uint32_t status;  // health and state flags, partner_status.h
 };
 static_assert(sizeof(PlayerState) == 24);
 
@@ -27,6 +28,7 @@ struct RemotePlayer {
     float position[3] = {};  // newest report extrapolated to now by the peer's velocity
     float velocity[3] = {};  // metres per second between the two newest reports
     float yaw = 0;
+    partner_status::Status status;
 };
 
 // Starts the launcher link; its thread sends the local player at kSendHz and keeps the newest state per peer.

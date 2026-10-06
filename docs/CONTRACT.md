@@ -90,7 +90,7 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 
 | type | name | dir | reliable | payload |
 |---|---|---|---|---|
-| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 reserved |
+| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 status (DS2: bits 0-7 health 0-254 or 255 unknown, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 sender reports; 0 = not reported, `partner_status.h`) |
 | 0x0101-0x0107 | cargo list/take/add, pickups, drops | | see header | `cargo_transfer.h`, `cargo_ground.h` |
 | 0x0108 | VEHICLE_STATE | driver/passenger to all | no | `vehicle_sync.h` (64 bytes) |
 | 0x0109 | VEHICLE_LOAD | driver to all | yes | `vehicle_load.h` |

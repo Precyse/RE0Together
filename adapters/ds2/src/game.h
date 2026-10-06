@@ -9,6 +9,7 @@
 #include "combat_wire.h"
 #include "env_wire.h"
 #include "fact_wire.h"
+#include "partner_status.h"
 #include "camp_wire.h"
 #include "enemy_wire.h"
 #include "story_wire.h"
@@ -29,6 +30,9 @@ bool resolve();
 
 // The local player character (Sam).
 std::optional<Pose> localPlayer();
+
+// The local player's health and state for the partner's overlay. Not known until the player exists. Any thread.
+partner_status::Status localStatus();
 
 // The camera the game renders from.
 std::optional<world_to_screen::Camera> camera();

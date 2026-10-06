@@ -35,7 +35,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | candidate | status | owner | file | note |
 |---|---|---|---|---|
 | Partner name and distance | done | | `marker_overlay.cpp` | |
-| Partner off screen (behind the camera) | missing | new | `marker_overlay.cpp` | the marker is just not drawn; an edge arrow is missing |
+| Partner off screen (behind the camera) | done | new | `marker_overlay.cpp` | edge arrow with name, distance, health and state; unverified live |
 | Partner health, down, dead, loading, in a menu | missing | new | `player_sync.cpp` | PLAYER_STATE has a reserved u32 that could carry these |
 | Ping or marker | missing | new | none | the game has its own signs; a co-op ping at the aim point is a later item |
 | Partner-left notice | done | | `player_sync.cpp` | toast with name |
@@ -69,7 +69,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/ds2/remote_player.cpp`, `ds2/body.cpp`.
 - **Verify:** `tools/ds2/fake_launcher.py --follow`, kill it, body hidden within 5 s; restart it, the same body returns (one `remote_body: spawned` line in total).
 
-### 3. Partner status: off screen, health, down (S/M, new)
+### 3. Partner status: off screen, health, down (S/M, new; built, see DS2_NOTES "Partner status")
 - **Root change:** PLAYER_STATE's reserved u32 carries flags (dead, down, loading, in menu, driving) and a health byte; the marker shows health and state, and becomes an arrow at the screen edge when the partner is behind the camera or off screen; a toast when the partner dies or respawns.
 - **Files:** `adapters/ds2/src/player_sync.cpp`, `marker_overlay.cpp`, `world_to_screen.h` (edge clamp, unit tested), `ds2/player_state.cpp` (health read).
 - **Verify:** `tests/world_to_screen_test.cpp` for the edge clamp; `fake_launcher.py --at X,Y,Z` behind Sam; a fake flag word from fake_launcher.

@@ -39,4 +39,37 @@ inline std::optional<ScreenPoint> project(const Camera& camera, const Vec3& worl
     return ScreenPoint{static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(std::sqrt(dot(d, d)))};
 }
 
+// Where an off-screen point's arrow sits: on the screen edge `margin` pixels in, pointing the way to turn.
+struct EdgeArrow {
+    float x = 0;
+    float y = 0;
+    float angle = 0;  // radians of the pointing direction on screen, 0 = right, pi / 2 = down
+};
+
+constexpr double kDirectionEpsilon = 1e-6;
+
+// Nothing while the point is on screen (inside the margin); behind the camera the arrow points the way the point lies
+// to the sides, straight down when it is exactly behind.
+inline std::optional<EdgeArrow> edgeArrow(const Camera& camera, const Vec3& world, float width, float height, float margin) {
+    double dx = 0, dy = 0;
+    if (const auto point = project(camera, world, width, height)) {
+        if (point->x >= margin && point->x <= width - margin && point->y >= margin && point->y <= height - margin) {
+            return std::nullopt;
+        }
+        dx = point->x - width * 0.5;
+        dy = point->y - height * 0.5;
+    } else {
+        const Vec3 d = world - camera.position;
+        dx = dot(d, camera.right);
+        dy = -dot(d, camera.up);
+    }
+    if (std::fabs(dx) < kDirectionEpsilon && std::fabs(dy) < kDirectionEpsilon) dy = 1;
+    const double halfWidth = width * 0.5 - margin, halfHeight = height * 0.5 - margin;
+    const double toSide = std::fabs(dx) < kDirectionEpsilon ? HUGE_VAL : halfWidth / std::fabs(dx);
+    const double toTop = std::fabs(dy) < kDirectionEpsilon ? HUGE_VAL : halfHeight / std::fabs(dy);
+    const double scale = std::fmin(toSide, toTop);
+    return EdgeArrow{static_cast<float>(width * 0.5 + dx * scale), static_cast<float>(height * 0.5 + dy * scale),
+                     static_cast<float>(std::atan2(dy, dx))};
+}
+
 }  // namespace world_to_screen

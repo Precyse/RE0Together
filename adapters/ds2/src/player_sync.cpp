@@ -59,6 +59,15 @@ Clock::time_point g_lastSend;
 Clock::time_point g_lastLog;
 uint32_t g_seq = 0;
 
+// Toasts the partner's death on the report that first says dead (caller holds g_mutex).
+void toastDeath(uint8_t slot, const Heard* last, const Heard& now) {
+    const bool wasDead = last && partner_status::decode(last->state.status).dead;
+    if (wasDead || !partner_status::decode(now.state.status).dead) return;
+    const auto name = g_names.find(slot);
+    toast_queue::push(((name == g_names.end() ? "Player " + std::to_string(slot) : name->second) + " died").c_str(),
+                      kToastSeconds);
+}
+
 void onFrame(const GameFrame& frame) {
     if (frame.type != player_sync::kMsgPlayerState || frame.payload.size() != sizeof(player_sync::PlayerState)) return;
     Heard heard{{}, Clock::now()};
@@ -74,6 +83,7 @@ void onFrame(const GameFrame& frame) {
             restarted ? 0.0f : static_cast<float>(heard.state.seq - last.state.seq) / player_sync::kSendHz;
         position_blend::velocity(last.state.pos, heard.state.pos, gapSeconds, heard.velocity);
     }
+    toastDeath(frame.slot, previous != g_heard.end() ? &previous->second : nullptr, heard);
     g_heard[frame.slot] = heard;
 }
 
@@ -101,6 +111,7 @@ void sendLocal(NetClient& net) {
     state.pos[1] = static_cast<float>(pose->position.y);
     state.pos[2] = static_cast<float>(pose->position.z);
     state.yaw = pose->yaw;
+    state.status = partner_status::encode(game::localStatus());
     if (!net.send(player_sync::kMsgPlayerState, false, proto::kSlotAll, proto::bytesOf(state))) return;
     debug_stats::count(debug_stats::Counter::PlayerStateSent);
     const auto now = Clock::now();
@@ -184,7 +195,8 @@ std::vector<RemotePlayer> remotePlayers() {
         if (now - heard.at > kStaleAfter) continue;
         const auto name = g_names.find(slot);
         RemotePlayer peer{slot, name == g_names.end() ? "Player " + std::to_string(slot) : name->second, {},
-                          {heard.velocity[0], heard.velocity[1], heard.velocity[2]}, heard.state.yaw};
+                          {heard.velocity[0], heard.velocity[1], heard.velocity[2]}, heard.state.yaw,
+                          partner_status::decode(heard.state.status)};
         const float elapsed = std::chrono::duration<float>(now - heard.at).count();
         position_blend::extrapolate(heard.state.pos, heard.velocity, elapsed, peer.position);
         out.push_back(std::move(peer));
