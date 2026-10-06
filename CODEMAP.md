@@ -10,7 +10,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | CliOptions.cs | argument parsing | `CliOptions.Parse`, `Usage` |
 | App.cs | wiring and ~100 Hz main loop; CLI runs one session, interactive (GUI) takes commands and returns to idle | `Run`, `Host`, `Join`, `Leave`, `Invite`, `Stop`, `StatusChanged`, `EndSession` |
 | AppStatus.cs | display status of the loop (idle, connecting, hosting, joined, game running, peer connected + RTT) | `AppStatus`, `AppState` |
-| Updater.cs | self-update from the rolling GitHub release `latest` (`update.json` repo, `version.txt` build): download, rename old files to `*.old`, copy new, relaunch; skipped silently on any failure or outside the packaged layout | `TryInstall` |
+| Updater.cs | self-update from the rolling GitHub release `latest` (`update.json` repo, `version.txt` build): download, rename old files to `*.old`, copy new; start-up relaunches (`TryInstall`), the window's Update button only stages (`Stage`: no relaunch while a Steam session is open, the player reopens); skipped silently on any failure or outside the packaged layout | `TryInstall`, `Stage` |
 | InstanceGuard.cs | one window launcher at a time: a new window launcher closes older launcher processes | `CloseOtherLaunchers` |
 | Gui/GuiHost.cs | GUI entry: hides the console, runs App on a background thread, window on the STA thread | `Run` |
 | Gui/MainForm.cs | the window in the broadcast tool's operator look: composes the views below, wires Host / Join / Copy / Invite / Leave to App, applies AppStatus | `MainForm`, `Apply` |
@@ -35,7 +35,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SteamTransport.cs | ISteamNetworkingMessages channel 0, member-only sessions | `Send`, `Pump` |
 | LocalTransport.cs | UDP loopback transport + presence keepalive | `PeerPresent` |
 | ILobby.cs | membership source interface | |
-| SteamLobby.cs | Steam lobby create/join, cf_* data | `Create`, `Join` |
+| SteamLobby.cs | Steam lobby create/join, cf_* data; a request Steam rejects or never answers (30 s) becomes `Failure` | `Create`, `Join`, `Pump` |
 | LocalLobby.cs | fake lobby for local testing | |
 | SteamBootstrap.cs | SteamAPI init/callbacks, overlay invites | `PendingInviteLobby` |
 | GameProfile.cs | `games/<id>.json` loader, optional `saveSync` block (fixed Steam-cloud files, or `hostSaveDir`/`guestSaveDir`/`filePattern`) | `Load`, `ListIds` |
@@ -220,7 +220,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/ds2/test_commands.cpp | `test_commands=1`: command files in the coop folder (tp, area, addweapon, bt) run on the simulation tick, plus a log of access violations in the game image | `test_commands::installEarly`; `loose.txt "r [x]"` logs (x: deletes the gear kinds of) loose pieces near Sam, `body.txt` logs the body's slot pieces |
 | src/ds2/cutscene_log.cpp, cutscene_log.h | `cutscene_log=1`: logs each shared Sequence start (resource, entity and network UUIDs, category, stop frame, held or started) and DSGameState bit changes | `cutscene_log::enable`, `onStart` |
 | src/ds2/cutscene.cpp, cutscene.h | synced cutscenes (adapter.ini `cutscene_sync=1`): detours on the Sequence start 0x1403f30f0 (a return without the original is a hold), stop 0x1403f4750 and the skip 0x14182e390; Playback records (Announced, Held, Released, Playing); the host holds until the guests are ready, a guest holds every shared Sequence until announced and starts the owning network or adopts the entity when its own graph does not; END cuts a guest's copy short after a host skip | `cutscene::installEarly`, `game::setCutsceneRole`, `takeCutsceneStarts`, `releaseCutscene`, `takeCutsceneEnds`, `armCutscene`, `takeCutsceneReady`, `goCutscene`, `endCutscene`, `cutscenePlaying` |
-| src/ds2/sequence_info.cpp, sequence_info.h | reads an engine Sequence: resource (the engine's ref walk, vtable check), category, stop frame, frame, started, stop recorded on the root, entity UUID, owning SequenceNetwork UUID (network manager 0x14623E000); starts a network by UUID 0x14049df10 | `sequence_info::read`, `isSequence`, `started`, `frame`, `stopRecorded`, `startNetwork` |
+| src/ds2/sequence_info.cpp, sequence_info.h | reads an engine Sequence: resource (the engine's ref walk, vtable check), category, game state, stop frame, frame, started, stop recorded on the root, entity UUID, owning SequenceNetwork UUID (network manager 0x14623E000); starts a network by UUID 0x14049df10 | `sequence_info::read`, `isSequence`, `started`, `frame`, `stopRecorded`, `startNetwork` |
 | src/cutscene_wire.h | CUTSCENE_START / READY / GO / END (0x012A-0x012D) payloads, `decode` with validation, `endedEarly`, the shared categories | `cutscene_wire::Start`, `Ready`, `Go`, `End`, `decode` |
 | src/cutscene_table.h | the playbacks and the rules that hold or let through the engine's Sequence start (host, guest, release, go, hold limit); no engine access, tested | `cutscene_table::Table`, `hostDecide`, `guestDecide`, `release`, `go`, `arm` |
 | src/cutscene_gate.h | the host's wait for READY from every peer, 5 s timeout | `cutscene_gate::ReadyGate` |
