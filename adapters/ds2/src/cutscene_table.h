@@ -153,8 +153,13 @@ public:
     }
 
     // Guest: the host's announcement.
+    // A START that repeats a known one is ignored; a different START with a known id is a new host session's (ids restart at 1),
+    // and replaces the old playback.
     void arm(const cutscene_wire::Start& start, uint64_t now) {
-        if (byId(start.id) || playbacks.size() >= kMaxPlaybacks) return;
+        Playback* known = byId(start.id);
+        if (known && std::memcmp(&known->start, &start, sizeof(start)) == 0) return;
+        if (known) erase(known);
+        if (playbacks.size() >= kMaxPlaybacks) return;
         Playback p;
         p.start = start;
         p.createdMs = now;
