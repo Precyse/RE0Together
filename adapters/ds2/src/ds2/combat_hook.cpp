@@ -167,8 +167,11 @@ struct Waiting {
 std::vector<Waiting> g_forwardWaiting;  // simulation thread only
 
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
-    if (g_godMode && params && victim && victim == remote_player::samEntity()) return;
     const combat_log::Snapshot snapshot = combat_log::before(victim, params);
+    if (g_godMode && params && victim && victim == remote_player::samEntity()) {
+        combat_log::after(snapshot, victim, params, "dropped, god mode");
+        return;
+    }
     if (params && victim && !remote_apply::active()) {
         const game::CombatRole role = g_role;
         const bool diverted = (role == game::CombatRole::Guest && divertEnemyHit(victim, params)) ||
