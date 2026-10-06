@@ -161,8 +161,7 @@ void drawToasts(float width) { ::drawToasts(ImGui::GetBackgroundDrawList(), widt
 
 void draw(float width, float height) {
     ImDrawList* list = ImGui::GetBackgroundDrawList();
-    ::drawToasts(list, width);
-    const float noticeTop = drawToasts(list, width);
+    const float noticeTop = ::drawToasts(list, width);
     if (const auto self = game::localPlayer()) drawFarNotices(list, width, noticeTop, self->position);
     const auto camera = game::camera();
     if (!camera) return;
