@@ -23,8 +23,14 @@ for slot in slots:
     else:
         obj = proc.u32(enemy + POOL + slot * ENTRY_SIZE + OBJECT)
     print("slot", slot, hex(obj))
+    if not obj:
+        print("  no object")
+        continue
     for _ in range(SAMPLES):
         data = proc.read(obj + BLOCK_START, BLOCK_SIZE)
+        if len(data) != BLOCK_SIZE:
+            print("  unreadable")
+            break
         print(" ".join("%08x" % w for w in struct.unpack("<32I", data)))
         floats = struct.unpack("<32f", data)
         print("  floats", " ".join("%.2f" % f for f in floats[:32]))

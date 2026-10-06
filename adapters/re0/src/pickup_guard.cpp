@@ -1,6 +1,5 @@
 #include "pickup_guard.h"
 
-#include "character_owner.h"
 #include "debug_stats.h"
 #include "game.h"
 #include "hooks.h"
@@ -18,31 +17,14 @@ bool targetMissing(uintptr_t player) {
     return player && game::readPointer(player + game::kPlayerInteractTargetOffset) == 0;
 }
 
-// A remote-owned character's pickup belongs to its own machine: the prompt, the answer (take, use, decline) and the
-// take happen there. Only the confirmed result reaches this one: FLOOR_TAKE when the item really leaves the floor
-// (sItemPut::remove, whether taken or used) and INVENTORY / state sync for what it changed. The replayed press must
-// not start the interaction here, or the prompt opens on both machines.
-bool remoteOwned(uintptr_t player) {
-    return player && character_owner::isRemoteOwned(character_owner::identify(player));
-}
-
-bool endAction(uintptr_t action, const char* reason) {
-    if (!game::writeMemory(action + game::kPickupPhaseOffset, game::kPickupDonePhase)) return false;
-    debug_stats::count(debug_stats::Counter::PickupsAborted);
-    logger::writeUnlessRepeated(reason);
-    return true;
-}
-
 uint32_t __fastcall stepDetour(void* state, void* edx, void* player) {
-    const uintptr_t action = reinterpret_cast<uintptr_t>(state);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(state);
     uint32_t phase = 0;
-    if (!game::readMemory(action + game::kPickupPhaseOffset, phase) || phase >= game::kPickupDonePhase) {
-        return g_originalStep(state, edx, player);
-    }
-    const uintptr_t picker = game::readPointer(action + game::kPickupPlayerOffset);
-    if (remoteOwned(picker) && endAction(action, "pickup_guard: the peer's pickup is not replayed here")) return 0;
-    if (phase == game::kPickupTakePhase && targetMissing(picker) &&
-        endAction(action, "pickup_guard: pickup target is gone, pickup aborted")) {
+    if (game::readMemory(address + game::kPickupPhaseOffset, phase) && phase == game::kPickupTakePhase &&
+        targetMissing(game::readPointer(address + game::kPickupPlayerOffset)) &&
+        game::writeMemory(address + game::kPickupPhaseOffset, game::kPickupDonePhase)) {
+        debug_stats::count(debug_stats::Counter::PickupsAborted);
+        logger::writeUnlessRepeated("pickup_guard: pickup target is gone, pickup aborted");
         return 0;
     }
     return g_originalStep(state, edx, player);
