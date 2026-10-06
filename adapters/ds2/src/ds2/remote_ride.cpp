@@ -3,6 +3,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
+#include <cstring>
+#include <cstdio>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
@@ -38,17 +41,56 @@ constexpr uintptr_t kClearParent = 0x14014ae00;
 constexpr uintptr_t kMoverUpdate = 0x140ec81e0;  // DSPlayerMover update (message handler)
 constexpr uintptr_t kComponentOwner = 0x48;
 
-// The driver's door, in the vehicle's frame (right, forward, up): where the engine's door check lets a player board.
-constexpr double kDoorRight = 2.6;
-constexpr double kDoorForward = 1.8;
-constexpr double kDoorUp = 0.8;
 constexpr auto kBoardRetry = std::chrono::seconds(3);
 constexpr double kBoardReachMetres = 6.0;  // from Sam to the vehicle's origin
-// The passenger seat, in the vehicle's frame: the other of the two seat pods on the cab roof (the driver's is at
-// right 0.40, forward 1.57, up 2.36).
-constexpr double kPassengerRight = -0.40;
-constexpr double kPassengerForward = 1.57;
-constexpr double kPassengerUp = 2.36;
+
+// Where a model's driver door and passenger seat are, in the vehicle's frame (right, forward, up). The door is where the
+// engine's door check lets a player board; the passenger seat is the other of the two seat pods on the cab roof (the
+// driver's is at right 0.40, forward 1.57, up 2.36 on the truck). Keyed by the UUID of the vehicle's entity resource
+// (logged at boarding); a model that is not listed is not boarded (an unlisted seat would put the body in the air).
+struct Offset {
+    double right, forward, up;
+};
+struct VehicleSeats {
+    uint8_t model[16];
+    Offset door, passenger;
+};
+constexpr VehicleSeats kSeats[] = {
+    {{0xd8, 0x44, 0xf7, 0xde, 0x7a, 0xa2, 0x4f, 0xca, 0xa4, 0x9f, 0x12, 0x93, 0x0f, 0x49, 0x4d, 0x91},
+     {2.6, 1.8, 0.8},
+     {-0.40, 1.57, 2.36}},  // the truck
+};
+constexpr uintptr_t kEntityResource = 0x68;
+constexpr uintptr_t kResourceUuid = 0x10;
+
+// The vehicle's entry in the table, or null (logged once per vehicle).
+const VehicleSeats* seatsOf(uintptr_t vehicle) {
+    static uintptr_t unknownLogged = 0;
+    uint8_t model[16] = {};
+    const uintptr_t resource = decima::readPointer(decima::readPointer(vehicle + kEntityResource));
+    if (resource && decima::safeCopy(model, resource + kResourceUuid, sizeof(model))) {
+        for (const VehicleSeats& seats : kSeats) {
+            if (std::memcmp(seats.model, model, sizeof(model)) == 0) return &seats;
+        }
+    }
+    if (unknownLogged != vehicle) {
+        unknownLogged = vehicle;
+        char text[33] = {};
+        for (int i = 0; i < 16; ++i) snprintf(text + 2 * i, 3, "%02x", model[i]);
+        logger::write("remote_ride: vehicle %p is model %s, which has no seat table entry: not boarded", reinterpret_cast<void*>(vehicle), text);
+    }
+    return nullptr;
+}
+
+// A point in the vehicle's frame, in world coordinates.
+decima::WorldTransform pointOn(const decima::WorldTransform& vehicle, const Offset& at) {
+    const auto& r = vehicle.orientation.row;
+    decima::WorldTransform point = vehicle;
+    point.position.x += r[0][0] * at.right + r[1][0] * at.forward + r[2][0] * at.up;
+    point.position.y += r[0][1] * at.right + r[1][1] * at.forward + r[2][1] * at.up;
+    point.position.z += r[0][2] * at.right + r[1][2] * at.forward + r[2][2] * at.up;
+    return point;
+}
 
 enum class Stage { OnFoot, Boarding, Riding, Leaving };
 
@@ -59,18 +101,16 @@ bool g_passenger = false;     // the peer reports a passenger seat: the remote s
 bool g_followsLocal = false;  // the local player drives the same vehicle: the remote rides only while he does
 uint64_t g_vehicleId = 0;
 uint64_t g_localPassengerSeen = 0;  // the vehicle the local player was last seated in as a passenger
+bool g_localLeaving = false;        // the local player's ride-off was requested because the driver left
 
 using ClearParentFn = void (*)(uintptr_t entity);
 
 // The remote beside the vehicle's driver door, facing it.
-void standAtDriverDoor(uintptr_t vehicle) {
+void standAtDriverDoor(uintptr_t vehicle, const VehicleSeats& seats) {
     decima::WorldTransform truck{};
     if (!decima::safeRead(vehicle + ds2::kEntityTransform, truck)) return;
     const auto& r = truck.orientation.row;
-    decima::WorldTransform door = truck;
-    door.position.x += r[0][0] * kDoorRight + r[1][0] * kDoorForward + r[2][0] * kDoorUp;
-    door.position.y += r[0][1] * kDoorRight + r[1][1] * kDoorForward + r[2][1] * kDoorUp;
-    door.position.z += r[0][2] * kDoorRight + r[1][2] * kDoorForward + r[2][2] * kDoorUp;
+    decima::WorldTransform door = pointOn(truck, seats.door);
     for (int i = 0; i < 3; ++i) {  // facing the vehicle: forward is the vehicle's left
         door.orientation.row[0][i] = r[1][i];
         door.orientation.row[1][i] = -r[0][i];
@@ -79,8 +119,8 @@ void standAtDriverDoor(uintptr_t vehicle) {
     ds2::teleportEntity(remote_player::entity(), door);
 }
 
-void requestBoarding(uintptr_t plugin, uintptr_t vehicle) {
-    standAtDriverDoor(vehicle);
+void requestBoarding(uintptr_t plugin, uintptr_t vehicle, const VehicleSeats& seats) {
+    standAtDriverDoor(vehicle, seats);
     const uintptr_t owner = decima::readPointer(plugin + kPluginOwner);
     if (!owner) return;
     ds2::field<uint64_t>(owner, kOwnerRequestTarget) = ds2::field<uint64_t>(vehicle, ds2::kEntityNetworkId);
@@ -94,15 +134,12 @@ void clearRequest(uintptr_t plugin) {
     if (owner) ds2::field<uint8_t>(owner, kOwnerRequestKind) = 0;
 }
 
-// The pod's world transform on the vehicle, or false when the vehicle is not readable.
+// The pod's world transform on the vehicle, or false when the vehicle is not readable or its model has no entry.
 bool passengerSeat(uintptr_t vehicle, decima::WorldTransform& seat) {
     decima::WorldTransform truck{};
-    if (!decima::safeRead(vehicle + ds2::kEntityTransform, truck)) return false;
-    const auto& r = truck.orientation.row;
-    seat = truck;
-    seat.position.x += r[0][0] * kPassengerRight + r[1][0] * kPassengerForward + r[2][0] * kPassengerUp;
-    seat.position.y += r[0][1] * kPassengerRight + r[1][1] * kPassengerForward + r[2][1] * kPassengerUp;
-    seat.position.z += r[0][2] * kPassengerRight + r[1][2] * kPassengerForward + r[2][2] * kPassengerUp;
+    const VehicleSeats* seats = seatsOf(vehicle);
+    if (!seats || !decima::safeRead(vehicle + ds2::kEntityTransform, truck)) return false;
+    seat = pointOn(truck, seats->passenger);
     return true;
 }
 
@@ -118,11 +155,35 @@ void seatLocalPassenger() {
     const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
     decima::WorldTransform seat{};
     if (plugin && ds2::field<uint8_t>(plugin, kPluginPhase) == kPhaseOnFoot) {
-        if (Clock::now() - g_samBoardedAt > kBoardRetry) setdriver_guard::endLocalPassenger();
+        if (g_localLeaving) {  // the ride-off ended: the engine leaves the entity parented to the vehicle
+            reinterpret_cast<ClearParentFn>(ds2::at(kClearParent))(remote_player::samEntity());
+            g_localLeaving = false;
+            setdriver_guard::endLocalPassenger();
+        } else if (Clock::now() - g_samBoardedAt > kBoardRetry) {
+            setdriver_guard::endLocalPassenger();
+        }
         return;
     }
     if (passengerSeat(ds2::loadedVehicle(vehicleId), seat)) ds2::teleportEntity(remote_player::samEntity(), seat);
     g_samBoardedAt = Clock::now();
+}
+
+// The driver left (the partner stopped driving that vehicle, disconnected, or its body is parked): the local passenger gets
+// off through the game's own ride-off, as the remote does, instead of staying seated in a vehicle nobody drives.
+void leaveLocalPassengerIfDriverGone() {
+    const uint64_t vehicleId = setdriver_guard::localPassengerVehicle();
+    if (!vehicleId) {  // the engine's ride-off answered Sam's SetDriver: the ride is over
+        g_localLeaving = false;
+        return;
+    }
+    if (g_localLeaving) return;
+    const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
+    if (riding && riding->id == vehicleId && riding->role == vehicle_sync::kRoleDriver && !remote_player::isParked()) return;
+    const uintptr_t plugin = ds2::ridePlugin(remote_player::samEntity());
+    if (!plugin || ds2::field<uint8_t>(plugin, kPluginPhase) != kPhaseDrive) return;
+    ds2::field<uint8_t>(plugin, kPluginRequestedPhase) = kPhaseRideOff;
+    g_localLeaving = true;
+    logger::write("remote_ride: the driver left, the local player gets off");
 }
 
 // DSPlayerMover's update writes a seated player's transform (the driver's seat) into the entity itself. The remote,
@@ -142,6 +203,18 @@ uint64_t moverUpdateDetour(uintptr_t mover, uintptr_t message, uintptr_t a3, uin
         ds2::teleportEntity(remote, seat);
     }
     return result;
+}
+
+// The vehicle the partner drives, when it is loaded here and its model has a seat table entry.
+struct Boardable {
+    uintptr_t vehicle = 0;
+    const VehicleSeats* seats = nullptr;
+    explicit operator bool() const { return vehicle && seats; }
+};
+
+Boardable boardableVehicle(const std::optional<uint64_t>& driven) {
+    const uintptr_t vehicle = driven ? ds2::loadedVehicle(*driven) : 0;
+    return {vehicle, vehicle ? seatsOf(vehicle) : nullptr};
 }
 
 // Whether the local player drives the vehicle too (each machine keeps its own driver; the partner then rides along).
@@ -165,6 +238,7 @@ void reset() {
     g_followsLocal = false;
     g_vehicleId = 0;
     g_localPassengerSeen = 0;
+    g_localLeaving = false;
 }
 
 bool holdsBody() { return g_stage != Stage::OnFoot; }
@@ -202,6 +276,7 @@ void boardLocalPassenger() {
 
 void tick() {
     boardLocalPassenger();
+    leaveLocalPassengerIfDriverGone();
     const uintptr_t plugin = ds2::ridePlugin(remote_player::entity());
     if (!plugin) return;
     const uint8_t phase = ds2::field<uint8_t>(plugin, kPluginPhase);
@@ -209,11 +284,13 @@ void tick() {
     const auto driven = riding ? std::optional<uint64_t>(riding->id) : std::nullopt;
     switch (g_stage) {
         case Stage::OnFoot:
-            if (const uintptr_t vehicle = driven ? ds2::loadedVehicle(*driven) : 0) {
+            if (const Boardable boardable = boardableVehicle(driven)) {
+                const uintptr_t vehicle = boardable.vehicle;
+                const VehicleSeats* seats = boardable.seats;
                 g_vehicleId = *driven;
                 g_followsLocal = localDrives(g_vehicleId);
                 g_passenger = g_followsLocal || riding->role == vehicle_sync::kRolePassenger;
-                requestBoarding(plugin, vehicle);
+                requestBoarding(plugin, vehicle, *seats);
                 g_stage = Stage::Boarding;
                 logger::write("remote_ride: boarding vehicle %llx as %s", static_cast<unsigned long long>(g_vehicleId),
                               g_passenger ? "a passenger" : "the driver");
@@ -228,7 +305,7 @@ void tick() {
                 clearRequest(plugin);
                 if (phase == kPhaseOnFoot) g_stage = Stage::OnFoot;
             } else if (phase == kPhaseOnFoot && Clock::now() - g_boardedAt > kBoardRetry) {
-                if (const uintptr_t vehicle = ds2::loadedVehicle(*driven)) requestBoarding(plugin, vehicle);
+                if (const Boardable boardable = boardableVehicle(driven)) requestBoarding(plugin, boardable.vehicle, *boardable.seats);
             }
             break;
         case Stage::Riding:

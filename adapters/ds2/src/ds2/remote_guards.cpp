@@ -47,12 +47,14 @@ constexpr uint32_t kStartMask = 0x3FFF;
 constexpr int kCountShift = 14;
 constexpr uint32_t kCountMask = 0x3FF;
 
-// DSPlayerComponent's per-frame update handler (message 0x14FF, the stance and state update of a player). Run for the remote
-// it flickers Sam's bottom-left prompts (found by clearing the component's handler entries one at a time: with this one
-// cleared 0 of 60 screenshots lost the "Activate Terminal" prompt, against about 1 in 8 without). The body's pose and
-// animation come from the adapter, so the update is not needed.
-constexpr uintptr_t kPlayerComponentUpdate = 0x14080ade0;
-constexpr const char* kPlayerComponent = "DSPlayerComponent";
+// The removal handlers that clear DSPlayerSystem's singleton pointers (see player_system_guard, which diverts the init's
+// stores): the remote's removal would clear Sam's.
+struct Removal {
+    const char* component;
+    uintptr_t function;
+};
+constexpr Removal kSingletonRemovals[] = {{"DSPlayerEquipmentManageComponent", 0x140F7A930},
+                                          {"DSPlayerFacialRigManagerComponent", 0x140EE3EE0}};
 
 using InitTableFn = void (*)(uintptr_t table, uint32_t capacity);
 using PartToggleFn = void (*)(uintptr_t holder, uint8_t id);
@@ -117,7 +119,9 @@ void silenceRemote() {
     for (const char* name : kSilencedComponents) {
         silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(name)));
     }
-    silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(kPlayerComponent)), ds2::at(kPlayerComponentUpdate));
+    for (const Removal& removal : kSingletonRemovals) {
+        silence(entity, decima::findComponent(entity, msvc_rtti::vtableOf(removal.component)), ds2::at(removal.function));
+    }
 }
 
 }  // namespace remote_guards

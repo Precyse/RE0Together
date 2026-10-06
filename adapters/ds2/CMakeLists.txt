@@ -108,6 +108,7 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_baggage.cpp
     src/ds2/remote_marker.cpp
     src/ds2/remote_guards.cpp
+    src/ds2/remote_update.cpp
     src/ds2/remote_appearance.cpp
     src/ds2/remote_animation.cpp
     src/ds2/remote_ride.cpp
@@ -120,6 +121,7 @@ add_library(ds2_adapter SHARED
     src/ds2/warp.cpp
     src/ds2/cargo_defer.cpp
     src/ds2/loading_screen.cpp
+    src/ds2/player_system_guard.cpp
     src/ds2/world_pause.cpp
     src/ds2/bt_events.cpp
     src/ds2/enemy_spawn.cpp
