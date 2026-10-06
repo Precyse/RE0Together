@@ -93,6 +93,42 @@ float nearestSquaredDistance(uintptr_t entity) {
     return nearest;
 }
 
+constexpr double kPartnerSightMetres = 80.0;  // members this close to the partner get a line of their own
+constexpr int kMaxMemberLines = 8;
+
+uintptr_t memberEntity(uintptr_t item) {
+    uintptr_t entity = 0;
+    return decima::safeRead(item + kItemEntity, entity) ? entity : 0;
+}
+
+// How many members of the group are nearer (to the nearer focus) than this one: its place in the update's sorted list.
+int rankInGroup(const Group& group, uintptr_t entity) {
+    const float mine = nearestSquaredDistance(entity);
+    int rank = 0;
+    for (int i = 0; i < group.count; ++i) {
+        const uintptr_t other = memberEntity(group.items[i]);
+        if (other && other != entity && nearestSquaredDistance(other) < mine) ++rank;
+    }
+    return rank;
+}
+
+// Diagnostics: the members of a group that stand near the partner, with their place in the group's sorted list against its budget.
+void logPartnerMembers(int index, const Group& group, uint32_t budget, int& lines) {
+    decima::WorldPosition partner;
+    if (!partner_focus::partnerPosition(partner)) return;
+    for (int i = 0; i < group.count && lines < kMaxMemberLines; ++i) {
+        const uintptr_t entity = memberEntity(group.items[i]);
+        decima::WorldPosition at;
+        if (!entity || !decima::safeRead(entity + ds2::kEntityTransform, at)) continue;
+        const double metres = std::sqrt(partner_focus::squaredDistance(at, partner));
+        if (metres > kPartnerSightMetres) continue;
+        ++lines;
+        logger::write("sneaking_focus: group %d member %p, %.0f m from the partner, %s, rank %d of %d against budget %u", index,
+                      reinterpret_cast<void*>(entity), metres, ds2::entityAsleep(entity) ? "asleep" : "awake",
+                      rankInGroup(group, entity), group.count, budget);
+    }
+}
+
 // Diagnostics: after the update, every 5 s, each group's members and how many sleep, with the numbers that decide it.
 void logGroups(uintptr_t manager) {
     static ULONGLONG nextLog = 0;
@@ -105,6 +141,7 @@ void logGroups(uintptr_t manager) {
     const auto farRadius = ds2::field<const float*>(manager, kGroupFar);
     const auto limit = ds2::field<const int32_t*>(manager, kGroupLimit);
     const auto budget = ds2::field<const uint32_t*>(manager, kGroupBudgets);
+    int memberLines = 0;
     for (int g = 0; g < count; ++g) {
         int asleep = 0;
         for (int i = 0; i < groups[g].count; ++i) {
@@ -113,6 +150,7 @@ void logGroups(uintptr_t manager) {
         }
         logger::write("sneaking_focus: manager %p group %d: %d members, %d asleep, near %.0f far %.0f, limit %d, budget %u",
                       reinterpret_cast<void*>(manager), g, groups[g].count, asleep, nearRadius[g], farRadius[g], limit[g], budget[g]);
+        logPartnerMembers(g, groups[g], budget[g], memberLines);
     }
 }
 
