@@ -100,11 +100,28 @@ void forwardOrder(uintptr_t mission, uintptr_t args) {
     if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
 }
 
+// Host: a mission request the script made, reported when it is made (before the drain applies it and before the section it
+// activates) with the arguments the guest's replay needs; the poll below stays as the catch for starts that bypass these calls.
+void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
+    story_wire::Event event = missionEvent(kind, mission, a, b);
+    if (section) decima::safeCopy(event.section, section, sizeof(event.section));
+    report(event);
+}
+
 uint64_t requestStartDetour(uintptr_t c, uintptr_t mission, uintptr_t args, uintptr_t section, uintptr_t reserve,
                             uintptr_t f, uintptr_t g, uintptr_t h) {
     if (vetoed()) {
         forwardOrder(mission, args);
         return 0;
+    }
+    if (g_host.load() && mission && !static_cast<uint8_t>(reserve)) {
+        uint32_t a = kNoRow;
+        int32_t b = 0;
+        if (args) {
+            decima::safeRead(args, a);
+            decima::safeRead(args + sizeof(a), b);
+        }
+        reportRequest(story_wire::Kind::MissionStart, mission, a, b, section);
     }
     return g_requestStart(c, mission, args, section, reserve, f, g, h);
 }
@@ -112,12 +129,14 @@ uint64_t requestStartDetour(uintptr_t c, uintptr_t mission, uintptr_t args, uint
 uint64_t requestSuccessDetour(uintptr_t c, uintptr_t mission, uintptr_t flag, uintptr_t d, uintptr_t e, uintptr_t f,
                               uintptr_t g, uintptr_t h) {
     if (vetoed()) return 0;
+    if (g_host.load() && mission) reportRequest(story_wire::Kind::MissionSuccess, mission, static_cast<uint32_t>(flag), 0, 0);
     return g_requestSuccess(c, mission, flag, d, e, f, g, h);
 }
 
 uint64_t requestFailDetour(uintptr_t c, uintptr_t mission, uintptr_t reason, uintptr_t d, uintptr_t e, uintptr_t f,
                            uintptr_t g, uintptr_t h) {
     if (vetoed()) return 0;
+    if (g_host.load() && mission) reportRequest(story_wire::Kind::MissionFail, mission, static_cast<uint32_t>(reason), 0, 0);
     return g_requestFail(c, mission, reason, d, e, f, g, h);
 }
 
@@ -268,9 +287,10 @@ void replayMission(const story_wire::Event& event) {
             uint32_t a;
             int32_t b;
         } args{event.a, event.b};
-        static const uint8_t noSection[story_wire::kUuidSize] = {};
+        alignas(16) uint8_t section[story_wire::kUuidSize];
+        std::memcpy(section, event.section, sizeof(section));
         reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, const void*, const void*, bool)>(ds2::at(kRequestStart))(
-            c, mission, &args, noSection, false);
+            c, mission, &args, section, false);
         logger::write("story: replayed the start of mission %llx", static_cast<unsigned long long>(event.missionId));
     } else if (kind == story_wire::Kind::MissionSuccess) {
         reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, uint32_t)>(ds2::at(kRequestSuccess))(c, mission, event.a);
