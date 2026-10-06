@@ -7,6 +7,7 @@
 #include <mutex>
 
 #include "log.h"
+#include "partner_cargo_sync.h"
 
 namespace {
 
@@ -92,6 +93,7 @@ void giveUp(NetClient& net, uint8_t hostSlot, uint64_t handle) {
 
 // Receives a piece: created at once, or kept and retried while the game removes the stale copy of it.
 void receive(const game::Cargo& piece) {
+    partner_cargo_sync::expectAdded(piece);
     switch (game::addCargo(piece)) {
         case game::AddResult::Done:
             break;

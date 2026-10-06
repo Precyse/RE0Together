@@ -30,6 +30,7 @@ CARGO_LIST = 0x0101
 VEHICLE_LOAD = 0x0109
 VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
 CARGO_ADD = 0x0103
+CARGO_GONE, MOVE_ACK = 0x011A, 0x0130
 CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
@@ -210,6 +211,8 @@ def serve(sock, a):
                     record(body)
             elif msg_type in (ENEMY_STATE, ENEMY_GONE, ENEMY_ANIM) and a.enemy_record:
                 record(body)
+            elif msg_type == CARGO_GONE and a.echo_cargo:
+                sock.sendall(encode(MOVE_ACK, peer_slot, body[4:]))  # CargoGone and MoveAck (gone) share their bytes
             elif msg_type == CARGO_LIST and a.echo_cargo:
                 sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == EQUIP_STATE and a.echo_equip:
