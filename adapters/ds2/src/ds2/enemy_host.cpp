@@ -162,6 +162,7 @@ void tick() {
     const ULONGLONG now = GetTickCount64();
     if (now - lastSample < kSampleMs) return;
     lastSample = now;
+    if (!sim_tick::inWorld()) return;  // a load frees the entities the list holds
     std::lock_guard lock(g_mutex);
     if (!g_sharing) return;
     if (g_snapshotRequested) {
