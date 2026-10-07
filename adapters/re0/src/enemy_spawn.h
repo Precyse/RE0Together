@@ -5,6 +5,8 @@
 // base family's variant +0x6ab0 = rand % 3 on a first spawn). The create runs with the random state set from the record
 // (spawn_seed.h) and the game's own state is put back right after, so both machines create the same enemy and the rest
 // of the game's randomness is untouched. Always on in co-op: a room created before the partner joined matches too.
+// A created enemy also clears its pool slot's waiting decision and follow state (enemy_decision, enemy_state), so a
+// script spawn that reuses a freed slot never inherits the previous enemy's.
 namespace enemy_spawn {
 
 // Hooks the create. False when the hook failed.

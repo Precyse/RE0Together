@@ -208,6 +208,12 @@ uint8_t ownerTarget(uintptr_t enemy) {
     return g_follow[slot].target;
 }
 
+void forgetSlot(uint8_t slot) {
+    if (slot >= game::kEnemyPoolSlots) return;
+    g_follow[slot] = Follow{};
+    g_mismatchLogged[slot] = false;
+}
+
 void onFrame(const GameFrame& frame) {
     if (frame.type != enemy_protocol::kMsgEnemyState || frame.slot != net_pad::peerSlot() ||
         frame.payload.size() < sizeof(StateHeader)) {

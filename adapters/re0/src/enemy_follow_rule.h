@@ -99,6 +99,10 @@ public:
     // A replayed hit restarted the enemy (its reaction): a decision the owner made before the hit no longer applies.
     void supersede() { pending_ = false; }
 
+    // A new enemy was created in the slot (a script spawn reusing a freed pool slot): nothing the owner decided for the
+    // previous one applies, and the new one may be seeded again.
+    void forget() { *this = PendingDecision{}; }
+
     bool take(Decision& out) {
         if (!pending_) return false;
         pending_ = false;

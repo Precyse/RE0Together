@@ -187,7 +187,8 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 | Split party | each machine owns its room; hits and decisions of another room are dropped; doors never wait | code |
 | Cutscene or scripted enemy | script setAction calls run natively on both (only the decision points are substituted); a cutscene or menu on either side holds the other's world | code |
 | Game over and continue, save load | a room load: follow state and waiting decisions reset; the enemies are created from the same seeded states | code |
-| Scripted spawn mid-room | the scripts' spawns go through the same seeded create | spawn_seed_test, code |
+| Scripted spawn mid-room | the scripts' spawns go through the same seeded create (replayed on the peer by event sync, in the firer's order) | spawn_seed_test, code |
+| A spawn reusing a freed pool slot | the create clears the slot's waiting decision and follow state; the new enemy aligns on the owner's next snapshot | enemy_follow_rule_test |
 
 ## 6. Live checks (next session)
 

@@ -185,6 +185,10 @@ void reset() {
     g_pendingRoom = scene::current();
 }
 
+void forgetSlot(uint8_t slot) {
+    if (slot < game::kEnemyPoolSlots) pendingFor(slot).forget();
+}
+
 void onOwnerOutcome(uintptr_t enemy, uint8_t slot, bool reacted, const Action& reaction) {
     if (slot >= game::kEnemyPoolSlots) return;
     pendingFor(slot).supersede();
