@@ -1,15 +1,17 @@
 #pragma once
 #include <cstdint>
 
-// Room-entry barrier (room_gate_rule.h): a machine that arrives in a room the peer's door is still taking it to holds
-// its world (menu_mirror's sUnit::updateAll freeze) until the peer reports that room, turns away, or 15 s pass.
+// Door barrier (room_gate_rule.h). The door's last phase asks 0x551c70 whether the door may finish (its only caller);
+// finishing ends the room phase DoorLoad and starts the room. For a door both machines play (TEAM, together), this
+// machine reports that its door is ready, and while the peer's is not, the check says "not yet": the door stays on its
+// last frame, the room and its enemies do not start, nothing is frozen on screen. Released when the peer's door is
+// ready, the peer turns away, the link drops, or after 5 s; a hold over 2 s shows "Waiting for partner".
 namespace room_gate {
 
-// Game thread, from door_travel once a door's room is in place.
-void onArrival(uint16_t scene);
+// Hooks the door's finish check. False when the hook failed.
+bool install();
 
-// Game thread, every frame from sUnit::updateAll (which also runs while the world is held): true while the hold lasts;
-// the frame that releases it logs why.
-bool holdsWorld();
+// Any thread: this machine's running door is ready to finish (ROOM_STATE tells the peer).
+bool doorReady();
 
 }  // namespace room_gate

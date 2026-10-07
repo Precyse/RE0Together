@@ -17,6 +17,7 @@
 #include "enemy_state.h"
 #include "enemy_target.h"
 #include "enemy_think.h"
+#include "room_gate.h"
 #include "event_place.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
@@ -70,6 +71,7 @@ void enableCoop() {
     pickup_guard::enable();
     door_travel::enable(g_net);
     if (!door_sync::enable(g_net)) logger::write("adapter: door sync unavailable");
+    if (!room_gate::install()) logger::write("adapter: door barrier unavailable");
     split_rooms::enable();
     flag_sync::enable(g_net);
     join_sync::enable(g_net);

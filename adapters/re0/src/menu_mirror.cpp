@@ -18,7 +18,6 @@
 #include "menu_hold_rule.h"
 #include "net_pad.h"
 #include "protocol.h"
-#include "room_gate.h"
 #include "split_rooms.h"
 
 namespace {
@@ -52,23 +51,19 @@ bool anyPeerMenu(bool (*test)(const menu_hold_rule::PeerMenu&, menu_hold_rule::C
     return false;
 }
 
-void setFrozen(bool frozen, bool byMenu) {
+void setFrozen(bool frozen) {
     g_frozen = frozen;
     debug_stats::set(debug_stats::Gauge::WorldFrozen, frozen);
-    if (frozen && byMenu) debug_stats::count(debug_stats::Counter::MenuFreezes);
+    if (frozen) debug_stats::count(debug_stats::Counter::MenuFreezes);
     debug_overlay::toast(frozen ? "Waiting for partner" : "Resumed", kToastSeconds);
-    logger::write("menu_mirror: world %s%s", frozen ? "frozen" : "resumed",
-                  frozen ? (byMenu ? " (peer menu)" : " (room entry)") : "");
+    logger::write("menu_mirror: world %s", frozen ? "frozen" : "resumed");
 }
 
-// Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze. A peer's menu holds this
-// world only while the two are together (a peer in another room is not affected by it); a room entry holds it until
-// the peer arrives too (room_gate).
+// Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze. A peer in another room
+// is not affected by this world, so it is held only while the two are together.
 void __fastcall updateAllDetour(void* self, void* edx) {
-    const bool roomEntry = room_gate::holdsWorld();
-    const bool byMenu = anyPeerMenu(menu_hold_rule::holds) && !split_rooms::apart() && !game_state::uiPausesWorld();
-    const bool freeze = roomEntry || byMenu;
-    if (freeze != g_frozen) setFrozen(freeze, byMenu);
+    const bool freeze = anyPeerMenu(menu_hold_rule::holds) && !split_rooms::apart() && !game_state::uiPausesWorld();
+    if (freeze != g_frozen) setFrozen(freeze);
     if (freeze) return;
     g_originalUpdateAll(self, edx);
 }

@@ -120,11 +120,12 @@ racing the local AI's own choice. Rejected for the same reason as Build 158, onl
   applies it and whoever receives an applied hit replays it.
 - **Target.** The base classes' selector 0x421b20 and uEnemy2b's 0x439e90 are hooked; on the follower the hooked
   selector's result is the owner's character, so the selector call stays the only writer of the target fields.
-- **Room-entry barrier** (the user's idea, adapted to the engine). ROOM_STATE carries the room the sender's door leads
-  to. A machine that loads a room the peer is still travelling to holds its whole world (the proven menu freeze of
-  sUnit::updateAll, "Waiting for partner") until the peer reports that room, turns away, the link drops, or 15 s
-  pass. Both rooms then start from their spawn records within half a round trip. The engine loads the room after the
-  door animation (the door phase goes idle first), so the hold sits between "both doors done" and "room runs".
+- **Door barrier** (the user's idea). When one player takes a door in TEAM, both machines play that door and load
+  the room inside it; the room starts when the door finishes (room phase DoorLoad -> Main). The door's own finish
+  check 0x551c70 is hooked: the faster machine reports its door ready and its door waits on its last frame until the
+  peer's same door is ready, so both rooms start their enemies from the spawn records together. Nothing visible is
+  frozen; "Waiting for partner" shows only past 2 s; released after 5 s at most, or when the peer turns away or the
+  link drops. A door one player takes alone, or a partner heading into the same room on its own, never waits.
 - **Following mid-room** (walking into a room the peer already runs, or after a barrier timeout). On the first
   snapshot each enemy takes the owner's pose (if more than 40 off) and HP once, and its think step the owner's current
   record until the first decision arrives.
@@ -152,10 +153,11 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 
 | Condition | Handling | Test |
 |---|---|---|
-| Room entry, either first | the first holds (barrier) until the peer's arrival report, and owns the room | room_gate_rule_test |
-| Room entry, simultaneous | both hold; each releases when the other's arrival report lands (sent before a hold starts) | room_gate_rule_test |
+| Room entry together, either first | the faster machine's door waits at its finish until the peer's is ready; it then owns the room (first in) | room_gate_rule_test |
+| Room entry together, simultaneous | each reports ready before it checks, so neither waits for long | room_gate_rule_test |
+| Doors taken alone, split mode, partner heading the same way | never waits: only a door both machines play holds | room_gate_rule_test |
 | Follower thinks before the owner's first decision | its think waits (applies nothing) up to 15 ticks from following start, then decides itself | enemy_follow_rule_test |
-| Load gap 0-15 s | barrier; past 15 s the first plays on and the late one aligns on its first snapshot | room_gate_rule_test |
+| Load gap 0-5 s | barrier, invisible under 2 s; past 5 s the first plays on and the late one aligns on its first snapshot | room_gate_rule_test |
 | Peer disconnects mid-room | no snapshots: after 15 ticks (500 ms) the follower's think decides again; the owner keeps running | enemy_follow_rule_test |
 | Door taken while enemies act | a room change resets the follow state and waiting decisions; events of the old room are dropped by their room byte | enemy_follow_rule_test, code |
 | Both kill the same enemy at once | the owner applies both in order; the second lands on a dead enemy as in vanilla; replays follow the same order | code |
@@ -171,8 +173,9 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 
 ## 6. Live checks (next session)
 
-- Room entry together: `room_gate: holding scene 0x.. for the peer` then `room_gate: released scene 0x.. (peer
-  arrived|peer not coming|timeout) after N ms`; the second machine logs no hold. Timeouts mean a stalled peer.
+- Door together: the faster machine logs `room_gate: door into scene 0x.. waits for the peer's` then `room_gate: door
+  into scene 0x.. released (peer ready|peer not coming|timeout) after N ms`; the slower one logs no wait. Timeouts
+  mean a stalled peer. Note what the screen shows during a wait.
 - Hits: host `enemy_net: hit slot N applied hp A -> B rng xxxxxxxx` and guest `enemy_net: hit slot N replayed hp A ->
   B (was X here)` with the same A and B; `replay diverged` should never appear. `enemy_net: hit dropped (<reason>)`
   names every lost hit; `(not a player)` marks damage from explosions or the like.

@@ -16,7 +16,9 @@
 #include "net_pad.h"
 #include "protocol.h"
 #include "resync.h"
+#include "door_sync.h"
 #include "room_gate.h"
+#include "room_phase.h"
 #include "scene.h"
 #include "split_rooms.h"
 #include "state_correction.h"
@@ -49,14 +51,21 @@ bool g_ranEnemies = false;  // game thread: the last logged enemy authority
 
 bool partnerInRoom() { return game_state::inCurrentRoom(game::partner()); }
 
+// The room phase is DoorLoad from a door's start until it finishes (its last phase included, when the room loads).
+bool inDoor() { return game_state::roomPhase() == room_phase::DoorLoad; }
+
 // The scene the running door leads to, scene::kNone when no door runs.
 uint16_t doorTarget() {
     const uintptr_t doorLoad = game::readPointer(game::kDoorLoadGlobal);
     uint32_t room = 0;
-    if (!game_state::doorActive() || !doorLoad || !game::readMemory(doorLoad + game::kDoorLoadRoomOffset, room)) {
-        return scene::kNone;
-    }
+    if (!inDoor() || !doorLoad || !game::readMemory(doorLoad + game::kDoorLoadRoomOffset, room)) return scene::kNone;
     return static_cast<uint16_t>(room);
+}
+
+uint8_t doorFlags() {
+    if (!inDoor()) return 0;
+    return static_cast<uint8_t>((door_sync::sharedDoor() ? door_travel::kDoorShared : 0) |
+                                (room_gate::doorReady() ? door_travel::kDoorReady : 0));
 }
 
 void send(const door_travel::RoomState& state) {
@@ -64,7 +73,7 @@ void send(const door_travel::RoomState& state) {
 }
 
 door_travel::RoomState currentState() {
-    return {scene::current(), partnerInRoom(), g_enemyClaim, doorTarget(), {}};
+    return {scene::current(), partnerInRoom(), g_enemyClaim, doorTarget(), doorFlags(), 0};
 }
 
 void sendRoomState() {
@@ -74,7 +83,7 @@ void sendRoomState() {
 
 // Level-triggered from the game tick and the net thread, so the start is seen even when the game stops ticking.
 // Whether the partner comes along is the game's own follow logic (party_mode keeps its follow flag). The peer learns
-// where the door leads at once: the game does not tick again until the room is in place (room_gate).
+// where the door leads at once: the game does not tick again until the door has finished.
 void pollDoorStart() {
     if (!game_state::doorActive() || g_doorWasActive.exchange(true)) return;
     uint8_t follow = 0;
@@ -93,7 +102,6 @@ void onArrival() {
     state_correction::requestForcedCheck();
     floor_items_sync::onArrival();
     logger::write("door_travel: arrived in scene 0x%02x%s", scene::current(), g_enemyClaim ? ", first here" : "");
-    room_gate::onArrival(scene::current());
 }
 
 void forgetPeer() {
@@ -188,6 +196,8 @@ bool enemyAuthority() {
     peerReport(peer);
     return control_rule::runsEnemies(peerPlace(), character_owner::isHost(), g_enemyClaim, peer.enemyClaim != 0);
 }
+
+void announce() { sendRoomState(); }
 
 void onNetTick() {
     if (net_pad::active()) pollDoorStart();

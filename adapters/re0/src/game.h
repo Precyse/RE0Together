@@ -118,6 +118,10 @@ constexpr uintptr_t kGameInfoStageOffset = 0x2a80;
 constexpr uintptr_t kGameInfoRoomOffset = 0x2a84;
 constexpr uintptr_t kDoorLoadStateOffset = 0x44;
 constexpr uintptr_t kDoorLoadRoomOffset = 0x20;  // u32 room (scene id) the running door leads to, stored by start
+// sDoorLoad's last phase (5, from update 0x552300) finishes the door, which ends the room phase DoorLoad and starts the
+// room, once its fade timer ran out, the fade is done and this check (thiscall, no arguments, bool: the door model's
+// motion finished) passes; 0x552629 is its only caller.
+constexpr uintptr_t kDoorFinishCheckFunction = 0x551c70;
 constexpr uintptr_t kRoomControlGlobal = 0xdcbeb4;         // sRoomControl*
 constexpr uintptr_t kRoomPhaseCurrentOffset = 0xb8 + 0x14;  // phase manager +0x14: room_phase::Phase
 // sRoomControl::requestPhase: thiscall (phase), ret 4. The vanilla V requests Change (9), which zaps to the partner

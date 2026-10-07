@@ -29,6 +29,9 @@ void onArrival();
 // The peer reports another room than the one loaded here, or this player's own character is outside the loaded room.
 bool apart();
 
+// Together and in TEAM: a door either player takes is played on both machines.
+bool travelsTogether();
+
 // LEAVE_BEHIND, or apart: each machine keeps its own player's character in focus (no shared camera).
 bool independent();
 

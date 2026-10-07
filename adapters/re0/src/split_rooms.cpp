@@ -78,8 +78,7 @@ void onTick() {
 namespace split_rooms {
 
 bool takeOver(const DoorChange& change) {
-    // Together in TEAM both characters go through the door.
-    if (!apart() && party_mode::current() == control_rule::PartyMode::Team) return false;
+    if (travelsTogether()) return false;  // both characters go through the door
     g_pending = change;
     return true;
 }
@@ -106,6 +105,8 @@ bool apart() {
     const uintptr_t own = character_owner::find(character_owner::localCharacter());
     return own && game_state::playing() && !game_state::inCurrentRoom(own);
 }
+
+bool travelsTogether() { return !apart() && party_mode::current() == control_rule::PartyMode::Team; }
 
 bool independent() { return apart() || party_mode::current() == control_rule::PartyMode::LeaveBehind; }
 

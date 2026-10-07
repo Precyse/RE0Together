@@ -3,8 +3,8 @@
 The adapter connects to it as to its launcher; it is the host (slot 0) and a fake guest (slot 1) owns Billy. Commands
 are read from a text file, one per line, as they are appended:
     door <scene> <entry>   the fake player's character goes through a door (DOOR_CHANGE), reports where the door leads
-                           at once and that room when its door would have finished (8 s), like a real peer; a game
-                           that arrives first holds its world until then (room_gate)
+                           at once (a door both machines play) and that room when its door would have finished (8 s),
+                           like a real peer; a game whose door is ready first waits at its door's end (room_gate)
     room <scene>           the fake player reports this room (ROOM_STATE every second); "room host" follows the game
     party                  the guest asks for the other party mode (PARTY_REQUEST)
     place <scene> <x> <y> <z>  an event on the fake's side moved the game's character (CHARACTER_PLACE)
@@ -54,7 +54,8 @@ TICK_S = 1.0
 DOOR_SECONDS = 8.0  # a real peer reports its new room only when its door animation ends
 POLL_S = 0.1
 NO_SCENE = 0xFFFF
-ROOM_STATE_FORMAT = "<HBBH2x"  # scene, partner in room, enemy claim, door target
+ROOM_STATE_FORMAT = "<HBBHBx"  # scene, partner in room, enemy claim, door target, door flags
+DOOR_SHARED, DOOR_READY = 1, 2
 
 
 def encode(msg_type, slot, payload=b"", flags=FLAG_RELIABLE):
@@ -96,6 +97,7 @@ class Session:
         self.guest_scene = None  # None = follow the host's room
         self.host_scene = NO_SCENE
         self.door_target = NO_SCENE  # where the fake's running door leads
+        self.door_flags = 0
         self.hp = None  # the fake's reported hp, None = no PLAYER_STATE
         self.menu = None  # (open, phase) of the fake's MENU_STATE, None = never sent
         self.phase = None  # the host's announced room phase (--guest), None = no SAVE_SLOT
@@ -131,7 +133,7 @@ class Session:
 
     def room_state(self):
         scene = self.host_scene if self.guest_scene is None else self.guest_scene
-        self.send(ROOM_STATE, struct.pack(ROOM_STATE_FORMAT, scene, 0, 0, self.door_target))
+        self.send(ROOM_STATE, struct.pack(ROOM_STATE_FORMAT, scene, 0, 0, self.door_target, self.door_flags))
 
     def receive_loop(self):
         while True:
@@ -140,10 +142,10 @@ class Session:
             msg_type, _, _ = struct.unpack("<HBB", body[:4])
             payload = body[4:]
             if msg_type == ROOM_STATE:
-                scene, partner_in_room, claim, door_target = struct.unpack(ROOM_STATE_FORMAT, payload)
+                scene, partner_in_room, claim, door_target, door_flags = struct.unpack(ROOM_STATE_FORMAT, payload)
                 if scene != self.host_scene or door_target != NO_SCENE:
                     print(f"host room: scene {scene:#04x} partner_in_room={partner_in_room} claim={claim} "
-                          f"door_target={door_target:#04x}", flush=True)
+                          f"door_target={door_target:#04x} door_flags={door_flags}", flush=True)
                 self.host_scene = scene
             elif msg_type == DOOR_CHANGE:
                 room, entry, a3, a4, flag, character = struct.unpack("<5IB3x", payload)
@@ -160,8 +162,11 @@ class Session:
                     print("join snapshot sent", flush=True)
 
     def arrive(self, scene):
+        self.door_flags = DOOR_SHARED | DOOR_READY  # its door is ready to finish, then it finishes
+        self.room_state()
         self.guest_scene = scene
         self.door_target = NO_SCENE
+        self.door_flags = 0
         self.room_state()
 
     def command(self, line):
@@ -173,6 +178,7 @@ class Session:
             a3, a4, flag = REAL_DOOR_ARGS
             self.send(DOOR_CHANGE, struct.pack("<5IB3x", room, entry, a3, a4, flag, self.character))
             self.door_target = room
+            self.door_flags = DOOR_SHARED
             self.room_state()
             threading.Timer(DOOR_SECONDS, self.arrive, (room,)).start()
         elif words[0] == "room":

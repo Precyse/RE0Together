@@ -19,8 +19,8 @@ Seen in: <game>: <address/function>, notes file section.
 ## Door or level transition runs through one loader  [state-transition, presentation]
 Shape: a door or trigger asks a loader object to start. The loader plays the transition (animation, fade), counts down, and only then changes the room or level. The room change itself also decides which party members come along.
 Find it: write-watch the loader's target or timer field during a door, then walk up to the function that stores the room and entry.
-Replicate: run on owner, send arguments, at the loader start (not the room change). Party carry follows the engine's own rule.
-Seen in: RE0: sDoorLoad::start 0x552b50, then changeRoom 0x610c60, then partner carry in 0x61e2c0 (RE0_NOTES "Rooms, doors").
+Replicate: run on owner, send arguments, at the loader start (not the room change). Party carry follows the engine's own rule. When both machines play the same transition, hold the faster one at the loader's own finish check (not by freezing the new room) until the other is ready, so both rooms start their AI together; bound it with a short timeout.
+Seen in: RE0: sDoorLoad::start 0x552b50, then changeRoom 0x610c60, then partner carry in 0x61e2c0 (RE0_NOTES "Rooms, doors"); finish check 0x551c70 in the door's last phase, the barrier (RE0_NOTES "Door barrier").
 
 ## Interactions are checked for the controlled character only  [control, state-transition]
 Shape: event scripts test "the controlled player is in trigger zone N and pressed action". Other characters track their zone but are never asked.
@@ -50,7 +50,7 @@ Seen in: RE0: sSubMenu::open 0x5d9030.
 Shape: a single "update all units" function runs each frame; menus stop the world by not running it.
 Find it: follow the vtable of the unit manager; the per-group update loop.
 Replicate: freeze mirror. Skip it while the peer is in a menu.
-Seen in: RE0: sUnit::updateAll 0x727b50; the same skip is the room-entry barrier (`room_gate`: a machine that loads a shared room first holds until the peer's door brings it in too, so both rooms start from their spawn records together). Bound the hold: reading screens and cutscenes hold until closed, plain menus release after a cap (RE0: 20 s, `menu_hold_rule.h`), so an idle partner cannot freeze the other player; the screen kind travels in the menu message.
+Seen in: RE0: sUnit::updateAll 0x727b50. Bound the hold: reading screens and cutscenes hold until closed, plain menus release after a cap (RE0: 20 s, `menu_hold_rule.h`), so an idle partner cannot freeze the other player; the screen kind travels in the menu message.
 
 ## Remote-controlled character driven by pad replay  [control]
 Shape: a character's brain object reads a pad. Swapping the brain type (player versus AI) changes who drives it.

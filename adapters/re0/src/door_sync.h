@@ -40,6 +40,10 @@ void queue(const DoorChange& change, bool bothTravel = false);
 // Game thread: starts `change` here (the door's character must already be the camera character).
 void run(const DoorChange& change);
 
+// Any thread: the door running here is played on both machines (a TEAM door taken together: this machine's, sent while
+// together, or the peer's run here). A join teleport's door is not.
+bool sharedDoor();
+
 // Hooks sDoorLoad::start and the act-on-trigger check and registers the per-frame apply. False when a hook cannot be installed.
 bool enable(NetClient& net);
 

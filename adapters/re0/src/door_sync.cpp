@@ -1,6 +1,7 @@
 #include "door_sync.h"
 
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <mutex>
 #include <optional>
@@ -30,6 +31,7 @@ NetClient* g_net = nullptr;
 DoorStartFunction g_originalDoorStart = nullptr;
 ActOnTriggerFunction g_originalActOnTrigger = nullptr;
 bool g_applying = false;  // game thread only: a peer's door is being run, so the hook passes it through
+std::atomic<bool> g_shared{false};  // the running door is played on both machines
 
 std::mutex g_mutex;
 std::optional<DoorChange> g_pending;  // guarded by g_mutex: the newest peer door not yet run
@@ -87,6 +89,7 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
     const auto focused = static_cast<uint8_t>(character_owner::identify(game::controlled()));
     rememberWithCarried({room, entry, arg3, arg4, flag, focused, {}});
     if (g_applying || !net_pad::active()) {
+        if (!g_applying) g_shared = false;
         g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
         return;
     }
@@ -96,6 +99,7 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
         return;
     }
     split_rooms::beforeLocalDoor(static_cast<uint16_t>(room));
+    g_shared = split_rooms::travelsTogether();  // the peer plays it too (split_rooms::takeOver)
     g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
     send({room, entry, arg3, arg4, flag, focused, {}});
     logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);
@@ -113,6 +117,7 @@ void onTick() {
     bool bothTravel = false;
     const std::optional<DoorChange> change = takePending(bothTravel);
     if (!change || (!bothTravel && split_rooms::takeOver(*change))) return;
+    g_shared = !bothTravel;  // the peer's own door; a join teleport has no door on the peer
     door_sync::run(*change);
 }
 
@@ -159,6 +164,8 @@ void run(const DoorChange& change) {
     debug_stats::count(debug_stats::Counter::DoorsApplied);
     logger::write("door_sync: ran the peer's door to room 0x%x entry 0x%x", change.room, change.entry);
 }
+
+bool sharedDoor() { return g_shared; }
 
 bool enable(NetClient& net) {
     g_net = &net;
