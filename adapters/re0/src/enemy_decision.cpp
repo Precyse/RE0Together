@@ -185,8 +185,14 @@ void reset() {
     g_pendingRoom = scene::current();
 }
 
-void onHitReplayed(uint8_t slot) {
-    if (slot < game::kEnemyPoolSlots) pendingFor(slot).supersede();
+void onOwnerOutcome(uintptr_t enemy, uint8_t slot, bool reacted, const Action& reaction) {
+    if (slot >= game::kEnemyPoolSlots) return;
+    pendingFor(slot).supersede();
+    Action local;
+    if (!reacted || !readAction(enemy, local) || !enemy_follow_rule::atBoundary(local, reaction)) return;
+    setAction(reinterpret_cast<void*>(enemy), enemy_follow_rule::startOf(reaction));
+    logger::write("enemy_decision: slot %u took the owner's reaction (%d,%d), was (%d,%d)", slot, reaction.word[0],
+                  reaction.word[1], local.word[0], local.word[1]);
 }
 
 }  // namespace enemy_decision

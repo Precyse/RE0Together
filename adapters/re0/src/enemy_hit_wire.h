@@ -25,7 +25,10 @@ inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacter
             0,
             0,
             {},
-            vtable};
+            vtable,
+            0,
+            {},
+            {}};
 }
 
 // The owner's HP and random state just before its damage function ran (the HP after it is set once it has run).

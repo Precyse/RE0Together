@@ -73,24 +73,46 @@ void sendApplied(const HitPayload& hit) {
     }
 }
 
-// Runs the hit as the owner: its HP and random state are what every replay starts from, its HP after is the outcome.
+bool readAction(uintptr_t enemy, enemy_follow_rule::Action& out) {
+    return game::readMemory(enemy + game::kEnemyActionOffset, out.word);
+}
+
+// Runs the hit as the owner: its HP and random state are what every replay starts from, its HP after and the reaction
+// it set are the outcome.
 void runAsOwner(uintptr_t enemy, uintptr_t attackerObject, HitPayload& hit, game::HitPoint point,
                 game::HitInfo info) {
     const game::RandomState random = game::readRandomState();
     enemy_hit_wire::stamp(hit, hpOf(enemy), random);
+    enemy_follow_rule::Action before;
+    const bool readBefore = readAction(enemy, before);
     if (!enemy_damage_hook::runDamage(enemy, attackerObject, point, info)) return;
     hit.hpAfter = hpOf(enemy);
+    enemy_follow_rule::Action after;
+    if (readBefore && readAction(enemy, after)) {
+        hit.reacted = enemy_follow_rule::atBoundary(after, before);
+        std::memcpy(hit.reaction, after.word, sizeof(hit.reaction));
+    }
     sendApplied(hit);
     logger::write("enemy_net: hit slot %u applied hp %d -> %d rng %08x%s", hit.slot, hit.hpBefore, hit.hpAfter,
                   random[0], hit.attackerCharacterId == enemy_protocol::kNoAttacker ? " (not a player)" : "");
 }
 
-// Damage no player dealt: there is no attacker to rebuild on the peer, so only its HP outcome travels.
+// The reaction the owner's damage function set (a flinch, a fall, a death) is the one this enemy shows.
+void takeReaction(uintptr_t enemy, const HitPayload& hit) {
+    enemy_follow_rule::Action reaction;
+    std::memcpy(reaction.word, hit.reaction, sizeof(reaction.word));
+    enemy_decision::onOwnerOutcome(enemy, hit.slot, hit.reacted != 0, reaction);
+}
+
+// Damage no player dealt: there is no attacker to rebuild on the peer, so its outcome travels: the HP after and the
+// reaction.
 void applyOutcome(uintptr_t enemy, const HitPayload& hit) {
     const int32_t hpLocal = hpOf(enemy);
-    if (hpLocal <= 0 || hpLocal == hit.hpAfter) return;
-    player_damage::setHp(enemy, hit.hpAfter);
-    logger::write("enemy_net: slot %u hp %d -> %d (owner's damage not by a player)", hit.slot, hpLocal, hit.hpAfter);
+    if (hpLocal <= 0) return;
+    if (hpLocal != hit.hpAfter) player_damage::setHp(enemy, hit.hpAfter);
+    takeReaction(enemy, hit);
+    logger::write("enemy_net: slot %u hp %d -> %d%s (owner's damage not by a player)", hit.slot, hpLocal, hit.hpAfter,
+                  hit.reacted ? ", reaction" : "");
 }
 
 // Runs the owner's hit from the owner's inputs; the local random state is put back afterwards. The owner's outcome is
@@ -111,12 +133,12 @@ void replay(uintptr_t enemy, uintptr_t attackerObject, const HitPayload& hit) {
     const bool ran = enemy_damage_hook::runDamage(enemy, attackerObject, point, info);
     game::writeRandomState(local);
     if (!ran) return;
-    enemy_decision::onHitReplayed(hit.slot);
     const int32_t hpReplayed = hpOf(enemy);
     if (hpReplayed != hit.hpAfter) {
         player_damage::setHp(enemy, hit.hpAfter);
         logger::write("enemy_net: hit slot %u replay diverged: hp %d, owner %d", hit.slot, hpReplayed, hit.hpAfter);
     }
+    takeReaction(enemy, hit);
     logger::write("enemy_net: hit slot %u replayed hp %d -> %d (was %d here)", hit.slot, hit.hpBefore, hit.hpAfter,
                   hpLocal);
 }

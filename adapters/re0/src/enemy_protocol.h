@@ -14,8 +14,8 @@ constexpr uint16_t kMsgEnemyDecision = proto::kFirstGameType + 0x1A;  // owner t
 constexpr uint8_t kNoAttacker = 0xFF;  // HIT_APPLIED for damage no player dealt (attackerCharacterId)
 
 // Payload of HIT_REQUEST and HIT_APPLIED: a HitInfo without its attacker pointer, the hit point relative to the enemy,
-// and (HIT_APPLIED only) what the owner's damage function started from and ended with, so every machine replays the
-// same outcome.
+// and (HIT_APPLIED only) what the owner's damage function started from and ended with (HP, and the reaction it set),
+// so every machine replays the same outcome.
 struct HitPayload {
     uint8_t slot;
     uint8_t attackerCharacterId;  // 0 Billy, 1 Rebecca, kNoAttacker (HIT_APPLIED only: just the HP outcome)
@@ -30,8 +30,11 @@ struct HitPayload {
     int32_t hpAfter;      // HIT_APPLIED: and just after it
     uint32_t random[4];   // HIT_APPLIED: the owner's random state just before the hit (game::RandomState)
     uint32_t vtable;      // the sender's enemy class in that slot: a hit on another class there is dropped
+    uint8_t reacted;      // HIT_APPLIED: the damage function changed the enemy's action (a flinch, a fall, a death)
+    uint8_t reserved[3];
+    int32_t reaction[4];  // HIT_APPLIED: the owner's behaviour record right after the hit
 };
-static_assert(sizeof(HitPayload) == 60);
+static_assert(sizeof(HitPayload) == 80);
 
 // ENEMY_DECISION: the owner's enemy's new record (chosen by its think step or at an action boundary) and the pose it
 // chose it from.

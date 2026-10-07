@@ -17,7 +17,9 @@ static_assert(offsetof(HitPayload, offset) == kOffsetOffset);
 static_assert(offsetof(HitPayload, random) == kRandomOffset);
 constexpr size_t kVtableOffset = kRandomOffset + sizeof(game::RandomState);
 static_assert(offsetof(HitPayload, vtable) == kVtableOffset);
-static_assert(sizeof(HitPayload) == kVtableOffset + sizeof(uint32_t));
+constexpr size_t kReactionOffset = kVtableOffset + sizeof(uint32_t) + sizeof(uint32_t);  // after the flag and padding
+static_assert(offsetof(HitPayload, reaction) == kReactionOffset);
+static_assert(sizeof(HitPayload) == kReactionOffset + 4 * sizeof(int32_t));
 
 int g_failures = 0;
 
@@ -36,7 +38,8 @@ int main() {
     const game::HitInfo info{2, 0x1b, 7, -3, &senderAttacker, 1, {}};
     constexpr uint32_t kZombieVtable = 0xcbdcd8;
     HitPayload sent = enemy_hit_wire::encode(5, 1, 0x25, kZombieVtable, point, senderEnemy, info);
-    check(sent.hpBefore == 0 && sent.hpAfter == 0 && sent.random[0] == 0, "a request carries no outcome");
+    check(sent.hpBefore == 0 && sent.hpAfter == 0 && sent.random[0] == 0 && sent.reacted == 0 && sent.reaction[0] == 0,
+          "a request carries no outcome");
     const game::RandomState random{0x12345678u, 0x9abcdef0u, 0x0badf00du, 0xdeadbeefu};
     enemy_hit_wire::stamp(sent, 94, random);
 

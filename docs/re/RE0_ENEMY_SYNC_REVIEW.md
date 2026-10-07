@@ -123,7 +123,8 @@ two decisions runs natively on both machines.
   the random state, runs the damage function, and sends HIT_APPLIED with both and the HP after it. The other machine
   sets that HP, swaps the random state in, runs the same damage function (same crit, damage, reaction and death),
   restores its random state, and checks the result against the owner's HP after. Damage no player dealt (each
-  machine sees its own copy) is applied by the owner only, and its HP after travels. Whoever receives a request
+  machine sees its own copy) is applied by the owner only, and its HP after and the reaction its damage function set
+  travel; the follower starts that reaction (and a replay's, if it ended on another) through the class's own setAction. Whoever receives a request
   applies it and whoever receives an applied hit replays it. Every hit names the enemy's class; a slot holding
   another class on the receiver is dropped.
 - **Target.** The base classes' selector 0x421b20 and uEnemy2b's 0x439e90 are hooked; on the follower the hooked
@@ -155,7 +156,7 @@ Owner = everything vanilla, plus reporting.
 | Motion, animation, physics | own update | own update | nothing of ours writes them |
 | Position, rotation | own movement | own movement; at a decision more than 40 off, the owner's decision pose (before the action starts); once at follow start | no per-tick writes exist |
 | HP | its damage function | the replayed damage function (from the owner's HP and random state); the owner's HP after when a replay or a non-player hit ends elsewhere; once at follow start | the follower never runs its own damage function on a shared enemy (hits go to the owner) |
-| Death | HP in its damage function, then its own decisions | the same, replayed | no periodic HP writes |
+| Death | HP in its damage function, then its own decisions | the same, replayed; the owner's reaction (a fall, a death) started when its enemy does not show it | no periodic HP writes |
 | Target +0x6b80/84/88 | the selector | the hooked selector, with the owner's character | one call writes it |
 | Global random state 0xe2ccb0 | the game; set from the spawn record for one create, then put back | the same for a create; swapped in for one replayed damage call and put back right after, on the game thread | |
 | Spawn variant +0x6ab0 and spawn HP | the spawn init, from the seeded state or the saved record | the same | both create from the same state and the same records |
@@ -222,11 +223,12 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 5. **The random state swaps** (one replayed damage call, one enemy create) assume nothing outside the game thread uses
    the generator; its 154 call sites were not all checked, and the create's callers (room setup 0x4109d0, script
    opcodes through 0x4109f0) are taken to run on the game thread.
-6. **Non-player damage** (explosions) on the follower shows no reaction, only the owner's HP after (there is no
-   attacker object to replay with).
+6. **Non-player damage** (explosions) is not replayed on the follower (there is no attacker object): its HP after and
+   the reaction the owner's damage function set are applied. A class that sets its reaction only on a later frame,
+   from flags the damage function raised, shows it on the follower only with the owner's next decision.
 7. **Spawn variants** are now the same on both machines, but a first spawn's variant is a fixed function of its
    record (not random per playthrough, as in vanilla).
 8. **Message number 0x011A** (ENEMY_DECISION) could collide with another branch's new message; check on merge.
-9. **Wire changes:** HitPayload 60 bytes, ENEMY_STATE header with a sequence number, ENEMY_DECISION 52 bytes,
+9. **Wire changes:** HitPayload 80 bytes, ENEMY_STATE header with a sequence number, ENEMY_DECISION 52 bytes,
    ROOM_STATE door flags. Both players need the same build (the build check enforces it).
 10. **Nothing here ran in the game.** All of it is static analysis and unit tests; the first live session decides.
