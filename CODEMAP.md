@@ -193,6 +193,8 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | src/init.cpp | start-up: crash dumps, config, the build guard (unsupported exe: toast-only overlay, no hooks), DX12 overlay hooks, the remote body's engine hooks when enabled, input filter, interaction watch, waits for the player to exist, the simulation-thread tick (vehicles), then the launcher link | `initThread`, `simulationTick` |
 | src/build_guard.cpp | compares DS2.exe's PE TimeDateStamp and SizeOfImage with the build the fixed addresses were taken from (Steam 23923251); a mismatch installs no hooks | `build_guard::checkRunningGame`, `identityOf`, `supported`, `kSupported` |
 | src/partner_status.cpp | the PLAYER_STATE status word: health byte and dead/down/loading/driving flags, its texts (unit tested) | `partner_status::encode`, `decode`, `stateText`, `healthPercent` |
+| src/gear_snapshot.cpp | the guest's gained gear as a piece list (slot, kind, category, durability): multiset `minus`, text `format` / `parse` (unit tested) | `gear_snapshot::minus`, `format`, `parse` |
+| src/gear_restore.cpp | adapter.ini `gear_restore=1` (off by default): while a guest, writes what Sam gained since the join (backpack and worn pieces) to `coop/personal_gear.txt` every 30 s on change; at the next settled join gives the snapshot back through `game::addCargo` / `addSlotPiece` minus what Sam already holds | `gear_restore::installEarly`, `tick`, `setEnabled` |
 | src/ds2/local_status.cpp | the local player's health (entity GetHealth through enemy_vitals), dead flag, loading screen and driving, for the status word | `game::localStatus` |
 | src/config.cpp | `coop/adapter.ini` (port 27980, overlay, self_marker, remote_body = the partner's body, on by default; enemy_sync = shared enemies and weapon_sync = weapon sync, both on by default (0 turns them off); weapon_attach_mode) | `loadConfig` |
 | src/documents_redirect.cpp | session saves: with `coop\session\Documents` present, the game's import slots for SHGetKnownFolderPath / SHGetFolderPathW return that folder for Documents (patched from DllMain) | `documents_redirect::install`, `active` |
@@ -327,6 +329,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tests/world_to_screen_test.cpp | projection cases (centre, offsets, behind, large coordinates, edge arrow cases) |
 | tests/build_guard_test.cpp | identity read from a PE header copy, supported/other stamp/other size/truncated/non-PE |
 | tests/partner_status_test.cpp | status word round trip, health percent, state texts |
+| tests/gear_snapshot_test.cpp | multiset difference, format/parse round trip, refused files |
 | tests/load_shape_test.cpp | load stack placement and facing, box size, hull | |
 | tests/fact_wire_test.cpp | FACT_SET round trip, truncated, stray byte, unknown kind, entry limit (no game); `--encode/--decode <file>` modes for the python cross-check | |
 | tests/bt_wire_test.cpp | BT_ENV / CATCHER_EVENT round trip, short and long payloads, unknown kind and flags, region set arithmetic (no game) | |
@@ -345,9 +348,12 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tests/anim_wire_test.cpp | ANIM_STATE / ANIM_EVENT payload with and without timestamp, rejections, pulse detection, held pulses (no game) | |
 | tests/fact_snapshot_test.cpp | FACT_SNAPSHOT chunking, header checks, progress; pending queue release, expiry and overflow (no game) | |
 | tools/ds2/fact_wire_test.py | cross-language FACT_SET check: python encodes and C++ decodes, C++ encodes and python decodes, truncation rejected (no game) | |
-| tools/ds2/savefmt.py | DS2 save container on copies: 32-byte header, XOR key from a Murmur hash of the header seed, index / size table / chunks (chunk 0 text, chunk 1 PNG); `segments` decrypts, `assemble` re-encrypts | `segments`, `assemble`, `key_for` |
+| tools/ds2/savefmt.py | DS2 save container on copies: 32-byte header, XOR key from a Murmur hash of the header seed, index / size table / chunks (chunk 0 text, chunk 1 PNG); `segments` decrypts, `assemble` re-encrypts, `lz4_block` unpacks a chunk (chunks 2-65 are 0x40000-byte LZ4 pages) | `segments`, `assemble`, `key_for`, `lz4_block` |
 | tools/ds2/savefmt_test.py | decrypt then re-encrypt equals the save, PNG in chunk 1 (on the copies in G:/coop-scratch/ds2/savefmt or given files) | |
 | tools/ds2/gear_pair.py | live: copies the session saves, gives Sam a weapon (test command), presses F at a terminal (autosave), copies again and lists the changed saves, for the gear-only diff | |
+| tools/ds2/menu_path.py | sends a comma list of gamectl keys to the game with a screenshot after each (System menu to Load to a save) | |
+| tools/ds2/session_fix.py | makes Continue load a chosen save from the coop session folder: backs the session up, installs the save as autosave4 with its save-time FILETIME (chunk 0) set to now, drops the other autosaves, patches profile.dat's last-save time; `--apply` writes it (game closed) | `build`, `rewrite_time` |
+| tools/ds2/qol_verify.py | live re-check of the qol features: build guard line, health label, edge arrow, death toast shots, F9 resync log | |
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |
 | tests/overlay_test.cpp | real D3D12 swap chain created after the hooks: every Present draws, also after the swap chain is recreated on a new queue and format | |
 

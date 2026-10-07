@@ -8,6 +8,9 @@ import savefmt
 
 DEFAULT_DIR = Path(r"G:\coop-scratch\ds2\savefmt")
 PNG_MAGIC = b"\x89PNG"
+HEADER_CHUNK_BYTES = 0x520
+PAGE_BYTES = 0x40000
+FIRST_PAGE_CHUNK = 2
 EXPECTED_COUNT_OFFSET = 2
 
 
@@ -21,6 +24,12 @@ def check_save(path):
         problems.append("index count differs from the table")
     if not chunks[1].startswith(PNG_MAGIC):
         problems.append("second chunk is not the PNG thumbnail")
+    if len(savefmt.lz4_block(chunks[0])) != HEADER_CHUNK_BYTES:
+        problems.append("chunk 0 does not unpack to 0x520 bytes")
+    for number, chunk in enumerate(chunks[FIRST_PAGE_CHUNK:], FIRST_PAGE_CHUNK):
+        if len(savefmt.lz4_block(chunk)) != PAGE_BYTES:
+            problems.append(f"chunk {number} does not unpack to one 0x40000-byte page")
+            break
     return problems
 
 

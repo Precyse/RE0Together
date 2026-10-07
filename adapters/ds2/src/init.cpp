@@ -23,6 +23,7 @@
 #include "ds2/cargo_defer.h"
 #include "ds2/player_system_guard.h"
 #include "equip_sync.h"
+#include "gear_restore.h"
 #include "ds2/loading_screen.h"
 #include "ds2/cutscene.h"
 #include "ds2/cutscene_log.h"
@@ -115,6 +116,8 @@ DWORD WINAPI initThread(LPVOID) {
     cargo_defer::installEarly();
     equip_sync::installEarly();
     player_system_guard::installEarly();
+    gear_restore::setEnabled(config.gearRestore);
+    gear_restore::installEarly();
     if (config.ordersDiagnostics) orders_diag::installEarly();
     world_pause::installEarly();
     loading_screen::installEarly();

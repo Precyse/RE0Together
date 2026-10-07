@@ -17,6 +17,7 @@ struct Config {
     bool cutsceneSync = false;  // cutscenes watched together: the host holds a story cutscene until the guests are ready
     bool weaponSync = true;    // weapons: the partner's body holds and fires the weapon the partner has drawn (adapter.ini weapon_sync=0 turns it off)
     uint8_t weaponAttachMode = 1;  // SetParent mode of the body's weapon (1 = the engine's own), to try other attach variants live
+    bool gearRestore = false;  // a guest keeps its own gained gear across sessions (coop\personal_gear.txt, src/gear_restore.h); off until checked live
     bool remoteBody = true;    // the partner's body: a second player entity that walks and rides (adapter.ini remote_body=0 turns it off)
 };
 

@@ -63,6 +63,8 @@ Config loadConfig() {
             config.cutsceneSync = value == "1";
         } else if (key == "weapon_sync") {
             config.weaponSync = value != "0";
+        } else if (key == "gear_restore") {
+            config.gearRestore = value == "1";
         } else if (key == "weapon_attach_mode") {
             config.weaponAttachMode = static_cast<uint8_t>(std::strtoul(value.c_str(), nullptr, kDecimalBase));
         } else if (key == "remote_body") {
