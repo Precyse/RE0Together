@@ -99,6 +99,13 @@ void onLocalToggleKey() {
     command_log::decide("party toggle not sent: link busy");
 }
 
+void setByScript(PartyMode mode) {
+    if (!character_owner::isHost() || g_mode == mode) return;
+    setMode(mode);
+    command_log::decide("party mode set by a room script: %s", modeName(mode));
+    announce();
+}
+
 void onFrame(const GameFrame& frame) {
     if (frame.type == proto::kMsgPartyRequest) {
         if (!frame.payload.empty()) return;

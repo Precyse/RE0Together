@@ -20,9 +20,17 @@ struct DoorChange {
     uint32_t arg4;
     uint32_t flag;
     uint8_t characterId;
-    uint8_t reserved[3];
+    uint8_t flags;  // kDoorAlone
+    uint8_t reserved[2];
 };
 static_assert(sizeof(DoorChange) == 24);
+
+// A room script left the partner behind (TraceOff) before this door: only the character going through travels, whatever
+// the party mode (a lift that takes one character).
+constexpr uint8_t kDoorAlone = 1;
+
+// Game thread: while set, a local door comes from a room script's door op that left the partner behind (event_sync).
+void setScriptDoorAlone(bool alone);
 
 // Net thread: queues a peer's door for the game thread.
 void onFrame(const GameFrame& frame);

@@ -78,7 +78,7 @@ void onTick() {
 namespace split_rooms {
 
 bool takeOver(const DoorChange& change) {
-    if (travelsTogether()) return false;  // both characters go through the door
+    if (travelsTogether() && (change.flags & door_sync::kDoorAlone) == 0) return false;  // both go through the door
     g_pending = change;
     return true;
 }

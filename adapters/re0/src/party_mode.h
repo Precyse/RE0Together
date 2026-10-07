@@ -13,6 +13,10 @@ control_rule::PartyMode current();
 // The local player pressed the party key (net thread). The host flips at once, a guest sends PARTY_REQUEST.
 void onLocalToggleKey();
 
+// Host, game thread: a room script let the partner stop (TraceOff) or start following (TraceOn); the party mode
+// becomes what the script wants and is announced. Ignored on a guest (the host runs the same script).
+void setByScript(control_rule::PartyMode mode);
+
 // Net thread: PARTY_REQUEST (host) and PARTY_MODE (guest).
 void onFrame(const GameFrame& frame);
 

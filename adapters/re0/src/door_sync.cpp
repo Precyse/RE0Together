@@ -32,6 +32,7 @@ DoorStartFunction g_originalDoorStart = nullptr;
 ActOnTriggerFunction g_originalActOnTrigger = nullptr;
 bool g_applying = false;  // game thread only: a peer's door is being run, so the hook passes it through
 std::atomic<bool> g_shared{false};  // the running door is played on both machines
+bool g_scriptAlone = false;         // game thread only: a room script's door op that left the partner behind runs
 
 std::mutex g_mutex;
 std::optional<DoorChange> g_pending;  // guarded by g_mutex: the newest peer door not yet run
@@ -87,7 +88,8 @@ void send(const DoorChange& change) {
 void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t entry, uint32_t arg3, uint32_t arg4,
                                 uint32_t flag) {
     const auto focused = static_cast<uint8_t>(character_owner::identify(game::controlled()));
-    rememberWithCarried({room, entry, arg3, arg4, flag, focused, {}});
+    const uint8_t flags = g_scriptAlone ? door_sync::kDoorAlone : 0;
+    rememberWithCarried({room, entry, arg3, arg4, flag, focused, flags, {}});
     if (g_applying || !net_pad::active()) {
         if (!g_applying) g_shared = false;
         g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
@@ -99,10 +101,10 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
         return;
     }
     split_rooms::beforeLocalDoor(static_cast<uint16_t>(room));
-    g_shared = split_rooms::travelsTogether();  // the peer plays it too (split_rooms::takeOver)
+    g_shared = split_rooms::travelsTogether() && flags == 0;  // the peer plays it too (split_rooms::takeOver)
     g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
-    send({room, entry, arg3, arg4, flag, focused, {}});
-    logger::write("door_sync: door to room 0x%x entry 0x%x sent", room, entry);
+    send({room, entry, arg3, arg4, flag, focused, flags, {}});
+    logger::write("door_sync: door to room 0x%x entry 0x%x sent%s", room, entry, flags ? ", partner left behind" : "");
 }
 
 std::optional<DoorChange> takePending(bool& bothTravel) {
@@ -166,6 +168,8 @@ void run(const DoorChange& change) {
 }
 
 bool sharedDoor() { return g_shared; }
+
+void setScriptDoorAlone(bool alone) { g_scriptAlone = alone; }
 
 bool enable(NetClient& net) {
     g_net = &net;
