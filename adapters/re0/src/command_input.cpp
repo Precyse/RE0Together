@@ -13,11 +13,9 @@
 #include "party_mode.h"
 #include "resync.h"
 #include "virtual_keys.h"
-#include "window_focus.h"
 
 namespace {
 
-constexpr int kKeyDownMask = 0x8000;
 constexpr UINT kExtendedScanPrefix = 0xE000;
 constexpr uint8_t kDikExtendedBit = 0x80;
 constexpr UINT kScanCodeMask = 0xFF;
@@ -35,7 +33,9 @@ uint8_t dikOf(int virtualKey) {
     return static_cast<uint8_t>((scan & kScanCodeMask) | (extended ? kDikExtendedBit : 0));
 }
 
-bool keyDown(int virtualKey) { return (GetAsyncKeyState(virtualKey) & kKeyDownMask) != 0; }
+// As the game's own keyboard read last saw it: the game opens its keyboard foreground-only, so a key typed into
+// another window never counts.
+bool keyDown(int virtualKey) { return virtual_keys::realKeyDown(dikOf(virtualKey)); }
 
 // True on the poll where the command goes down (key or controller button). The edge state follows the raw input on
 // every poll, so it cannot stick.
@@ -57,13 +57,9 @@ void publishFocus() {
 // keep the game's own meaning.
 bool commandsOwned() { return net_pad::active() && game_state::playing(); }
 
-// Logs the press; true when it should become a request (game window in front, a peer connected, in gameplay).
-bool accept(const char* name, int virtualKey, bool foreground, bool owned) {
-    command_log::press(name, virtualKey, foreground);
-    if (!foreground) {
-        command_log::decide("%s ignored: window not foreground", name);
-        return false;
-    }
+// Logs the press; true when it should become a request (a peer connected, in gameplay).
+bool accept(const char* name, const char* source, bool owned) {
+    command_log::press(name, source);
     if (!net_pad::active()) {
         command_log::decide("%s ignored: no peer connected", name);
         return false;
@@ -90,12 +86,11 @@ void onNetTick() {
     const bool owned = commandsOwned();
     virtual_keys::setHiddenKeys(owned ? g_commandScancodes : virtual_keys::HiddenKeys{});
     pad_commands::setHidden(owned);
-    const bool foreground = gameIsForeground();
-    const pad_commands::Buttons pad = pad_commands::pressed();
-    const bool trace = pressedEdge(keyDown(g_keys.trace) || pad.trace, g_traceWasDown);
-    if (trace && accept("party", g_keys.trace, foreground, owned)) party_mode::onLocalToggleKey();
+    const bool traceKey = keyDown(g_keys.trace);
+    const bool trace = pressedEdge(traceKey || pad_commands::pressed().trace, g_traceWasDown);
+    if (trace && accept("party", traceKey ? "keyboard" : "controller", owned)) party_mode::onLocalToggleKey();
     const bool resyncKey = pressedEdge(keyDown(kResyncKey), g_resyncWasDown);
-    if (resyncKey && accept("resync", kResyncKey, foreground, owned)) resync::request("resync key");
+    if (resyncKey && accept("resync", "keyboard", owned)) resync::request("resync key");
 }
 
 }  // namespace command_input
