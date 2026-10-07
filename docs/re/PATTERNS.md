@@ -152,6 +152,7 @@ Shape: a game reading the keyboard through raw input (WM_INPUT + GetRawInputData
 Find it: the game's imports (GetRawInputData, RegisterRawInputDevices).
 Replicate: redirect the game's own GetRawInputData import (not a global hook) and, while the menu is open, turn its key presses into an unknown key (make code and virtual key 0xFF); let releases through so no game key stays held. Read the menu's own keys with GetAsyncKeyState while the game window is in front.
 Seen in: DS2: `input_filter.cpp`, `cargo_menu.cpp`, `import_patch.cpp` (shared with the save redirect).
+Traps: RE0: "GetAsyncKeyState while the game window is in front" refused a guest's controller presses all session (another window had the focus; the game reads XInput regardless of focus, so the player kept playing). Read a command from the same input the game reads: the game's own keyboard device read (its cooperative level decides focus) and the controller whenever the game polls it (`command_input.cpp`, docs/RE0_NOTES.md "Command input source").
 
 ## When there is no veto point, watch the owner field and undo  [authority, world-state]
 Shape: some player actions (DS2 cargo pickup) send no "is it allowed?" query the adapter can refuse, but the object they act on keeps its identity and only changes an owner field.

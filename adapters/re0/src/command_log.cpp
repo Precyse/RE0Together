@@ -14,8 +14,8 @@ constexpr size_t kTextCapacity = 160;
 
 namespace command_log {
 
-void press(const char* name, int virtualKey, bool foreground) {
-    logger::writeUnlessRepeated("command: %s pressed (VK 0x%02x) foreground=%d", name, virtualKey, foreground);
+void press(const char* name, const char* source) {
+    logger::writeUnlessRepeated("command: %s pressed (%s)", name, source);
     debug_stats::setLastCommand(name);
 }
 

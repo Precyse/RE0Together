@@ -4,8 +4,8 @@
 // to adapter.log and the panel. Any thread. Identical lines repeated within a second are logged once.
 namespace command_log {
 
-// A detected local key press; also the panel's "last command".
-void press(const char* name, int virtualKey, bool foreground);
+// A detected local press from `source` ("keyboard" or "controller"); also the panel's "last command".
+void press(const char* name, const char* source);
 
 // A request sent, received or routed, or any other step worth a log line.
 void note(const char* format, ...);

@@ -17,6 +17,10 @@ void tap(uint8_t scancode);
 // While muted the game reads only virtual keys.
 void setRealKeyboardMuted(bool muted);
 
+// True when the game's last keyboard read reported `scancode` (DIK) down, before hiding and muting. The game's keyboard
+// is foreground-only (SetCooperativeLevel 0x16 at 0x807691), so this is false while another window has the focus.
+bool realKeyDown(uint8_t scancode);
+
 // The game never sees these keys (DIK scan codes; 0 = none) while they are set.
 using HiddenKeys = std::array<uint8_t, 2>;
 void setHiddenKeys(const HiddenKeys& scancodes);
