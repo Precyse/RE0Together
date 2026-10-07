@@ -1,4 +1,4 @@
-// Checks the equip sync rule (no game). Exit 0 when every check passes.
+// Checks the equip sync rules (no game). Exit 0 when every check passes.
 #include <cstdio>
 #include <cstring>
 
@@ -18,9 +18,39 @@ void setSlot(uint8_t (&block)[equip_rule::kBlockSize], uint32_t slot) {
     std::memcpy(block + equip_rule::kEquippedOffset, &slot, sizeof(slot));
 }
 
+constexpr int32_t kHandgun = 3;
+constexpr int32_t kShotgun = 5;
+constexpr int32_t kKnife = 0xe;
+
+void checkPlans() {
+    using equip_rule::kNoWeapon;
+    using equip_rule::planLoad;
+    auto plan = planLoad(kHandgun, kShotgun, kNoWeapon);
+    check(plan.releaseHeld && plan.requestNext && !plan.releaseRequested && plan.requested == kShotgun,
+          "a new weapon releases the held set and requests its own");
+    plan = planLoad(kHandgun, kHandgun, kNoWeapon);
+    check(!plan.releaseHeld && !plan.requestNext && !plan.releaseRequested && plan.requested == kNoWeapon,
+          "the same weapon loads nothing");
+    plan = planLoad(kHandgun, kNoWeapon, kNoWeapon);
+    check(plan.releaseHeld && !plan.requestNext && plan.requested == kNoWeapon, "unequipping only releases");
+    plan = planLoad(kHandgun, kShotgun, kShotgun);
+    check(!plan.requestNext && !plan.releaseRequested && plan.requested == kShotgun,
+          "a weapon already requested is not requested twice");
+    plan = planLoad(kHandgun, kKnife, kShotgun);
+    check(plan.releaseRequested && plan.requestNext && plan.requested == kKnife,
+          "a newer slot replaces the request still loading");
+    plan = planLoad(kHandgun, kHandgun, kShotgun);
+    check(plan.releaseRequested && !plan.requestNext && plan.requested == kNoWeapon,
+          "switching back drops the request still loading");
+    plan = planLoad(kShotgun, kKnife, kShotgun);
+    check(!plan.releaseRequested && plan.releaseHeld && plan.requested == kKnife,
+          "a request that became the held weapon is released as the held one only");
+}
+
 }  // namespace
 
 int main() {
+    checkPlans();
     uint8_t before[equip_rule::kBlockSize] = {};
     uint8_t after[equip_rule::kBlockSize] = {};
     setSlot(before, 4);

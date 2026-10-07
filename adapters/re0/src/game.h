@@ -62,6 +62,16 @@ constexpr uintptr_t kPlayerSetWeaponTypeFunction = 0x50d870;  // thiscall(player
 constexpr uintptr_t kPlayerWeaponAttachFunction = 0x50d670;   // thiscall(player)
 constexpr uintptr_t kPlayerWeaponAimFunction = 0x516630;      // thiscall(player)
 constexpr uintptr_t kBlockEquippedOffset = 0x3c;              // u32 equipped slot in the block the player function returns
+constexpr uintptr_t kPlayerWeaponTypeOffset = 0x6950;         // i32 held weapon type (0x50f740 reads it)
+
+// Weapon resource sets (the weapon's arc: model and the player's motion lists for it) in sGameChara, keyed by unit
+// kind and weapon type. Before the equip step the menu close (0x5d8040) releases the set of the weapon a character
+// leaves, requests the one it takes with the character's room record (+0xff4), and waits until every request loaded;
+// setWeaponType only looks the motion lists up (sResource flag 0x80), so equipping first leaves the bind pose.
+constexpr int32_t kWeaponUnitKind = 0x74;
+constexpr uintptr_t kReleaseSetFunction = 0x520850;     // thiscall(sGameChara, kind, type) ret 8
+constexpr uintptr_t kRequestSetFunction = 0x5203d0;     // thiscall(sGameChara, kind, type, record) ret 0xc
+constexpr uintptr_t kRequestsLoadedFunction = 0x520240; // thiscall(sGameChara) -> bool; each call drives the loads
 
 // sItemPut: the dropped floor items, 28 records; a live record points at its spawned uItem
 constexpr uintptr_t kItemPutGlobal = 0xdce0a8;  // sItemPut*
