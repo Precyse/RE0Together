@@ -86,6 +86,32 @@ void hostTick() {
     for (const Camp& camp : camps) g_known.push_back(camp.phase);
 }
 
+// Writes the phase into the camp object and every member (no gauge, no engine alert call) and runs the camp's update.
+void writePhase(const Camp& camp, int32_t phase) {
+    ds2::field<int32_t>(camp.object, kObjectPhase) = phase;
+    const int32_t members = ds2::field<int32_t>(camp.object, kObjectMemberCount);
+    const uintptr_t array = decima::readPointer(camp.object + kObjectMembers);
+    for (int32_t i = 0; array && i < members && i < kMaxMembers; ++i) {
+        const uintptr_t member = decima::readPointer(array + i * sizeof(uintptr_t));
+        if (!member) continue;
+        ds2::field<int32_t>(member, kMemberPhase) = phase;
+        ds2::field<float>(member, kMemberGauge) = 0.0f;
+    }
+    const uintptr_t vtable = decima::readPointer(camp.object);
+    const uintptr_t update = vtable ? decima::readPointer(vtable + kUpdateSlot * sizeof(uintptr_t)) : 0;
+    if (update) reinterpret_cast<void (*)(uintptr_t, float)>(update)(camp.object, 0.0f);
+}
+
+// False when the engine faulted.
+bool writePhaseGuarded(const Camp& camp, int32_t phase) {
+    __try {
+        writePhase(camp, phase);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 void setPhase(const Camp& camp, int32_t phase) {
     alignas(16) uint8_t uuid[camp_wire::kUuidSize];
     std::memcpy(uuid, camp.phase.uuid, sizeof(uuid));
@@ -94,18 +120,7 @@ void setPhase(const Camp& camp, int32_t phase) {
             reinterpret_cast<void (*)(const void*)>(ds2::at(kForceAlert))(uuid);
             return;
         }
-        ds2::field<int32_t>(camp.object, kObjectPhase) = phase;
-        const int32_t members = ds2::field<int32_t>(camp.object, kObjectMemberCount);
-        const uintptr_t array = decima::readPointer(camp.object + kObjectMembers);
-        for (int32_t i = 0; array && i < members && i < kMaxMembers; ++i) {
-            const uintptr_t member = decima::readPointer(array + i * sizeof(uintptr_t));
-            if (!member) continue;
-            ds2::field<int32_t>(member, kMemberPhase) = phase;
-            ds2::field<float>(member, kMemberGauge) = 0.0f;
-        }
-        const uintptr_t vtable = decima::readPointer(camp.object);
-        const uintptr_t update = vtable ? decima::readPointer(vtable + kUpdateSlot * sizeof(uintptr_t)) : 0;
-        if (update) reinterpret_cast<void (*)(uintptr_t, float)>(update)(camp.object, 0.0f);
+        writePhase(camp, phase);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logger::write("camp_alert: the engine faulted setting a camp to phase %d", phase);
     }
@@ -152,8 +167,10 @@ void installEarly() { sim_tick::add(&tick, "camp alert", sim_tick::Gate::Gamepla
 
 void alertAllCamps() {
     const std::vector<Camp> camps = readCamps();
-    for (const Camp& camp : camps) setPhase(camp, camp_wire::kPhaseAlert);
-    logger::write("camp_alert: %zu camps forced to alert", camps.size());
+    for (const Camp& camp : camps) {
+        if (!writePhaseGuarded(camp, camp_wire::kPhaseAlert)) logger::write("camp_alert: the engine faulted setting a camp to alert");
+    }
+    logger::write("camp_alert: %zu camps written to the alert phase", camps.size());
 }
 
 }  // namespace camp_alert
