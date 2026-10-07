@@ -47,10 +47,10 @@ void aimOwnClass(uintptr_t enemy, uintptr_t target) {
     game::writeMemory(enemy + game::kEnemyTargetFlatDistanceOffset, flat);
 }
 
-// After a selector ran: on a puppet the owner's character replaces its choice.
+// After a selector ran: on the machine following the owner, the owner's character replaces its choice.
 void followOwner(void* enemy, void (*aim)(uintptr_t enemy, uintptr_t target)) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
-    const uint8_t id = enemy_state::puppetTarget(self);
+    const uint8_t id = enemy_state::ownerTarget(self);
     if (id == enemy_protocol::kNoTarget) return;
     const uintptr_t target = character_owner::find(static_cast<character_owner::Character>(id));
     if (target) aim(self, target);

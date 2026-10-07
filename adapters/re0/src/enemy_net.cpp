@@ -10,6 +10,7 @@
 #include "enemy_hit_wire.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
+#include "enemy_state.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
@@ -96,6 +97,7 @@ void replay(uintptr_t enemy, uintptr_t attackerObject, const HitPayload& hit) {
     const bool ran = enemy_damage_hook::runDamage(enemy, attackerObject, point, info);
     writeRandom(local);
     if (!ran) return;
+    enemy_state::onHitReplayed(hit.slot);
     logger::write("enemy_net: hit slot %u replayed hp %d -> %d (was %d here)", hit.slot, hit.hpBefore, hpOf(enemy),
                   hpLocal);
 }

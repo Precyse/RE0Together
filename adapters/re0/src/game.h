@@ -184,15 +184,14 @@ constexpr int kEnemyPoolSlots = 37;
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
 constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, a, b}, written by the class setAction
 constexpr size_t kEnemySetActionSlot = 63;        // vtable slot (+0xfc): setAction(state, id, a, b), thiscall ret 0x10
-// The slot-63 implementations and their stack argument counts (the ret size tells: 0x10 = 4, 8 = 2, 4 = 1). A thunk or
-// call with the wrong count would unbalance the stack, so only these are ever patched or called.
+// The slot-63 implementations and their stack argument counts (the ret size tells: 0x10 = 4, 8 = 2, 4 = 1). A
+// call with the wrong count would unbalance the stack, so only these are ever called.
 struct SetActionFunction {
     uintptr_t function;
     size_t argc;
 };
 constexpr std::array<SetActionFunction, 7> kEnemySetActionFunctions = {
     {{0x4cc670, 4}, {0x44d820, 4}, {0x4650f0, 4}, {0x480c20, 4}, {0x4bbc70, 4}, {0x48ac80, 2}, {0x4b17f0, 1}}};
-constexpr size_t kEnemyUpdateSlot = 41;  // vtable slot (+0xa4): per-frame update, thiscall with no arguments
 // The target an enemy chases: the 15 classes sharing update 0x420f70 choose it in 0x421b20 (thiscall, no arguments;
 // the nearer of sPlayer's controlled and partner characters, the controlled one on a tie or when flags 6 / 2 are set).
 constexpr uintptr_t kEnemyBaseTargetSelectFunction = 0x421b20;
@@ -205,10 +204,6 @@ constexpr uintptr_t kEnemyTargetFlatDistanceOffset = kEnemyTargetHeightOffset;  
 constexpr uintptr_t kEnemyTargetDistanceOffset = 0x6b88;  // f32 distance to the target
 constexpr uintptr_t kEnemyDistanceControlledOffset = 0x67cc;  // f32 distance to sPlayer's controlled character
 constexpr uintptr_t kEnemyDistancePartnerOffset = 0x67d0;     // f32 distance to sPlayer's partner
-// The AI's decision step of the 15 classes sharing update 0x420f70: their state-2 handler (vtable slot 67, thiscall, no
-// arguments), a chain of transition checks that end in setAction calls, then a per-action table call. It does not move
-// or animate the enemy.
-constexpr uintptr_t kEnemyThinkFunction = 0x41db20;
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 // The game's one random generator (xorshift128 0x684d90 on four words at 0xe2ccb0). An enemy's damage function rolls
 // it for the critical hit before applying (slot 76 0x4cbdb0 -> randRange 0x6600c0; class 0x438b00 via 0x660080), so

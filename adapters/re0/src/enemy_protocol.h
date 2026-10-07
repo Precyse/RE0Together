@@ -27,8 +27,10 @@ struct HitPayload {
 };
 static_assert(sizeof(HitPayload) == 52);
 
-// ENEMY_STATE: one count byte, then `count` entries.
-constexpr size_t kStateHeaderSize = 1;
+// ENEMY_STATE: a count byte and the sender's loaded scene (a byte, like a hit's room), then `count` entries.
+constexpr size_t kStateHeaderSize = 2;
+constexpr size_t kStateCountByte = 0;
+constexpr size_t kStateRoomByte = 1;
 constexpr uint8_t kNoTarget = 0xFF;
 struct EnemyEntry {
     uint8_t slot;

@@ -1,18 +1,21 @@
 #pragma once
 #include <cstdint>
 
-// Pure rule of the enemy AI replication (no game access, unit tested). An enemy's behaviour is the record
-// {state, action id, a, b} the class's setAction (vtable slot 63) stores at +0x67a4; the class's own handlers turn a
-// new record into a motion. On a puppet the enemy's own setAction calls are refused, so the owner's record is applied
-// as soon as it differs; the cooldown only covers handlers that write the state word directly (they bypass setAction).
+// Pure rule of the owner's decisions on the other machine (no game access, unit tested). Both machines run an enemy's
+// own AI. An enemy's behaviour is the record {state, action id, a, b} its class's setAction (vtable slot 63) stores at
+// +0x67a4; the class's handlers turn a new record into a motion. When the owner's record changes, the other machine's
+// enemy is given it through setAction, unless its own AI reaches the same action id within kGraceMs. An unchanged
+// owner record is never applied again, so the enemy's own action code is never restarted or held.
 namespace enemy_action_rule {
 
-constexpr int64_t kCooldownMs = 100;  // minimum time between two applications for one enemy
-constexpr int64_t kNeverMs = -1000000000;
+constexpr int64_t kGraceMs = 100;
 constexpr int kWords = 4;
+constexpr int kIdWord = 1;
 
 struct Action {
     int32_t word[kWords] = {};
+
+    int32_t id() const { return word[kIdWord]; }
 
     bool operator==(const Action& other) const {
         for (int i = 0; i < kWords; ++i) {
@@ -23,20 +26,28 @@ struct Action {
     bool operator!=(const Action& other) const { return !(*this == other); }
 };
 
-class Sync {
+class Cue {
 public:
-    void reset() { *this = Sync(); }
-
-    // The owner's record from a snapshot.
-    void observeOwner(const Action& owner) {
+    // The owner's record from a snapshot. A new one (the first one included) becomes pending; a change while one is
+    // pending replaces it and keeps the first change's time, so a busy owner is followed without waiting longer.
+    void observeOwner(const Action& owner, int64_t nowMs) {
+        if (hasOwner_ && owner == owner_) return;
         owner_ = owner;
         hasOwner_ = true;
+        if (pending_) return;
+        pending_ = true;
+        sinceMs_ = nowMs;
     }
 
-    // True when the puppet (whose own record is `local`) should now be given the owner's.
+    // True when the enemy, whose record is `local`, should now be given owner(). Each change is applied at most once.
     bool due(const Action& local, int64_t nowMs) {
-        if (!hasOwner_ || local == owner_ || nowMs - lastApplyMs_ < kCooldownMs) return false;
-        lastApplyMs_ = nowMs;
+        if (!pending_) return false;
+        if (local.id() == owner_.id()) {
+            pending_ = false;
+            return false;
+        }
+        if (nowMs - sinceMs_ < kGraceMs) return false;
+        pending_ = false;
         return true;
     }
 
@@ -45,7 +56,8 @@ public:
 private:
     Action owner_;
     bool hasOwner_ = false;
-    int64_t lastApplyMs_ = kNeverMs;
+    bool pending_ = false;
+    int64_t sinceMs_ = 0;
 };
 
 }  // namespace enemy_action_rule
