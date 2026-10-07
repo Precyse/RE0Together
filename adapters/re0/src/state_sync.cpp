@@ -178,6 +178,7 @@ void onFrame(const GameFrame& frame) {
     if (frame.type == state_sync::kMsgPlayerState) debug_stats::count(debug_stats::Counter::PlayerStateReceived);
     logRemoteState(frame);
     state_correction::onFrame(frame);
+    partner_hud::onFrame(frame);
 }
 
 void tick(NetClient& net) {
