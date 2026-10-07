@@ -20,6 +20,9 @@ bool leadsPeer();
 // the owner, the enemy is dead there, or the owner named none).
 uint8_t ownerTarget(uintptr_t enemy);
 
+// Game thread: a new enemy was created in `slot`; it is aligned with the owner's again on the next snapshot.
+void forgetSlot(uint8_t slot);
+
 // Net thread: stores the latest ENEMY_STATE from the owner for the game thread; a late one is dropped.
 void onFrame(const GameFrame& frame);
 

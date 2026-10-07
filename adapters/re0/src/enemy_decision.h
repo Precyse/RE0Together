@@ -29,6 +29,9 @@ void seed(uint8_t slot, const enemy_follow_rule::Decision& decision);
 // Game thread: this machine stopped following (room change, owner change, peer gone): waiting decisions are dropped.
 void reset();
 
+// Game thread: a new enemy was created in `slot`; decisions waiting for its previous occupant are dropped.
+void forgetSlot(uint8_t slot);
+
 // Game thread: the owner's damage outcome on `slot` was applied here (a replayed hit, or damage no player dealt). Its
 // reaction replaces a decision the owner made before the hit; when the owner's damage function set one (`reacted`) and
 // this enemy does not show the same action, the owner's reaction is started through the class's own setAction.

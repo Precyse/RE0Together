@@ -80,6 +80,18 @@ void testSeedOnlyBeforeAnyDecision() {
     check(waiting.take(out) && out.action.word[1] == 8, "nor a decision still waiting");
 }
 
+void testNewEnemyInTheSlotForgetsTheOldOne() {
+    rule::PendingDecision pending;
+    pending.offer(20, decision(5));
+    pending.forget();
+    rule::Decision out;
+    check(!pending.take(out), "a decision for the slot's previous enemy never reaches the new one");
+    pending.seed(decision(3));
+    check(pending.take(out) && out.action.word[1] == 3, "the new enemy is seeded from the owner's record again");
+    pending.offer(21, decision(7));
+    check(pending.take(out) && out.action.word[1] == 7, "the owner's next decisions apply");
+}
+
 void testOwnerSilenceGivesTheAiBack() {
     check(rule::thinksForOwner(true, 0), "owner heard just now");
     check(rule::thinksForOwner(true, rule::kOwnerSilentTicks - 1), "a short gap is still the owner's");
@@ -123,6 +135,7 @@ int main() {
     testLateOrRepeatedDecisionIsIgnored();
     testHitSupersedesEarlierDecision();
     testSeedOnlyBeforeAnyDecision();
+    testNewEnemyInTheSlotForgetsTheOldOne();
     testOwnerSilenceGivesTheAiBack();
     testSeedableRecords();
     testActionBoundary();
