@@ -48,13 +48,22 @@ void testMayFire() {
 }
 
 void testOpRoles() {
-    check(rule::roleOf(rule::op::kMes) == OpRole::FirerOnly, "messages are the firer's");
-    check(rule::roleOf(rule::op::kMesSel) == OpRole::FirerOnly, "selections are the firer's");
-    check(rule::roleOf(rule::op::kDoor) == OpRole::FirerOnly, "doors go through door_sync");
-    check(rule::roleOf(rule::op::kItemGet) == OpRole::FirerOnly, "items go through inventory sync");
-    check(rule::roleOf(rule::op::kItemPut) == OpRole::FirerOnly, "floor items go through floor_items_sync");
-    check(rule::roleOf(rule::op::kEventExec) == OpRole::FirerOnly, "a fork arrives as its own start");
-    check(rule::roleOf(rule::op::kCharChange) == OpRole::FirerOnly, "the camera character stays camera_parity's");
+    check(rule::roleOf(rule::op::kMes) == OpRole::LeaderOnly, "messages are the subject player's");
+    check(rule::roleOf(rule::op::kMesSel) == OpRole::LeaderOnly, "selections are the subject player's");
+    check(rule::roleOf(rule::op::kDoor) == OpRole::LeaderOnly, "doors go through door_sync");
+    check(rule::roleOf(rule::op::kItemGet) == OpRole::LeaderOnly, "items go through inventory sync");
+    check(rule::roleOf(rule::op::kItemPut) == OpRole::LeaderOnly, "floor items go through floor_items_sync");
+    check(rule::roleOf(rule::op::kEventExec) == OpRole::LeaderOnly, "a fork arrives as its own start");
+    check(rule::roleOf(rule::op::kCharChange2) == OpRole::Switch, "a character switch moves the lead, not the camera");
+    check(rule::roleOf(rule::op::kTraceOff) == OpRole::Follow, "TraceOff sets the party, not the follow flag");
+    check(rule::roleOf(rule::op::kSub) == OpRole::LeaderOnly, "an item selection is the subject player's");
+    constexpr uint16_t kUpCutStart = 86;
+    constexpr uint16_t kUpCutProc = 88;
+    check(rule::roleOf(kUpCutStart) == OpRole::LeaderOnly, "a close-up is the subject player's");
+    check(rule::roleOf(kUpCutProc) == OpRole::LeaderOnly, "a close-up's choice is the subject player's");
+    check(rule::isDoor(rule::op::kDoor) && rule::isDoor(rule::op::kUpCutDoor), "door ops");
+    check(!rule::isDoor(rule::op::kMes), "not a door");
+    check(!rule::followsAfter(rule::op::kTraceOff) && rule::followsAfter(rule::op::kTraceOn), "trace ops");
     check(rule::roleOf(rule::op::kWait) == OpRole::Wait, "wait");
     check(rule::roleOf(rule::op::kFadeInWait) == OpRole::Wait, "fade wait");
     constexpr uint16_t kFlagSet = 36;
@@ -72,18 +81,24 @@ void testOpRoles() {
 }
 
 void testFollow() {
-    check(rule::beforeOp(false, OpRole::Run) == Follow::WaitForFirer, "never ahead of the firer");
-    check(rule::beforeOp(false, OpRole::Wait) == Follow::WaitForFirer, "not even a wait");
+    check(rule::beforeOp(false, OpRole::Run) == Follow::WaitForLeader, "never ahead of the leader");
+    check(rule::beforeOp(false, OpRole::Wait) == Follow::WaitForLeader, "not even a wait");
     check(rule::beforeOp(true, OpRole::Run) == Follow::Run, "a finished op runs here");
-    check(rule::beforeOp(true, OpRole::FirerOnly) == Follow::Skip, "a firer-only op is skipped");
-    check(rule::beforeOp(true, OpRole::Wait) == Follow::Skip, "a wait the firer finished is skipped");
+    check(rule::beforeOp(true, OpRole::LeaderOnly) == Follow::Skip, "a leader-only op is skipped");
+    check(rule::beforeOp(true, OpRole::Wait) == Follow::Skip, "a wait the leader finished is skipped");
     check(rule::finished(0x31c, 0x320, rule::kResultNext), "moved on");
     check(rule::finished(0x31c, 0x31e, rule::kResultYield), "moved and yielded (frame)");
     check(rule::finished(0x31c, 0x31c, rule::kResultEnd), "exit");
     check(!rule::finished(0x31c, 0x31c, rule::kResultYield), "still waiting");
-    check(rule::afterRun(true, 0) == rule::AfterRun::TakeFirersBranch, "finished here: the firer's branch");
+    check(rule::afterRun(true, 0) == rule::AfterRun::TakeLeadersBranch, "finished here: the leader's branch");
     check(rule::afterRun(false, rule::kStallMs - 1) == rule::AfterRun::KeepRunning, "still running: keep at it");
-    check(rule::afterRun(false, rule::kStallMs) == rule::AfterRun::Force, "stalled: end it where the firer did");
+    check(rule::afterRun(false, rule::kStallMs) == rule::AfterRun::Force, "stalled: end it where the leader did");
+}
+
+void testLead() {
+    check(rule::leadsHere(true, true), "the subject's owner leads");
+    check(!rule::leadsHere(false, true), "the other machine follows once the peer has the thread");
+    check(rule::leadsHere(false, false), "nobody follows: the machine that has it leads");
 }
 
 void testStartFate() {
@@ -108,6 +123,7 @@ int main() {
     testMayFire();
     testOpRoles();
     testFollow();
+    testLead();
     testStartFate();
     testWire();
     if (g_failures == 0) std::printf("event_rule_test: all checks passed\n");

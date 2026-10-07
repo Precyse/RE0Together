@@ -198,6 +198,12 @@ constexpr uintptr_t kTriggerEntryParam2Offset = 0xc;
 // next frame, 2 = the thread ends.
 constexpr uintptr_t kScriptDispatchFunction = 0x57ce80;
 constexpr uintptr_t kEventScriptUpdateFunction = 0x5835a0;    // thiscall, no args: runs every thread once per frame
+// Opcode table rows {handler, signature, name}; the operand bytes of a signature come from a cdecl sizer.
+constexpr uintptr_t kOpcodeTable = 0xcd57d8;
+constexpr uintptr_t kOpcodeRowSize = 12;
+constexpr uintptr_t kOpcodeSignatureOffset = 4;
+constexpr uintptr_t kOperandSizeFunction = 0x57cc10;  // cdecl int(const char* signature)
+constexpr uint32_t kOpcodeSize = 2;                   // the big-endian opcode itself
 // Return addresses of the startThreadOnce callers: the Main phase's trigger scan 0x568270, the inventory's item use
 // 0x568080, and its "can this item be used here" probe 0x567e90 (runs the thread's first ops, then ends it).
 constexpr uintptr_t kTriggerScanStartReturn = 0x568530;

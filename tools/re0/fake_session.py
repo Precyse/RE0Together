@@ -44,8 +44,8 @@ PLAYER_STATE, OWNERSHIP, PARTY_MODE = 0x0100, 0x0102, 0x010A
 MENU_STATE, SAVE_SLOT, RESYNC_REQUEST, FLOOR_SNAPSHOT = 0x0105, 0x010F, 0x0114, 0x0115
 PROTO_PEER_DOWN = 0x0004
 EVENT_START, EVENT_STEPS = 0x0130, 0x0131
-EVENT_START_FORMAT = "<IHHHHBBBx"  # key, scene, serial, trigger index, pc, type, character, kind
-EVENT_STEP_FORMAT = "<HHHBx"  # serial, from pc, to pc, result
+EVENT_START_FORMAT = "<IHHHHBBBB"  # key, scene, serial, trigger index, pc, type, subject character, kind, flags
+EVENT_STEP_FORMAT = "<HHHBx"  # serial, from pc, to pc, result, flags
 STEP_RESULTS = ("yield", "next", "end", "killed")
 SESSION_SLOT = 0
 IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
@@ -62,6 +62,7 @@ POLL_S = 0.1
 NO_SCENE = 0xFFFF
 ROOM_STATE_FORMAT = "<HBBHBx"  # scene, partner in room, enemy claim, door target, door flags
 DOOR_SHARED, DOOR_READY = 1, 2
+DOOR_ALONE = 1  # DOOR_CHANGE flags: a room script left the partner behind
 
 
 def encode(msg_type, slot, payload=b"", flags=FLAG_RELIABLE):
@@ -154,13 +155,15 @@ class Session:
                           f"door_target={door_target:#04x} door_flags={door_flags}", flush=True)
                 self.host_scene = scene
             elif msg_type == DOOR_CHANGE:
-                room, entry, a3, a4, flag, character = struct.unpack("<5IB3x", payload)
-                print(f"host door: room {room:#x} entry {entry} a3 {a3} a4 {a4} flag {flag:#x} character {character}",
-                      flush=True)
+                room, entry, a3, a4, flag, character, door_flags = struct.unpack("<5IBB2x", payload)
+                print(f"host door: room {room:#x} entry {entry} a3 {a3} a4 {a4} flag {flag:#x} character {character}"
+                      f"{' (partner left behind)' if door_flags & DOOR_ALONE else ''}", flush=True)
             elif msg_type == EVENT_START:
-                key, scene, serial, index, pc, kind_type, character, kind = struct.unpack(EVENT_START_FORMAT, payload)
+                key, scene, serial, index, pc, kind_type, character, kind, flags = struct.unpack(EVENT_START_FORMAT,
+                                                                                                 payload)
                 print(f"event start: serial {serial} key {key:#04x} trigger {index} type {kind_type:#04x} "
-                      f"{'shared' if kind else 'local'} pc {pc:#x} scene {scene:#04x} character {character}", flush=True)
+                      f"{'shared' if kind else 'local'} pc {pc:#x} scene {scene:#04x} subject {character} "
+                      f"flags {flags}", flush=True)
             elif msg_type == EVENT_STEPS:
                 (count,) = struct.unpack_from("<H", payload)
                 steps = [struct.unpack_from(EVENT_STEP_FORMAT, payload, 4 + i * 8) for i in range(count)]
