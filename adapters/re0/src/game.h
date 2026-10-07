@@ -173,6 +173,36 @@ constexpr uintptr_t kSceneEntrySpotsOffset = 0x9aa4;
 constexpr uintptr_t kSceneEntrySpotSize = 0x18;  // {f32 x, y, z, then 3 f32 of facing}
 // thiscall on sSceneInfo (record, player) ret 8: moves the player into the record (leave/enter callbacks included).
 constexpr uintptr_t kSceneAssignFunction = 0x619e30;
+
+// Room event scripts (docs/re/RE0_EVENT_SYNC.md). sEventScript runs the loaded room's script (nativePC/event/*.bes2):
+// 8 thread slots of 0x88 bytes, each running big-endian u16 opcodes from the table at 0xcd57d8.
+constexpr uintptr_t kEventScriptGlobal = 0xdcbebc;  // sEventScript*
+constexpr uintptr_t kScriptThreadsOffset = 0x114;
+constexpr uintptr_t kScriptThreadSize = 0x88;
+constexpr size_t kScriptThreadCount = 8;
+constexpr uintptr_t kThreadActiveOffset = 0;        // u8, 1 while the slot runs
+constexpr uintptr_t kThreadKeyOffset = 4;           // u32 script key (the scene id for room triggers)
+constexpr uintptr_t kThreadCodeOffset = 8;          // code base (offsets in the file are from it)
+constexpr uintptr_t kThreadPcOffset = 0xc;          // u32 offset of the next opcode
+constexpr uintptr_t kThreadIndexOffset = 0x34;      // u16 trigger index, kForkThreadIndex for a forked thread
+constexpr uintptr_t kThreadSubStateOffset = 0x38;   // u32 progress of the current opcode, 0 when it starts
+constexpr uint16_t kForkThreadIndex = 0xffff;
+// thiscall (key, trigger index, condition type) ret 0xc: starts the trigger's thread, or returns 0 when one of
+// (key, index) already runs or the script is not loaded.
+constexpr uintptr_t kStartTriggerThreadFunction = 0x57f800;
+constexpr uintptr_t kStartForkThreadFunction = 0x57f7e0;      // thiscall (key, pc) ret 8, EventExec's start
+constexpr uintptr_t kFindTriggerThreadFunction = 0x57f840;    // thiscall (key, index) ret 8 -> running thread or 0
+constexpr uintptr_t kTriggerEntryFunction = 0x57fd70;         // thiscall (key, index) ret 8 -> {type, code, p1, p2}
+constexpr uintptr_t kTriggerEntryParam2Offset = 0xc;
+// thiscall on the interpreter (thread) ret 4: runs the thread's next opcode; 1 = run the next one now, 0 = yield to the
+// next frame, 2 = the thread ends.
+constexpr uintptr_t kScriptDispatchFunction = 0x57ce80;
+constexpr uintptr_t kEventScriptUpdateFunction = 0x5835a0;    // thiscall, no args: runs every thread once per frame
+// Return addresses of the startThreadOnce callers: the Main phase's trigger scan 0x568270, the inventory's item use
+// 0x568080, and its "can this item be used here" probe 0x567e90 (runs the thread's first ops, then ends it).
+constexpr uintptr_t kTriggerScanStartReturn = 0x568530;
+constexpr uintptr_t kItemUseStartReturn = 0x568193;
+constexpr uintptr_t kItemProbeStartReturn = 0x567fa1;
 // thiscall on sSceneInfo (record) ret 4: unloads a record nobody is in.
 constexpr uintptr_t kSceneReleaseFunction = 0x61dde0;
 // thiscall on [0xdcc010] (scene id or -1, unit handle) ret 8: the per-room unit registry the carry updates.

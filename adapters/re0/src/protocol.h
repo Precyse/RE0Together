@@ -40,6 +40,8 @@ constexpr uint16_t kMsgSaveSlot = kFirstGameType + 15;         // 0x010F, host t
 constexpr uint16_t kMsgCharacterPlace = kFirstGameType + 0x13;  // 0x0113, to the owner, reliable: event_place::CharacterPlace
 constexpr uint16_t kMsgResyncRequest = kFirstGameType + 0x14;  // 0x0114, host to guest, reliable: empty (ask for a new join snapshot)
 constexpr uint16_t kMsgFloorSnapshot = kFirstGameType + 0x15;  // 0x0115, host to guest, reliable: floor_snapshot payload
+constexpr uint16_t kMsgEventStart = kFirstGameType + 0x30;  // 0x0130, firer to all, reliable: event_sync::EventStart
+constexpr uint16_t kMsgEventSteps = kFirstGameType + 0x31;  // 0x0131, firer to all, reliable: event_sync steps
 
 constexpr size_t kWelcomeSize = 7;
 constexpr size_t kPeerUpFixedSize = 10;
