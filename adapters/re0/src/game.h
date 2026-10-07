@@ -117,6 +117,7 @@ static_assert(sizeof(ItemPutRecord) == 0x24);
 constexpr uintptr_t kGameInfoStageOffset = 0x2a80;
 constexpr uintptr_t kGameInfoRoomOffset = 0x2a84;
 constexpr uintptr_t kDoorLoadStateOffset = 0x44;
+constexpr uintptr_t kDoorLoadRoomOffset = 0x20;  // u32 room (scene id) the running door leads to, stored by start
 constexpr uintptr_t kRoomControlGlobal = 0xdcbeb4;         // sRoomControl*
 constexpr uintptr_t kRoomPhaseCurrentOffset = 0xb8 + 0x14;  // phase manager +0x14: room_phase::Phase
 // sRoomControl::requestPhase: thiscall (phase), ret 4. The vanilla V requests Change (9), which zaps to the partner

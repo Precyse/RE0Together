@@ -44,6 +44,7 @@ add_library(re0_adapter SHARED
     src/game_state.cpp
     src/door_travel.cpp
     src/door_sync.cpp
+    src/room_gate.cpp
     src/event_place.cpp
     src/pad_commands.cpp
     src/scene.cpp
@@ -119,6 +120,8 @@ add_executable(enemy_action_rule_test tests/enemy_action_rule_test.cpp)
 
 add_executable(enemy_follow_rule_test tests/enemy_follow_rule_test.cpp)
 
+add_executable(room_gate_rule_test tests/room_gate_rule_test.cpp)
+
 
 add_executable(session_rule_test tests/session_rule_test.cpp)
 
@@ -136,6 +139,6 @@ add_executable(enemy_hit_wire_test tests/enemy_hit_wire_test.cpp)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test equip_rule_test spot_rule_test enemy_action_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test jitter_target_test pad_buffer_test enemy_hit_wire_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test equip_rule_test spot_rule_test enemy_action_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test jitter_target_test pad_buffer_test enemy_hit_wire_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

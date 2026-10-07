@@ -87,6 +87,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"save writes", format(L"%u", total(s, Counter::SaveWrites)), false});
     lines.push_back({L"world frozen", gauge(s, Gauge::WorldFrozen) ? L"yes (waiting for partner)" : L"no", false});
     lines.push_back({L"menu freezes", format(L"%u", total(s, Counter::MenuFreezes)), false});
+    lines.push_back({L"room entry holds", format(L"%u", total(s, Counter::RoomGateHolds)), false});
     lines.push_back({L"inventory sent", format(L"%u", total(s, Counter::InventorySent)), false});
     lines.push_back({L"inventory applied", format(L"%u", total(s, Counter::InventoryApplied)), false});
     lines.push_back({L"inventory exchanges", format(L"%u", total(s, Counter::InventoryExchanges)), false});

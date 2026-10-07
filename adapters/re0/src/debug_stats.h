@@ -34,6 +34,7 @@ enum class Counter : size_t {
     DoorsApplied,
     DoorsSuppressed,
     MenuFreezes,
+    RoomGateHolds,
     InventorySent,
     InventoryApplied,
     InventoryExchanges,

@@ -16,6 +16,7 @@
 #include "net_pad.h"
 #include "protocol.h"
 #include "resync.h"
+#include "room_gate.h"
 #include "scene.h"
 #include "split_rooms.h"
 #include "state_correction.h"
@@ -48,20 +49,41 @@ bool g_ranEnemies = false;  // game thread: the last logged enemy authority
 
 bool partnerInRoom() { return game_state::inCurrentRoom(game::partner()); }
 
-void sendRoomState() {
-    const door_travel::RoomState state{scene::current(), partnerInRoom(), g_enemyClaim};
-    g_lastSend = Clock::now();
+// The scene the running door leads to, scene::kNone when no door runs.
+uint16_t doorTarget() {
+    const uintptr_t doorLoad = game::readPointer(game::kDoorLoadGlobal);
+    uint32_t room = 0;
+    if (!game_state::doorActive() || !doorLoad || !game::readMemory(doorLoad + game::kDoorLoadRoomOffset, room)) {
+        return scene::kNone;
+    }
+    return static_cast<uint16_t>(room);
+}
+
+void send(const door_travel::RoomState& state) {
     g_net->send(proto::kMsgRoomState, true, proto::kSlotAll, proto::bytesOf(state));
 }
 
+door_travel::RoomState currentState() {
+    return {scene::current(), partnerInRoom(), g_enemyClaim, doorTarget(), {}};
+}
+
+void sendRoomState() {
+    g_lastSend = Clock::now();
+    send(currentState());
+}
+
 // Level-triggered from the game tick and the net thread, so the start is seen even when the game stops ticking.
-// Whether the partner comes along is the game's own follow logic (party_mode keeps its follow flag).
+// Whether the partner comes along is the game's own follow logic (party_mode keeps its follow flag). The peer learns
+// where the door leads at once: the game does not tick again until the room is in place (room_gate).
 void pollDoorStart() {
     if (!game_state::doorActive() || g_doorWasActive.exchange(true)) return;
     uint8_t follow = 0;
     const uintptr_t sPlayer = game::readPointer(game::kPlayerGlobal);
     const bool follows = sPlayer && game::readMemory(sPlayer + game::kPlayerFollowOffset, follow) && follow;
-    logger::write("door_travel: door started, partner %s", partnerInRoom() && follows ? "follows" : "stays");
+    const door_travel::RoomState state = currentState();
+    send(state);
+    logger::write("door_travel: door to scene 0x%02x started, partner %s", state.doorTarget,
+                  partnerInRoom() && follows ? "follows" : "stays");
 }
 
 void onArrival() {
@@ -71,6 +93,7 @@ void onArrival() {
     state_correction::requestForcedCheck();
     floor_items_sync::onArrival();
     logger::write("door_travel: arrived in scene 0x%02x%s", scene::current(), g_enemyClaim ? ", first here" : "");
+    room_gate::onArrival(scene::current());
 }
 
 void forgetPeer() {
@@ -78,17 +101,11 @@ void forgetPeer() {
     g_hasPeer = false;
 }
 
-bool peerReport(door_travel::RoomState& out) {
-    std::lock_guard lock(g_mutex);
-    out = g_peer;
-    return g_hasPeer;
-}
-
 // Both sides see their two characters together, yet the peer is in another room than us.
 void checkDesync(Clock::time_point now) {
     door_travel::RoomState peer;
-    const bool mismatch = peerReport(peer) && peer.partnerInRoom && partnerInRoom() && !game_state::doorActive() &&
-                          door_travel::peerPlace() == PeerPlace::Elsewhere;
+    const bool mismatch = door_travel::peerReport(peer) && peer.partnerInRoom && partnerInRoom() &&
+                          !game_state::doorActive() && door_travel::peerPlace() == PeerPlace::Elsewhere;
     if (!mismatch) {
         g_mismatching = false;
         g_desyncReported = false;
@@ -151,6 +168,12 @@ void onFrame(const GameFrame& frame) {
     std::lock_guard lock(g_mutex);
     std::memcpy(&g_peer, frame.payload.data(), sizeof(g_peer));
     g_hasPeer = true;
+}
+
+bool peerReport(RoomState& out) {
+    std::lock_guard lock(g_mutex);
+    out = g_peer;
+    return g_hasPeer;
 }
 
 PeerPlace peerPlace() {
