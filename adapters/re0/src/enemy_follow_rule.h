@@ -2,8 +2,9 @@
 #include <cstdint>
 
 // Pure rules of an enemy the peer owns and this machine also runs (no game access, unit tested). Its own update moves
-// and animates it; what the owner decides reaches it only at the engine's own decision point (the base family's think
-// step, enemy_think.cpp), where it may also be put back on the owner's pose between two actions.
+// and animates it; what the owner decides reaches it only at the engine's own decision points (enemy_decision.cpp: the
+// base family's think step, and the action boundary of the classes sharing its executor), where it may also be put
+// back on the owner's pose between two actions.
 namespace enemy_follow_rule {
 
 constexpr int kActionWords = 4;
@@ -26,8 +27,9 @@ struct Action {
     bool operator!=(const Action& other) const { return !(*this == other); }
 };
 
-// What the owner's think step chose, and the pose it chose it from.
+// What the owner's enemy chose, and the pose it chose it from.
 struct Decision {
+    uint32_t vtable = 0;  // the owner's enemy class: a record only means something to the same class
     Action action;
     float pos[3] = {};
     float quat[4] = {};
@@ -53,6 +55,27 @@ constexpr int32_t kThinkState = 2;
 constexpr bool seedable(const Action& action) {
     return action.word[0] != kSetupState && action.word[0] != kThinkState;
 }
+
+// An action boundary: the executor changed the record's state or action id since its last commit (+0x67b4 holds the
+// record as the previous frame ended).
+constexpr bool atBoundary(const Action& record, const Action& previous) {
+    return record.word[0] != previous.word[0] || record.word[1] != previous.word[1];
+}
+
+enum class AtBoundary { Agree, Apply, OtherState };
+
+// At the follower's own action boundary: its AI chose `local`, the owner's newest choice is `owner`. Only the action
+// within the same state is taken from the owner; a change of state (death, setup, the class's own phases) stays with
+// the class, which reaches it from the replayed hits and its own conditions.
+constexpr AtBoundary atOwnBoundary(const Action& local, const Action& owner) {
+    if (local.word[0] != owner.word[0]) return AtBoundary::OtherState;
+    return local.word[1] == owner.word[1] ? AtBoundary::Agree : AtBoundary::Apply;
+}
+
+// The owner's action from its first step. The third word counts an action's steps (live probe: (1,8,0,1) then
+// (1,8,1,1) with motions 0x016, 0x01a), and the owner's record is read after its update may have run step 0, so the
+// follower starts it the way the engine does, with that word 0.
+constexpr Action startOf(const Action& owner) { return {{owner.word[0], owner.word[1], 0, owner.word[3]}}; }
 
 // The owner's newest decision for one enemy that its think step has not applied yet.
 class PendingDecision {

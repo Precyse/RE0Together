@@ -37,7 +37,7 @@ add_library(re0_adapter SHARED
     src/character_owner.cpp
     src/inventory_sync.cpp
     src/equip_refresh.cpp
-    src/enemy_think.cpp
+    src/enemy_decision.cpp
     src/floor_items_sync.cpp
     src/floor_pending.cpp
     src/pickup_guard.cpp

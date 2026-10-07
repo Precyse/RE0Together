@@ -11,7 +11,7 @@
 #include "enemy_hit_wire.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
-#include "enemy_think.h"
+#include "enemy_decision.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
@@ -70,7 +70,8 @@ bool encode(uintptr_t enemy, uint8_t attackerId, const game::HitPoint& point, co
     uint8_t room = 0;
     float enemyPos[3];
     if (slot == enemy_registry::kNoSlot || !wireRoom(room) || !positionOf(enemy, enemyPos)) return false;
-    out = enemy_hit_wire::encode(static_cast<uint8_t>(slot), attackerId, room, point, enemyPos, info);
+    out = enemy_hit_wire::encode(static_cast<uint8_t>(slot), attackerId, room,
+                                 static_cast<uint32_t>(game::readPointer(enemy)), point, enemyPos, info);
     return true;
 }
 
@@ -118,7 +119,7 @@ void replay(uintptr_t enemy, uintptr_t attackerObject, const HitPayload& hit) {
     const bool ran = enemy_damage_hook::runDamage(enemy, attackerObject, point, info);
     writeRandom(local);
     if (!ran) return;
-    enemy_think::onHitReplayed(hit.slot);
+    enemy_decision::onHitReplayed(hit.slot);
     const int32_t hpReplayed = hpOf(enemy);
     if (hpReplayed != hit.hpAfter) {
         player_damage::setHp(enemy, hit.hpAfter);
@@ -145,8 +146,8 @@ void applyHit(const Hit& event) {
         return;
     }
     const uintptr_t enemy = enemy_registry::enemyAt(hit.slot);
-    if (!enemy) {
-        logger::write("enemy_net: hit dropped (slot %u: no enemy)", hit.slot);
+    if (!enemy || game::readPointer(enemy) != hit.vtable) {
+        logger::write("enemy_net: hit dropped (slot %u: %s)", hit.slot, enemy ? "another class here" : "no enemy");
         return;
     }
     if (hit.attackerCharacterId == enemy_protocol::kNoAttacker) return applyOutcome(enemy, hit);
@@ -166,10 +167,11 @@ void applyHit(const Hit& event) {
 void applyDecision(const enemy_protocol::Decision& wire) {
     if (wire.room != scene::current() || wire.slot >= game::kEnemyPoolSlots) return;
     enemy_follow_rule::Decision decision;
+    decision.vtable = wire.vtable;
     std::memcpy(decision.action.word, wire.action, sizeof(wire.action));
     std::memcpy(decision.pos, wire.pos, sizeof(wire.pos));
     std::memcpy(decision.quat, wire.quat, sizeof(wire.quat));
-    enemy_think::offer(wire.slot, wire.seq, decision);
+    enemy_decision::offer(wire.slot, wire.seq, decision);
 }
 
 struct Apply {
@@ -219,6 +221,7 @@ void sendDecision(uint8_t slot, const enemy_follow_rule::Decision& decision) {
     if (!wireRoom(wire.room)) return;
     wire.slot = slot;
     wire.seq = g_decisionSeq++;
+    wire.vtable = decision.vtable;
     std::memcpy(wire.action, decision.action.word, sizeof(wire.action));
     std::memcpy(wire.pos, decision.pos, sizeof(wire.pos));
     std::memcpy(wire.quat, decision.quat, sizeof(wire.quat));

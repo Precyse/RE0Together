@@ -29,19 +29,22 @@ struct HitPayload {
     int32_t hpBefore;     // HIT_APPLIED: the owner's enemy HP just before the hit
     int32_t hpAfter;      // HIT_APPLIED: and just after it
     uint32_t random[4];   // HIT_APPLIED: the owner's random state just before the hit (game::RandomState)
+    uint32_t vtable;      // the sender's enemy class in that slot: a hit on another class there is dropped
 };
-static_assert(sizeof(HitPayload) == 56);
+static_assert(sizeof(HitPayload) == 60);
 
-// ENEMY_DECISION: the base-family enemy's new record, chosen by the owner's think step, and the pose it chose from.
+// ENEMY_DECISION: the owner's enemy's new record (chosen by its think step or at an action boundary) and the pose it
+// chose it from.
 struct Decision {
     uint8_t slot;
     uint8_t room;
     uint16_t seq;  // per sender, increasing (wraps)
+    uint32_t vtable;  // the owner's enemy class: a record only means something to the same class
     int32_t action[4];
     float pos[3];
     float quat[4];
 };
-static_assert(sizeof(Decision) == 48);
+static_assert(sizeof(Decision) == 52);
 
 // ENEMY_STATE: header, then `count` entries.
 struct StateHeader {

@@ -10,7 +10,7 @@ namespace enemy_hit_wire {
 
 // The hit point travels relative to the enemy: the damage function only gets its address, and its head/body test
 // compares the point's height with the enemy's, so each machine rebuilds it around its own enemy.
-inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacterId, uint8_t room,
+inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacterId, uint8_t room, uint32_t vtable,
                                          const game::HitPoint& point, const float (&enemyPos)[3],
                                          const game::HitInfo& info) {
     return {slot,
@@ -24,7 +24,8 @@ inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacter
             info.b,
             0,
             0,
-            {}};
+            {},
+            vtable};
 }
 
 // The owner's HP and random state just before its damage function ran (the HP after it is set once it has run).

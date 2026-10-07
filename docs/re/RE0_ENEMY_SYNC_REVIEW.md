@@ -97,54 +97,65 @@ one screen misses on the other.
 correction was a second writer: a per-tick position write on top of the enemy's own movement, and a setAction cue
 racing the local AI's own choice. Rejected for the same reason as Build 158, only milder.
 
-**(d) Chosen: one decision maker, one outcome maker, native execution.** The engine itself separates "decide" from
-"execute" in the base family, and that seam is where the owner's decisions enter:
+**(d) Chosen: one decision maker, one outcome maker, native execution.** The owner's enemies decide; the follower takes
+each decision at the point where its own engine decides, through the class's own action setter; everything between
+two decisions runs natively on both machines.
 
-- **Decisions (base family, 15 vtables: uEnemy10..1a, 50, 51, 5a, 5b, 6a, 6b).** These classes decide only in their
-  think step 0x41db20 (state 2): transition checks and a per-action think call that end in setAction 0x4cc670 (a plain
-  store of the record; their code has no direct writes of it). The owner's think step runs untouched and every record
-  it chooses goes to the peer with the pose it chose it from (ENEMY_DECISION, reliable). On the follower the think
-  step also runs (its flags, timers and per-action call), the setAction calls it makes are dropped, and the owner's
-  newest decision is stored through the real setAction at that same point. Execution, movement, animation and hit
-  reactions stay native. If the pose there is more than 40 units off, it is set to the owner's decision pose before
-  the action starts (between two actions; normal play stays under it).
-- **The other 23 vtables** decide inside their action code (no seam). They run natively on both machines; their
-  outcomes (hits, deaths) are exact and their start is shared (barrier). Their decisions are not synced; finding a
-  seam per class is open work.
+- **Base family (15 vtables: uEnemy10..1a, 50, 51, 5a, 5b, 6a, 6b): the think step.** These classes decide only in
+  their think step 0x41db20 (state 2): transition checks and a per-action think call that end in setAction 0x4cc670
+  (a plain store of the record; their code has no direct writes of it). The owner's think step runs untouched and
+  every record it chooses goes to the peer with the pose it chose it from (ENEMY_DECISION, reliable). On the follower
+  the think step also runs (its flags, timers and per-action call), the setAction calls it makes are dropped, and the
+  owner's newest decision is stored through the real setAction at that same point.
+- **Boundary classes (9 vtables: uEnemy2a, 2c, 31, 37, 38, 3a, 3c, 3e, 43): the action boundary.** Their action code
+  decides by direct writes, but their executor (slot 66) has the base family's shape: it runs per-action tables by
+  action id and ends in the commit 0x4cc6a0, which copies the record to +0x67b4. A record that differs from +0x67b4
+  on entry (state or action id) is an action boundary. The owner reports the record at each boundary; at the
+  follower's own boundary, if the owner's newest action is in the same state and differs, it replaces the one the
+  local AI just chose, from the action's first step (step word 0), through the class's setAction (the plain store),
+  after the commit, so the next frame starts it as a new action. A change of state (death, setup, the class's own
+  phases) stays with the class.
+- **Pose at a decision.** If the enemy is more than 40 units from the pose the owner decided from, it is set there
+  before the action starts (between two actions; normal play stays under it).
+- **The other 14 vtables run natively**, with hits, deaths and the room start shared (section 7 lists why each one).
 - **Hits and deaths: the room's enemy owner decides, everyone replays exactly.** A hit landing on the owner's screen
   runs there; one landing on the other screen goes to the owner as HIT_REQUEST. The owner records the enemy's HP and
   the random state, runs the damage function, and sends HIT_APPLIED with both and the HP after it. The other machine
   sets that HP, swaps the random state in, runs the same damage function (same crit, damage, reaction and death),
   restores its random state, and checks the result against the owner's HP after. Damage no player dealt (each
   machine sees its own copy) is applied by the owner only, and its HP after travels. Whoever receives a request
-  applies it and whoever receives an applied hit replays it.
+  applies it and whoever receives an applied hit replays it. Every hit names the enemy's class; a slot holding
+  another class on the receiver is dropped.
 - **Target.** The base classes' selector 0x421b20 and uEnemy2b's 0x439e90 are hooked; on the follower the hooked
   selector's result is the owner's character, so the selector call stays the only writer of the target fields.
-- **Door barrier** (the user's idea). When one player takes a door in TEAM, both machines play that door and load
-  the room inside it; the room starts when the door finishes (room phase DoorLoad -> Main). The door's own finish
-  check 0x551c70 is hooked: the faster machine reports its door ready and its door waits on its last frame until the
+- **Door barrier** (the user's idea). When one player takes a door in TEAM, both machines play that door and load the
+  room inside it; the room starts when the door finishes (room phase DoorLoad -> Main). The door's own finish check
+  0x551c70 is hooked: the faster machine reports its door ready and its door waits on its last frame until the
   peer's same door is ready, so both rooms start their enemies from the spawn records together. Nothing visible is
   frozen; "Waiting for partner" shows only past 2 s; released after 5 s at most, or when the peer turns away or the
   link drops. A door one player takes alone, or a partner heading into the same room on its own, never waits.
 - **Following mid-room** (walking into a room the peer already runs, or after a barrier timeout). On the first
-  snapshot each enemy takes the owner's pose (if more than 40 off) and HP once, and its think step the owner's current
-  record until the first decision arrives.
+  snapshot each enemy takes the owner's pose (if more than 40 off) and HP once, and the owner's current record stands
+  in as its next decision until the owner's first one arrives.
 
 ## 4. Who writes what
 
 Follower = the machine sharing the room with the peer that runs it (`enemy_state::followsOwner`: following, and an
-owner snapshot within the last 15 of its own ticks, 500 ms at 30 fps; a world held on both sides is not silence). Owner = everything vanilla, plus reporting.
+owner snapshot within the last 15 of its own ticks, 500 ms at 30 fps; a world held on both sides is not silence).
+Owner = everything vanilla, plus reporting.
 
 | Field | Owner | Follower | Why nothing else writes it |
 |---|---|---|---|
 | Record +0x67a4..+0x67b0, base family | its own setAction calls | setAction calls outside think (executor, damage reaction, scripts) as in vanilla; inside think only the owner's decision, through the real setAction | the follower's think-step setAction calls are dropped; the base family has no direct record writes |
-| Record, other 23 vtables | own code | own code | nothing of ours writes it |
+| Record, boundary classes | own code | own code, except at its own action boundary, where the owner's action of the same state replaces the local choice once, after the commit and before anything reads it (next frame) | the replacement is the only write of ours, at the engine's boundary; a state change is never replaced |
+| Record, other 14 vtables | own code | own code | nothing of ours writes it |
 | Motion, animation, physics | own update | own update | nothing of ours writes them |
-| Position, rotation | own movement | own movement; at a decision more than 40 off, the owner's decision pose (before the action starts); once at follow start | the per-tick blend and correction are deleted |
+| Position, rotation | own movement | own movement; at a decision more than 40 off, the owner's decision pose (before the action starts); once at follow start | no per-tick writes exist |
 | HP | its damage function | the replayed damage function (from the owner's HP and random state); the owner's HP after when a replay or a non-player hit ends elsewhere; once at follow start | the follower never runs its own damage function on a shared enemy (hits go to the owner) |
-| Death | HP in its damage function, then think | the same, replayed | no periodic HP writes |
+| Death | HP in its damage function, then its own decisions | the same, replayed | no periodic HP writes |
 | Target +0x6b80/84/88 | the selector | the hooked selector, with the owner's character | one call writes it |
 | Global random state 0xe2ccb0 | the game | swapped in for one replayed damage call and put back right after, on the game thread | |
+| Door finish (room start) | the door's own check | the door's own check, deferred while the peer's same door is not ready | the hook only ever answers "not yet" to a check that passed |
 
 The owner's hits and decisions reach the follower through one ordered queue (enemy_net), so a decision the owner
 made before a hit is never applied after that hit's reaction (the replay drops it).
@@ -153,22 +164,23 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 
 | Condition | Handling | Test |
 |---|---|---|
-| Room entry together, either first | the faster machine's door waits at its finish until the peer's is ready; it then owns the room (first in) | room_gate_rule_test |
-| Room entry together, simultaneous | each reports ready before it checks, so neither waits for long | room_gate_rule_test |
-| Doors taken alone, split mode, partner heading the same way | never waits: only a door both machines play holds | room_gate_rule_test |
-| Follower thinks before the owner's first decision | its think waits (applies nothing) up to 15 ticks from following start, then decides itself | enemy_follow_rule_test |
-| Load gap 0-5 s | barrier, invisible under 2 s; past 5 s the first plays on and the late one aligns on its first snapshot | room_gate_rule_test |
-| Peer disconnects mid-room | no snapshots: after 15 ticks (500 ms) the follower's think decides again; the owner keeps running | enemy_follow_rule_test |
-| Door taken while enemies act | a room change resets the follow state and waiting decisions; events of the old room are dropped by their room byte | enemy_follow_rule_test, code |
+| Door together, either machine faster | the faster machine's door waits at its finish until the peer's is ready; it is first in and owns the room | room_gate_rule_test |
+| Door together, both ready at once | each reports ready before it checks, so neither waits | room_gate_rule_test |
+| Door taken alone, split mode, partner heading the same way | never waits: only a door both machines play holds | room_gate_rule_test |
+| Load gap 0-5 s | barrier, no toast under 2 s; past 5 s the first plays on and the late one aligns on its first snapshot | room_gate_rule_test |
+| Follower decides before the owner's first decision | its decision point waits (applies nothing) up to 15 ticks from following start, then decides itself | enemy_follow_rule_test |
+| Peer disconnects mid-room | no snapshots: after 15 ticks the follower decides itself again; the owner keeps running | enemy_follow_rule_test |
+| Door taken while enemies act | a room change resets follow state and waiting decisions; events of the old room are dropped by their room byte | enemy_follow_rule_test, code |
 | Both kill the same enemy at once | the owner applies both in order; the second lands on a dead enemy as in vanilla; replays follow the same order | code |
 | Hit after the enemy died here | replay dropped and logged; the owner's outcome already stands | code |
-| Hit after a room change | dropped by its room byte, logged | code |
+| Hit after a room change, or on another class in that slot | dropped by its room byte or class, logged | enemy_hit_wire_test, code |
 | Packet loss, reordering, late snapshot | events are reliable and ordered; a snapshot or decision with an older or repeated sequence number is dropped | enemy_follow_rule_test |
-| Owner leaves the room | the remaining machine is owner: its think decides from the next frame, waiting decisions dropped; nothing was switched off, so nothing switches back on | code |
-| Both believe they own (or neither does) | hits are applied or replayed whoever receives them; no one follows a silent owner, so no enemy waits for a decision | enemy_follow_rule_test |
-| Resync mid-combat | the join snapshot does not touch enemies; the follow state carries on | code |
-| Split party | each machine owns its room; hits and decisions of another room are dropped | code |
-| Cutscene or scripted enemy | script setAction calls run natively on both (only think is substituted); a cutscene or menu on either side holds the other's world | code |
+| A decision for another class in that slot | dropped and logged (decisions name the owner's class) | code |
+| Owner leaves the room | the remaining machine owns it: its own decisions from the next frame, waiting decisions dropped; nothing was switched off | code |
+| Both believe they own (or neither does) | hits are applied or replayed whoever receives them; no one follows a silent owner, so no enemy waits | enemy_follow_rule_test |
+| Resync mid-combat | the join snapshot does not touch enemies; a join teleport's door is not shared, so it never waits | code |
+| Split party | each machine owns its room; hits and decisions of another room are dropped; doors never wait | code |
+| Cutscene or scripted enemy | script setAction calls run natively on both (only the decision points are substituted); a cutscene or menu on either side holds the other's world | code |
 | Game over and continue, save load | a room load: follow state and waiting decisions reset | code |
 
 ## 6. Live checks (next session)
@@ -179,8 +191,38 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 - Hits: host `enemy_net: hit slot N applied hp A -> B rng xxxxxxxx` and guest `enemy_net: hit slot N replayed hp A ->
   B (was X here)` with the same A and B; `replay diverged` should never appear. `enemy_net: hit dropped (<reason>)`
   names every lost hit; `(not a player)` marks damage from explosions or the like.
-- Decisions: `enemy_think: slot N took the owner's decision (...)` on the follower (1/s) and the F8 line `enemy
-  decisions sent/applied`; `enemy_think: slot N realigned at a decision, drift D` should be rare.
-- Drift of the other 23 vtables: `enemy_state: slot N drift D (record s,id)` (1/s, only above 40).
+- Decisions: `enemy_decision: slot N took the owner's decision (...)` on the follower (1/s) and the F8 line `enemy
+  decisions sent/applied`; `enemy_decision: slot N realigned at a decision, drift D` should be rare; `decision
+  dropped, owner class` should never appear.
+- Drift: `enemy_state: slot N drift D (record s,id)` (1/s, only above 40): expected only for the 14 native vtables.
 - Follow start: `enemy_state: slot N aligned with the owner (drift D, hp A -> B)`.
 - Crit parity: a guest line `hp X -> -1` with X far below 0 should no longer appear.
+
+## 7. Risks
+
+1. **14 vtables decide natively on both machines** (hits, deaths and room start are shared), so their behaviour can
+   differ between screens:
+   - uEnemy2f, 34, 39, 46: their setAction (0x44d820, 0x4650f0, 0x480c20, 0x4bbc70) also resets class sub-state, and
+     their executor does not end in the shared commit; how their own code starts an action is not established, so a
+     replaced action could run with the previous one's sub-state.
+   - uEnemy2b, 30, 40, 41, 42: executors without the shared commit, their own state machines (2b: state 2 is its
+     death handler, its own target selector).
+   - uEnemy35, 45, 47: no state-1 executor (slot 66 is the empty stub); the record is not an action record there.
+   - uEnemy44: its update is the empty stub (no per-frame behaviour of its own).
+   - uEnemy3bRebecca: slot 63 is not a setAction (0x48ac80 writes one byte through its argument).
+2. **Boundary classes, the step word.** The follower starts the owner's action with the third word 0, read from one
+   probe ((1,8,0,1) then (1,8,1,1) with two motions). If a class uses that word otherwise, a replaced action could
+   start in the wrong variant. Watch the boundary classes' animations after a `took the owner's decision` line.
+3. **Waiting at a decision point.** A follower enemy that reaches its decision point before the owner's decision has
+   arrived waits there (about half a round trip), holding its last motion; expected invisible, unconfirmed.
+4. **The door barrier's screen.** During a wait the door stays on its last phase; whether that shows the door's last
+   frame or black after its fade is unconfirmed.
+5. **The random state swap** assumes nothing outside the game thread uses the generator; its 154 call sites were not
+   all checked.
+6. **Non-player damage** (explosions) on the follower shows no reaction, only the owner's HP after (there is no
+   attacker object to replay with).
+7. **Spawn variants** (`rand % 3` into +0x6ab0 at spawn) are not synced.
+8. **Message number 0x011A** (ENEMY_DECISION) could collide with another branch's new message; check on merge.
+9. **Wire changes:** HitPayload 60 bytes, ENEMY_STATE header with a sequence number, ENEMY_DECISION 52 bytes,
+   ROOM_STATE door flags. Both players need the same build (the build check enforces it).
+10. **Nothing here ran in the game.** All of it is static analysis and unit tests; the first live session decides.

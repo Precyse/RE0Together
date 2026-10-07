@@ -93,6 +93,22 @@ void testSeedableRecords() {
     check(!rule::seedable({{rule::kThinkState, 5, 0, 0}}), "never the think state");
 }
 
+void testActionBoundary() {
+    check(!rule::atBoundary({{1, 5, 2, 1}}, {{1, 5, 0, 1}}), "a step inside the same action is no boundary");
+    check(rule::atBoundary({{1, 7, 0, 0}}, {{1, 5, 3, 1}}), "a new action id");
+    check(rule::atBoundary({{2, 5, 0, 0}}, {{1, 5, 3, 1}}), "a new state");
+}
+
+void testFollowerBoundary() {
+    using rule::AtBoundary;
+    check(rule::atOwnBoundary({{1, 5, 0, 0}}, {{1, 5, 2, 1}}) == AtBoundary::Agree, "same action: left alone");
+    check(rule::atOwnBoundary({{1, 5, 0, 0}}, {{1, 8, 1, 1}}) == AtBoundary::Apply, "another action: the owner's");
+    check(rule::atOwnBoundary({{1, 5, 0, 0}}, {{3, 3, 0, 0}}) == AtBoundary::OtherState,
+          "another state stays with the class");
+    const rule::Action start = rule::startOf({{1, 8, 1, 1}});
+    check(start == rule::Action{{1, 8, 0, 1}}, "the owner's action from its first step, its parameter kept");
+}
+
 void testRealignOnlyBeyondTheGap() {
     check(!rule::realigns(rule::kRealignDistance), "at the limit: left alone");
     check(rule::realigns(rule::kRealignDistance + 1.0f), "beyond: realigned");
@@ -109,6 +125,8 @@ int main() {
     testSeedOnlyBeforeAnyDecision();
     testOwnerSilenceGivesTheAiBack();
     testSeedableRecords();
+    testActionBoundary();
+    testFollowerBoundary();
     testRealignOnlyBeyondTheGap();
     if (g_failures == 0) std::printf("enemy_follow_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

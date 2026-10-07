@@ -11,7 +11,7 @@
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
 #include "enemy_target.h"
-#include "enemy_think.h"
+#include "enemy_decision.h"
 #include "game.h"
 #include "game_tick.h"
 #include "log.h"
@@ -106,7 +106,7 @@ void resetFollow() {
         g_fresh = false;
     }
     g_follow.fill(Follow{});
-    enemy_think::reset();
+    enemy_decision::reset();
     g_mismatchLogged.fill(false);
     g_followRoom = scene::current();
     g_ticksSinceOwner = 0;
@@ -128,10 +128,11 @@ void align(const EnemyEntry& entry, uintptr_t enemy) {
     const int32_t hp = readHp(enemy);
     if (hp > 0 && hp != entry.hp) player_damage::setHp(enemy, entry.hp);
     enemy_follow_rule::Decision current;
+    current.vtable = entry.vtable;
     std::memcpy(current.action.word, entry.action, sizeof(entry.action));
     std::memcpy(current.pos, entry.pos, sizeof(entry.pos));
     std::memcpy(current.quat, entry.quat, sizeof(entry.quat));
-    if (enemy_follow_rule::seedable(current.action)) enemy_think::seed(entry.slot, current);
+    if (enemy_follow_rule::seedable(current.action)) enemy_decision::seed(entry.slot, current);
     logger::write("enemy_state: slot %u aligned with the owner (drift %.1f, hp %d -> %d)", entry.slot, drift, hp,
                   entry.hp);
 }

@@ -10,7 +10,7 @@
 // and random state its damage function started from and the HP it ended with; every other machine replays the hit from
 // the same inputs, so the crit roll, damage, reaction and death are the same on both screens. A machine that receives a
 // request applies it as the owner would, and one that receives an applied hit replays it, so a moment where the two
-// disagree about the owner loses no hit. Decisions: the base family's think step choices (enemy_think). Both kinds
+// disagree about the owner loses no hit. Decisions: what the owner's enemies chose (enemy_decision). Both kinds
 // share one queue, so a decision the owner made before a hit is never applied after that hit's reaction.
 namespace enemy_net {
 
@@ -23,7 +23,7 @@ void applyAsOwner(uintptr_t enemy, uint8_t attackerId, uintptr_t attackerObject,
 bool requestHit(uintptr_t enemy, character_owner::Character attacker, const game::HitPoint& point,
                 const game::HitInfo& info);
 
-// Game thread, the owner: sends a think step's decision for the enemy in `slot`.
+// Game thread, the owner: sends a decision of the enemy in `slot`.
 void sendDecision(uint8_t slot, const enemy_follow_rule::Decision& decision);
 
 // Net thread: queues a HIT_REQUEST, HIT_APPLIED or ENEMY_DECISION from the peer for the game thread.
