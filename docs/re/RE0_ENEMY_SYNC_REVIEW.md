@@ -107,17 +107,17 @@ two decisions runs natively on both machines.
   every record it chooses goes to the peer with the pose it chose it from (ENEMY_DECISION, reliable). On the follower
   the think step also runs (its flags, timers and per-action call), the setAction calls it makes are dropped, and the
   owner's newest decision is stored through the real setAction at that same point.
-- **Boundary classes (9 vtables: uEnemy2a, 2c, 31, 37, 38, 3a, 3c, 3e, 43): the action boundary.** Their action code
-  decides by direct writes, but their executor (slot 66) has the base family's shape: it runs per-action tables by
-  action id and ends in the commit 0x4cc6a0, which copies the record to +0x67b4. A record that differs from +0x67b4
-  on entry (state or action id) is an action boundary. The owner reports the record at each boundary; at the
-  follower's own boundary, if the owner's newest action is in the same state and differs, it replaces the one the
-  local AI just chose, from the action's first step (step word 0), through the class's setAction (the plain store),
-  after the commit, so the next frame starts it as a new action. A change of state (death, setup, the class's own
-  phases) stays with the class.
+- **Executor classes (18 vtables: uEnemy2a, 2b, 2c, 2f, 30, 31, 34, 37, 38, 39, 3a, 3c, 3e, 40, 41, 42, 43, 46): the
+  action boundary.** Their action code decides by direct writes inside the action executor (state-1 handler, slot 66;
+  14 functions), which runs the class's per-action tables by action id like the base family's. A record whose state or
+  action id changed across one executor call is an action boundary. The owner reports the record at each boundary; at
+  the follower's own boundary, if the owner's newest action is in the same state and differs, it replaces the one the
+  local AI just chose, from the action's first step (step word 0), through the class's own setAction, after the call,
+  so the next frame starts it as a new action. A change of state (death, setup, the class's own phases) stays with the
+  class.
 - **Pose at a decision.** If the enemy is more than 40 units from the pose the owner decided from, it is set there
   before the action starts (between two actions; normal play stays under it).
-- **The other 14 vtables run natively**, with hits, deaths and the room start shared (section 7 lists why each one).
+- **The other 5 vtables run natively**, with hits, deaths and the room start shared (section 7 lists why each one).
 - **Hits and deaths: the room's enemy owner decides, everyone replays exactly.** A hit landing on the owner's screen
   runs there; one landing on the other screen goes to the owner as HIT_REQUEST. The owner records the enemy's HP and
   the random state, runs the damage function, and sends HIT_APPLIED with both and the HP after it. The other machine
@@ -150,8 +150,8 @@ Owner = everything vanilla, plus reporting.
 | Field | Owner | Follower | Why nothing else writes it |
 |---|---|---|---|
 | Record +0x67a4..+0x67b0, base family | its own setAction calls | setAction calls outside think (executor, damage reaction, scripts) as in vanilla; inside think only the owner's decision, through the real setAction | the follower's think-step setAction calls are dropped; the base family has no direct record writes |
-| Record, boundary classes | own code | own code, except at its own action boundary, where the owner's action of the same state replaces the local choice once, after the commit and before anything reads it (next frame) | the replacement is the only write of ours, at the engine's boundary; a state change is never replaced |
-| Record, other 14 vtables | own code | own code | nothing of ours writes it |
+| Record, executor classes | own code | own code, except at its own action boundary, where the owner's action of the same state replaces the local choice once, right after the executor call and before anything reads it (next frame) | the replacement is the only write of ours, at the engine's boundary, through the class's own setAction; a state change is never replaced |
+| Record, other 5 vtables | own code | own code | nothing of ours writes it |
 | Motion, animation, physics | own update | own update | nothing of ours writes them |
 | Position, rotation | own movement | own movement; at a decision more than 40 off, the owner's decision pose (before the action starts); once at follow start | no per-tick writes exist |
 | HP | its damage function | the replayed damage function (from the owner's HP and random state); the owner's HP after when a replay or a non-player hit ends elsewhere; once at follow start | the follower never runs its own damage function on a shared enemy (hits go to the owner) |
@@ -199,25 +199,22 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 - Decisions: `enemy_decision: slot N took the owner's decision (...)` on the follower (1/s) and the F8 line `enemy
   decisions sent/applied`; `enemy_decision: slot N realigned at a decision, drift D` should be rare; `decision
   dropped, owner class` should never appear.
-- Drift: `enemy_state: slot N drift D (record s,id)` (1/s, only above 40): expected only for the 14 native vtables.
+- Drift: `enemy_state: slot N drift D (record s,id)` (1/s, only above 40): expected mostly for the 5 native vtables.
 - Follow start: `enemy_state: slot N aligned with the owner (drift D, hp A -> B)`.
 - Crit parity: a guest line `hp X -> -1` with X far below 0 should no longer appear.
 
 ## 7. Risks
 
-1. **14 vtables decide natively on both machines** (hits, deaths and room start are shared), so their behaviour can
+1. **5 vtables decide natively on both machines** (hits, deaths and room start are shared), so their behaviour can
    differ between screens:
-   - uEnemy2f, 34, 39, 46: their setAction (0x44d820, 0x4650f0, 0x480c20, 0x4bbc70) also resets class sub-state, and
-     their executor does not end in the shared commit; how their own code starts an action is not established, so a
-     replaced action could run with the previous one's sub-state.
-   - uEnemy2b, 30, 40, 41, 42: executors without the shared commit, their own state machines (2b: state 2 is its
-     death handler, its own target selector).
-   - uEnemy35, 45, 47: no state-1 executor (slot 66 is the empty stub); the record is not an action record there.
+   - uEnemy35, 45, 47: no action executor (slot 66 is the empty stub 0x9e2ac0); their record is not an action record.
    - uEnemy44: its update is the empty stub (no per-frame behaviour of its own).
    - uEnemy3bRebecca: slot 63 is not a setAction (0x48ac80 writes one byte through its argument).
-2. **Boundary classes, the step word.** The follower starts the owner's action with the third word 0, read from one
-   probe ((1,8,0,1) then (1,8,1,1) with two motions). If a class uses that word otherwise, a replaced action could
-   start in the wrong variant. Watch the boundary classes' animations after a `took the owner's decision` line.
+2. **Executor classes, how an action starts.** The follower starts the owner's action through the class's own
+   setAction with the third word 0, read from one probe ((1,8,0,1) then (1,8,1,1) with two motions). Their own code
+   starts actions by direct writes; 4 classes' setAction also resets class sub-state (uEnemy2f, 34, 39, 46), the
+   others' is the plain store. If a class keeps per-action state that only its own start path sets, a replaced action
+   could start in the wrong variant or hold. Watch those classes' animations after a `took the owner's decision` line.
 3. **Waiting at a decision point.** A follower enemy that reaches its decision point before the owner's decision has
    arrived waits there (about half a round trip), holding its last motion; expected invisible, unconfirmed.
 4. **The door barrier's screen.** During a wait the door stays on its last phase; whether that shows the door's last

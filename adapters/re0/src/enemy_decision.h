@@ -10,13 +10,14 @@
 // native on both machines.
 //   Base family (game.h kEnemyThinkFunction): the think step decides. On the follower it still runs (flags, timers),
 //   the records it would set are dropped and the owner's newest decision is set instead.
-//   Boundary classes (game.h kEnemyBoundaryVtables): their action code decides; the executor's commit
-//   (kEnemyActionCommitFunction) marks an action boundary. At the follower's own boundary the owner's newest action of
-//   the same state replaces its choice, from the action's first step.
-//   Every other class runs natively; only its hits, deaths and room start are shared.
+//   Executor classes (game.h kEnemyExecutorFunctions, 18 vtables): their action code decides inside the executor, so
+//   a record whose state or id changed across one executor call is an action boundary. At the follower's own boundary
+//   the owner's newest action of the same state replaces its choice, from the action's first step, through the
+//   class's own setAction.
+//   uEnemy35, 44, 45, 47 and 3bRebecca run natively; only their hits, deaths and room start are shared.
 namespace enemy_decision {
 
-// Hooks the think step, the base family's setAction and the executor's commit. False when a hook failed.
+// Hooks the think step, the base family's setAction and the 14 executors. False when a hook failed.
 bool install();
 
 // Game thread: the owner's decision `seq` for the enemy in `slot` of the loaded room.

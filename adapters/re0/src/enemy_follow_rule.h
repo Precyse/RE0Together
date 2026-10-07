@@ -3,7 +3,7 @@
 
 // Pure rules of an enemy the peer owns and this machine also runs (no game access, unit tested). Its own update moves
 // and animates it; what the owner decides reaches it only at the engine's own decision points (enemy_decision.cpp: the
-// base family's think step, and the action boundary of the classes sharing its executor), where it may also be put
+// base family's think step, and the action boundary of the executor classes), where it may also be put
 // back on the owner's pose between two actions.
 namespace enemy_follow_rule {
 
@@ -56,10 +56,10 @@ constexpr bool seedable(const Action& action) {
     return action.word[0] != kSetupState && action.word[0] != kThinkState;
 }
 
-// An action boundary: the executor changed the record's state or action id since its last commit (+0x67b4 holds the
-// record as the previous frame ended).
-constexpr bool atBoundary(const Action& record, const Action& previous) {
-    return record.word[0] != previous.word[0] || record.word[1] != previous.word[1];
+// An action boundary: the record's state or action id changed across one executor call (a step inside the same action
+// is none).
+constexpr bool atBoundary(const Action& after, const Action& before) {
+    return after.word[0] != before.word[0] || after.word[1] != before.word[1];
 }
 
 enum class AtBoundary { Agree, Apply, OtherState };

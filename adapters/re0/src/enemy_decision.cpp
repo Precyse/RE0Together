@@ -1,8 +1,8 @@
 #include "enemy_decision.h"
 
-#include <algorithm>
 #include <array>
 #include <chrono>
+#include <utility>
 
 #include "debug_stats.h"
 #include "enemy_net.h"
@@ -25,8 +25,8 @@ constexpr auto kLogInterval = std::chrono::seconds(1);
 using NoArgumentFunction = void(__fastcall*)(void* enemy, void* edx);
 using SetActionFunction = void(__fastcall*)(void* enemy, void* edx, int32_t state, int32_t id, int32_t a, int32_t b);
 NoArgumentFunction g_originalThink = nullptr;
-NoArgumentFunction g_originalCommit = nullptr;
 SetActionFunction g_originalSetAction = nullptr;
+std::array<NoArgumentFunction, game::kEnemyExecutorFunctions.size()> g_originalExecutors{};
 
 // Game thread only.
 std::array<enemy_follow_rule::PendingDecision, game::kEnemyPoolSlots> g_pending{};
@@ -43,18 +43,13 @@ enemy_follow_rule::PendingDecision& pendingFor(uint8_t slot) {
     return g_pending[slot];
 }
 
-bool readAction(uintptr_t enemy, uintptr_t offset, Action& out) { return game::readMemory(enemy + offset, out.word); }
+bool readAction(uintptr_t enemy, Action& out) { return game::readMemory(enemy + game::kEnemyActionOffset, out.word); }
 
-bool boundaryClass(uintptr_t enemy) {
-    const uintptr_t vtable = game::readPointer(enemy);
-    return std::find(game::kEnemyBoundaryVtables.begin(), game::kEnemyBoundaryVtables.end(), vtable) !=
-           game::kEnemyBoundaryVtables.end();
-}
-
-// Every class this module drives stores its record through the plain setAction (game.h), so the original store is
-// the class's own call.
+// The class's own setAction (vtable slot 63), the way its code starts an action.
 void setAction(void* enemy, const Action& action) {
-    g_originalSetAction(enemy, nullptr, action.word[0], action.word[1], action.word[2], action.word[3]);
+    const uintptr_t vtable = game::readPointer(reinterpret_cast<uintptr_t>(enemy));
+    const uintptr_t function = game::readPointer(vtable + game::kEnemySetActionSlot * sizeof(uint32_t));
+    game::callThiscall<void>(function, enemy, action.word[0], action.word[1], action.word[2], action.word[3]);
 }
 
 // Puts the enemy on the pose the owner decided from when it is far off; the action about to start moves it from there.
@@ -113,10 +108,10 @@ void __fastcall thinkDetour(void* enemy, void* edx) {
     if (slot == enemy_registry::kNoSlot) return g_originalThink(enemy, edx);
     if (enemy_state::followsOwner()) return thinkForOwner(enemy, edx, static_cast<uint8_t>(slot));
     Action before;
-    const bool reports = enemy_state::leadsPeer() && readAction(self, game::kEnemyActionOffset, before);
+    const bool reports = enemy_state::leadsPeer() && readAction(self, before);
     g_originalThink(enemy, edx);
     Action after;
-    if (reports && readAction(self, game::kEnemyActionOffset, after) && after != before) report(self, slot, after);
+    if (reports && readAction(self, after) && after != before) report(self, slot, after);
 }
 
 void __fastcall setActionDetour(void* enemy, void* edx, int32_t state, int32_t id, int32_t a, int32_t b) {
@@ -132,21 +127,33 @@ void boundaryForOwner(void* enemy, uint8_t slot, const Action& local) {
     apply(enemy, slot, decision, enemy_follow_rule::startOf(decision.action));
 }
 
-// The executor's commit: for a boundary class, a record that differs from the previous frame's is an action boundary.
-// The commit runs first (the previous record becomes this frame's choice); a replacement set after it reads as a new
-// action on the next frame.
-void __fastcall commitDetour(void* enemy, void* edx) {
+// One executor call: the action code inside it decides by direct writes, so a record whose state or id changed across
+// the call is an action boundary. A replacement set after the call starts as a new action on the next frame.
+void runExecutor(size_t executor, void* enemy, void* edx) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
-    Action record;
-    Action previous;
-    const bool boundary = boundaryClass(self) && readAction(self, game::kEnemyActionOffset, record) &&
-                          readAction(self, game::kEnemyPreviousActionOffset, previous) &&
-                          enemy_follow_rule::atBoundary(record, previous);
-    g_originalCommit(enemy, edx);
-    const int slot = boundary ? enemy_registry::slotOf(self) : enemy_registry::kNoSlot;
+    Action before;
+    const bool readBefore = readAction(self, before);
+    g_originalExecutors[executor](enemy, edx);
+    Action after;
+    if (!readBefore || !readAction(self, after) || !enemy_follow_rule::atBoundary(after, before)) return;
+    const int slot = enemy_registry::slotOf(self);
     if (slot == enemy_registry::kNoSlot) return;
-    if (enemy_state::followsOwner()) return boundaryForOwner(enemy, static_cast<uint8_t>(slot), record);
-    if (enemy_state::leadsPeer()) report(self, slot, record);
+    if (enemy_state::followsOwner()) return boundaryForOwner(enemy, static_cast<uint8_t>(slot), after);
+    if (enemy_state::leadsPeer()) report(self, slot, after);
+}
+
+template <size_t Executor>
+void __fastcall executorDetour(void* enemy, void* edx) {
+    runExecutor(Executor, enemy, edx);
+}
+
+// Every executor is hooked (no short circuit), each with its own detour and trampoline.
+template <size_t... Executors>
+bool installExecutors(std::index_sequence<Executors...>) {
+    return (hooks::install("enemy executor", game::kEnemyExecutorFunctions[Executors],
+                           reinterpret_cast<void*>(&executorDetour<Executors>),
+                           reinterpret_cast<void**>(&g_originalExecutors[Executors])) &
+            ...);
 }
 
 }  // namespace
@@ -160,11 +167,9 @@ bool install() {
     const bool thinkHooked = setActionHooked &&
                              hooks::install("enemy think", game::kEnemyThinkFunction, reinterpret_cast<void*>(thinkDetour),
                                             reinterpret_cast<void**>(&g_originalThink));
-    const bool commitHooked =
-        setActionHooked && hooks::install("enemy action commit", game::kEnemyActionCommitFunction,
-                                          reinterpret_cast<void*>(commitDetour),
-                                          reinterpret_cast<void**>(&g_originalCommit));
-    return thinkHooked && commitHooked;
+    const bool executorsHooked =
+        setActionHooked && installExecutors(std::make_index_sequence<game::kEnemyExecutorFunctions.size()>{});
+    return thinkHooked && executorsHooked;
 }
 
 void offer(uint8_t slot, uint16_t seq, const Decision& decision) {

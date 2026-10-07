@@ -195,15 +195,29 @@ constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, 
 // their record (no direct writes in their code). The other 23 vtables decide inside their action code.
 constexpr uintptr_t kEnemyThinkFunction = 0x41db20;
 constexpr uintptr_t kEnemyBaseSetActionFunction = 0x4cc670;
-// The executor (state-1 handler, slot 66) of the base family and of 9 more vtables runs the per-action tables by action
-// id and ends in this commit (thiscall, no arguments): the record is copied to +0x67b4 (the previous frame's record), so
-// a record that differs from +0x67b4 on entry is an action boundary this frame.
-constexpr uintptr_t kEnemyActionCommitFunction = 0x4cc6a0;
-constexpr uintptr_t kEnemyPreviousActionOffset = 0x67b4;
-// The 9 non-base vtables whose executor ends in the commit and whose setAction is the plain store 0x4cc670 (0x4b17f0
-// jumps to it): uEnemy2a, 2c, 31, 37, 38, 3a, 3c, 3e, 43. Their decisions are taken at the action boundary.
-constexpr std::array<uintptr_t, 9> kEnemyBoundaryVtables = {0xcc3fe8, 0xcbf5f8, 0xcbfe58, 0xcc08c0, 0xcc5ae8,
-                                                            0xcc13d8, 0xcc18e8, 0xcc5c60, 0xcc25d8};
+constexpr size_t kEnemySetActionSlot = 63;  // vtable slot (+0xfc): the class's setAction, thiscall (state, id, a, b)
+// The action executors (state-1 handler, vtable slot 66, thiscall, no arguments) of 18 non-base vtables: each runs the
+// class's per-action tables by action id (+0x67a8), and the action code inside decides the next action by direct
+// writes, so a record whose state or id changed across one executor call is an action boundary. Their setAction is
+// 0x4cc670 or a class wrapper of it that also resets class sub-state (0x44d820, 0x4650f0, 0x480c20, 0x4bbc70; 0x4b17f0
+// jumps to 0x4cc670), all four stack arguments. The executor of 15 more vtables is the base family's (think decides
+// there); uEnemy35, 44, 45, 47 have none (slot 66 is the empty stub 0x9e2ac0); uEnemy3bRebecca has no setAction.
+constexpr std::array<uintptr_t, 14> kEnemyExecutorFunctions = {
+    0x4d6530,  // uEnemy2a
+    0x437800,  // uEnemy2b
+    0x4423a0,  // uEnemy2c
+    0x44d080,  // uEnemy2f
+    0x451aa0,  // uEnemy30
+    0x45a370,  // uEnemy31
+    0x45da30,  // uEnemy34
+    0x474250,  // uEnemy37, 38
+    0x480320,  // uEnemy39
+    0x486810,  // uEnemy3a, 3e
+    0x490b10,  // uEnemy3c
+    0x49c390,  // uEnemy40, 41, 42
+    0x4a8940,  // uEnemy43
+    0x4bad30,  // uEnemy46
+};
 // The target an enemy chases: the 15 classes sharing update 0x420f70 choose it in 0x421b20 (thiscall, no arguments;
 // the nearer of sPlayer's controlled and partner characters, the controlled one on a tie or when flags 6 / 2 are set).
 constexpr uintptr_t kEnemyBaseTargetSelectFunction = 0x421b20;
