@@ -8,7 +8,10 @@ namespace enemy_follow_rule {
 
 constexpr int kActionWords = 4;
 constexpr float kRealignDistance = 40.0f;  // a smaller gap at a decision is left to the enemy's own movement
-constexpr int64_t kOwnerSilentMs = 500;    // no owner snapshot for this long: the local AI decides again
+// Ticks this machine ran without an owner snapshot before its own AI decides again (500 ms at 30 fps). Counted in
+// ticks, not time, so a world held on both sides (a menu, a door) does not count as silence. The count starts when
+// following starts, so the owner's first decisions are waited for, but never longer than this.
+constexpr int kOwnerSilentTicks = 15;
 
 // An enemy's behaviour record {state, action id, a, b} at +0x67a4.
 struct Action {
@@ -35,8 +38,8 @@ constexpr bool newer(uint16_t seq, uint16_t last) { return static_cast<int16_t>(
 
 // The follower's think step takes the owner's decisions only while the owner is heard from, so a lost owner never
 // leaves an enemy waiting for a decision.
-constexpr bool thinksForOwner(bool following, int64_t sinceOwnerMs) {
-    return following && sinceOwnerMs >= 0 && sinceOwnerMs < kOwnerSilentMs;
+constexpr bool thinksForOwner(bool following, int ticksSinceOwner) {
+    return following && ticksSinceOwner < kOwnerSilentTicks;
 }
 
 constexpr bool realigns(float drift) { return drift > kRealignDistance; }

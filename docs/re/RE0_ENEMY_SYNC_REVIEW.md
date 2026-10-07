@@ -132,7 +132,7 @@ racing the local AI's own choice. Rejected for the same reason as Build 158, onl
 ## 4. Who writes what
 
 Follower = the machine sharing the room with the peer that runs it (`enemy_state::followsOwner`: following, and an
-owner snapshot within 500 ms). Owner = everything vanilla, plus reporting.
+owner snapshot within the last 15 of its own ticks, 500 ms at 30 fps; a world held on both sides is not silence). Owner = everything vanilla, plus reporting.
 
 | Field | Owner | Follower | Why nothing else writes it |
 |---|---|---|---|
@@ -154,8 +154,9 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 |---|---|---|
 | Room entry, either first | the first holds (barrier) until the peer's arrival report, and owns the room | room_gate_rule_test |
 | Room entry, simultaneous | both hold; each releases when the other's arrival report lands (sent before a hold starts) | room_gate_rule_test |
+| Follower thinks before the owner's first decision | its think waits (applies nothing) up to 15 ticks from following start, then decides itself | enemy_follow_rule_test |
 | Load gap 0-15 s | barrier; past 15 s the first plays on and the late one aligns on its first snapshot | room_gate_rule_test |
-| Peer disconnects mid-room | no snapshots: after 500 ms the follower's think decides again; the owner keeps running | enemy_follow_rule_test |
+| Peer disconnects mid-room | no snapshots: after 15 ticks (500 ms) the follower's think decides again; the owner keeps running | enemy_follow_rule_test |
 | Door taken while enemies act | a room change resets the follow state and waiting decisions; events of the old room are dropped by their room byte | enemy_follow_rule_test, code |
 | Both kill the same enemy at once | the owner applies both in order; the second lands on a dead enemy as in vanilla; replays follow the same order | code |
 | Hit after the enemy died here | replay dropped and logged; the owner's outcome already stands | code |

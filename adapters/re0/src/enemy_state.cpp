@@ -30,7 +30,6 @@ using enemy_protocol::StateHeader;
 constexpr auto kSendInterval = std::chrono::milliseconds(50);
 constexpr auto kLogInterval = std::chrono::seconds(1);
 constexpr uint16_t kMaxWireRoom = UINT8_MAX;
-constexpr int64_t kNeverHeard = -1;
 
 NetClient* g_net = nullptr;
 Clock::time_point g_lastSend;
@@ -58,8 +57,7 @@ struct Follow {
 std::array<Follow, game::kEnemyPoolSlots> g_follow{};
 std::array<bool, game::kEnemyPoolSlots> g_mismatchLogged{};
 uint16_t g_followRoom = scene::kNone;  // the scene g_follow describes
-Clock::time_point g_lastOwnerSnapshot;
-bool g_heardOwner = false;
+int g_ticksSinceOwner = 0;  // follower ticks since following started or the last owner snapshot
 Clock::time_point g_lastDriftLog;
 
 bool readPosition(uintptr_t enemy, float (&out)[3]) { return game::readMemory(enemy + game::kUnitPositionOffset, out); }
@@ -100,11 +98,6 @@ void sendState() {
 // Shares the loaded room with the peer, and the peer runs it.
 bool following() { return net_pad::active() && !split_rooms::apart() && !split_rooms::localEnemyAuthority(); }
 
-int64_t sinceOwnerMs() {
-    if (!g_heardOwner) return kNeverHeard;
-    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - g_lastOwnerSnapshot).count();
-}
-
 // Also forgets the owner's snapshot numbering: the next owner (or a restarted one) counts from its own start.
 void resetFollow() {
     {
@@ -116,7 +109,7 @@ void resetFollow() {
     enemy_think::reset();
     g_mismatchLogged.fill(false);
     g_followRoom = scene::current();
-    g_heardOwner = false;
+    g_ticksSinceOwner = 0;
 }
 
 void logMismatchOnce(const EnemyEntry& entry, const char* reason) {
@@ -180,14 +173,16 @@ void takeLatest() {
         g_fresh = false;
     }
     if (snapshot.header.room != scene::current()) return;  // the owner's previous room: its slots name other enemies
-    g_lastOwnerSnapshot = Clock::now();
-    g_heardOwner = true;
+    g_ticksSinceOwner = 0;
     for (uint8_t i = 0; i < snapshot.header.count; ++i) applyEntry(snapshot.entries[i]);
 }
 
 void onTick() {
     if (scene::current() != g_followRoom || !following()) resetFollow();
-    if (following()) return takeLatest();
+    if (following()) {
+        ++g_ticksSinceOwner;
+        return takeLatest();
+    }
     if (!enemy_state::leadsPeer()) return;
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
@@ -199,7 +194,7 @@ void onTick() {
 
 namespace enemy_state {
 
-bool followsOwner() { return enemy_follow_rule::thinksForOwner(following(), sinceOwnerMs()); }
+bool followsOwner() { return enemy_follow_rule::thinksForOwner(following(), g_ticksSinceOwner); }
 
 bool leadsPeer() { return net_pad::active() && !split_rooms::apart() && split_rooms::localEnemyAuthority(); }
 

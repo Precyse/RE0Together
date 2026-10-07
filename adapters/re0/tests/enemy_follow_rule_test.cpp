@@ -82,9 +82,9 @@ void testSeedOnlyBeforeAnyDecision() {
 
 void testOwnerSilenceGivesTheAiBack() {
     check(rule::thinksForOwner(true, 0), "owner heard just now");
-    check(!rule::thinksForOwner(true, rule::kOwnerSilentMs), "silent owner: the local AI decides");
+    check(rule::thinksForOwner(true, rule::kOwnerSilentTicks - 1), "a short gap is still the owner's");
+    check(!rule::thinksForOwner(true, rule::kOwnerSilentTicks), "silent owner: the local AI decides");
     check(!rule::thinksForOwner(false, 0), "not following: the local AI decides");
-    check(!rule::thinksForOwner(true, -1), "never heard: the local AI decides");
 }
 
 void testSeedableRecords() {

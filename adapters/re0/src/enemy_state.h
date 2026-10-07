@@ -10,7 +10,7 @@
 namespace enemy_state {
 
 // Game thread: this machine shares the loaded room with the peer, the peer runs its enemies, and the peer's snapshots
-// are arriving (enemy_follow_rule::thinksForOwner).
+// are arriving (enemy_follow_rule::thinksForOwner, counted in this machine's ticks).
 bool followsOwner();
 
 // Game thread: this machine runs the loaded room's enemies and the peer is in the room (it follows them).
