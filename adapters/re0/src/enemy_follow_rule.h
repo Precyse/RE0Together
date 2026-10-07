@@ -1,62 +1,90 @@
 #pragma once
 #include <cstdint>
 
-#include "position_blend.h"
-
-// Pure rules of an enemy that the peer owns and this machine also runs (no game access, unit tested). The enemy moves
-// by its own AI; a snapshot only measures how far it is from the owner's, and that error is removed over the next
-// ticks on top of its own movement. HP from a snapshot is only a backstop for damage no hit event explains.
+// Pure rules of an enemy the peer owns and this machine also runs (no game access, unit tested). Its own update moves
+// and animates it; what the owner decides reaches it only at the engine's own decision point (the base family's think
+// step, enemy_think.cpp), where it may also be put back on the owner's pose between two actions.
 namespace enemy_follow_rule {
 
-constexpr float kDeadZone = 12.0f;        // smaller errors are left alone
-constexpr float kSnapDistance = 300.0f;   // a bigger error is a teleport, not drift
-constexpr float kSharePerTick = 0.2f;     // share of the remaining error removed each tick
-constexpr int64_t kHitSettleMs = 500;     // a snapshot this soon after a replayed hit may predate it
-constexpr int64_t kDeathFallbackMs = 1000;  // a death no hit explained, applied once the owner has held it this long
-constexpr int64_t kNever = INT64_MIN / 2;
+constexpr int kActionWords = 4;
+constexpr float kRealignDistance = 40.0f;  // a smaller gap at a decision is left to the enemy's own movement
+constexpr int64_t kOwnerSilentMs = 500;    // no owner snapshot for this long: the local AI decides again
 
-enum class Start { None, Correct, Snap };
+// An enemy's behaviour record {state, action id, a, b} at +0x67a4.
+struct Action {
+    int32_t word[kActionWords] = {};
 
-struct Correction {
-    float remaining[3] = {};
+    bool operator==(const Action& other) const {
+        for (int i = 0; i < kActionWords; ++i) {
+            if (word[i] != other.word[i]) return false;
+        }
+        return true;
+    }
+    bool operator!=(const Action& other) const { return !(*this == other); }
 };
 
-// On a snapshot: the error from `local` to `owner`, measured once.
-inline Start start(Correction& correction, const float (&local)[3], const float (&owner)[3]) {
-    const float drift = position_blend::distance(local, owner);
-    const bool correct = drift >= kDeadZone && drift <= kSnapDistance;
-    for (int i = 0; i < 3; ++i) correction.remaining[i] = correct ? owner[i] - local[i] : 0.0f;
-    if (drift < kDeadZone) return Start::None;
-    return correct ? Start::Correct : Start::Snap;
+// What the owner's think step chose, and the pose it chose it from.
+struct Decision {
+    Action action;
+    float pos[3] = {};
+    float quat[4] = {};
+};
+
+// Sequence numbers wrap: `seq` is newer than `last` when it is less than half the range ahead.
+constexpr bool newer(uint16_t seq, uint16_t last) { return static_cast<int16_t>(static_cast<uint16_t>(seq - last)) > 0; }
+
+// The follower's think step takes the owner's decisions only while the owner is heard from, so a lost owner never
+// leaves an enemy waiting for a decision.
+constexpr bool thinksForOwner(bool following, int64_t sinceOwnerMs) {
+    return following && sinceOwnerMs >= 0 && sinceOwnerMs < kOwnerSilentMs;
 }
 
-// Each tick: the part of the remaining error to add to the enemy's position now.
-inline void step(Correction& correction, float (&delta)[3]) {
-    for (int i = 0; i < 3; ++i) {
-        delta[i] = correction.remaining[i] * kSharePerTick;
-        correction.remaining[i] -= delta[i];
-    }
+constexpr bool realigns(float drift) { return drift > kRealignDistance; }
+
+// Base-family record states (dispatch table 0xd7ab60): 0 sets the enemy up after its spawn, 2 is the think step.
+constexpr int32_t kSetupState = 0;
+constexpr int32_t kThinkState = 2;
+
+// A record that may stand in for the owner's first decision: never the one-time setup (it would run again) or the
+// think state itself (the think step is where it is applied).
+constexpr bool seedable(const Action& action) {
+    return action.word[0] != kSetupState && action.word[0] != kThinkState;
 }
 
-class HpBackstop {
+// The owner's newest decision for one enemy that its think step has not applied yet.
+class PendingDecision {
 public:
-    void onHitReplayed(int64_t nowMs) { lastHitMs_ = nowMs; }
+    // A decision from the owner, in arrival order; an older or repeated one is ignored.
+    void offer(uint16_t seq, const Decision& decision) {
+        if (hasSeq_ && !newer(seq, lastSeq_)) return;
+        hasSeq_ = true;
+        lastSeq_ = seq;
+        decision_ = decision;
+        pending_ = true;
+    }
 
-    // The owner's HP from a snapshot: true when it should be written into the local enemy. Never revives a local dead
-    // enemy, and a lethal value waits so the death comes from the replayed hit (its reaction and crit) when there is one.
-    bool applies(int32_t local, int32_t owner, int64_t nowMs) {
-        if (owner > 0) {
-            ownerDeadSinceMs_ = kNever;
-        } else if (ownerDeadSinceMs_ == kNever) {
-            ownerDeadSinceMs_ = nowMs;
-        }
-        if (local == owner || local <= 0 || nowMs - lastHitMs_ < kHitSettleMs) return false;
-        return owner > 0 || nowMs - ownerDeadSinceMs_ >= kDeathFallbackMs;
+    // Following starts mid-room: the owner's current record (from a snapshot) stands in until its first decision.
+    void seed(const Decision& decision) {
+        if (hasSeq_ || pending_) return;
+        decision_ = decision;
+        pending_ = true;
+    }
+
+    // A replayed hit restarted the enemy (its reaction): a decision the owner made before the hit no longer applies.
+    void supersede() { pending_ = false; }
+
+    bool take(Decision& out) {
+        if (!pending_) return false;
+        pending_ = false;
+        out = decision_;
+        return true;
     }
 
 private:
-    int64_t lastHitMs_ = kNever;
-    int64_t ownerDeadSinceMs_ = kNever;
+    Decision decision_;
+    bool pending_ = false;
+    bool hasSeq_ = false;
+    uint16_t lastSeq_ = 0;
 };
 
 }  // namespace enemy_follow_rule

@@ -7,16 +7,17 @@
 #include <vector>
 
 #include "debug_stats.h"
-#include "enemy_action.h"
 #include "enemy_follow_rule.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
 #include "enemy_target.h"
+#include "enemy_think.h"
 #include "game.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
 #include "player_damage.h"
+#include "position_blend.h"
 #include "scene.h"
 #include "split_rooms.h"
 
@@ -24,62 +25,55 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 using enemy_protocol::EnemyEntry;
+using enemy_protocol::StateHeader;
 
 constexpr auto kSendInterval = std::chrono::milliseconds(50);
-constexpr int64_t kLogIntervalMs = 1000;
+constexpr auto kLogInterval = std::chrono::seconds(1);
 constexpr uint16_t kMaxWireRoom = UINT8_MAX;
+constexpr int64_t kNeverHeard = -1;
 
 NetClient* g_net = nullptr;
 Clock::time_point g_lastSend;
+uint16_t g_sendSeq = 0;  // game thread only
 
 struct Snapshot {
-    uint8_t count = 0;
-    uint8_t room = 0;
+    StateHeader header{};
     std::array<EnemyEntry, game::kEnemyPoolSlots> entries{};
 };
 
 std::mutex g_mutex;
-Snapshot g_latest;     // guarded by g_mutex
-bool g_fresh = false;  // guarded by g_mutex
+Snapshot g_latest;          // guarded by g_mutex
+bool g_fresh = false;       // guarded by g_mutex
+bool g_hasSeq = false;      // guarded by g_mutex
+uint16_t g_lastSeq = 0;     // guarded by g_mutex
 
 // What this machine knows about one enemy the peer owns (game thread only).
 struct Follow {
     bool valid = false;
+    bool aligned = false;  // the one-time alignment of following start is done
     uint8_t target = enemy_protocol::kNoTarget;
     int32_t ownerHp = 0;
-    enemy_follow_rule::Correction correction;
-    enemy_follow_rule::HpBackstop hp;
-    enemy_action_rule::Cue cue;
 };
 
 std::array<Follow, game::kEnemyPoolSlots> g_follow{};
 std::array<bool, game::kEnemyPoolSlots> g_mismatchLogged{};
 uint16_t g_followRoom = scene::kNone;  // the scene g_follow describes
-
-// One log line per kind and second.
-struct LogLimit {
-    int64_t lastMs = enemy_follow_rule::kNever;
-    bool due(int64_t nowMs) {
-        if (nowMs - lastMs < kLogIntervalMs) return false;
-        lastMs = nowMs;
-        return true;
-    }
-};
-LogLimit g_correctLog;
-LogLimit g_snapLog;
-LogLimit g_cueLog;
-LogLimit g_hpLog;
-
-int64_t nowMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
-}
+Clock::time_point g_lastOwnerSnapshot;
+bool g_heardOwner = false;
+Clock::time_point g_lastDriftLog;
 
 bool readPosition(uintptr_t enemy, float (&out)[3]) { return game::readMemory(enemy + game::kUnitPositionOffset, out); }
+
+int32_t readHp(uintptr_t enemy) {
+    int32_t hp = 0;
+    game::readMemory(enemy + game::kEnemyHpOffset, hp);
+    return hp;
+}
 
 void sendState() {
     const uint16_t room = scene::current();
     if (room > kMaxWireRoom) return;
-    std::vector<uint8_t> payload(enemy_protocol::kStateHeaderSize);
+    std::vector<uint8_t> payload(sizeof(StateHeader));
     uint8_t count = 0;
     for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
         const uintptr_t enemy = enemy_registry::enemyAt(slot);
@@ -87,30 +81,42 @@ void sendState() {
         entry.slot = static_cast<uint8_t>(slot);
         entry.vtable = static_cast<uint32_t>(game::readPointer(enemy));
         entry.target = enemy_target::read(enemy);
-        enemy_action_rule::Action action;
         if (!enemy_registry::isEnemy(enemy) || !game::readMemory(enemy + game::kEnemyHpOffset, entry.hp) ||
-            !game::readTransform(enemy, entry.pos, entry.quat) || !enemy_action::read(enemy, action)) {
+            !game::readTransform(enemy, entry.pos, entry.quat) ||
+            !game::readMemory(enemy + game::kEnemyActionOffset, entry.action)) {
             continue;
         }
-        std::memcpy(entry.action, action.word, sizeof(entry.action));
         const auto* bytes = reinterpret_cast<const uint8_t*>(&entry);
         payload.insert(payload.end(), bytes, bytes + sizeof(entry));
         ++count;
     }
-    payload[enemy_protocol::kStateCountByte] = count;
-    payload[enemy_protocol::kStateRoomByte] = static_cast<uint8_t>(room);
+    const StateHeader header{count, static_cast<uint8_t>(room), g_sendSeq++};
+    std::memcpy(payload.data(), &header, sizeof(header));
     if (g_net->send(enemy_protocol::kMsgEnemyState, false, proto::kSlotAll, payload)) {
         debug_stats::count(debug_stats::Counter::EnemyStateSent);
     }
 }
 
-// This machine runs enemies the peer owns: it has a peer, is in the same room, and the peer runs the room.
+// Shares the loaded room with the peer, and the peer runs it.
 bool following() { return net_pad::active() && !split_rooms::apart() && !split_rooms::localEnemyAuthority(); }
 
+int64_t sinceOwnerMs() {
+    if (!g_heardOwner) return kNeverHeard;
+    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - g_lastOwnerSnapshot).count();
+}
+
+// Also forgets the owner's snapshot numbering: the next owner (or a restarted one) counts from its own start.
 void resetFollow() {
+    {
+        std::lock_guard lock(g_mutex);
+        g_hasSeq = false;
+        g_fresh = false;
+    }
     g_follow.fill(Follow{});
+    enemy_think::reset();
     g_mismatchLogged.fill(false);
     g_followRoom = scene::current();
+    g_heardOwner = false;
 }
 
 void logMismatchOnce(const EnemyEntry& entry, const char* reason) {
@@ -120,33 +126,34 @@ void logMismatchOnce(const EnemyEntry& entry, const char* reason) {
     logger::write("enemy_state: slot %u %s (owner vtable 0x%x)", entry.slot, reason, entry.vtable);
 }
 
-void applyHp(Follow& follow, const EnemyEntry& entry, uintptr_t enemy, int64_t now) {
-    int32_t hp = 0;
-    if (!game::readMemory(enemy + game::kEnemyHpOffset, hp) || !follow.hp.applies(hp, entry.hp, now)) return;
-    player_damage::setHp(enemy, entry.hp);
-    if (g_hpLog.due(now)) logger::write("enemy_state: slot %u hp %d -> %d (owner, no hit event)", entry.slot, hp, entry.hp);
+// Following starts mid-room (this machine walked into a room the peer already runs, or became the follower): the
+// enemy takes the owner's pose and HP once, and its think step the owner's current record until the first decision.
+void align(const EnemyEntry& entry, uintptr_t enemy) {
+    float pos[3];
+    const float drift = readPosition(enemy, pos) ? position_blend::distance(pos, entry.pos) : 0.0f;
+    if (enemy_follow_rule::realigns(drift)) game::writeTransform(enemy, entry.pos, entry.quat);
+    const int32_t hp = readHp(enemy);
+    if (hp > 0 && hp != entry.hp) player_damage::setHp(enemy, entry.hp);
+    enemy_follow_rule::Decision current;
+    std::memcpy(current.action.word, entry.action, sizeof(entry.action));
+    std::memcpy(current.pos, entry.pos, sizeof(entry.pos));
+    std::memcpy(current.quat, entry.quat, sizeof(entry.quat));
+    if (enemy_follow_rule::seedable(current.action)) enemy_think::seed(entry.slot, current);
+    logger::write("enemy_state: slot %u aligned with the owner (drift %.1f, hp %d -> %d)", entry.slot, drift, hp,
+                  entry.hp);
 }
 
-// Measures the error to the owner's enemy once; a jump is snapped, pose and all.
-void measure(Follow& follow, const EnemyEntry& entry, uintptr_t enemy, int64_t now) {
+void logDrift(const EnemyEntry& entry, uintptr_t enemy) {
     float pos[3];
     if (!readPosition(enemy, pos)) return;
     const float drift = position_blend::distance(pos, entry.pos);
-    switch (enemy_follow_rule::start(follow.correction, pos, entry.pos)) {
-        case enemy_follow_rule::Start::None:
-            return;
-        case enemy_follow_rule::Start::Correct:
-            if (g_correctLog.due(now)) logger::write("enemy_state: slot %u corrected drift %.1f", entry.slot, drift);
-            return;
-        case enemy_follow_rule::Start::Snap:
-            game::writeTransform(enemy, entry.pos, entry.quat);
-            debug_stats::count(debug_stats::Counter::Snaps);
-            if (g_snapLog.due(now)) logger::write("enemy_state: snapped slot %u drift %.1f", entry.slot, drift);
-            return;
-    }
+    const auto now = Clock::now();
+    if (!enemy_follow_rule::realigns(drift) || now - g_lastDriftLog < kLogInterval) return;
+    g_lastDriftLog = now;
+    logger::write("enemy_state: slot %u drift %.1f (record %d,%d)", entry.slot, drift, entry.action[0], entry.action[1]);
 }
 
-void applyEntry(const EnemyEntry& entry, int64_t now) {
+void applyEntry(const EnemyEntry& entry) {
     if (entry.slot >= game::kEnemyPoolSlots) return;
     Follow& follow = g_follow[entry.slot];
     const uintptr_t enemy = enemy_registry::enemyAt(entry.slot);
@@ -157,14 +164,14 @@ void applyEntry(const EnemyEntry& entry, int64_t now) {
     follow.valid = true;
     follow.target = entry.target;
     follow.ownerHp = entry.hp;
-    applyHp(follow, entry, enemy, now);
-    if (entry.hp > 0) measure(follow, entry, enemy, now);
-    enemy_action_rule::Action owner;
-    std::memcpy(owner.word, entry.action, sizeof(owner.word));
-    follow.cue.observeOwner(owner, now);
+    if (!follow.aligned) {
+        follow.aligned = true;
+        return align(entry, enemy);
+    }
+    logDrift(entry, enemy);
 }
 
-void takeLatest(int64_t now) {
+void takeLatest() {
     Snapshot snapshot;
     {
         std::lock_guard lock(g_mutex);
@@ -172,50 +179,16 @@ void takeLatest(int64_t now) {
         snapshot = g_latest;
         g_fresh = false;
     }
-    if (snapshot.room != scene::current()) return;  // the owner's previous room: its slots name other enemies
-    for (uint8_t i = 0; i < snapshot.count; ++i) applyEntry(snapshot.entries[i], now);
-}
-
-// The enemy keeps its own movement; a share of the measured error is added on top.
-void correct(Follow& follow, uintptr_t enemy) {
-    float delta[3];
-    enemy_follow_rule::step(follow.correction, delta);
-    float pos[3];
-    if ((delta[0] == 0.0f && delta[1] == 0.0f && delta[2] == 0.0f) || !readPosition(enemy, pos)) return;
-    for (int i = 0; i < 3; ++i) pos[i] += delta[i];
-    game::writeMemory(enemy + game::kUnitPositionOffset, pos);
-}
-
-// A new owner decision the local AI did not reach by itself starts through the class's own setAction.
-void cue(Follow& follow, uintptr_t enemy, int slot, int64_t now) {
-    enemy_action_rule::Action local;
-    if (!enemy_action::read(enemy, local) || !follow.cue.due(local, now)) return;
-    const enemy_action_rule::Action& owner = follow.cue.owner();
-    if (!enemy_action::request(enemy, owner)) return;
-    debug_stats::count(debug_stats::Counter::EnemyActionRequests);
-    if (g_cueLog.due(now)) {
-        logger::write("enemy_state: slot %d cued action (%d,%d,%d,%d), local (%d,%d,%d,%d)", slot, owner.word[0],
-                      owner.word[1], owner.word[2], owner.word[3], local.word[0], local.word[1], local.word[2],
-                      local.word[3]);
-    }
-}
-
-void followOwner() {
-    const int64_t now = nowMs();
-    takeLatest(now);
-    for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
-        Follow& state = g_follow[slot];
-        const uintptr_t enemy = enemy_registry::enemyAt(slot);
-        if (!state.valid || !enemy || state.ownerHp <= 0) continue;
-        correct(state, enemy);
-        cue(state, enemy, slot, now);
-    }
+    if (snapshot.header.room != scene::current()) return;  // the owner's previous room: its slots name other enemies
+    g_lastOwnerSnapshot = Clock::now();
+    g_heardOwner = true;
+    for (uint8_t i = 0; i < snapshot.header.count; ++i) applyEntry(snapshot.entries[i]);
 }
 
 void onTick() {
     if (scene::current() != g_followRoom || !following()) resetFollow();
-    if (following()) return followOwner();
-    if (!net_pad::active() || split_rooms::apart()) return;  // apart, each machine runs its own room's enemies
+    if (following()) return takeLatest();
+    if (!enemy_state::leadsPeer()) return;
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;
@@ -226,8 +199,12 @@ void onTick() {
 
 namespace enemy_state {
 
+bool followsOwner() { return enemy_follow_rule::thinksForOwner(following(), sinceOwnerMs()); }
+
+bool leadsPeer() { return net_pad::active() && !split_rooms::apart() && split_rooms::localEnemyAuthority(); }
+
 uint8_t ownerTarget(uintptr_t enemy) {
-    if (!following()) return enemy_protocol::kNoTarget;
+    if (!followsOwner()) return enemy_protocol::kNoTarget;
     const int slot = enemy_registry::slotOf(enemy);
     if (slot == enemy_registry::kNoSlot || !g_follow[slot].valid || g_follow[slot].ownerHp <= 0) {
         return enemy_protocol::kNoTarget;
@@ -235,26 +212,24 @@ uint8_t ownerTarget(uintptr_t enemy) {
     return g_follow[slot].target;
 }
 
-void onHitReplayed(uint8_t slot) {
-    if (slot < game::kEnemyPoolSlots) g_follow[slot].hp.onHitReplayed(nowMs());
-}
-
 void onFrame(const GameFrame& frame) {
     if (frame.type != enemy_protocol::kMsgEnemyState || frame.slot != net_pad::peerSlot() ||
-        frame.payload.size() < enemy_protocol::kStateHeaderSize) {
+        frame.payload.size() < sizeof(StateHeader)) {
         return;
     }
-    const uint8_t count = frame.payload[enemy_protocol::kStateCountByte];
-    if (count > game::kEnemyPoolSlots ||
-        frame.payload.size() != enemy_protocol::kStateHeaderSize + count * sizeof(EnemyEntry)) {
+    StateHeader header;
+    std::memcpy(&header, frame.payload.data(), sizeof(header));
+    if (header.count > game::kEnemyPoolSlots ||
+        frame.payload.size() != sizeof(StateHeader) + header.count * sizeof(EnemyEntry)) {
         return;
     }
-    debug_stats::count(debug_stats::Counter::EnemyStateReceived);
     std::lock_guard lock(g_mutex);
-    g_latest.count = count;
-    g_latest.room = frame.payload[enemy_protocol::kStateRoomByte];
-    std::memcpy(g_latest.entries.data(), frame.payload.data() + enemy_protocol::kStateHeaderSize,
-                count * sizeof(EnemyEntry));
+    if (g_hasSeq && !enemy_follow_rule::newer(header.seq, g_lastSeq)) return;
+    g_hasSeq = true;
+    g_lastSeq = header.seq;
+    debug_stats::count(debug_stats::Counter::EnemyStateReceived);
+    g_latest.header = header;
+    std::memcpy(g_latest.entries.data(), frame.payload.data() + sizeof(StateHeader), header.count * sizeof(EnemyEntry));
     g_fresh = true;
 }
 

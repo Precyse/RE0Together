@@ -92,7 +92,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"inventory applied", format(L"%u", total(s, Counter::InventoryApplied)), false});
     lines.push_back({L"inventory exchanges", format(L"%u", total(s, Counter::InventoryExchanges)), false});
     lines.push_back({L"equip refreshes", format(L"%u", total(s, Counter::EquipRefreshes)), false});
-    lines.push_back({L"enemy action requests", format(L"%u", total(s, Counter::EnemyActionRequests)), false});
+    lines.push_back({L"enemy decisions sent/applied", format(L"%u / %u", total(s, Counter::EnemyDecisionsSent), total(s, Counter::EnemyDecisionsApplied)), false});
     lines.push_back({L"flag words sent/applied", format(L"%u / %u", total(s, Counter::FlagWordsSent), total(s, Counter::FlagWordsApplied)), false});
     lines.push_back({L"floor put sent/applied", format(L"%u / %u", total(s, Counter::FloorPutSent), total(s, Counter::FloorPutApplied)), false});
     lines.push_back({L"floor take sent/applied", format(L"%u / %u", total(s, Counter::FloorTakeSent), total(s, Counter::FloorTakeApplied)), false});

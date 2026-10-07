@@ -10,7 +10,9 @@ using enemy_protocol::HitPayload;
 
 constexpr size_t kOffsetOffset = 4;  // after slot, attacker, flag, room
 constexpr size_t kInfoWords = 4;
-constexpr size_t kRandomOffset = kOffsetOffset + sizeof(game::HitPoint) + kInfoWords * sizeof(int32_t) + sizeof(int32_t);
+constexpr size_t kHpWords = 2;  // before and after
+constexpr size_t kRandomOffset =
+    kOffsetOffset + sizeof(game::HitPoint) + kInfoWords * sizeof(int32_t) + kHpWords * sizeof(int32_t);
 static_assert(offsetof(HitPayload, offset) == kOffsetOffset);
 static_assert(offsetof(HitPayload, random) == kRandomOffset);
 static_assert(sizeof(HitPayload) == kRandomOffset + sizeof(game::RandomState));
@@ -31,7 +33,7 @@ int main() {
     int senderAttacker = 0;
     const game::HitInfo info{2, 0x1b, 7, -3, &senderAttacker, 1, {}};
     HitPayload sent = enemy_hit_wire::encode(5, 1, 0x25, point, senderEnemy, info);
-    check(sent.hpBefore == 0 && sent.random[0] == 0, "a request carries no outcome inputs");
+    check(sent.hpBefore == 0 && sent.hpAfter == 0 && sent.random[0] == 0, "a request carries no outcome");
     const game::RandomState random{0x12345678u, 0x9abcdef0u, 0x0badf00du, 0xdeadbeefu};
     enemy_hit_wire::stamp(sent, 94, random);
 

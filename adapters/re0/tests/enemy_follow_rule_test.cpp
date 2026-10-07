@@ -1,5 +1,4 @@
-// Checks the follower rules: error correction and the HP backstop (no game). Exit 0 when every check passes.
-#include <cmath>
+// Checks the follower rules: decision order, owner silence, realignment (no game). Exit 0 when every check passes.
 #include <cstdio>
 
 #include "../src/enemy_follow_rule.h"
@@ -16,101 +15,101 @@ void check(bool ok, const char* what) {
     ++g_failures;
 }
 
-bool near(float a, float b) { return std::fabs(a - b) < 0.001f; }
-
-void testSmallErrorIsLeftAlone() {
-    rule::Correction correction;
-    const float local[3] = {100.0f, 0.0f, 100.0f};
-    const float owner[3] = {105.0f, 0.0f, 100.0f};
-    check(rule::start(correction, local, owner) == rule::Start::None, "inside the dead zone: nothing");
-    float delta[3];
-    rule::step(correction, delta);
-    check(delta[0] == 0.0f && delta[1] == 0.0f && delta[2] == 0.0f, "no movement added");
+rule::Decision decision(int32_t id) {
+    rule::Decision d;
+    d.action = {{1, id, 0, 0}};
+    return d;
 }
 
-void testErrorIsRemovedOverTicks() {
-    rule::Correction correction;
-    const float local[3] = {0.0f, 0.0f, 0.0f};
-    const float owner[3] = {100.0f, 0.0f, 0.0f};
-    check(rule::start(correction, local, owner) == rule::Start::Correct, "drift: corrected");
-    float total = 0.0f;
-    float delta[3];
-    rule::step(correction, delta);
-    check(near(delta[0], 100.0f * rule::kSharePerTick), "a share of the error per tick");
-    total += delta[0];
-    for (int tick = 0; tick < 100; ++tick) {
-        rule::step(correction, delta);
-        total += delta[0];
-    }
-    check(near(total, 100.0f), "the whole error is removed, no more");
+void testSequenceWraps() {
+    check(rule::newer(2, 1) && !rule::newer(1, 2) && !rule::newer(5, 5), "plain order");
+    check(rule::newer(1, 65535) && !rule::newer(65535, 1), "wrap-around");
 }
 
-void testNewSnapshotReplacesTheError() {
-    rule::Correction correction;
-    const float local[3] = {0.0f, 0.0f, 0.0f};
-    const float far[3] = {100.0f, 0.0f, 0.0f};
-    rule::start(correction, local, far);
-    const float closer[3] = {5.0f, 0.0f, 0.0f};
-    rule::start(correction, local, closer);
-    float delta[3];
-    rule::step(correction, delta);
-    check(delta[0] == 0.0f, "the newest measurement wins, not a sum");
+void testNothingToTakeAtFirst() {
+    rule::PendingDecision pending;
+    rule::Decision out;
+    check(!pending.take(out), "no decision yet");
 }
 
-void testJumpSnaps() {
-    rule::Correction correction;
-    const float local[3] = {0.0f, 0.0f, 0.0f};
-    const float owner[3] = {0.0f, 0.0f, rule::kSnapDistance + 1.0f};
-    check(rule::start(correction, local, owner) == rule::Start::Snap, "beyond the snap distance: snap");
-    float delta[3];
-    rule::step(correction, delta);
-    check(delta[2] == 0.0f, "a snap leaves no correction behind");
+void testNewestDecisionIsTakenOnce() {
+    rule::PendingDecision pending;
+    pending.offer(10, decision(2));
+    pending.offer(11, decision(5));
+    rule::Decision out;
+    check(pending.take(out) && out.action.word[1] == 5, "the newest of several waiting decisions");
+    check(!pending.take(out), "applied once");
 }
 
-void testHpFollowsTheOwner() {
-    rule::HpBackstop hp;
-    check(hp.applies(94, 78, 1000), "owner lower: applied");
-    check(!hp.applies(78, 78, 1100), "equal: nothing");
+void testLateOrRepeatedDecisionIsIgnored() {
+    rule::PendingDecision pending;
+    pending.offer(11, decision(5));
+    rule::Decision out;
+    pending.take(out);
+    pending.offer(10, decision(2));
+    check(!pending.take(out), "older than one already applied");
+    pending.offer(11, decision(5));
+    check(!pending.take(out), "a repeat");
 }
 
-void testHpWaitsAfterAReplayedHit() {
-    rule::HpBackstop hp;
-    hp.onHitReplayed(1000);
-    check(!hp.applies(69, 85, 1000 + rule::kHitSettleMs - 1), "a snapshot older than the hit cannot undo it");
-    check(hp.applies(69, 85, 1000 + rule::kHitSettleMs), "after the settle time the owner's value counts");
+void testHitSupersedesEarlierDecision() {
+    rule::PendingDecision pending;
+    pending.offer(10, decision(5));
+    pending.supersede();
+    rule::Decision out;
+    check(!pending.take(out), "the hit reaction replaces a decision made before it");
+    pending.offer(11, decision(7));
+    check(pending.take(out) && out.action.word[1] == 7, "the owner's next decision applies");
 }
 
-void testDeathComesFromTheHitFirst() {
-    rule::HpBackstop hp;
-    check(!hp.applies(16, -1, 1000), "an owner death waits for the hit's replay");
-    check(!hp.applies(16, -1, 1000 + rule::kDeathFallbackMs - 1), "still waiting");
-    check(hp.applies(16, -1, 1000 + rule::kDeathFallbackMs), "no hit explained it: applied");
+void testSeedOnlyBeforeAnyDecision() {
+    rule::PendingDecision fresh;
+    fresh.seed(decision(3));
+    rule::Decision out;
+    check(fresh.take(out) && out.action.word[1] == 3, "the owner's current record stands in");
+
+    rule::PendingDecision decided;
+    decided.offer(4, decision(8));
+    decided.take(out);
+    decided.seed(decision(3));
+    check(!decided.take(out), "a snapshot record never replaces the decision stream");
+
+    rule::PendingDecision waiting;
+    waiting.offer(4, decision(8));
+    waiting.seed(decision(3));
+    check(waiting.take(out) && out.action.word[1] == 8, "nor a decision still waiting");
 }
 
-void testOwnerAliveAgainRestartsTheDeathWait() {
-    rule::HpBackstop hp;
-    hp.applies(16, -1, 1000);
-    hp.applies(16, 16, 1500);
-    check(!hp.applies(16, -1, 1000 + rule::kDeathFallbackMs), "the wait counts from the latest death report");
+void testOwnerSilenceGivesTheAiBack() {
+    check(rule::thinksForOwner(true, 0), "owner heard just now");
+    check(!rule::thinksForOwner(true, rule::kOwnerSilentMs), "silent owner: the local AI decides");
+    check(!rule::thinksForOwner(false, 0), "not following: the local AI decides");
+    check(!rule::thinksForOwner(true, -1), "never heard: the local AI decides");
 }
 
-void testLocalDeadIsNeverRevived() {
-    rule::HpBackstop hp;
-    check(!hp.applies(-1, 40, 5000), "a dead local enemy keeps its death");
+void testSeedableRecords() {
+    check(rule::seedable({{1, 5, 0, 0}}) && rule::seedable({{3, 3, 0, 0}}), "an action or a lying state");
+    check(!rule::seedable({{rule::kSetupState, 0, 0, 0}}), "never the setup again");
+    check(!rule::seedable({{rule::kThinkState, 5, 0, 0}}), "never the think state");
+}
+
+void testRealignOnlyBeyondTheGap() {
+    check(!rule::realigns(rule::kRealignDistance), "at the limit: left alone");
+    check(rule::realigns(rule::kRealignDistance + 1.0f), "beyond: realigned");
 }
 
 }  // namespace
 
 int main() {
-    testSmallErrorIsLeftAlone();
-    testErrorIsRemovedOverTicks();
-    testNewSnapshotReplacesTheError();
-    testJumpSnaps();
-    testHpFollowsTheOwner();
-    testHpWaitsAfterAReplayedHit();
-    testDeathComesFromTheHitFirst();
-    testOwnerAliveAgainRestartsTheDeathWait();
-    testLocalDeadIsNeverRevived();
+    testSequenceWraps();
+    testNothingToTakeAtFirst();
+    testNewestDecisionIsTakenOnce();
+    testLateOrRepeatedDecisionIsIgnored();
+    testHitSupersedesEarlierDecision();
+    testSeedOnlyBeforeAnyDecision();
+    testOwnerSilenceGivesTheAiBack();
+    testSeedableRecords();
+    testRealignOnlyBeyondTheGap();
     if (g_failures == 0) std::printf("enemy_follow_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

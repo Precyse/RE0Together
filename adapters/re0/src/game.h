@@ -184,15 +184,13 @@ constexpr uintptr_t kEnemyPoolObjectOffset = 0xc;  // uEnemy* inside a pool entr
 constexpr int kEnemyPoolSlots = 37;
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
 constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, a, b}, written by the class setAction
-constexpr size_t kEnemySetActionSlot = 63;        // vtable slot (+0xfc): setAction(state, id, a, b), thiscall ret 0x10
-// The slot-63 implementations and their stack argument counts (the ret size tells: 0x10 = 4, 8 = 2, 4 = 1). A
-// call with the wrong count would unbalance the stack, so only these are ever called.
-struct SetActionFunction {
-    uintptr_t function;
-    size_t argc;
-};
-constexpr std::array<SetActionFunction, 7> kEnemySetActionFunctions = {
-    {{0x4cc670, 4}, {0x44d820, 4}, {0x4650f0, 4}, {0x480c20, 4}, {0x4bbc70, 4}, {0x48ac80, 2}, {0x4b17f0, 1}}};
+// The base family: the 15 vtables whose per-frame update (slot 41) is 0x420f70 (uEnemy10..1a, 50, 51, 5a, 5b, 6a, 6b).
+// Their AI decides only in the think step, their state-2 handler (slot 67, thiscall, no arguments): a chain of
+// transition checks and a per-action think call that end in setAction; it moves and animates nothing. Their setAction
+// (slot 63, shared with 17 other vtables) is 0x4cc670, thiscall (state, id, a, b), ret 0x10, and the only writer of
+// their record (no direct writes in their code). The other 23 vtables decide inside their action code.
+constexpr uintptr_t kEnemyThinkFunction = 0x41db20;
+constexpr uintptr_t kEnemyBaseSetActionFunction = 0x4cc670;
 // The target an enemy chases: the 15 classes sharing update 0x420f70 choose it in 0x421b20 (thiscall, no arguments;
 // the nearer of sPlayer's controlled and partner characters, the controlled one on a tie or when flags 6 / 2 are set).
 constexpr uintptr_t kEnemyBaseTargetSelectFunction = 0x421b20;

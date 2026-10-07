@@ -123,7 +123,8 @@ void onFrame(const GameFrame& frame) {
         character_owner::onFrame(frame);
         return;
     }
-    if (frame.type == enemy_protocol::kMsgHitRequest || frame.type == enemy_protocol::kMsgHitApplied) {
+    if (frame.type == enemy_protocol::kMsgHitRequest || frame.type == enemy_protocol::kMsgHitApplied ||
+        frame.type == enemy_protocol::kMsgEnemyDecision) {
         enemy_net::onFrame(frame);
         return;
     }

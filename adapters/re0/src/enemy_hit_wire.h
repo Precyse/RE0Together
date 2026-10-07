@@ -23,10 +23,11 @@ inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacter
             info.a,
             info.b,
             0,
+            0,
             {}};
 }
 
-// The owner's HP and random state just before its damage function ran.
+// The owner's HP and random state just before its damage function ran (the HP after it is set once it has run).
 inline void stamp(enemy_protocol::HitPayload& hit, int32_t hpBefore, const game::RandomState& random) {
     hit.hpBefore = hpBefore;
     for (size_t i = 0; i < random.size(); ++i) hit.random[i] = random[i];

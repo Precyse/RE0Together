@@ -7,6 +7,7 @@
 #include "character_owner.h"
 #include "damage_thunk.h"
 #include "enemy_net.h"
+#include "enemy_protocol.h"
 #include "enemy_registry.h"
 #include "log.h"
 #include "net_pad.h"
@@ -40,7 +41,8 @@ void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint*
     if (!character_owner::isLocalOwned(shooter)) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
     } else if (split_rooms::localEnemyAuthority()) {
-        enemy_net::applyAsOwner(enemyAddress, shooter, reinterpret_cast<uintptr_t>(attacker), *point, *info);
+        enemy_net::applyAsOwner(enemyAddress, static_cast<uint8_t>(shooter), reinterpret_cast<uintptr_t>(attacker), *point,
+                                *info);
     } else if (!enemy_net::requestHit(enemyAddress, shooter, *point, *info)) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
     }
@@ -57,9 +59,13 @@ void __stdcall onDamage(void* enemy, void* attacker, game::HitPoint* point, game
         onPlayerHit(shooter, enemy, attacker, point, info, original);
         return;
     }
-    const bool hasSlot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy)) != enemy_registry::kNoSlot;
-    if (split_rooms::localEnemyAuthority() || !hasSlot) {
+    // Damage no player dealt (both machines see their own copy of it): the owner applies it and sends the outcome.
+    const uintptr_t enemyAddress = reinterpret_cast<uintptr_t>(enemy);
+    if (enemy_registry::slotOf(enemyAddress) == enemy_registry::kNoSlot) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
+    } else if (split_rooms::localEnemyAuthority()) {
+        enemy_net::applyAsOwner(enemyAddress, enemy_protocol::kNoAttacker, reinterpret_cast<uintptr_t>(attacker), *point,
+                                *info);
     }
 }
 
