@@ -8,6 +8,9 @@ namespace partner_hud {
 // Net thread, every tick: rebuilds the line and hands it to the overlay when it changed.
 void onNetTick(const SessionSnapshot& session);
 
+// Net thread: keeps the partner's latest PLAYER_STATE (host and guest alike) for the line's health and room.
+void onFrame(const GameFrame& frame);
+
 // A player joined: a new session starts, the host-left state and the partner's health history are forgotten.
 void onPeerJoined();
 
