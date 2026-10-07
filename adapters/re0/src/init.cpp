@@ -20,6 +20,7 @@
 #include "enemy_decision.h"
 #include "room_gate.h"
 #include "event_place.h"
+#include "event_sync.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
@@ -78,6 +79,7 @@ void enableCoop() {
     join_sync::enable(g_net);
     resync::enable(g_net);
     event_place::enable(g_net);
+    if (!event_sync::enable(g_net)) logger::write("adapter: event sync unavailable");
     if (!session_slot::enable()) logger::write("adapter: session slot unavailable");
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
@@ -148,6 +150,7 @@ void shutdownAdapter() {
     menu_mirror::uninstall();
     floor_items_sync::uninstall();
     door_sync::uninstall();
+    event_sync::uninstall();
     session_slot::uninstall();
     pickup_guard::uninstall();
     game_tick::uninstall();

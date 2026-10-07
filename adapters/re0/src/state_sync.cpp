@@ -16,6 +16,7 @@
 #include "enemy_protocol.h"
 #include "enemy_state.h"
 #include "event_place.h"
+#include "event_sync.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
@@ -146,6 +147,10 @@ void onFrame(const GameFrame& frame) {
     }
     if (frame.type == proto::kMsgCharacterPlace) {
         event_place::onFrame(frame);
+        return;
+    }
+    if (frame.type == proto::kMsgEventStart || frame.type == proto::kMsgEventSteps) {
+        event_sync::onFrame(frame);
         return;
     }
     if (frame.type == proto::kMsgFlagDiff) {

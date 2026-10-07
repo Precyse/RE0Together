@@ -18,7 +18,9 @@ are read from a text file, one per line, as they are appended:
                            snapshot (FLOOR_SNAPSHOT)
     leave                  the fake player goes away (PEER_DOWN) and stops sending; as the host: "Host left"
     resync                 (--guest) the host asks the guest for a resync (RESYNC_REQUEST)
-The host's door arguments are printed as they arrive, so real doors can be replayed for Billy.
+The host's door arguments are printed as they arrive, so real doors can be replayed for Billy, and so are the game's
+room script events (EVENT_START, and EVENT_STEPS per thread: the pcs of every op the game finished), to check what a
+peer would follow.
 
 With --guest the roles swap: the game is the guest (Billy) and the fake is the host (Rebecca); it announces ownership
 and the party mode, and answers the game's SNAPSHOT_REQUEST with a join snapshot built from the game's own flags and
@@ -41,6 +43,10 @@ SNAPSHOT_REQUEST, JOIN_SNAPSHOT = 0x010D, 0x010E
 PLAYER_STATE, OWNERSHIP, PARTY_MODE = 0x0100, 0x0102, 0x010A
 MENU_STATE, SAVE_SLOT, RESYNC_REQUEST, FLOOR_SNAPSHOT = 0x0105, 0x010F, 0x0114, 0x0115
 PROTO_PEER_DOWN = 0x0004
+EVENT_START, EVENT_STEPS = 0x0130, 0x0131
+EVENT_START_FORMAT = "<IHHHHBBBx"  # key, scene, serial, trigger index, pc, type, character, kind
+EVENT_STEP_FORMAT = "<HHHBx"  # serial, from pc, to pc, result
+STEP_RESULTS = ("yield", "next", "end", "killed")
 SESSION_SLOT = 0
 IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
 FLAG_RELIABLE = 1
@@ -151,6 +157,15 @@ class Session:
                 room, entry, a3, a4, flag, character = struct.unpack("<5IB3x", payload)
                 print(f"host door: room {room:#x} entry {entry} a3 {a3} a4 {a4} flag {flag:#x} character {character}",
                       flush=True)
+            elif msg_type == EVENT_START:
+                key, scene, serial, index, pc, kind_type, character, kind = struct.unpack(EVENT_START_FORMAT, payload)
+                print(f"event start: serial {serial} key {key:#04x} trigger {index} type {kind_type:#04x} "
+                      f"{'shared' if kind else 'local'} pc {pc:#x} scene {scene:#04x} character {character}", flush=True)
+            elif msg_type == EVENT_STEPS:
+                (count,) = struct.unpack_from("<H", payload)
+                steps = [struct.unpack_from(EVENT_STEP_FORMAT, payload, 4 + i * 8) for i in range(count)]
+                print("event steps: " + ", ".join(f"{serial}:{start:#x}->{end:#x} {STEP_RESULTS[result]}"
+                                                  for serial, start, end, result in steps), flush=True)
             elif msg_type == PARTY_MODE:
                 print(f"party mode: {'team' if payload[0] == 0 else 'leave behind'}", flush=True)
             elif msg_type == SNAPSHOT_REQUEST:

@@ -39,7 +39,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Story flags, puzzle progress, doors unlocked once, events seen | done | `flag_sync.cpp` | the 0x47 flag words, which include the enemy-killed bits |
 | Partner health and HP changes (HUD shows both characters) | done | `state_sync.cpp`, `state_correction.cpp`, `player_damage.cpp` | only the owner changes a character's HP |
 | Cutscenes and scripted moves of the other character | done | `event_place.cpp` | the story cutscene itself seen by both is a separate row below |
-| Story cutscene seen by both | missing | `menu_mirror.cpp`, `room_phase.h` | the non-trigger side only freezes ("Waiting for partner"); it never plays the cutscene |
+| Story cutscene seen by both, scripted room events (spawns, window breaks, camera cuts) | done, unverified live | `event_sync.cpp`, `event_rule.h` | the firer's room script thread is replayed op by op on the peer when it is in the room (docs/re/RE0_EVENT_SYNC.md) |
 | Puzzle props (push blocks, dumbwaiter, cranks) | partial | `flag_sync.cpp` | the flags they set are synced; objects whose state lives in the unit (pushable or shootable props, moving platforms, doors that animate after a script) are not; not audited object by object |
 | Using a healing item on the partner | unknown | `player_damage.cpp` | the setHP gate refuses non-owner HP changes; check whether the game offers it and whether the herb is lost |
 | Enemies the same on both screens: both machines run their enemies; decisions come only from the owner (the follower takes them at its own think step or action boundary), hits and deaths are owner-decided and replayed exactly, the target follows the owner, rooms start together (barrier) | done, unverified live | `enemy_decision.cpp`, `enemy_net.cpp`, `enemy_state.cpp`, `enemy_target.cpp`, `enemy_damage_hook.cpp`, `room_gate.cpp` | design, ownership and conditions: docs/re/RE0_ENEMY_SYNC_REVIEW.md; enemies are created from the same seeded random state on both machines (`enemy_spawn.cpp`) |
@@ -58,7 +58,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Pause behaviour | done, unverified live | `menu_mirror.cpp`, `menu_hold_rule.h` | menus hold the partner's world 20 s, reading screens and cutscenes until closed |
 | Item box | not needed | none | RE0 has none; items are dropped on the floor (floor sync covers it) |
 | Downed or revive | not needed | none | RE0 has no such state; a death is a game over |
-| Local script flags (sEventScript +0x58) | not needed | none | script-internal ordering, not saved; RE0_NOTES says why they are not synced |
+| Local script flags (sEventScript +0x58) | not needed | none | script-internal ordering, not saved; a replayed thread sets them on the peer itself (`event_sync`) |
 | Controls overlay | missing | `launcher/package/README.txt` | the user's rule is no explainer text in UI; keep keys in the README only |
 
 ### Failure handling
