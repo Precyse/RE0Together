@@ -9,6 +9,6 @@ namespace enemy_damage_hook {
 bool install();
 
 // Runs the enemy's own damage function for a hit received from the peer (the hook lets it through).
-bool applyNetworkHit(uintptr_t enemy, uintptr_t attacker, float distance, game::HitInfo& info);
+bool applyNetworkHit(uintptr_t enemy, uintptr_t attacker, game::HitPoint& point, game::HitInfo& info);
 
 }  // namespace enemy_damage_hook

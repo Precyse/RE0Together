@@ -9,7 +9,7 @@ namespace damage_thunk {
 
 constexpr size_t kThunkSize = 32;
 
-using Handler = void(__stdcall*)(void* enemy, void* attacker, float distance, game::HitInfo* info,
+using Handler = void(__stdcall*)(void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
                                  uintptr_t original);
 
 // Replaces the damage slot of `vtable` with a thunk written into `memory` (kThunkSize executable bytes) that calls
@@ -17,8 +17,8 @@ using Handler = void(__stdcall*)(void* enemy, void* attacker, float distance, ga
 uintptr_t patchVtable(uintptr_t vtable, uint8_t* memory, Handler handler);
 
 // Calls a damage function the way the game does.
-inline void callOriginal(uintptr_t original, void* enemy, void* attacker, float distance, game::HitInfo* info) {
-    game::callThiscall<void>(original, enemy, attacker, distance, info);
+inline void callOriginal(uintptr_t original, void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info) {
+    game::callThiscall<void>(original, enemy, attacker, point, info);
 }
 
 }  // namespace damage_thunk

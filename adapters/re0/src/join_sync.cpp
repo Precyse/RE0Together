@@ -64,6 +64,7 @@ void answer() {
     }
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;
     floor_items_sync::sendJournal();
+    game_tick::rearmAfterResync();
     logger::write("join_sync: snapshot sent (Billy scene 0x%02x, Rebecca scene 0x%02x)",
                   placeOf(snapshot, Character::Billy).scene, placeOf(snapshot, Character::Rebecca).scene);
 }
@@ -80,6 +81,7 @@ void finish(const JoinSnapshot& snapshot) {
     const CharacterPlace& ownPlace = placeOf(snapshot, own);
     game::writeTransform(character_owner::find(own), ownPlace.pos, ownPlace.quat);
     g_caughtUp = true;
+    game_tick::rearmAfterResync();
     logger::write("join_sync: caught up in scene 0x%02x", scene::current());
 }
 

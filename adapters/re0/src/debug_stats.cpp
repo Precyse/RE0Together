@@ -73,6 +73,11 @@ void noteCallbackDisabled(const char* name) {
     g_disabled.emplace_back(name);
 }
 
+void noteCallbackRearmed(const char* name) {
+    std::lock_guard lock(g_mutex);
+    std::erase(g_disabled, name);
+}
+
 void setError(const char* format, ...) {
     char text[kErrorCapacity];
     va_list args;

@@ -87,6 +87,7 @@ void count(Counter counter, uint32_t amount = 1);
 void set(Gauge gauge, int value);
 void setSession(const SessionSnapshot& session);
 void noteCallbackDisabled(const char* name);
+void noteCallbackRearmed(const char* name);
 
 // printf-style; also the text shown by the overlay.
 void setError(const char* format, ...);

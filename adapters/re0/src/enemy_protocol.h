@@ -10,19 +10,19 @@ constexpr uint16_t kMsgHitRequest = proto::kFirstGameType + 0x10;   // guest to 
 constexpr uint16_t kMsgHitApplied = proto::kFirstGameType + 0x11;   // host to all, reliable
 constexpr uint16_t kMsgEnemyState = proto::kFirstGameType + 0x12;   // host to all, unreliable, 20 Hz
 
-// Payload of HIT_REQUEST and HIT_APPLIED: a HitInfo without its attacker pointer.
+// Payload of HIT_REQUEST and HIT_APPLIED: the hit point by value and a HitInfo without its attacker pointer.
 struct HitPayload {
     uint8_t slot;
     uint8_t attackerCharacterId;  // 0 Billy, 1 Rebecca
     uint8_t flag;
-    uint8_t reserved;
-    float distance;
+    uint8_t room;  // the sender's loaded scene: pool slots are reused by the next room's enemies
+    float point[3];  // game::HitPoint; the damage function takes its address, so only the values can travel
     int32_t rangeTier;
     int32_t attackType;
     int32_t a;
     int32_t b;
 };
-static_assert(sizeof(HitPayload) == 24);
+static_assert(sizeof(HitPayload) == 32);
 
 // ENEMY_STATE: one count byte, then `count` entries.
 constexpr size_t kStateHeaderSize = 1;

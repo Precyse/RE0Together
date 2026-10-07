@@ -19,7 +19,7 @@ using Clock = std::chrono::steady_clock;
 
 constexpr auto kFilePollInterval = std::chrono::seconds(1);
 constexpr float kToastSeconds = 2.5f;
-constexpr wchar_t kTriggerFile[] = L"\resync_now.txt";
+constexpr wchar_t kTriggerFile[] = L"\\resync_now.txt";
 
 NetClient* g_net = nullptr;
 Clock::time_point g_lastPoll;  // net thread only

@@ -6,15 +6,15 @@
 
 namespace {
 
-// Entry stack: [ret][attacker][distance][info]. Five pushes rebuild the arguments right to left; each push moves
-// the remaining source slots by 4, so the same [esp+16] displacement reads info, distance, then attacker.
+// Entry stack: [ret][attacker][point][info]. Five pushes rebuild the arguments right to left; each push moves
+// the remaining source slots by 4, so the same [esp+16] displacement reads info, point, then attacker.
 constexpr uint8_t kSourceDisplacement = 16;
 constexpr uint16_t kCalleeArgumentBytes = 12;
 
 void emitThunk(uint8_t* p, damage_thunk::Handler handler, uintptr_t original) {
     thunk::emit(p, {0x68});  // push original
     thunk::emitAddress(p, reinterpret_cast<const void*>(original));
-    for (int i = 0; i < 3; ++i) thunk::emit(p, {0xFF, 0x74, 0x24, kSourceDisplacement});  // push info, distance, attacker
+    for (int i = 0; i < 3; ++i) thunk::emit(p, {0xFF, 0x74, 0x24, kSourceDisplacement});  // push info, point, attacker
     thunk::emit(p, {0x51});  // push ecx (enemy)
     thunk::emit(p, {0xB8});  // mov eax, handler
     thunk::emitAddress(p, reinterpret_cast<const void*>(handler));

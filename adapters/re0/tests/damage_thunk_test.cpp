@@ -9,7 +9,6 @@
 namespace {
 
 constexpr size_t kFakeSlotCount = 40;
-constexpr float kDistance = 123.5f;
 constexpr int kPassCount = 3;
 
 struct Fake {
@@ -19,7 +18,7 @@ struct Fake {
 struct Recorded {
     void* enemy = nullptr;
     void* attacker = nullptr;
-    float distance = 0;
+    game::HitPoint* point = nullptr;
     game::HitInfo* info = nullptr;
     int calls = 0;
 };
@@ -29,24 +28,25 @@ Recorded g_handler;
 uintptr_t g_handlerOriginal = 0;
 bool g_suppress = false;
 
-void __fastcall fakeDamage(Fake* self, void*, void* attacker, float distance, game::HitInfo* info) {
-    g_original = {self, attacker, distance, info, g_original.calls + 1};
+void __fastcall fakeDamage(Fake* self, void*, void* attacker, game::HitPoint* point, game::HitInfo* info) {
+    g_original = {self, attacker, point, info, g_original.calls + 1};
 }
 
-void __stdcall handler(void* enemy, void* attacker, float distance, game::HitInfo* info, uintptr_t original) {
-    g_handler = {enemy, attacker, distance, info, g_handler.calls + 1};
+void __stdcall handler(void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info, uintptr_t original) {
+    g_handler = {enemy, attacker, point, info, g_handler.calls + 1};
     g_handlerOriginal = original;
-    if (!g_suppress) damage_thunk::callOriginal(original, enemy, attacker, distance, info);
+    if (!g_suppress) damage_thunk::callOriginal(original, enemy, attacker, point, info);
 }
 
-using DamageFn = void(__fastcall*)(void* self, void* edx, void* attacker, float distance, game::HitInfo* info);
+using DamageFn = void(__fastcall*)(void* self, void* edx, void* attacker, game::HitPoint* point, game::HitInfo* info);
 
 // Returns esp after the call minus esp before it: 0 when the thunk pops exactly its 12 argument bytes.
-__declspec(noinline) intptr_t callSlot(DamageFn slot, void* self, void* attacker, game::HitInfo* info) {
+__declspec(noinline) intptr_t callSlot(DamageFn slot, void* self, void* attacker, game::HitPoint* point,
+                                       game::HitInfo* info) {
     uintptr_t before = 0;
     uintptr_t after = 0;
     __asm mov before, esp
-    slot(self, nullptr, attacker, kDistance, info);
+    slot(self, nullptr, attacker, point, info);
     __asm mov after, esp
     return static_cast<intptr_t>(after - before);
 }
@@ -71,24 +71,25 @@ int main() {
     if (table[game::kEnemyDamageSlot] != memory) return fail("slot not patched");
 
     game::HitInfo info{1, 2, 3, 4, &fake, 1, {}};
+    game::HitPoint point{1.0f, 2.0f, 3.0f};
     int attackerTarget = 0;
     auto* thunked = reinterpret_cast<DamageFn>(table[game::kEnemyDamageSlot]);
 
     for (int pass = 1; pass <= kPassCount; ++pass) {
-        if (callSlot(thunked, &fake, &attackerTarget, &info) != 0) return fail("stack unbalanced (pass-through)");
+        if (callSlot(thunked, &fake, &attackerTarget, &point, &info) != 0) return fail("stack unbalanced (pass-through)");
         if (g_handler.calls != pass || g_original.calls != pass) return fail("call counts");
-        if (g_handler.enemy != &fake || g_handler.attacker != &attackerTarget || g_handler.distance != kDistance ||
+        if (g_handler.enemy != &fake || g_handler.attacker != &attackerTarget || g_handler.point != &point ||
             g_handler.info != &info || g_handlerOriginal != original) {
             return fail("handler arguments");
         }
-        if (g_original.enemy != &fake || g_original.attacker != &attackerTarget || g_original.distance != kDistance ||
+        if (g_original.enemy != &fake || g_original.attacker != &attackerTarget || g_original.point != &point ||
             g_original.info != &info) {
             return fail("original arguments");
         }
     }
 
     g_suppress = true;
-    if (callSlot(thunked, &fake, &attackerTarget, &info) != 0) return fail("stack unbalanced (suppressed)");
+    if (callSlot(thunked, &fake, &attackerTarget, &point, &info) != 0) return fail("stack unbalanced (suppressed)");
     if (g_handler.calls != kPassCount + 1 || g_original.calls != kPassCount) return fail("suppression ran the original");
 
     std::printf("PASS\n");

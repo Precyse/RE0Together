@@ -200,7 +200,7 @@ constexpr uintptr_t kEnemyDistancePartnerOffset = 0x67d0;     // f32 distance to
 // or animate the enemy.
 constexpr uintptr_t kEnemyThinkFunction = 0x41db20;
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
-constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, float distance, HitInfo*), thiscall ret 0xC
+constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
     0xcbdcd8, 0xcc4f28, 0xcc50a0, 0xcc5218, 0xcc5390, 0xcc5508, 0xcc5680, 0xcc57f8, 0xcc5970, 0xcc3fe8,
     0xcbf0d0, 0xcbf5f8, 0xcbf9a0, 0xcbfbc8, 0xcbfe58, 0xcc01a8, 0xcc0458, 0xcc08c0, 0xcc5ae8, 0xcc0cb0,
@@ -218,6 +218,15 @@ struct HitInfo {
     uint8_t reserved[3];
 };
 static_assert(sizeof(HitInfo) == 24);
+
+// Where a hit landed, in world space: the damage function copies it into the enemy (+0x6aa0 in the 0x420f70 family)
+// and tests its height against the enemy's to tell a head hit from a body hit.
+struct HitPoint {
+    float x;
+    float y;
+    float z;
+};
+static_assert(sizeof(HitPoint) == 12);
 
 // Think (brain) objects
 constexpr uintptr_t kControlledThinkVtable = 0xccbbe8;  // cPlayerThink

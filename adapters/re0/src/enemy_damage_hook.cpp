@@ -33,32 +33,35 @@ uintptr_t originalFor(uintptr_t vtable) {
 }
 
 // Hit by a player character: the owning machine reports it and the room's enemy authority applies it.
-void onPlayerHit(Character shooter, void* enemy, void* attacker, float distance, game::HitInfo* info,
+void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
                  uintptr_t original) {
     const uintptr_t enemyAddress = reinterpret_cast<uintptr_t>(enemy);
     if (character_owner::isRemoteOwned(shooter)) return;
     if (!character_owner::isLocalOwned(shooter)) {
-        damage_thunk::callOriginal(original, enemy, attacker, distance, info);
+        damage_thunk::callOriginal(original, enemy, attacker, point, info);
     } else if (split_rooms::localEnemyAuthority()) {
-        damage_thunk::callOriginal(original, enemy, attacker, distance, info);
-        enemy_net::announceHit(enemyAddress, shooter, distance, *info);
-    } else if (!enemy_net::requestHit(enemyAddress, shooter, distance, *info)) {
-        damage_thunk::callOriginal(original, enemy, attacker, distance, info);
+        damage_thunk::callOriginal(original, enemy, attacker, point, info);
+        enemy_net::announceHit(enemyAddress, shooter, *point, *info);
+    } else if (!enemy_net::requestHit(enemyAddress, shooter, *point, *info)) {
+        damage_thunk::callOriginal(original, enemy, attacker, point, info);
     }
 }
 
-void __stdcall onDamage(void* enemy, void* attacker, float distance, game::HitInfo* info, uintptr_t original) {
+void __stdcall onDamage(void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
+                        uintptr_t original) {
     if (g_applyingNetworkHit || !net_pad::active()) {
-        damage_thunk::callOriginal(original, enemy, attacker, distance, info);
+        damage_thunk::callOriginal(original, enemy, attacker, point, info);
         return;
     }
     const Character shooter = character_owner::identify(reinterpret_cast<uintptr_t>(attacker));
     if (shooter != Character::Unknown) {
-        onPlayerHit(shooter, enemy, attacker, distance, info, original);
+        onPlayerHit(shooter, enemy, attacker, point, info, original);
         return;
     }
     const bool hasSlot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy)) != enemy_registry::kNoSlot;
-    if (split_rooms::localEnemyAuthority() || !hasSlot) damage_thunk::callOriginal(original, enemy, attacker, distance, info);
+    if (split_rooms::localEnemyAuthority() || !hasSlot) {
+        damage_thunk::callOriginal(original, enemy, attacker, point, info);
+    }
 }
 
 }  // namespace
@@ -78,11 +81,11 @@ bool install() {
     return g_patchedCount == game::kEnemyVtables.size();
 }
 
-bool applyNetworkHit(uintptr_t enemy, uintptr_t attacker, float distance, game::HitInfo& info) {
+bool applyNetworkHit(uintptr_t enemy, uintptr_t attacker, game::HitPoint& point, game::HitInfo& info) {
     const uintptr_t original = originalFor(game::readPointer(enemy));
     if (!original) return false;
     g_applyingNetworkHit = true;
-    damage_thunk::callOriginal(original, reinterpret_cast<void*>(enemy), reinterpret_cast<void*>(attacker), distance,
+    damage_thunk::callOriginal(original, reinterpret_cast<void*>(enemy), reinterpret_cast<void*>(attacker), &point,
                                &info);
     g_applyingNetworkHit = false;
     return true;

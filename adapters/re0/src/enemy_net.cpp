@@ -1,5 +1,6 @@
 #include "enemy_net.h"
 
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -10,6 +11,7 @@
 #include "enemy_registry.h"
 #include "game_tick.h"
 #include "net_pad.h"
+#include "scene.h"
 #include "split_rooms.h"
 
 namespace {
@@ -19,6 +21,7 @@ using debug_stats::Counter;
 using enemy_protocol::HitPayload;
 
 constexpr size_t kMaxQueued = 64;
+constexpr uint16_t kMaxWireRoom = UINT8_MAX;
 
 struct Pending {
     uint16_t type;
@@ -29,26 +32,30 @@ NetClient* g_net = nullptr;
 std::mutex g_mutex;
 std::vector<Pending> g_queue;  // guarded by g_mutex
 
-bool send(uint16_t type, uint8_t destSlot, uintptr_t enemy, Character attacker, float distance,
+bool send(uint16_t type, uint8_t destSlot, uintptr_t enemy, Character attacker, const game::HitPoint& point,
           const game::HitInfo& info) {
     const int slot = enemy_registry::slotOf(enemy);
-    if (slot == enemy_registry::kNoSlot) return false;
-    const HitPayload hit{static_cast<uint8_t>(slot), static_cast<uint8_t>(attacker), info.flag, 0, distance,
-                         info.rangeTier, info.attackType, info.a, info.b};
+    const uint16_t room = scene::current();
+    if (slot == enemy_registry::kNoSlot || room > kMaxWireRoom) return false;
+    const HitPayload hit{static_cast<uint8_t>(slot), static_cast<uint8_t>(attacker), info.flag,
+                         static_cast<uint8_t>(room), {point.x, point.y, point.z}, info.rangeTier, info.attackType,
+                         info.a, info.b};
     const bool sent = g_net->send(type, true, destSlot, proto::bytesOf(hit));
     if (sent) debug_stats::count(type == enemy_protocol::kMsgHitRequest ? Counter::HitRequestSent : Counter::HitAppliedSent);
     return sent;
 }
 
-// Rebuilds the hit on this machine and runs it; the host then tells the peer.
+// Rebuilds the hit on this machine and runs it; the host then tells the peer. A hit queued before a room load is
+// dropped: its slot now names an enemy of the new room.
 void apply(const Pending& pending) {
     const HitPayload& hit = pending.hit;
-    if (hit.attackerCharacterId > static_cast<uint8_t>(Character::Rebecca)) return;
+    if (hit.attackerCharacterId > static_cast<uint8_t>(Character::Rebecca) || hit.room != scene::current()) return;
     const uintptr_t enemy = enemy_registry::enemyAt(hit.slot);
     const uintptr_t attacker = character_owner::find(static_cast<Character>(hit.attackerCharacterId));
     if (!enemy || !attacker) return;
+    game::HitPoint point{hit.point[0], hit.point[1], hit.point[2]};
     game::HitInfo info{hit.rangeTier, hit.attackType, hit.a, hit.b, reinterpret_cast<void*>(attacker), hit.flag, {}};
-    if (!enemy_damage_hook::applyNetworkHit(enemy, attacker, hit.distance, info)) return;
+    if (!enemy_damage_hook::applyNetworkHit(enemy, attacker, point, info)) return;
     if (pending.type != enemy_protocol::kMsgHitRequest) return;
     if (g_net->send(enemy_protocol::kMsgHitApplied, true, proto::kSlotAll, proto::bytesOf(hit))) {
         debug_stats::count(Counter::HitAppliedSent);
@@ -68,13 +75,13 @@ void drain() {
 
 namespace enemy_net {
 
-bool requestHit(uintptr_t enemy, Character attacker, float distance, const game::HitInfo& info) {
-    return send(enemy_protocol::kMsgHitRequest, static_cast<uint8_t>(net_pad::peerSlot()), enemy, attacker, distance,
+bool requestHit(uintptr_t enemy, Character attacker, const game::HitPoint& point, const game::HitInfo& info) {
+    return send(enemy_protocol::kMsgHitRequest, static_cast<uint8_t>(net_pad::peerSlot()), enemy, attacker, point,
                 info);
 }
 
-void announceHit(uintptr_t enemy, Character attacker, float distance, const game::HitInfo& info) {
-    send(enemy_protocol::kMsgHitApplied, proto::kSlotAll, enemy, attacker, distance, info);
+void announceHit(uintptr_t enemy, Character attacker, const game::HitPoint& point, const game::HitInfo& info) {
+    send(enemy_protocol::kMsgHitApplied, proto::kSlotAll, enemy, attacker, point, info);
 }
 
 void onFrame(const GameFrame& frame) {

@@ -2,8 +2,8 @@
 #include "net_client.h"
 
 // Resync on demand: a guest asks the host for a new join snapshot (its room, both inventories, the full flag block and
-// the floor changes), a host asks its guests to. Triggered by the file `coop\resync_now.txt` (created by hand, deleted
-// when taken) and by a room desync that persists (door_travel). Only in a session with a peer.
+// the floor changes), a host asks its guests to. Triggered by F9 (command_input), the file `coop\resync_now.txt`
+// (created by hand, deleted when taken) and a room desync that persists (door_travel). Only in a session with a peer.
 namespace resync {
 
 // Any thread: starts a resync (toast and log line with the reason).
