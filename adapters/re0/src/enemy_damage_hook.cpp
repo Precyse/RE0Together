@@ -23,7 +23,7 @@ struct Patched {
 
 std::array<Patched, game::kEnemyVtables.size()> g_patched{};
 size_t g_patchedCount = 0;
-bool g_applyingNetworkHit = false;  // game thread only
+bool g_runningDamage = false;  // game thread only: runDamage is calling the original
 
 uintptr_t originalFor(uintptr_t vtable) {
     for (size_t i = 0; i < g_patchedCount; ++i) {
@@ -32,7 +32,7 @@ uintptr_t originalFor(uintptr_t vtable) {
     return 0;
 }
 
-// Hit by a player character: the owning machine reports it and the room's enemy authority applies it.
+// Hit by a player character: the shooter's machine reports it, and the room's enemy owner applies it for everyone.
 void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
                  uintptr_t original) {
     const uintptr_t enemyAddress = reinterpret_cast<uintptr_t>(enemy);
@@ -40,8 +40,7 @@ void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint*
     if (!character_owner::isLocalOwned(shooter)) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
     } else if (split_rooms::localEnemyAuthority()) {
-        damage_thunk::callOriginal(original, enemy, attacker, point, info);
-        enemy_net::announceHit(enemyAddress, shooter, *point, *info);
+        enemy_net::applyAsOwner(enemyAddress, shooter, reinterpret_cast<uintptr_t>(attacker), *point, *info);
     } else if (!enemy_net::requestHit(enemyAddress, shooter, *point, *info)) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
     }
@@ -49,7 +48,7 @@ void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint*
 
 void __stdcall onDamage(void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
                         uintptr_t original) {
-    if (g_applyingNetworkHit || !net_pad::active()) {
+    if (g_runningDamage || !net_pad::active()) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
         return;
     }
@@ -81,13 +80,13 @@ bool install() {
     return g_patchedCount == game::kEnemyVtables.size();
 }
 
-bool applyNetworkHit(uintptr_t enemy, uintptr_t attacker, game::HitPoint& point, game::HitInfo& info) {
+bool runDamage(uintptr_t enemy, uintptr_t attacker, game::HitPoint& point, game::HitInfo& info) {
     const uintptr_t original = originalFor(game::readPointer(enemy));
     if (!original) return false;
-    g_applyingNetworkHit = true;
+    g_runningDamage = true;
     damage_thunk::callOriginal(original, reinterpret_cast<void*>(enemy), reinterpret_cast<void*>(attacker), &point,
                                &info);
-    g_applyingNetworkHit = false;
+    g_runningDamage = false;
     return true;
 }
 

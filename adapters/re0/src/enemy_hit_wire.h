@@ -8,15 +8,36 @@
 
 namespace enemy_hit_wire {
 
-// The hit point travels by value: the damage function only gets its address, which means nothing on the peer.
+// The hit point travels relative to the enemy: the damage function only gets its address, and its head/body test
+// compares the point's height with the enemy's, so each machine rebuilds it around its own enemy.
 inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacterId, uint8_t room,
-                                         const game::HitPoint& point, const game::HitInfo& info) {
-    return {slot, attackerCharacterId, info.flag, room, {point.x, point.y, point.z},
-            info.rangeTier, info.attackType, info.a, info.b};
+                                         const game::HitPoint& point, const float (&enemyPos)[3],
+                                         const game::HitInfo& info) {
+    return {slot,
+            attackerCharacterId,
+            info.flag,
+            room,
+            {point.x - enemyPos[0], point.y - enemyPos[1], point.z - enemyPos[2]},
+            info.rangeTier,
+            info.attackType,
+            info.a,
+            info.b,
+            0,
+            {}};
 }
 
-inline game::HitPoint pointOf(const enemy_protocol::HitPayload& hit) {
-    return {hit.point[0], hit.point[1], hit.point[2]};
+// The owner's HP and random state just before its damage function ran.
+inline void stamp(enemy_protocol::HitPayload& hit, int32_t hpBefore, const game::RandomState& random) {
+    hit.hpBefore = hpBefore;
+    for (size_t i = 0; i < random.size(); ++i) hit.random[i] = random[i];
+}
+
+inline game::HitPoint pointOf(const enemy_protocol::HitPayload& hit, const float (&enemyPos)[3]) {
+    return {enemyPos[0] + hit.offset[0], enemyPos[1] + hit.offset[1], enemyPos[2] + hit.offset[2]};
+}
+
+inline game::RandomState randomOf(const enemy_protocol::HitPayload& hit) {
+    return {hit.random[0], hit.random[1], hit.random[2], hit.random[3]};
 }
 
 // The HitInfo the receiver passes, with its own object for the attacking character.

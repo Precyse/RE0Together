@@ -6,23 +6,26 @@
 
 namespace enemy_protocol {
 
-constexpr uint16_t kMsgHitRequest = proto::kFirstGameType + 0x10;   // guest to host, reliable
-constexpr uint16_t kMsgHitApplied = proto::kFirstGameType + 0x11;   // host to all, reliable
-constexpr uint16_t kMsgEnemyState = proto::kFirstGameType + 0x12;   // host to all, unreliable, 20 Hz
+constexpr uint16_t kMsgHitRequest = proto::kFirstGameType + 0x10;   // to the room's enemy owner, reliable
+constexpr uint16_t kMsgHitApplied = proto::kFirstGameType + 0x11;   // the owner's applied hit, to all, reliable
+constexpr uint16_t kMsgEnemyState = proto::kFirstGameType + 0x12;   // owner to all, unreliable, 20 Hz
 
-// Payload of HIT_REQUEST and HIT_APPLIED: the hit point by value and a HitInfo without its attacker pointer.
+// Payload of HIT_REQUEST and HIT_APPLIED: a HitInfo without its attacker pointer, the hit point relative to the enemy,
+// and (HIT_APPLIED only) what the owner's damage function started from, so every machine replays the same outcome.
 struct HitPayload {
     uint8_t slot;
     uint8_t attackerCharacterId;  // 0 Billy, 1 Rebecca
     uint8_t flag;
     uint8_t room;  // the sender's loaded scene: pool slots are reused by the next room's enemies
-    float point[3];  // game::HitPoint; the damage function takes its address, so only the values can travel
+    float offset[3];  // hit point minus the enemy's position: the head/body test compares heights relative to the enemy
     int32_t rangeTier;
     int32_t attackType;
     int32_t a;
     int32_t b;
+    int32_t hpBefore;     // HIT_APPLIED: the owner's enemy HP just before the hit
+    uint32_t random[4];   // HIT_APPLIED: the owner's random state just before the hit (game::RandomState)
 };
-static_assert(sizeof(HitPayload) == 32);
+static_assert(sizeof(HitPayload) == 52);
 
 // ENEMY_STATE: one count byte, then `count` entries.
 constexpr size_t kStateHeaderSize = 1;

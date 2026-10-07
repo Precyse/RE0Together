@@ -210,6 +210,11 @@ constexpr uintptr_t kEnemyDistancePartnerOffset = 0x67d0;     // f32 distance to
 // or animate the enemy.
 constexpr uintptr_t kEnemyThinkFunction = 0x41db20;
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
+// The game's one random generator (xorshift128 0x684d90 on four words at 0xe2ccb0). An enemy's damage function rolls
+// it for the critical hit before applying (slot 76 0x4cbdb0 -> randRange 0x6600c0; class 0x438b00 via 0x660080), so
+// a hit replayed with the owner's state rolls the owner's result.
+constexpr uintptr_t kRandomStateGlobal = 0xe2ccb0;
+using RandomState = std::array<uint32_t, 4>;
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
     0xcbdcd8, 0xcc4f28, 0xcc50a0, 0xcc5218, 0xcc5390, 0xcc5508, 0xcc5680, 0xcc57f8, 0xcc5970, 0xcc3fe8,
