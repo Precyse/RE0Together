@@ -9,7 +9,7 @@ screen only, crits show on one screen only.
 
 | Step | Engine | Notes |
 |---|---|---|
-| Spawn | room load; per enemy slot 36 (0x420ce0 in the base family) reads the spawn record, sets HP, and for some records picks a variant with the global RNG (`rand % 3` into +0x6ab0) | pool sEnemy +0x4b0, 37 slots; same save and room give the same slot order. A killed enemy's flag (0x612 + spawn id) keeps it out of play (flag_sync carries it). |
+| Spawn | room load and scripts; sEnemy's create 0x410bb0 builds each enemy from its spawn record and calls slot 36 (0x420ce0 in the base family), which sets HP and on a first spawn picks a variant with the global RNG (`rand % 3` into +0x6ab0) | pool sEnemy +0x4b0, 37 slots; same save and room give the same slot order. A killed enemy's flag (0x612 + spawn id) keeps it out of play (flag_sync carries it). |
 | Update | vtable slot 41, once per frame from sUnit::updateAll | one function per class (18 implementations) runs AI, action execution, animation and movement together; it ends in `table[state]` on the record +0x67a4. |
 | Think | base family (15 vtables): state-2 handler 0x41db20 | a chain of transition checks ending in setAction; picks the target in 0x421b20 (nearer of sPlayer's controlled and partner; the controlled one on a tie). The other 12 implementations decide inside their per-action functions with direct writes of +0x67a4. |
 | Action | slot 63 setAction(state, id, a, b) stores the record; the state handlers start the matching motion | 83 direct writes of the record in the non-base classes bypass setAction. |
@@ -134,6 +134,9 @@ two decisions runs natively on both machines.
   peer's same door is ready, so both rooms start their enemies from the spawn records together. Nothing visible is
   frozen; "Waiting for partner" shows only past 2 s; released after 5 s at most, or when the peer turns away or the
   link drops. A door one player takes alone, or a partner heading into the same room on its own, never waits.
+- **Creation.** sEnemy's create 0x410bb0 runs with the random state made from the scene and the spawn record
+  (index, kind, spawn id), and the game's own state is put back after it, so both machines create the same enemies
+  (the zombies' variant included).
 - **Following mid-room** (walking into a room the peer already runs, or after a barrier timeout). On the first
   snapshot each enemy takes the owner's pose (if more than 40 off) and HP once, and the owner's current record stands
   in as its next decision until the owner's first one arrives.
@@ -154,7 +157,8 @@ Owner = everything vanilla, plus reporting.
 | HP | its damage function | the replayed damage function (from the owner's HP and random state); the owner's HP after when a replay or a non-player hit ends elsewhere; once at follow start | the follower never runs its own damage function on a shared enemy (hits go to the owner) |
 | Death | HP in its damage function, then its own decisions | the same, replayed | no periodic HP writes |
 | Target +0x6b80/84/88 | the selector | the hooked selector, with the owner's character | one call writes it |
-| Global random state 0xe2ccb0 | the game | swapped in for one replayed damage call and put back right after, on the game thread | |
+| Global random state 0xe2ccb0 | the game; set from the spawn record for one create, then put back | the same for a create; swapped in for one replayed damage call and put back right after, on the game thread | |
+| Spawn variant +0x6ab0 and spawn HP | the spawn init, from the seeded state or the saved record | the same | both create from the same state and the same records |
 | Door finish (room start) | the door's own check | the door's own check, deferred while the peer's same door is not ready | the hook only ever answers "not yet" to a check that passed |
 
 The owner's hits and decisions reach the follower through one ordered queue (enemy_net), so a decision the owner
@@ -181,7 +185,8 @@ made before a hit is never applied after that hit's reaction (the replay drops i
 | Resync mid-combat | the join snapshot does not touch enemies; a join teleport's door is not shared, so it never waits | code |
 | Split party | each machine owns its room; hits and decisions of another room are dropped; doors never wait | code |
 | Cutscene or scripted enemy | script setAction calls run natively on both (only the decision points are substituted); a cutscene or menu on either side holds the other's world | code |
-| Game over and continue, save load | a room load: follow state and waiting decisions reset | code |
+| Game over and continue, save load | a room load: follow state and waiting decisions reset; the enemies are created from the same seeded states | code |
+| Scripted spawn mid-room | the scripts' spawns go through the same seeded create | spawn_seed_test, code |
 
 ## 6. Live checks (next session)
 
@@ -217,11 +222,13 @@ made before a hit is never applied after that hit's reaction (the replay drops i
    arrived waits there (about half a round trip), holding its last motion; expected invisible, unconfirmed.
 4. **The door barrier's screen.** During a wait the door stays on its last phase; whether that shows the door's last
    frame or black after its fade is unconfirmed.
-5. **The random state swap** assumes nothing outside the game thread uses the generator; its 154 call sites were not
-   all checked.
+5. **The random state swaps** (one replayed damage call, one enemy create) assume nothing outside the game thread uses
+   the generator; its 154 call sites were not all checked, and the create's callers (room setup 0x4109d0, script
+   opcodes through 0x4109f0) are taken to run on the game thread.
 6. **Non-player damage** (explosions) on the follower shows no reaction, only the owner's HP after (there is no
    attacker object to replay with).
-7. **Spawn variants** (`rand % 3` into +0x6ab0 at spawn) are not synced.
+7. **Spawn variants** are now the same on both machines, but a first spawn's variant is a fixed function of its
+   record (not random per playthrough, as in vanilla).
 8. **Message number 0x011A** (ENEMY_DECISION) could collide with another branch's new message; check on merge.
 9. **Wire changes:** HitPayload 60 bytes, ENEMY_STATE header with a sequence number, ENEMY_DECISION 52 bytes,
    ROOM_STATE door flags. Both players need the same build (the build check enforces it).

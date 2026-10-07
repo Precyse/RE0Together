@@ -222,6 +222,15 @@ constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemie
 // a hit replayed with the owner's state rolls the owner's result.
 constexpr uintptr_t kRandomStateGlobal = 0xe2ccb0;
 using RandomState = std::array<uint32_t, 4>;
+// sEnemy's create (thiscall (a, record index, b), ret 0xc, returns the enemy): builds an enemy from the room's spawn
+// record this + 0x30 + index * 0x5c (index below 0x4e8) and ends in the class's spawn init (vtable slot 36), which reads
+// the record (+0x4 kind, +0x10 spawn id, +0x40 first-spawn marker, +0x50 saved variant) and rolls the random state.
+constexpr uintptr_t kEnemyCreateFunction = 0x410bb0;
+constexpr uintptr_t kSpawnTableOffset = 0x30;
+constexpr uintptr_t kSpawnRecordSize = 0x5c;
+constexpr uint32_t kSpawnRecordCount = 0x4e8;
+constexpr uintptr_t kSpawnRecordKindOffset = 0x4;
+constexpr uintptr_t kSpawnRecordIdOffset = 0x10;
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
     0xcbdcd8, 0xcc4f28, 0xcc50a0, 0xcc5218, 0xcc5390, 0xcc5508, 0xcc5680, 0xcc57f8, 0xcc5970, 0xcc3fe8,
@@ -382,6 +391,15 @@ inline void swapControlled(uintptr_t next, uintptr_t previous) {
     callThiscall<void>(kSetControlledFunction, sPlayer, reinterpret_cast<void*>(next));
     setPartner(previous);
 }
+
+// The game's random state (kRandomStateGlobal); zeros when unreadable.
+inline RandomState readRandomState() {
+    RandomState state{};
+    readMemory(kRandomStateGlobal, state);
+    return state;
+}
+
+inline void writeRandomState(const RandomState& state) { writeMemory(kRandomStateGlobal, state); }
 
 inline bool readTransform(uintptr_t player, float (&pos)[3], float (&quat)[4]) {
     return player && readMemory(player + kPlayerPositionOffset, pos) &&

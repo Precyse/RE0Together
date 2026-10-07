@@ -47,14 +47,6 @@ int32_t hpOf(uintptr_t enemy) {
 
 bool positionOf(uintptr_t enemy, float (&out)[3]) { return game::readMemory(enemy + game::kUnitPositionOffset, out); }
 
-game::RandomState readRandom() {
-    game::RandomState state{};
-    game::readMemory(game::kRandomStateGlobal, state);
-    return state;
-}
-
-void writeRandom(const game::RandomState& state) { game::writeMemory(game::kRandomStateGlobal, state); }
-
 // The loaded room as a wire byte, or false when it has no id that fits.
 bool wireRoom(uint8_t& out) {
     const uint16_t room = scene::current();
@@ -84,7 +76,7 @@ void sendApplied(const HitPayload& hit) {
 // Runs the hit as the owner: its HP and random state are what every replay starts from, its HP after is the outcome.
 void runAsOwner(uintptr_t enemy, uintptr_t attackerObject, HitPayload& hit, game::HitPoint point,
                 game::HitInfo info) {
-    const game::RandomState random = readRandom();
+    const game::RandomState random = game::readRandomState();
     enemy_hit_wire::stamp(hit, hpOf(enemy), random);
     if (!enemy_damage_hook::runDamage(enemy, attackerObject, point, info)) return;
     hit.hpAfter = hpOf(enemy);
@@ -114,10 +106,10 @@ void replay(uintptr_t enemy, uintptr_t attackerObject, const HitPayload& hit) {
     game::HitPoint point = enemy_hit_wire::pointOf(hit, enemyPos);
     game::HitInfo info = enemy_hit_wire::infoOf(hit, reinterpret_cast<void*>(attackerObject));
     if (hpLocal != hit.hpBefore) player_damage::setHp(enemy, hit.hpBefore);
-    const game::RandomState local = readRandom();
-    writeRandom(enemy_hit_wire::randomOf(hit));
+    const game::RandomState local = game::readRandomState();
+    game::writeRandomState(enemy_hit_wire::randomOf(hit));
     const bool ran = enemy_damage_hook::runDamage(enemy, attackerObject, point, info);
-    writeRandom(local);
+    game::writeRandomState(local);
     if (!ran) return;
     enemy_decision::onHitReplayed(hit.slot);
     const int32_t hpReplayed = hpOf(enemy);

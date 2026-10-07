@@ -14,6 +14,7 @@
 #include "door_travel.h"
 #include "enemy_damage_hook.h"
 #include "enemy_net.h"
+#include "enemy_spawn.h"
 #include "enemy_state.h"
 #include "enemy_target.h"
 #include "enemy_decision.h"
@@ -91,6 +92,7 @@ void enableCoop() {
     enemy_damage_hook::install();
     enemy_target::install();
     enemy_decision::install();
+    enemy_spawn::install();
     player_damage::install(g_net);
     menu_mirror::enable();
 }
