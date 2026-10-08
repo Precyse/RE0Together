@@ -20,7 +20,6 @@ void installEarly();
 uintptr_t managerOf(uintptr_t entity);
 std::vector<Change> sampleChanges(uintptr_t manager, VariableValues& sent, bool snapshot);
 void applyValues(uintptr_t manager, const VariableValues& values);
-void applyChanges(uintptr_t manager, const std::vector<Change>& changes);
 
 // The source the remote copies: the local player (loopback test).
 void setMirrorLocalPlayer(bool enabled);

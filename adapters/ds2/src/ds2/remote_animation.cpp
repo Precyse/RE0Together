@@ -252,13 +252,6 @@ void applyValues(uintptr_t manager, const VariableValues& values) {
     }
 }
 
-void applyChanges(uintptr_t manager, const std::vector<Change>& changes) {
-    const int32_t count = std::min<int32_t>(ds2::field<int32_t>(manager, kVariableCount), kMaxVariables);
-    for (const Change& change : changes) {
-        if (change.index < count) writeVariable(manager, change.index, change.type, change.value);
-    }
-}
-
 void installEarly() {
     hooks::install("morpheme animated pose", ds2::at(kMorphemeGetAnimatedPose),
                    reinterpret_cast<void*>(&morphemeDetour), reinterpret_cast<void**>(&g_morpheme));
