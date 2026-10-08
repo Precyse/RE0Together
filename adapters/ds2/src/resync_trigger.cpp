@@ -13,7 +13,7 @@
 namespace {
 
 constexpr TimeUs kPollIntervalUs = 500'000;
-constexpr wchar_t kTriggerFile[] = L"\resync_now.txt";
+constexpr wchar_t kTriggerFile[] = L"\\resync_now.txt";
 constexpr int kResyncKey = VK_F9;
 constexpr SHORT kKeyDown = static_cast<SHORT>(0x8000);
 constexpr float kToastSeconds = 2.0f;
