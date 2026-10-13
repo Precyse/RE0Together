@@ -6,7 +6,7 @@ usage: python gamectl.py shot [out.png]
        python gamectl.py loadsave <slot> [--from-logo]    from the title menu (or the boot logo), load a save slot and continue
        python gamectl.py idle                             seconds since the user last touched the mouse or keyboard
 Keys are only sent while RE0 is the foreground window; if focus cannot be taken, nothing is sent.
-Menus: Enter confirms, Space cancels, Esc opens pause (Quit Game lives there).
+Menus: Enter confirms, Space cancels. No key opens a pause menu (Esc, Tab, Backspace, P, F1 tried without the mod); quit with Alt+F4.
 """
 import ctypes
 import ctypes.wintypes as wt

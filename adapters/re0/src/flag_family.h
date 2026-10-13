@@ -1,10 +1,11 @@
 #pragma once
 #include <cstdint>
 
-// The story flag bitset (sFlagManager +0x20) holds every script flag family. Each family sits at a
-// base bit and has a count of flags; the bases are the constants the game's setters add the operand to
-// (SetEnemyFlag 0x312, SetEffectFlag 0x412, SetActFlag 0x612, SetDisplayFlag 0x712, SetBGMFlag 0x812).
-// docs/re/RE0_FLAGS.md lists every flag with the rooms that set and read it.
+// The story flag bitset (sFlagManager +0x20, 0x47 words) holds every script flag family. Each family runs
+// from its base (the constant the game's setter adds the operand to: SetEnemyFlag 0x312, SetEffectFlag 0x412,
+// SetActFlag 0x612, SetDisplayFlag 0x712, SetBGMFlag 0x812) to the next base, as the generic setter
+// (0x59bd50) branches; saves set bits past the last named flag of a family.
+// docs/re/RE0_FLAGS.md lists every named flag with the rooms that set and read it.
 namespace flag_family {
 
 enum class Family { Story, Enemy, Effect, Act, Display, Bgm, Unmapped };
@@ -15,13 +16,15 @@ struct Range {
     uint32_t end;  // one past the last bit
 };
 
+constexpr uint32_t kBitsetEnd = 0x47 * 32;
+
 constexpr Range kRanges[] = {
-    {Family::Story, 0x000, 0x1c1},
-    {Family::Enemy, 0x312, 0x3d9},
-    {Family::Effect, 0x412, 0x4b0},
-    {Family::Act, 0x612, 0x6bf},
-    {Family::Display, 0x712, 0x785},
-    {Family::Bgm, 0x812, 0x84d},
+    {Family::Story, 0x000, 0x312},
+    {Family::Enemy, 0x312, 0x412},
+    {Family::Effect, 0x412, 0x612},
+    {Family::Act, 0x612, 0x712},
+    {Family::Display, 0x712, 0x812},
+    {Family::Bgm, 0x812, kBitsetEnd},
 };
 
 inline Family classify(uint32_t bit) {
