@@ -15,7 +15,8 @@ namespace {
 constexpr size_t kLineCapacity = 1024;
 constexpr auto kRepeatWindow = std::chrono::seconds(1);
 
-std::mutex g_mutex;
+std::mutex g_mutex;  // guards g_file
+FILE* g_file = nullptr;
 std::mutex g_repeatMutex;  // guards the last repeat-filtered line
 std::string g_lastFiltered;
 std::chrono::steady_clock::time_point g_lastFilteredTime;
@@ -25,12 +26,14 @@ void append(const char* message) {
     GetLocalTime(&t);
 
     std::lock_guard lock(g_mutex);
-    const std::wstring path = coopDirectory() + L"\\adapter.log";
-    FILE* file = _wfsopen(path.c_str(), L"a", _SH_DENYNO);
-    if (!file) return;
-    fprintf(file, "%04u-%02u-%02u %02u:%02u:%02u.%03u %s\n", t.wYear, t.wMonth, t.wDay, t.wHour,
+    if (!g_file) {
+        const std::wstring path = coopDirectory() + L"\\adapter.log";
+        g_file = _wfsopen(path.c_str(), L"a", _SH_DENYNO);
+        if (!g_file) return;
+    }
+    fprintf(g_file, "%04u-%02u-%02u %02u:%02u:%02u.%03u %s\n", t.wYear, t.wMonth, t.wDay, t.wHour,
             t.wMinute, t.wSecond, t.wMilliseconds, message);
-    fclose(file);
+    fflush(g_file);
 }
 
 }  // namespace
