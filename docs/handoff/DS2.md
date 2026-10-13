@@ -33,7 +33,7 @@ Game: Death Stranding 2 (Decima engine), G:\SteamLibrary\steamapps\common\DEATH 
 
 ## Live test rules
 - Only one game instance. Use fake_launcher.py as the peer only. Stop with cleanup.sh. No push.
-- Before every launch: uptime under 1 day AND free commit above 25 GB (Get-CimInstance Win32_OperatingSystem). Reboot if RAM is short (steamwebhelper once held 5.6 GB).
+- Before every launch: free commit above 25 GB (Get-CimInstance Win32_OperatingSystem). Reboot if RAM is short (steamwebhelper once held 5.6 GB).
 - Lock: G:\coop-scratch\ds2\scripts\lock.sh for game runs.
 - Never restart a live session or the PC to free leaked commit; restart Steam only.
 - Never create or delete body cargo while the local player's slots are empty or gameplay has not settled.
