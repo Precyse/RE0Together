@@ -14,6 +14,7 @@
 #include "net_client.h"
 #include "peer_pose.h"
 #include "player_sync.h"
+#include "order_handoff.h"
 #include "rack_sync.h"
 #include "toast_queue.h"
 #include "ds2/remote_animation.h"
@@ -129,6 +130,7 @@ DWORD WINAPI initThread(LPVOID) {
     structures::installEarly();
     vehicle_sync::installEarly();
     rack_sync::installEarly();
+    order_handoff::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
     hooks::applyBatch();

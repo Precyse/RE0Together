@@ -31,11 +31,14 @@ VEHICLE_LOAD = 0x0109
 VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
 CARGO_ADD = 0x0103
 CARGO_GONE, MOVE_ACK = 0x011A, 0x0130
-CARGO_ASK = 0x0131
+CARGO_ASK, CARGO_GIVE = 0x0131, 0x0133
 CARGO_ENTRY_SIZE = 80  # cargo_transfer.h CargoEntry; the first u64 is the handle
 CARGO_ENTRY_FORMAT = struct.Struct("<QI44sQQfB3x")  # handle, type, name, order id, second id, durability, category
 CARGO_ASK_FORMAT = struct.Struct("<QB7x")  # handle, wants it (cargo_transfer.h)
-CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
+CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h; CARGO_GIVE has the same layout)
+MOVE_ACK_FORMAT = struct.Struct("<IIQ")  # type, moved (0 gone, 1 added), order id (partner_cargo_wire.h)
+MOVED_ADDED = 1
+HEADACHE_PILLS = 306656069
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 STRUCT_REQUEST = 0x0132  # guest to host: STRUCT_CREATE payload with the id left to the host
@@ -171,6 +174,9 @@ def main():
     p.add_argument("--host-picks-order", default="", help="SECONDS: send HOST_PICKUP of the order piece Special Plant Seeds (matched by order id at a position nowhere near it)")
     p.add_argument("--give-plain", default="", help="SECONDS: send CARGO_ADD of a Headache Pills piece with durability 123 (a worn piece)")
     p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
+    p.add_argument("--accept-gives", action="store_true", help="as the host (use --guest): print each CARGO_GIVE the adapter sends and answer with MOVE_ACK, as a host that took the piece")
+    p.add_argument("--refuse-gives", action="store_true", help="as the host (use --guest): print each CARGO_GIVE and send the piece back (CARGO_ADD, then MOVE_ACK), as a host that refused it")
+    p.add_argument("--give-native", default="", help="SECONDS: as the guest peer, send CARGO_GIVE of a Headache Pills piece (the game moved it into the host's rack) and print the host's CARGO_ADD / MOVE_ACK answer")
     p.add_argument("--ask-take", default="", help="SECONDS: as the guest, send CARGO_ASK for the first piece in the host's last CARGO_LIST (the host gives it)")
     p.add_argument("--hold-order", action="store_true", help="the peer reports carrying the order piece Special Plant Seeds (CARGO_LIST once a second)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
@@ -274,8 +280,16 @@ def serve(sock, a):
             elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
                 on_cutscene(msg_type, body)
             elif msg_type == STORY_EVENT_TYPE and len(body) - 4 == STORY_EVENT_FORMAT.size:
-                kind, _, _, _, mission, _, _ = STORY_EVENT_FORMAT.unpack_from(body, 4)
-                print(f"story: received kind {kind} for mission {mission:x}", flush=True)
+                kind, row, extra, _, mission, _, _ = STORY_EVENT_FORMAT.unpack_from(body, 4)
+                print(f"story: received kind {kind} for mission {mission:x} (a {row:#x}, b {extra})", flush=True)
+            elif msg_type == CARGO_GIVE and len(body) - 4 == CARGO_ADD_FORMAT.size:
+                on_give(body[4:])
+            elif msg_type == CARGO_ADD and len(body) - 4 == CARGO_ADD_FORMAT.size:
+                kind, _, _, _, order, _ = CARGO_ADD_FORMAT.unpack_from(body, 4)
+                print(f"cargo: CARGO_ADD kind {kind} order {order:x}", flush=True)
+            elif msg_type == MOVE_ACK and len(body) - 4 == MOVE_ACK_FORMAT.size:
+                kind, moved, order = MOVE_ACK_FORMAT.unpack_from(body, 4)
+                print(f"cargo: MOVE_ACK kind {kind} {'added' if moved == MOVED_ADDED else 'gone'} order {order:x}", flush=True)
             elif msg_type == CARGO_GONE and a.echo_cargo:
                 sock.sendall(encode(MOVE_ACK, peer_slot, body[4:]))  # CargoGone and MoveAck (gone) share their bytes
             elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
@@ -296,6 +310,15 @@ def serve(sock, a):
                 sock.sendall(encode(msg_type, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
+
+    def on_give(payload):
+        kind, _, _, _, order, _ = CARGO_ADD_FORMAT.unpack_from(payload)
+        print(f"cargo: CARGO_GIVE kind {kind} order {order:x}", flush=True)
+        if a.refuse_gives:
+            sock.sendall(encode(CARGO_ADD, peer_slot, payload))
+        if a.accept_gives or a.refuse_gives:
+            sock.sendall(encode(MOVE_ACK, peer_slot, MOVE_ACK_FORMAT.pack(kind, MOVED_ADDED, order)))
+            print(f"cargo: {'refused' if a.refuse_gives else 'accepted'} the give", flush=True)
 
     cutscene = {"id": 0}
 
@@ -326,7 +349,7 @@ def serve(sock, a):
         at = announced[net_id][1]
         return sum((at[i] - local[axis]) ** 2 for i, axis in enumerate("xyz")) > ENEMY_REACH_METRES ** 2
     struct_added = struct_removed = struct_requested = request_removed = False
-    gave = asked = picked = gave_plain = told_story = False
+    gave = asked = picked = gave_plain = told_story = gave_native = False
     struct_added = struct_removed = struct_requested = False
     struct_added = struct_removed = struct_requested = request_removed = False
     gave = picked = gave_plain = told_story = False
@@ -392,9 +415,13 @@ def serve(sock, a):
             picked = True
             sock.sendall(encode(0x0106, peer_slot, struct.pack("<IIfffIQQB7x", 0, 641900174, 0.0, 0.0, 0.0, 0, 0x1000071000018E, 0, 0)))
             print("cargo: host picked up the order piece", flush=True)
+        if a.give_native and start is not None and not gave_native and now - start >= float(a.give_native):
+            gave_native = True
+            sock.sendall(encode(CARGO_GIVE, peer_slot, CARGO_ADD_FORMAT.pack(HEADACHE_PILLS, 0, 0.0, 0, 0, 0)))
+            print("cargo: CARGO_GIVE of Headache Pills sent", flush=True)
         if a.give_plain and start is not None and not gave_plain and now - start >= float(a.give_plain):
             gave_plain = True
-            sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(306656069, 0, 123.0, 0, 0, 0)))
+            sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(HEADACHE_PILLS, 0, 123.0, 0, 0, 0)))
             print("cargo: gave a worn plain piece", flush=True)
         if a.story and start is not None and not told_story:
             seconds, kind, mission = a.story.split(":")

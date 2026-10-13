@@ -26,8 +26,8 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Guest builds structures and roads | built, not run live (STRUCT_REQUEST, guest collapse; roads: plan in DS2_NOTES, needs live observation) | ds2-streaming | `ds2/structures.cpp` refuses the guest's placements; ladders only |
 | Guest voidout or death crater | missing | ds2-streaming | none; a world change made only in the dying player's world |
 | Partner in another region or map | partial (a "too far" line past 700 m; options in "Far partner" below) | ds2-streaming | `ds2/remote_player.cpp` (body leaves on area change), `marker_overlay.cpp` (distance only) |
-| Guest-initiated hand-over | missing | ds2-orders | `cargo_menu.cpp` is the host's (F7) |
-| Guest orders and deliveries | missing (by design for now) | ds2-orders | `ds2/order_gate.cpp` |
+| Guest-initiated hand-over | built, not run live (F7 on a guest sends CARGO_ASK; a piece the game moves into the host's rack is CARGO_GIVE, taken or sent back by the host) | ds2-orders | `cargo_menu.cpp`, `cargo_transfer.cpp`, `partner_cargo_sync.cpp`, `ds2/partner_cargo.cpp` |
+| Guest orders and deliveries | built, not run live (accept forwarded as OrderRequest, the host starts the order and hands the cargo over; turn-in forwarded as OrderDelivered) | ds2-orders | `ds2/order_gate.cpp`, `order_handoff.cpp`, `ds2/story.cpp` |
 | Shared locker | missing | ds2-orders | none |
 | Cutscenes for the partner | partial | ds2-story | `cutscene_log.cpp`; cutscene sync on `ds2-integration` |
 
@@ -99,10 +99,10 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/ds2/world_pause.cpp`.
 - **Verify:** one PC with `fake_launcher.py --follow`: open the pause menu, the partner body keeps walking and the clock advances (two screenshots 5 s apart).
 
-### 9. The guest cannot hand cargo over (M, ds2-orders)
-- **Root change:** the same F7 menu on the guest sends a give request to the host (the host stays the decider, as with CARGO_TAKE), so either player can start a hand-over.
-- **Files:** `adapters/ds2/src/cargo_menu.cpp`, `cargo_transfer.cpp`.
-- **Verify:** `tools/ds2/fake_peer.py --host --pickup-answers` style host answering a guest give; the piece leaves the game's backpack and is reported added.
+### 9. The guest cannot hand cargo over (done, not run live; ds2-orders)
+- **Root change (built):** the F7 menu on the guest sends a give request to the host (CARGO_ASK, the host stays the decider); a piece the game itself moves into the partner's rack is reported to the host as CARGO_GIVE instead of being dropped and then deleted by rack_sync, and the host takes it or sends it back.
+- **Files:** `adapters/ds2/src/cargo_menu.cpp`, `cargo_transfer.cpp`, `partner_cargo_sync.cpp`, `ds2/partner_cargo.cpp`.
+- **Verify:** `fake_launcher.py --guest --accept-gives` / `--refuse-gives` (see DS2_NOTES, "Native gives and guest orders").
 
 ### 10. The guest's own progress is lost at session end (L, new; first step done: `AdapterSettings.Reset` archives the session saves; the merge is open)
 - **Root change:** the save files hold world and personal state together, and every join overwrites the guest's copy with the host's, so the real fix is a merge: find which save blocks are personal (equipment, levels, private locker) and carry them from the guest's last session save into the next session's copy. First step (S): archive the guest's session save at session end instead of deleting it, so nothing is lost while the merge is worked out.

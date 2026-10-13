@@ -61,6 +61,7 @@ add_library(ds2_adapter SHARED
     src/equip_sync.cpp
     src/weapon_sync.cpp
     src/rack_sync.cpp
+    src/order_handoff.cpp
     src/env_sync.cpp
     src/bt_sync.cpp
     src/struct_sync.cpp
@@ -195,6 +196,7 @@ endfunction()
 add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
 add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 add_unit_test(peer_joins_test)
+add_unit_test(cargo_give_wire_test)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test)

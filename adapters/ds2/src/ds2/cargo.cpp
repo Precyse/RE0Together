@@ -73,6 +73,7 @@ constexpr uint64_t kLocalPlayerKey = 0;
 // An order id: a mission number in the low bits and an order type in bits 32..37; anything else is plain cargo.
 constexpr uint64_t kOrderNumberMask = 0x1FFFFFFF;
 constexpr uint64_t kOrderTypeMask = 0x3Full << 32;
+constexpr uint64_t kMissionIdMask = 0xE00FFFFFFFFFFFFF;  // an order piece's id without its piece index (bits 52..60): the mission id
 constexpr uint8_t kBackpackSlotKind = 1;  // the main load of the backpack owner
 constexpr uint8_t kBedSlotKind = 0;  // a vehicle's cargo bed (its other slots, kinds 35-37, are not mirrored)
 constexpr uint8_t kNoSlotKind = 0xFF;
@@ -501,6 +502,23 @@ bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type) {
 std::vector<Cargo> vehicleCargo(uint64_t vehicle) { return slotPieces(vehicle, kBedSlotKind); }
 
 bool addVehicleCargo(uint64_t vehicle, uint32_t type) { return addSlotPiece(vehicle, kBedSlotKind, type); }
+
+std::vector<Cargo> orderPieces(uint64_t missionId, std::optional<uint64_t> bodyKey) {
+    std::vector<Cargo> out;
+    const uintptr_t baggage = manager();
+    if (!baggage) return out;
+    std::vector<SlotRange> racks = backpackSlots(baggage);
+    if (const uintptr_t body = bodyKey ? findOwner(baggage, *bodyKey) : 0) collectSlots(body, true, 0, racks);
+    for (const PoolEntry& entry : livePool(baggage)) {
+        uint32_t type = 0;
+        if ((entry.orderId & kMissionIdMask) != missionId || inSlots(racks, entry.slot) ||
+            !decima::safeRead(entry.item + kItemType, type)) {
+            continue;
+        }
+        out.push_back({entry.handle, type, itemName(entry.item), entry.orderId, entry.secondId, entry.category, entry.durability});
+    }
+    return out;
+}
 
 std::optional<uint64_t> findOrderPiece(uint64_t orderId) {
     const uintptr_t baggage = manager();

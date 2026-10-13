@@ -86,14 +86,15 @@ void sendLeft(NetClient& net, uint8_t partner, const std::vector<game::Cargo>& l
     }
 }
 
-// Only the host decides what moves between the players' racks, so only its gives are carried out.
+// The host's gives are carried out as CARGO_ADD; a guest's go to the host as CARGO_GIVE, which takes the piece or sends it
+// back. Either way the piece stays on the body until the partner's MOVE_ACK.
 void sendGiven(NetClient& net, uint8_t partner, const std::vector<game::Cargo>& given) {
     for (const game::Cargo& piece : given) {
-        if (!g_host) {
-            logger::write("partner_cargo_sync: a guest's give into the partner's rack is not carried out (kind %u)", piece.type);
-            continue;
+        if (g_host) {
+            cargo_transfer::sendPiece(net, partner, piece);
+        } else {
+            cargo_transfer::offerPiece(net, partner, piece);
         }
-        cargo_transfer::sendPiece(net, partner, piece);
         g_given.push_back(piece);
     }
 }
@@ -120,6 +121,11 @@ void onFrame(const GameFrame& frame) {
 }
 
 void expectAdded(const game::Cargo& piece) { g_awaiting.push_back({Moved::Added, piece, Clock::now()}); }
+
+void acknowledge(NetClient& net, uint8_t partner, const game::Cargo& piece) {
+    std::erase_if(g_awaiting, [&](const Awaiting& waiting) { return waiting.moved == Moved::Added && sameKey(waiting.piece, piece); });
+    sendAck(net, partner, {Moved::Added, piece, Clock::now()});
+}
 
 void tick(NetClient& net, const SessionSnapshot& session) {
     g_host = session.linked && session.localSlot == session.hostSlot;

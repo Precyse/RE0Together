@@ -1,7 +1,8 @@
 #pragma once
 // A piece the game moved between the partner's rack (the body's owner) and this world is mirrored on the partner's
 // machine: one that went into a terminal or to the local player is deleted there (CARGO_GONE, partner_cargo_wire.h), one
-// the local player put into the partner's rack is created there with its order link (CARGO_ADD). The partner's CARGO_LIST
+// the local player put into the partner's rack is created there with its order link (CARGO_ADD from the host; a guest's goes to
+// the host as CARGO_GIVE, which takes it or sends it back). The partner's CARGO_LIST
 // follows a moment later, so each move is held for rack_sync, which must not recreate a piece that left or delete one that
 // arrived before the list shows it. The hold ends when the partner acknowledges the move (MOVE_ACK, sent once its own list
 // shows it) or the link drops.
@@ -18,6 +19,10 @@ void tick(NetClient& net, const SessionSnapshot& session);
 
 // Net thread: this machine is creating `piece` for the partner's give (CARGO_ADD); acknowledged once the local list shows it.
 void expectAdded(const game::Cargo& piece);
+
+// Net thread: ends the partner's hold on `piece` now (MOVE_ACK) instead of when the local list shows it: a piece it gave that
+// this machine sent back.
+void acknowledge(NetClient& net, uint8_t partner, const game::Cargo& piece);
 
 // Net thread: the pieces the partner's rack lost to this world, and the ones this world gave it, not yet acknowledged.
 std::vector<game::Cargo> recentlyLeft();
