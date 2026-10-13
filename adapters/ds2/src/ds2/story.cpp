@@ -105,6 +105,19 @@ void forwardOrder(uintptr_t mission, uintptr_t args) {
     if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
 }
 
+// Host: a mission request the script made, reported when it is made (before the drain applies it and before the section it
+// activates) with the arguments the guest's replay needs; the poll below stays as the catch for starts that bypass these calls.
+void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
+    story_wire::Event event = missionEvent(kind, mission, a, b);
+    if (section) decima::safeCopy(event.section, section, sizeof(event.section));
+    {
+        std::lock_guard lock(g_mutex);
+        if (kind == story_wire::Kind::MissionStart) g_ledger.noteStart(event);
+        else g_ledger.noteEnd(event.missionId);
+    }
+    report(event);
+}
+
 bool isDelivery(uintptr_t mission) {
     const uintptr_t resource = decima::readPointer(mission + kMissionResource);
     return resource && decima::readPointer(resource) == ds2::at(kDeliveryResourceVtable);
@@ -119,19 +132,6 @@ void forwardDelivery(uintptr_t mission, uintptr_t flag) {
     decima::safeRead(mission + kMissionId, event.missionId);
     std::lock_guard lock(g_mutex);
     if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
-}
-
-// Host: a mission request the script made, reported when it is made (before the drain applies it and before the section it
-// activates) with the arguments the guest's replay needs; the poll below stays as the catch for starts that bypass these calls.
-void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
-    story_wire::Event event = missionEvent(kind, mission, a, b);
-    if (section) decima::safeCopy(event.section, section, sizeof(event.section));
-    {
-        std::lock_guard lock(g_mutex);
-        if (kind == story_wire::Kind::MissionStart) g_ledger.noteStart(event);
-        else g_ledger.noteEnd(event.missionId);
-    }
-    report(event);
 }
 
 uint64_t requestStartDetour(uintptr_t c, uintptr_t mission, uintptr_t args, uintptr_t section, uintptr_t reserve,

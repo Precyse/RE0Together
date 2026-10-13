@@ -5,8 +5,9 @@
 
 namespace partner_focus {
 
-// Start-up: the detour on the engine's per-category activity update 0x140171d90.
-void installEarly();
+// Start-up: the detour on the engine's per-category activity update 0x140171d90. `diagnostics` (adapter.ini diagnostics=1)
+// also logs the tables that keep members near the partner asleep and watches one sleeper's flags; never on in a shipped config.
+void installEarly(bool diagnostics);
 
 // The partner's body position while the body is live. Simulation thread.
 bool partnerPosition(decima::WorldPosition& out);

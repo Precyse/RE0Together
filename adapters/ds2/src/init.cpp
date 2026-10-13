@@ -99,7 +99,7 @@ DWORD WINAPI initThread(LPVOID) {
     bt_events::installEarly();
     if (config.enemySync) {
         enemy_spawn::installEarly();
-        enemy_host::installEarly();
+        enemy_host::installEarly(config.diagnostics);
         camp_alert::installEarly();
         enemy_puppet::installEarly();
         combat_hook::installEarly();
@@ -127,8 +127,8 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.cutsceneLog) cutscene_log::enable();
     if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync, config.testCommands ? config.cutsceneShareMinFrames : 0);
     partner_cargo::installEarly();
-    partner_focus::installEarly();
-    sneaking_focus::installEarly();
+    partner_focus::installEarly(config.diagnostics);
+    sneaking_focus::installEarly(config.diagnostics);
     structures::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");

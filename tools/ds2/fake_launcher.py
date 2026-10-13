@@ -268,6 +268,10 @@ def serve(sock, a):
                 print(f"story: received kind {kind} for mission {mission:x}", flush=True)
             elif msg_type == CARGO_GONE and a.echo_cargo:
                 sock.sendall(encode(MOVE_ACK, peer_slot, body[4:]))  # CargoGone and MoveAck (gone) share their bytes
+            elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
+                on_cutscene(msg_type, body)
+            elif msg_type == CARGO_LIST and a.echo_cargo:
+                sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == CARGO_LIST:
                 (listed,) = struct.unpack_from("<I", body, 4)
                 if listed and len(body) == 8 + listed * CARGO_ENTRY_SIZE:
@@ -313,6 +317,9 @@ def serve(sock, a):
         return sum((at[i] - local[axis]) ** 2 for i, axis in enumerate("xyz")) > ENEMY_REACH_METRES ** 2
     struct_added = struct_removed = struct_requested = request_removed = False
     gave = asked = picked = gave_plain = told_story = False
+    struct_added = struct_removed = struct_requested = False
+    struct_added = struct_removed = struct_requested = request_removed = False
+    gave = picked = gave_plain = told_story = False
     last_load = 0.0
     replay = load_enemy_recording(a.enemy_replay) if a.enemy_replay else []
     replay_start = None
