@@ -30,7 +30,7 @@ Hooks session create, GameSpy code (0x81A590, 0x8360F9, 0xC1BC76, 0xD2526F), mem
 - Change: just before `net_set_mode(1)` runs its co-op case (which resets both pools), each pool gets a VirtualAlloc block of its current size x (max_players - 1) and the fields above are rewritten like init does. Scaling by guests because the shipped size is for one guest (host + 1). Done once per process; max_players 2 changes nothing. The current size is read, so a size Juiced set stays the base. Identity check at that moment: name and three equal size fields; otherwise the pool is left and the log says why.
 - Start-up check also compares the two `push size` immediates.
 - Juiced overlap: none of 0x2773F0C..0x2773F5C, 0x2773F68..0x2773FB8, 0x51E500..0x51E506, 0x51E8A5..0x51E8AB, 0xBF4A10..0xBF4A5D appears among the 3100 addresses in `df_sr2_targets.tsv`. Juiced hooks the alloc failure call 0xC00E4A and reads pool objects only to print the error.
-- Live log: `pools: coop_player cpu 2260992 -> 6782976 bytes`, `pools: coop_player gpu 17367040 -> 52101120 bytes` (max_players 4).
+- Live log: `pools: coop_player cpu 2260992 -> 6782976 bytes`, `pools: coop_player gpu 17240064 -> 51720192 bytes` (max_players 4).
 
 ## Open questions for the live run
 - Order of `net_set_mode` and `session_pool_setup` (log line `inside net_set_mode 1` means the post-return write is too late for the pool sizing).
