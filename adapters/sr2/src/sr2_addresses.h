@@ -80,6 +80,50 @@ constexpr uintptr_t kMemberNextOffset = 0x22CC;
 constexpr uintptr_t kMemberStateOffset = 0x3C;
 constexpr uintptr_t kMemberSlotOffset = 0x1B0;  // byte: the session slot the 8-peer deltacomp arrays are indexed by
 
+// Players (milestone 4). A human is a player or npc object; the player humans form the list at kPlayerListHead.
+constexpr uintptr_t kCoopFlag = 0x2528B49;  // byte: a co-op session is running
+constexpr uintptr_t kPlayerListHead = 0x217043C;
+constexpr uintptr_t kLocalPlayer = 0x21703D4;
+constexpr uintptr_t kHumanNextOffset = 0x1294;
+constexpr uintptr_t kObjectNetRecordOffset = 0xB0;  // pointer to the net record; its byte 0 is the owner's session slot
+constexpr uintptr_t kObjectHandleOffset = 0x44;
+constexpr uintptr_t kObjectPositionOffset = 0x14;   // three floats
+constexpr uintptr_t kHumanJoinFlagsOffset = 0x1161;
+constexpr uint8_t kHumanJoiningBit = 0x10;
+constexpr uintptr_t kHumanDownedTimerOffset = 0xF8C;  // int, -1 while not down
+constexpr uintptr_t kHumanVehicleOffset = 0xD74;      // handle of the vehicle the human is in
+constexpr uintptr_t kHumanDrivenVehicleOffset = 0x18D0;
+constexpr uintptr_t kHumanMoverOffset = 0x374;
+constexpr uintptr_t kHumanActionOffset = 0x1130;
+constexpr uint32_t kActionEnterVehicleFirst = 0x1C5;  // actions 0x1C5..0x1CA: getting into a vehicle
+constexpr uint32_t kActionEnterVehicleCount = 6;
+
+// Session members: host member and the list a member keeps of the object handles it knows.
+constexpr uintptr_t kSessionHostMemberOffset = 0x404;
+constexpr uintptr_t kMemberSendEnabledOffset = 0x1B8;
+constexpr uintptr_t kMemberKnownHandlesOffset = 0x1DF0;
+constexpr uintptr_t kMemberKnownCountOffset = 0x21F0;
+constexpr uint32_t kMemberStateInGame = 0xD;
+constexpr uintptr_t kMaxWalkedPlayers = 12;  // the session is built for 12; every list walk stops here
+
+// Functions the milestone 4 thunks call or replace.
+constexpr uintptr_t kPartnerMemberGetter = 0x8CA380;  // cdecl, first member that is not the local one
+constexpr uintptr_t kSendToMember = 0x814670;        // ESI = member; cdecl(buffer, length, callback, context)
+constexpr uintptr_t kLookSyncA = 0x82B9F0;           // ECX = member, EAX = local human
+constexpr uintptr_t kLookSyncB = 0x82BC50;           // ECX = member, EAX = local human
+constexpr uintptr_t kResyncHuman = 0x9DFE80;         // fastcall(ECX = human)
+constexpr uintptr_t kHoldAssets = 0x6BE1E0;          // cdecl(human, list)
+constexpr uintptr_t kTeleportHuman = 0x9DB480;       // thiscall-like: ECX = human, six stack arguments
+constexpr uintptr_t kKillLocalHuman = 0x9AF560;      // ESI = human
+constexpr uintptr_t kWaitingToRespawn = 0x8CBDB0;    // ESI = human, AL out
+
+// Where the thunks that leave a patched block continue.
+constexpr uintptr_t kLeaveTeardown = 0x8CB3A8;
+constexpr uintptr_t kLeaveDone = 0x8CB42D;
+constexpr uintptr_t kVehicleExitAfterGetter = 0x6A28B9;  // past the getter call that the first patch replaces
+constexpr uintptr_t kVehicleExitDone = 0x6A293B;
+constexpr uintptr_t kTeamWipeResume = 0x9612DB;
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

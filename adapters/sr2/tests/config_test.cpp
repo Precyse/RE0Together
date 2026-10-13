@@ -23,5 +23,9 @@ int main() {
     check(parseConfig("max_players=99\n").maxPlayers == 8, "above 8 clamps to 8");
     check(parseConfig("max_players=abc\ntrace=x\n").maxPlayers == 4, "bad values keep the defaults");
     check(parseConfig("max_players=\nunknown=5\nnoequals\n").maxPlayers == 4, "empty value and unknown keys ignored");
+    check(!parseConfig("").partnerExperimental, "partner_experimental defaults to off");
+    check(parseConfig("partner_experimental=1\n").partnerExperimental, "partner_experimental on");
+    check(!parseConfig("partner_experimental=0\nmax_players=3\n").partnerExperimental, "partner_experimental off");
+    check(parseConfig("partner_experimental=1\nmax_players=3\ntrace=0\n").maxPlayers == 3, "partner_experimental leaves the other keys alone");
     return g_failures == 0 ? 0 : 1;
 }

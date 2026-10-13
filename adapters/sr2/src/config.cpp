@@ -13,7 +13,7 @@
 namespace {
 
 constexpr int kDecimalBase = 10;
-const char* const kDefaultIni = "max_players=4\ntrace=1\n";
+const char* const kDefaultIni = "max_players=4\ntrace=1\npartner_experimental=0\n";
 
 std::string trim(const std::string& s) {
     const auto begin = s.find_first_not_of(" \t\r");
@@ -44,6 +44,8 @@ Config parseConfig(const std::string& text) {
                 std::clamp<unsigned long>(number, sr2::kCoopDefaultPlayers, sr2::kMaxReplicatedPlayers));
         } else if (key == "trace") {
             config.trace = number != 0;
+        } else if (key == "partner_experimental") {
+            config.partnerExperimental = number != 0;
         }
     }
     return config;
