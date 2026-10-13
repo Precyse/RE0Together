@@ -1,5 +1,7 @@
 namespace CoopLauncher.Gui;
 
+internal enum ArrowDirection { Up, Down, Left }
+
 /// <summary>Shared painting: text, lamps, separators and image placement.</summary>
 internal static class Draw
 {
@@ -47,16 +49,19 @@ internal static class Draw
         g.FillRectangle(brush, x, centerY - Theme.LampSize / 2, Theme.LampSize, Theme.LampSize);
     }
 
-    /// <summary>A solid triangle pointing up or down, Theme.ArrowSize wide, centred on the point.</summary>
-    public static void Arrow(Graphics g, Color color, Point center, bool up)
+    /// <summary>A solid triangle Theme.ArrowSize across its base, pointing the given way, centred on the point.</summary>
+    public static void Arrow(Graphics g, Color color, Point center, ArrowDirection direction)
     {
         var half = Theme.ArrowSize / 2;
-        var rise = up ? -half / 2 : half / 2;
-        using var brush = new SolidBrush(color);
-        g.FillPolygon(brush, new[]
+        var tip = half / 2;
+        var points = direction switch
         {
-            new Point(center.X - half, center.Y - rise), new Point(center.X + half, center.Y - rise), new Point(center.X, center.Y + rise),
-        });
+            ArrowDirection.Up => new[] { new Point(center.X - half, center.Y + tip), new Point(center.X + half, center.Y + tip), new Point(center.X, center.Y - tip) },
+            ArrowDirection.Down => new[] { new Point(center.X - half, center.Y - tip), new Point(center.X + half, center.Y - tip), new Point(center.X, center.Y + tip) },
+            _ => new[] { new Point(center.X + tip, center.Y - half), new Point(center.X + tip, center.Y + half), new Point(center.X - tip, center.Y) },
+        };
+        using var brush = new SolidBrush(color);
+        g.FillPolygon(brush, points);
     }
 
     public static void HorizontalLine(Graphics g, int x1, int x2, int y)

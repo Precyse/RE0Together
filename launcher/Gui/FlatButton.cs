@@ -5,6 +5,8 @@ internal enum ButtonKind { Normal, Primary, Ghost }
 /// <summary>A flat, squared button: Primary is the one white action, Normal a raised card, Ghost an outline.</summary>
 internal sealed class FlatButton : Control
 {
+    private static readonly int ArrowGap = Theme.Scale(8);
+
     private readonly ButtonKind _kind;
     private bool _hover;
 
@@ -17,6 +19,9 @@ internal sealed class FlatButton : Control
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw, true);
     }
+
+    /// <summary>An arrow drawn before the label, or none.</summary>
+    public ArrowDirection? Arrow { get; set; }
 
     protected override void OnMouseEnter(EventArgs e)
     {
@@ -45,7 +50,16 @@ internal sealed class FlatButton : Control
         e.Graphics.Clear(Parent?.BackColor ?? Theme.Bg);
         using (var brush = new SolidBrush(fill)) e.Graphics.FillRectangle(brush, ClientRectangle);
         if (outline is { } line) Draw.Border(e.Graphics, ClientRectangle, line);
-        Draw.Centered(e.Graphics, Text, _kind == ButtonKind.Primary ? Theme.Primary : Theme.Strong, ink, ClientRectangle);
+        var font = _kind == ButtonKind.Primary ? Theme.Primary : Theme.Strong;
+        if (Arrow is not { } arrow)
+        {
+            Draw.Centered(e.Graphics, Text, font, ink, ClientRectangle);
+            return;
+        }
+        var textWidth = Draw.Width(Text, font);
+        var left = (Width - Theme.ArrowSize - ArrowGap - textWidth) / 2;
+        Draw.Arrow(e.Graphics, ink, new Point(left + Theme.ArrowSize / 2, Height / 2), arrow);
+        Draw.Text(e.Graphics, Text, font, ink, new Rectangle(left + Theme.ArrowSize + ArrowGap, 0, textWidth, Height));
     }
 
     private (Color Fill, Color Ink, Color? Outline) Colors()

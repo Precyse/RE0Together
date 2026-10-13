@@ -28,12 +28,12 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/WindowButtons.cs | minimize and close at the right of the top bar: line glyphs, grey hover (close darker), the top resize band passes through | `WindowButtons` |
 | Gui/NativeTheme.cs | Windows' dark frame (dark mode, border in the line colour) and dark native scrollbars | `DarkFrame`, `DarkScrollbars` |
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
-| Gui/TopBar.cs | top strip and title bar (its empty surface hit-tests transparent so the window drags by it): brand, newer launcher build on GitHub, build, state lamp and state, Settings (Back while open) and Update buttons (Update idle only), window buttons | `TopBar.Show`, `ShowAvailable`, `ShowSettingsOpen`, `SettingsButton`, `UpdateButton` |
+| Gui/TopBar.cs | top strip and title bar (its empty surface hit-tests transparent so the window drags by it): brand, newer launcher build on GitHub, build, state lamp and state, Settings (Back with a left arrow while open) and Update buttons (Update idle only), window buttons | `TopBar.Show`, `ShowAvailable`, `ShowSettingsOpen`, `SettingsButton`, `UpdateButton` |
 | Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus`, `StatusOf` |
 | Gui/GameStatus.cs | rail line and mod button label for a game (Game not found, Game build N unsupported, Not installed, Installed (Build N), Update available (Build M)); `CanHost` needs the mod and a supported game build | `GameStatus.Line`, `Action`, `CanHost` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name over character (seat order given by the caller, host first), role and partner ping on the right | `PlayerSlots.Show` |
-| Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
+| Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost; optional arrow before the label (Back) | `FlatButton` |
 | Gui/FieldBox.cs | dark one-line text field with focus border | `FieldBox.Input` |
 | Gui/FlatSelect.cs | flat dropdown list in the tool's greys (owner-drawn ComboBox; border and large arrow painted over the closed box) | `FlatSelect` |
 | Gui/FlatToggle.cs | flat squared on/off switch with a label | `FlatToggle.Checked`, `Flipped` |

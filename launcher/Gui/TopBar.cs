@@ -42,6 +42,7 @@ internal sealed class TopBar : Control
     public void ShowSettingsOpen(bool open)
     {
         SettingsButton.Text = open ? SettingsCloseLabel : SettingsLabel;
+        SettingsButton.Arrow = open ? ArrowDirection.Left : null;
         SettingsButton.Invalidate();
     }
 

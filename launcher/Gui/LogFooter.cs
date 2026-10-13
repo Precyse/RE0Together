@@ -41,7 +41,7 @@ internal sealed class LogFooter : Control
         var g = e.Graphics;
         g.Clear(BackColor);
         Draw.HorizontalLine(g, 0, Width, 0);
-        Draw.Arrow(g, Theme.Text, new Point(PadX + ArrowWidth / 2, Height / 2), up: !_expanded);
+        Draw.Arrow(g, Theme.Text, new Point(PadX + ArrowWidth / 2, Height / 2), _expanded ? ArrowDirection.Down : ArrowDirection.Up);
         var textX = PadX + ArrowWidth + Theme.Gap;
         Draw.Text(g, _line, Theme.Mono, Theme.Muted, new Rectangle(textX, 0, Width - textX - PadX, Height));
     }

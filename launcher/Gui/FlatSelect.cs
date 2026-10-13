@@ -52,7 +52,7 @@ internal sealed class FlatSelect : ComboBox
         using var g = Graphics.FromHwnd(Handle);
         var arrowBox = new Rectangle(Width - ArrowBoxWidth, 0, ArrowBoxWidth, Height);
         using (var fill = new SolidBrush(BackColor)) g.FillRectangle(fill, Rectangle.Inflate(arrowBox, 0, -1));
-        Draw.Arrow(g, Enabled ? Theme.Text : Theme.Dim, new Point(arrowBox.X + arrowBox.Width / 2, Height / 2), up: false);
+        Draw.Arrow(g, Enabled ? Theme.Text : Theme.Dim, new Point(arrowBox.X + arrowBox.Width / 2, Height / 2), ArrowDirection.Down);
         Draw.Border(g, ClientRectangle, Focused || DroppedDown ? Theme.Text : Theme.Line);
     }
 }
