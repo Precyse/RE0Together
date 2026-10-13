@@ -18,6 +18,7 @@
 #include "rack_sync.h"
 #include "struct_sync.h"
 #include "bt_sync.h"
+#include "crater_sync.h"
 #include "env_sync.h"
 #include "enemy_combat.h"
 #include "camp_sync.h"
@@ -133,6 +134,7 @@ void tick(NetClient& net) {
         fact_sync::onFrame(frame);
         env_sync::onFrame(frame);
         bt_sync::onFrame(frame);
+        crater_sync::onFrame(frame);
         struct_sync::onFrame(frame);
         story_sync::onFrame(frame);
         cutscene_sync::onFrame(frame);
@@ -161,6 +163,7 @@ void tick(NetClient& net) {
     fact_sync::tick(net, session);
     env_sync::tick(net, session);
     bt_sync::tick(net, session);
+    crater_sync::tick(net, session);
     struct_sync::tick(net, session);
     story_sync::tick(net, session);
     cutscene_sync::tick(net, session);

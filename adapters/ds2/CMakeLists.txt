@@ -62,6 +62,7 @@ add_library(ds2_adapter SHARED
     src/rack_sync.cpp
     src/env_sync.cpp
     src/bt_sync.cpp
+    src/crater_sync.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
     src/cutscene_sync.cpp
@@ -129,6 +130,8 @@ add_library(ds2_adapter SHARED
     src/ds2/player_system_guard.cpp
     src/ds2/world_pause.cpp
     src/ds2/bt_events.cpp
+    src/ds2/bt_diag.cpp
+    src/ds2/craters.cpp
     src/ds2/enemy_spawn.cpp
     src/ds2/enemy_vitals.cpp
     src/ds2/health_watch.cpp

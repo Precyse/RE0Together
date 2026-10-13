@@ -22,9 +22,9 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Local Sam as passenger when the partner drives ("Use Vehicle" prompt red) | missing | ds2-live | `ds2/remote_ride.cpp`, `vehicle_sync.cpp` |
 | Spawn crash 0x140F75E12 (DSPlayerSystem singleton writes) | partial | ds2-live | `ds2/remote_player.cpp` (guard on ds2-live) |
 | Enemies and weapons in a normal session | partial | ds2-tester | `config.h`: `enemy_sync` and `weapon_sync` default off |
-| BT grab of the guest's body | missing | ds2-streaming | `ds2/bt_events.h` TODO |
+| BT grab of the guest's body | probe built, behaviour undecided (the catch reads local index 0, the host's Sam; `bt_diag:` logs with diagnostics=1 say whether the remote body is ever the target) | ds2-bt | `ds2/bt_diag.cpp`, `ds2/bt_events.h` |
 | Guest builds structures and roads | built, not run live (STRUCT_REQUEST, guest collapse; roads: plan in DS2_NOTES, needs live observation) | ds2-streaming | `ds2/structures.cpp` refuses the guest's placements; ladders only |
-| Guest voidout or death crater | missing | ds2-streaming | none; a world change made only in the dying player's world |
+| Guest voidout or death crater | built, not run live (CRATER_SET 0x0137: the host's crater set is followed through AddCrater / RemoveCrater, a guest's own annihilation event is vetoed; the guest's own death and respawn rule is separate) | ds2-bt | `crater_sync.cpp`, `ds2/craters.cpp`, `crater_wire.h`, test command `crater.txt` |
 | Partner in another region or map | partial (a "too far" line past 700 m; options in "Far partner" below) | ds2-streaming | `ds2/remote_player.cpp` (body leaves on area change), `marker_overlay.cpp` (distance only) |
 | Guest-initiated hand-over | missing | ds2-orders | `cargo_menu.cpp` is the host's (F7) |
 | Guest orders and deliveries | missing (by design for now) | ds2-orders | `ds2/order_gate.cpp` |
