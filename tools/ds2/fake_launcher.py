@@ -165,6 +165,14 @@ def ladder_payload(local, kind=10, struct_id=None):
     return fixed + tail
 
 
+def scheduled_status(a, elapsed):
+    current = a.status
+    for at, word in a.status_steps:
+        if elapsed >= at:
+            current = word
+    return current
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=27980)
@@ -225,15 +233,7 @@ def main():
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
-    status_steps = sorted((float(at), int(word, 16)) for at, word in (step.split(":") for step in a.status_at.split(",") if step))
-
-    def scheduled_status(elapsed):
-        current = a.status
-        for at, word in status_steps:
-            if elapsed >= at:
-                current = word
-        return current
-
+    a.status_steps = sorted((float(at), int(word, 16)) for at, word in (step.split(":") for step in a.status_at.split(",") if step))
     server = socket.socket()
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("127.0.0.1", a.port))
@@ -578,7 +578,7 @@ def serve(sock, a):
                 y = local["y"] + fy * a.offset - fx * a.radius
                 yaw = local["yaw"]
             seq += 1
-            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, scheduled_status(now - start)), flags=0))
+            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, scheduled_status(a, now - start)), flags=0))
         time.sleep(1.0 / SEND_HZ)
 
 
