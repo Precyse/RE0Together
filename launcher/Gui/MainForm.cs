@@ -2,11 +2,10 @@ using System.Runtime.InteropServices;
 
 namespace CoopLauncher.Gui;
 
-/// <summary>The launcher window, in the broadcast tool's operator look: top bar, game rail, the selected game's hero,
-/// the session controls, the game's options, the player seats and a log drawer; the settings view takes the place of the
-/// right pane.
-/// All session logic lives in App.</summary>
-public sealed class MainForm : Form
+/// <summary>The launcher window, in the broadcast tool's operator look and without Windows' title bar: the top bar (which
+/// is the title bar), game rail, the selected game's hero, the session controls, the game's options, the player seats and
+/// a log drawer; the settings view takes the place of the right pane. All session logic lives in App.</summary>
+public sealed class MainForm : ChromelessForm
 {
     private const string WindowTitle = "Co-op Launcher";
     private const string ConfirmCloseText = "Leave the session and close?";
@@ -65,10 +64,8 @@ public sealed class MainForm : Form
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
-        // The smallest window the pane scrolls in, then the default size.
-        ClientSize = new Size(WindowWidth, MinimumHeight);
-        MinimumSize = Size;
-        ClientSize = new Size(WindowWidth, WindowHeight);
+        MinimumSize = SizeFromClientSize(new Size(WindowWidth, MinimumHeight));
+        Size = SizeFromClientSize(new Size(WindowWidth, WindowHeight));
         WindowMemory.Restore(this);
         NativeTheme.DarkScrollbars(_pane);
         _idleRow = ControlRow.Create(new[] { (Control)_host, _mod, _joinLabel, _joinCode, _join },
@@ -130,6 +127,8 @@ public sealed class MainForm : Form
         WindowMemory.Save(this);
     }
 
+    protected override int CaptionHeight => _top.Height;
+
     /// <summary>A second start of the launcher asks this window to come forward (called from any thread).</summary>
     public void BringForward() => OnUiThread(() =>
     {
@@ -140,7 +139,7 @@ public sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        NativeTheme.DarkTitleBar(this);
+        NativeTheme.DarkFrame(this);
         // Subscribed only once the handle exists: lines logged before it (start-up, a fatal error of the app loop) come
         // from the log's history instead of being dropped.
         foreach (var line in Log.Subscribe(OnLogWritten)) _drawer.ShowLine(line);

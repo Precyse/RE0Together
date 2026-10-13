@@ -34,6 +34,9 @@ internal static class Theme
     public static readonly int SectionPadY = Scale(16);
     public static readonly int Gap = Scale(8);
     public static readonly int ArrowSize = Scale(12);
+
+    /// <summary>The band along the top edge of the chromeless window that resizes it.</summary>
+    public static readonly int ResizeBand = Scale(5);
     public static readonly int PrimaryWidth = Scale(120);
     public static readonly int ToolWidth = Scale(104);
 
