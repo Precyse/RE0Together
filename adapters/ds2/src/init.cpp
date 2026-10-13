@@ -6,12 +6,14 @@
 #include "documents_redirect.h"
 #include "dx12_hook.h"
 #include "game.h"
+#include "hooks.h"
 #include "input_filter.h"
 #include "log.h"
-#include "main_thread.h"
 #include "marker_overlay.h"
 #include "net_client.h"
+#include "peer_pose.h"
 #include "player_sync.h"
+#include "rack_sync.h"
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/damage_diag.h"
@@ -50,11 +52,6 @@ constexpr DWORD kResolvePollMs = 1000;
 // Leaked on purpose: joining the net thread from a static destructor would run under the loader lock.
 NetClient& g_net = *new NetClient;
 
-// Engine work on the game's simulation thread: the vehicles partners drive (their bodies run on the engine's own update).
-void simulationTick() {
-    vehicle_sync::place();
-}
-
 void drawOverlay(float width, float height) {
     marker_overlay::draw(width, height);
     cargo_menu::draw(width, height);
@@ -69,7 +66,9 @@ DWORD WINAPI initThread(LPVOID) {
     crash_dump::install();
     const Config config = loadConfig();
     marker_overlay::setSelfMarker(config.selfMarker);
+    hooks::beginBatch();
     remote_body::setEnabled(config.remoteBody);
+    peer_pose::installEarly();
     if (config.remoteBody) remote_body::installEarly();
     remote_animation::setMirrorLocalPlayer(config.mirrorAnimation);
     if (config.overlay && !dx12_hook::install(drawOverlay)) logger::write("adapter: overlay unavailable");
@@ -83,7 +82,7 @@ DWORD WINAPI initThread(LPVOID) {
         enemy_host::installEarly();
         camp_alert::installEarly();
         enemy_puppet::installEarly();
-        combat_hook::installEarly();
+        combat_hook::installEarly(config.diagnostics);
         if (config.diagnostics) damage_diag::installEarly();
         health_watch::installEarly();
     }
@@ -105,13 +104,13 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.cutsceneLog) cutscene_log::installEarly();
     partner_cargo::installEarly();
     structures::installEarly();
+    vehicle_sync::installEarly();
+    rack_sync::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
+    hooks::applyBatch();
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
-    if (!main_thread::install(game::frameFunction(), simulationTick)) {
-        logger::write("adapter: no simulation-thread hook, partners' vehicles stay put");
-    }
     player_sync::start(g_net, config.port);
     return 0;
 }

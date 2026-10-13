@@ -7,7 +7,10 @@
 
 namespace rack_sync {
 
-// Net thread.
+// Start-up: registers the follow on the simulation thread.
+void installEarly();
+
+// Net thread: records the body's owner and the partner's rack for the simulation thread.
 void tick(NetClient& net, const SessionSnapshot& session);
 
 }  // namespace rack_sync

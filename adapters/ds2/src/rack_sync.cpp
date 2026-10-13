@@ -2,9 +2,12 @@
 
 #include <chrono>
 #include <map>
+#include <mutex>
+#include <optional>
 #include <vector>
 
 #include "cargo_transfer.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "log.h"
 #include "remote_body.h"
@@ -17,7 +20,15 @@ constexpr auto kCheckInterval = std::chrono::milliseconds(500);
 constexpr int kMaxChangesPerRound = 6;  // a burst (a cargo theft on the partner) is spread over several rounds
 constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and delete requests on its next update
 
-// Net thread only.
+struct Target {
+    std::optional<uint64_t> body;
+    std::optional<std::vector<game::Cargo>> wanted;  // set when the partner's body is this body
+};
+
+std::mutex g_mutex;
+Target g_target;  // net thread writes, simulation thread reads (guarded by g_mutex)
+
+// Simulation thread only.
 Clock::time_point g_lastCheck;
 Clock::time_point g_lastChange;
 std::map<uint32_t, size_t> g_lastWanted;
@@ -52,18 +63,34 @@ void follow(uint64_t ownerKey, const std::vector<game::Cargo>& wanted, Clock::ti
     logger::write("rack_sync: the body's rack: %d pieces removed, %d added (%zu wanted)", removed, added, wanted.size());
 }
 
+void simTick() {
+    const auto now = Clock::now();
+    if (now - g_lastCheck < kCheckInterval) return;
+    g_lastCheck = now;
+    Target target;
+    {
+        std::lock_guard lock(g_mutex);
+        target = g_target;
+    }
+    if (target.body) game::setOwnerActive(*target.body, false);  // the game may switch it back on
+    if (target.body && target.wanted) follow(*target.body, *target.wanted, now);
+}
+
 }  // namespace
 
 namespace rack_sync {
 
+void installEarly() { sim_tick::add(&simTick, "rack sync", sim_tick::Gate::Gameplay); }
+
 void tick(NetClient&, const SessionSnapshot& session) {
-    const auto now = Clock::now();
-    if (!session.linked || now - g_lastCheck < kCheckInterval) return;
-    g_lastCheck = now;
-    const std::optional<uint64_t> body = remote_body::ownerKey();
-    const auto partner = cargo_transfer::partner();
-    if (body) game::setOwnerActive(*body, false);  // the game may switch it back on
-    if (body && partner && partner->slot == remote_body::slot()) follow(*body, partner->cargo, now);
+    Target target;
+    if (session.linked) {
+        target.body = remote_body::ownerKey();
+        const auto partner = cargo_transfer::partner();
+        if (target.body && partner && partner->slot == remote_body::slot()) target.wanted = partner->cargo;
+    }
+    std::lock_guard lock(g_mutex);
+    g_target = std::move(target);
 }
 
 }  // namespace rack_sync

@@ -37,6 +37,7 @@ struct Entry {
 
 std::vector<Entry> g_entries;  // written at start-up only
 std::atomic<uint32_t> g_epoch{0};
+std::atomic<uint32_t> g_frame{0};
 ds2::GameplayClock g_gameplay;  // simulation thread: the local player's state machine running
 
 int64_t g_spent = 0;  // simulation thread only: counter ticks the callbacks took in this window
@@ -75,6 +76,7 @@ void report(int64_t now) {
 
 uint64_t updateDetour(uintptr_t self, float a, float b, uint8_t flag, uintptr_t s5, uintptr_t s6, uintptr_t s7,
                       uintptr_t s8) {
+    ++g_frame;
     const int64_t start = counter();
     const bool wasActive = g_gameplay.active();
     g_gameplay.update(ds2::localPlayerEntity());
@@ -101,6 +103,8 @@ void installEarly() {
 }
 
 uint32_t gameplayEpoch() { return g_epoch.load(); }
+
+uint32_t frame() { return g_frame.load(); }
 
 bool gameplayActive() { return g_gameplay.active(); }
 

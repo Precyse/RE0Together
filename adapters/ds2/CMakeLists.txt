@@ -47,6 +47,7 @@ add_library(ds2_adapter SHARED
     src/player_sync.cpp
     src/dx12_hook.cpp
     src/marker_overlay.cpp
+    src/peer_pose.cpp
     src/load_overlay.cpp
     src/cargo_transfer.cpp
     src/cargo_ground.cpp
@@ -87,8 +88,6 @@ add_library(ds2_adapter SHARED
     src/resync_trigger.cpp
     src/clock_sync.cpp
     src/anim_event.cpp
-    src/pending_queue.cpp
-    src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
     src/msvc_rtti.cpp
@@ -185,7 +184,7 @@ add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
 add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
-add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
+add_unit_test(fact_snapshot_test)
 add_unit_test(bt_wire_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)

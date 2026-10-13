@@ -21,7 +21,6 @@ constexpr int kManagerDisp = 13, kManagerEnd = 17;
 constexpr const char* kLastActivatedCamera =
     "48 63 87 ?? ?? ?? ?? 85 C0 75 04 33 FF EB ?? 48 8B D0 48 8B 87 ?? ?? ?? ?? 48 C1 E2 07";
 constexpr int kCameraCountDisp = 3, kCameraDataDisp = 21;
-constexpr uintptr_t kCameraPatternInFunction = 0x2A;  // the pattern starts this far into GetLastActivatedCamera
 
 constexpr uintptr_t kManagerLocalPlayers = 0x48;  // PlayerManager: Player* per local player (index 0 = this machine)
 constexpr uintptr_t kPlayerEntity = 0x48;         // Player::GetEntity
@@ -40,7 +39,6 @@ constexpr int kRightRow = 0, kForwardRow = 1, kUpRow = 2;
 uintptr_t g_managerGlobal = 0;
 uint32_t g_cameraCountOffset = 0;
 uint32_t g_cameraDataOffset = 0;
-uintptr_t g_lastActivatedCamera = 0;  // the function itself
 
 uintptr_t localPlayerObject() {
     const uintptr_t manager = decima::readPointer(g_managerGlobal);
@@ -70,7 +68,6 @@ bool findCode() {
         return false;
     }
     g_managerGlobal = pattern_scan::ripTarget(getLocalPlayer, kManagerDisp, kManagerEnd);
-    g_lastActivatedCamera = cameraCode - kCameraPatternInFunction;
     std::memcpy(&g_cameraCountOffset, reinterpret_cast<const void*>(cameraCode + kCameraCountDisp), sizeof(uint32_t));
     std::memcpy(&g_cameraDataOffset, reinterpret_cast<const void*>(cameraCode + kCameraDataDisp), sizeof(uint32_t));
     logger::write("game: player manager %p, camera stack +0x%x/+0x%x", reinterpret_cast<void*>(g_managerGlobal),
@@ -86,8 +83,6 @@ bool resolve() {
     static const bool codeFound = findCode();
     return codeFound && localPlayerObject() != 0;  // false until the player is in the world
 }
-
-uintptr_t frameFunction() { return g_lastActivatedCamera; }
 
 std::optional<Pose> localPlayer() {
     decima::WorldTransform t;

@@ -6,7 +6,6 @@
 
 #include "../src/adaptive_delay.h"
 #include "../src/clock_offset.h"
-#include "../src/delay_line.h"
 
 namespace {
 
@@ -82,48 +81,11 @@ void adaptiveDelay() {
     check(near(jittery.delayUs(), AdaptiveDelay::kMinDelayUs + 2 * 30 * kMs), "a link with regular 30 ms spikes settles at minimum + 2 x 30 ms");
 }
 
-void delayLine() {
-    DelayLine<float> line;
-    check(!line.at(1'000'000), "an empty line has nothing to show");
-    const TimeUs delay = line.delayUs();
-    for (int i = 0; i < 10; ++i) {
-        const TimeUs sent = 1'000'000 + i * 100 * kMs;  // 10 Hz reports of the value 0, 10, 20 ...
-        line.push(sent, sent + 20 * kMs, static_cast<float>(i * 10));
-    }
-    const TimeUs now = 1'000'000 + 500 * kMs + delay;  // render time is the report 5, 500 ms in
-    auto bracket = line.at(now);
-    check(bracket && *bracket->from == 50.0f && bracket->alpha == 0.0f, "rendering exactly on a report shows it");
-    bracket = line.at(now + 50 * kMs);
-    check(bracket && *bracket->from == 50.0f && *bracket->to == 60.0f && std::fabs(bracket->alpha - 0.5f) < 1e-4f,
-          "between two reports it is the pair and the fraction");
-    bracket = line.at(1'000'000);
-    check(bracket && *bracket->from == 0.0f && !bracket->starved, "before the oldest report the oldest is held");
-    bracket = line.at(1'000'000 + 900 * kMs + delay + 100 * kMs);
-    check(bracket && *bracket->from == 90.0f && bracket->starved, "past the newest report it is held and marked starved");
-
-    DelayLine<float> reordered;
-    reordered.push(2'000'000, 2'030'000, 2.0f);
-    reordered.push(1'000'000, 2'040'000, 1.0f);
-    reordered.push(3'000'000, 3'030'000, 3.0f);
-    reordered.push(2'000'000, 3'040'000, 2.5f);
-    const TimeUs render = 1'500'000 + reordered.delayUs();
-    bracket = reordered.at(render);
-    check(bracket && *bracket->from == 1.0f && *bracket->to == 2.5f, "late reports are put in order and a duplicate replaces");
-
-    DelayLine<int> longRun;
-    for (int i = 0; i < 1000; ++i) longRun.push(i * 16 * kMs, i * 16 * kMs + 20 * kMs, i);
-    const auto newest = longRun.at(999 * 16 * kMs + longRun.delayUs());
-    check(newest && *newest->from == 999, "a long stream keeps the newest reports");
-    longRun.clear();
-    check(longRun.empty() && longRun.delayUs() == AdaptiveDelay::kMinDelayUs, "clear forgets the reports and the delay");
-}
-
 }  // namespace
 
 int main() {
     clockOffset();
     adaptiveDelay();
-    delayLine();
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
 }

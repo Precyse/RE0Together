@@ -128,7 +128,7 @@ Seen in: DS2: DSNpcGroundMover +0x48 -> Entity, Entity::SetWorldTransform, `remo
 Shape: modern engines run the window pump, render and simulation on different threads; engine calls that create or link objects are only safe on the simulation thread.
 Find it: hook a small function the game calls every frame (DS2: Player::GetLastActivatedCamera) and count calling threads for a few seconds; the busiest is the simulation thread. The window's own thread may pump with GetMessage and never reach a PeekMessage hook.
 Replicate: queue adapter work and run it from that hook on that thread only.
-Seen in: DS2: `main_thread.cpp`. Trap: catching an access violation in the middle of an engine call leaves its locks held and freezes the game; fix the call instead of catching it.
+Seen in: DS2: the simulation-thread hook (`sim_tick.cpp`). Trap: catching an access violation in the middle of an engine call leaves its locks held and freezes the game; fix the call instead of catching it.
 
 ## Permissions are "is it allowed?" queries with a veto flag  [control, authority]
 Shape: before an action (claim an interaction, select a weapon, remove an item) the engine sends a query object to the actor; every interested component may set a refuse flag; the action runs only if nobody refused.

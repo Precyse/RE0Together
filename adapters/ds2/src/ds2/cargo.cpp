@@ -12,10 +12,12 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <mutex>
 #include <vector>
 
 #include "decima/localized_text.h"
 #include "decima/safe_read.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "log.h"
 #include "pattern_scan.h"
@@ -207,6 +209,7 @@ bool inSlots(const std::vector<SlotRange>& slots, uintptr_t slot) {
 bool isOrderId(uint64_t id);
 
 struct PoolEntry {
+    uintptr_t address;
     uint64_t handle;
     uintptr_t item;
     uintptr_t slot;
@@ -217,7 +220,7 @@ struct PoolEntry {
 };
 
 // Every piece in the pool, from one copy of it (the game may change entries while we read).
-std::vector<PoolEntry> livePool(uintptr_t manager) {
+std::vector<PoolEntry> readPool(uintptr_t manager) {
     std::vector<PoolEntry> out;
     const int32_t count = readCount(manager + kPoolCount, kMaxPool);
     const uintptr_t pool = decima::readPointer(manager + kPoolData);
@@ -226,6 +229,7 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
     for (int32_t i = 0; i < count; ++i) {
         const uint8_t* raw = entries.data() + i * kBaggageSize;
         PoolEntry entry;
+        entry.address = pool + i * kBaggageSize;
         std::memcpy(&entry.handle, raw + kBaggageHandle, sizeof(entry.handle));
         std::memcpy(&entry.item, raw + kBaggageItem, sizeof(entry.item));
         std::memcpy(&entry.slot, raw + kBaggageSlot, sizeof(entry.slot));
@@ -239,34 +243,30 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
     return out;
 }
 
-// The head of a pool entry (handle .. slot): what a scan needs to pick entries without copying the whole pool.
-constexpr uintptr_t kEntryHead = kBaggageHandle;
-constexpr size_t kEntryHeadSize = kBaggageSlot + sizeof(uintptr_t) - kBaggageHandle;
-
-struct EntryHead {
-    uint64_t handle;
-    uintptr_t item;
-    float durability;
-    uintptr_t slot;
+// The pool is copied once per simulation frame and every reader of that frame shares the copy. A write that changes the
+// pool drops it (dropPool); requests the game serves on its next update show up in the next frame's copy.
+std::mutex g_poolMutex;
+struct PoolCopy {
+    bool valid = false;
+    uint32_t frame = 0;
+    std::vector<PoolEntry> entries;
 };
+PoolCopy g_pool;  // guarded by g_poolMutex
 
-// Calls visit(entryAddress, head) for every used entry, reading only each entry's head (the pool is megabytes; this runs on
-// the simulation thread).
-template <class Visit>
-void scanPool(uintptr_t manager, Visit visit) {
-    const int32_t count = readCount(manager + kPoolCount, kMaxPool);
-    const uintptr_t pool = decima::readPointer(manager + kPoolData);
-    for (int32_t i = 0; pool && i < count; ++i) {
-        const uintptr_t entry = pool + static_cast<uintptr_t>(i) * kBaggageSize;
-        uint8_t raw[kEntryHeadSize];
-        if (!decima::safeCopy(raw, entry + kEntryHead, sizeof(raw))) continue;
-        EntryHead head;
-        std::memcpy(&head.handle, raw + kBaggageHandle - kEntryHead, sizeof(head.handle));
-        std::memcpy(&head.item, raw + kBaggageItem - kEntryHead, sizeof(head.item));
-        std::memcpy(&head.durability, raw + kBaggageDurability - kEntryHead, sizeof(head.durability));
-        std::memcpy(&head.slot, raw + kBaggageSlot - kEntryHead, sizeof(head.slot));
-        if (head.handle != kFreeHandle && head.item) visit(entry, head);
+std::vector<PoolEntry> livePool(uintptr_t manager) {
+    std::lock_guard lock(g_poolMutex);
+    const uint32_t frame = sim_tick::frame();
+    if (!g_pool.valid || g_pool.frame != frame) {
+        g_pool.entries = readPool(manager);
+        g_pool.frame = frame;
+        g_pool.valid = true;
     }
+    return g_pool.entries;
+}
+
+void dropPool() {
+    std::lock_guard lock(g_poolMutex);
+    g_pool.valid = false;
 }
 
 std::string itemName(uintptr_t item) { return decima::localizedText(decima::readPointer(item + kItemName)); }
@@ -306,6 +306,7 @@ bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& 
     }
     uint64_t handle = kFreeHandle;
     code().create(manager, &handle, info.data());
+    dropPool();
     return handle != kFreeHandle;
 }
 
@@ -405,15 +406,15 @@ std::vector<SlotPiece> slotPiecesOfKinds(uint64_t ownerKey, const uint8_t* kinds
     if (!owner || sharesWithLocalPlayer(baggage, ownerKey, owner)) return out;
     std::vector<std::pair<uint8_t, std::vector<SlotRange>>> byKind;
     for (size_t i = 0; i < count; ++i) byKind.emplace_back(kinds[i], slotsOfKind(owner, kinds[i]));
-    scanPool(baggage, [&](uintptr_t, const EntryHead& head) {
+    for (const PoolEntry& entry : livePool(baggage)) {
         for (const auto& [kind, slots] : byKind) {
             uint32_t type = 0;
-            if (inSlots(slots, head.slot) && decima::safeRead(head.item + kItemType, type)) {
-                out.push_back({kind, head.handle, type});
-                return;
+            if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
+                out.push_back({kind, entry.handle, type});
+                break;
             }
         }
-    });
+    }
     return out;
 }
 
@@ -441,18 +442,21 @@ void markOwnedCargo(uint64_t ownerKey) {
     if (!owner || ownerKey == kLocalPlayerKey || sharesWithLocalPlayer(baggage, ownerKey, owner)) return;
     std::vector<SlotRange> slots;
     collectSlots(owner, true, 0, slots);
-    scanPool(baggage, [&](uintptr_t entry, const EntryHead& head) {
-        if (inSlots(slots, head.slot) && head.durability != kBodyPieceMark) writeFloat(entry + kBaggageDurability, kBodyPieceMark);
-    });
+    for (const PoolEntry& entry : livePool(baggage)) {
+        if (inSlots(slots, entry.slot) && entry.durability != kBodyPieceMark) {
+            writeFloat(entry.address + kBaggageDurability, kBodyPieceMark);
+        }
+    }
+    dropPool();
 }
 
 std::vector<uint64_t> markedLooseCargo() {
     std::vector<uint64_t> handles;
     const uintptr_t baggage = manager();
     if (!baggage) return handles;
-    scanPool(baggage, [&](uintptr_t, const EntryHead& head) {
-        if (!head.slot && head.durability == kBodyPieceMark) handles.push_back(head.handle);
-    });
+    for (const PoolEntry& entry : livePool(baggage)) {
+        if (!entry.slot && entry.durability == kBodyPieceMark) handles.push_back(entry.handle);
+    }
     return handles;
 }
 

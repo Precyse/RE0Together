@@ -15,6 +15,10 @@ void installEarly();
 // keeps a baseline of engine state compares it to know the baseline is from before a load.
 uint32_t gameplayEpoch();
 
+// Counts the simulation frames: the engine's object update runs once per frame, and every callback of a frame reads the
+// same number. Any thread.
+uint32_t frame();
+
 // The one world signal. The local player's state machine comes back on while a load or travel still shows its loading
 // screen, so "in gameplay" alone does not mean the world is there. `inWorld`: the state machine runs and no loading screen
 // is up (what the engine's lists can be read under). `worldReady`: that, for long enough that the world has settled

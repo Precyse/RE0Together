@@ -5,7 +5,7 @@
 namespace combat_hook {
 
 // Start-up: the detour on ApplyDamage and the simulation tick that applies the partner's hits and kills, and on the
-// host reports which enemies died.
-void installEarly();
+// host reports which enemies died. `logCombat` writes the per-hit combat log (config diagnostics).
+void installEarly(bool logCombat);
 
 }  // namespace combat_hook

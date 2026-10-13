@@ -41,9 +41,10 @@ constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 constexpr double kMinMoveMeters = 0.03;  // an enemy that moved less than this and did not turn is not reported again...
 constexpr float kMinTurn = 0.01f;
-constexpr double kAnimationRadius = 50.0;  // metres around the partner: further enemies are not animated on its side
+constexpr double kNearPartnerRadius = 50.0;  // metres around the partner: enemies inside are animated and kept sent often
 constexpr ULONGLONG kAnimationSnapshotMs = 10000;  // a new enemy in range and a requested snapshot send one at once
-constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
+constexpr ULONGLONG kKeepaliveNearMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
+constexpr ULONGLONG kKeepaliveFarMs = 10000;
 
 struct Tracked {
     uint16_t netId;
@@ -86,11 +87,14 @@ bool partnerPosition(decima::WorldPosition& out) {
     return true;
 }
 
+bool nearPartner(const decima::WorldTransform& transform, const decima::WorldPosition* partner) {
+    return partner && std::hypot(transform.position.x - partner->x, transform.position.y - partner->y) <= kNearPartnerRadius;
+}
+
 // The enemy's animation variables that changed since the last report, while the partner is within sight of it.
 void sampleAnimation(Tracked& enemy, const decima::WorldTransform& transform, const decima::WorldPosition* partner,
                      ULONGLONG now) {
-    const bool inSight = partner && std::hypot(transform.position.x - partner->x, transform.position.y - partner->y) <= kAnimationRadius;
-    const uintptr_t manager = inSight ? remote_animation::managerOf(enemy.entity) : 0;
+    const uintptr_t manager = nearPartner(transform, partner) ? remote_animation::managerOf(enemy.entity) : 0;
     if (!manager) {
         enemy.sentVariables.reset();
         return;
@@ -118,9 +122,9 @@ void keepAwake(Tracked& enemy, const decima::WorldTransform& transform, const de
     ds2::wakeEntity(enemy.entity);
 }
 
-bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
+bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now, ULONGLONG keepaliveMs) {
     const enemy_wire::Pose& pose = state.pose;
-    if (now - enemy.sentAt >= kKeepaliveMs || state.healthRatio != enemy.sentHealth) return true;
+    if (now - enemy.sentAt >= keepaliveMs || state.healthRatio != enemy.sentHealth) return true;
     const double dx = pose.position[0] - enemy.sentPose.position[0];
     const double dy = pose.position[1] - enemy.sentPose.position[1];
     const double dz = pose.position[2] - enemy.sentPose.position[2];
@@ -194,7 +198,8 @@ void tick() {
             }
             if (enemy.announced && !dead && g_states.size() < kMaxQueued) {
                 const enemy_wire::EnemyState state = sample(enemy, transform, false, now);
-                if (worthSending(enemy, state, now)) {
+                const ULONGLONG keepaliveMs = nearPartner(transform, havePartner ? &partnerAt : nullptr) ? kKeepaliveNearMs : kKeepaliveFarMs;
+                if (worthSending(enemy, state, now, keepaliveMs)) {
                     enemy.sentPose = state.pose;
                     enemy.sentHealth = state.healthRatio;
                     enemy.sentAt = now;
