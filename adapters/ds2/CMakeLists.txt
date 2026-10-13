@@ -47,6 +47,7 @@ add_library(ds2_adapter SHARED
     src/input_filter.cpp
     src/player_sync.cpp
     src/dx12_hook.cpp
+    src/ds2/frame_gen.cpp
     src/marker_overlay.cpp
     src/peer_pose.cpp
     src/load_overlay.cpp
@@ -145,7 +146,7 @@ add_library(ds2_adapter SHARED
     src/ds2/sneaking_diag.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
-target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)
+target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32 advapi32)
 add_custom_command(TARGET ds2_adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:ds2_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/version.dll)
 
@@ -167,9 +168,9 @@ target_include_directories(enemy_wire_test PRIVATE src ${SHARED_DIR})
 add_executable(story_wire_test tests/story_wire_test.cpp)
 target_include_directories(story_wire_test PRIVATE src ${SHARED_DIR})
 
-add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
+add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp src/ds2/frame_gen.cpp ${SHARED_SOURCES})
 target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})
-target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)
+target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi advapi32)
 
 add_executable(proxy_load_test tests/proxy_load_test.cpp)
 add_dependencies(proxy_load_test ds2_adapter)
@@ -202,5 +203,7 @@ add_unit_test(cutscene_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
 add_unit_test(partner_status_test src/partner_status.cpp)
+add_unit_test(frame_gen_test src/ds2/frame_gen.cpp)
+target_link_libraries(frame_gen_test PRIVATE advapi32)
 add_unit_test(gear_snapshot_test src/gear_snapshot.cpp)
 add_unit_test(build_guard_test src/build_guard.cpp ${SHARED_DIR}/log.cpp ${SHARED_DIR}/paths.cpp)
