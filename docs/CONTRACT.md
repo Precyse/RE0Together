@@ -112,6 +112,7 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 | 0x0118 | RESYNC | to one slot or all | yes | u32 scopes (1 facts, 2 authority, 4 anim) |
 | 0x0128 | BT_ENV | host to all | yes | u64 BT-active region set, bit r = region r (`bt_wire.h`, 8 bytes) |
 | 0x0129 | CATCHER_EVENT | host to all | yes | u8 kind (1 territory, 2 tar), u8 flags (bit 0 the territory's bool), u8[2] reserved, u8[16] locator UUID (20 bytes) |
+| 0x0137 | CRATER_SET | host to all | yes | the host's voidout craters (`crater_wire.h`): u16 count (at most 64), u16 reserved, then count x 48 bytes {u8[16] crater locator UUID, f64[3] position, f32 radius, u16 area, u8 kind, u8 reserved}; sent whole on a change, every 5 s and to a joining peer |
 | 0x0119 | STORY_EVENT | host to all (a guest sends an order request to the host) | yes | `story_wire.h` (104 bytes): kind (mission start/success/fail, section active/inactive, area change, order request), mission id, args, section or start-section UUID, area transform |
 | 0x012A | CUTSCENE_START | host to all | yes | `cutscene_wire.h` (60 bytes): u32 id, u8 category, u8[3] reserved, i32 stop frame, u8[16] SequenceResource UUID, u8[16] host Sequence entity UUID, u8[16] SequenceNetwork UUID (zero if unknown) |
 | 0x012B | CUTSCENE_READY | guest to host | yes | u32 id (the guest holds its copy) |

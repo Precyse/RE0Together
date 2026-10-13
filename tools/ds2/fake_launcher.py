@@ -49,6 +49,10 @@ CUTSCENE_STOP_SCRIPTED = 3
 CUTSCENE_CATEGORY_STORY = 1
 STORY_EVENT_TYPE = 0x0119
 STORY_EVENT_FORMAT = struct.Struct("<B3xIiIQ16s64s")  # kind, a, b, flags, mission id, section, transform (story_wire.h, 104 bytes)
+CRATER_SET = 0x0137
+CRATER_HEADER = struct.Struct("<HH")  # count, reserved (crater_wire.h)
+CRATER_FORMAT = struct.Struct("<16s3dfHBB")  # uuid, position, radius, area, kind, reserved (48 bytes)
+CRATER_RESEND_SECONDS = 5.0  # the host peer repeats its crater set
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
@@ -112,6 +116,22 @@ def load_enemy_recording(path):
 STRUCT_KINDS = {2: 0x00, 3: 0x00, 4: 0x08, 5: 0x18, 6: 0x00, 7: 0x00, 9: 0x08, 10: 0x18, 11: 0x08, 12: 0x08, 14: 0x28, 15: 0x08,
                 16: 0x08, 20: 0x00, 21: 0x18, 22: 0x28, 23: 0x30, 26: 0x10, 32: 0x28, 33: 0x28, 34: 0x10}
 SUBKIND_DEFAULT = 14  # EDSConstructionPointSubCategory Invalid: the category's own config
+
+
+def crater_set_payload(spec):
+    """UUID:X,Y,Z:RADIUS:AREA[;...] (an empty text is the empty set) as a CRATER_SET payload."""
+    craters = [item.split(":") for item in spec.split(";") if item]
+    body = b"".join(CRATER_FORMAT.pack(bytes.fromhex(uuid), *(float(v) for v in at.split(",")), float(radius), int(area), 0, 0)
+                    for uuid, at, radius, area in craters)
+    return CRATER_HEADER.pack(len(craters), 0) + body
+
+
+def print_crater_set(body):
+    count, _ = CRATER_HEADER.unpack_from(body)
+    print(f"craters: CRATER_SET of {count}", flush=True)
+    for i in range(count):
+        uuid, x, y, z, radius, area, kind, _ = CRATER_FORMAT.unpack_from(body, CRATER_HEADER.size + i * CRATER_FORMAT.size)
+        print(f"craters:   {uuid.hex()} at {x:.1f} {y:.1f} {z:.1f} radius {radius:.1f} area {area} kind {kind}", flush=True)
 
 
 def kind_payload(local, kind, index):
@@ -187,6 +207,9 @@ def main():
                     "it) of this amount and attack type every 10 s")
     p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s; an enemy the host reports gone (died or despawned) is not hit again, and a death is printed")
     p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
+    p.add_argument("--crater-set", default=None, help='UUID:X,Y,Z:RADIUS:AREA[;...]: as the host (use --guest), send this CRATER_SET every 5 s ("" is the empty set)')
+    p.add_argument("--crater-clear", type=float, default=0.0, help="SECONDS after the first --crater-set send: from then on send the empty set")
+    p.add_argument("--crater-log", action="store_true", help="print every CRATER_SET received")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
@@ -242,6 +265,8 @@ def serve(sock, a):
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
+            elif msg_type == CRATER_SET and a.crater_log:
+                print_crater_set(body[4:])
             elif msg_type == STRUCT_CREATE and a.struct_request:
                 requested.update(id=struct.unpack_from('<I', body, 8)[0], at=time.time())
                 print(f"struct: STRUCT_CREATE kind {body[4]} id {requested['id']}", flush=True)
@@ -328,6 +353,7 @@ def serve(sock, a):
     last_weapon = last_fire = last_player_hit = 0.0
     struct_sent = 0
     last_bt = 0.0
+    last_crater = crater_start = None
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -460,6 +486,11 @@ def serve(sock, a):
         if a.bt_regions and now - last_bt >= 1.0:
             last_bt = now
             sock.sendall(encode(0x0128, peer_slot, struct.pack("<Q", int(a.bt_regions, 16))))
+        if a.crater_set is not None and (last_crater is None or now - last_crater >= CRATER_RESEND_SECONDS):
+            last_crater = now
+            crater_start = crater_start or now
+            cleared = a.crater_clear and now - crater_start >= a.crater_clear
+            sock.sendall(encode(CRATER_SET, peer_slot, crater_set_payload("" if cleared else a.crater_set)))
         if a.struct_all and local and start is not None and now - start >= a.struct_all + 8.0 * struct_sent:
             if struct_sent < len(STRUCT_KINDS):
                 kind = sorted(STRUCT_KINDS)[struct_sent]
