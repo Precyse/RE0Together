@@ -25,6 +25,14 @@ Game: Death Stranding 2 (Decima engine), G:\SteamLibrary\steamapps\common\DEATH 
 - Smaller: vehicle placement onto the existing sim tick and drop the extra frame hook; gate the combat log behind diagnostics=1; the logger should not reopen the file per line; enable all hooks in one batch (89 hooks, 4.3 s start-up); decide whether PendingQueue and DelayLine are used.
 - Riding as driver and passenger, draw/holster after the DSPlayerComponent cut, and rejoin reusing a parked body are not re-checked live.
 
+## Live results 2026-10-13 (ds2-live fb0978e, solo with fake_launcher; logs and shots in coop-scratch/ds2_solo, ds2_peer, ds2_vehicle)
+- Done on ds2-live: items 2, 4, 5 and all "Smaller" items (sim tick for body, vehicle and rack; keepalive by distance; combat log behind diagnostics; logger opened once; hooks enabled in one batch; PendingQueue, DelayLine and main_thread removed).
+- PASS: start-up batch (85 hooks enabled 1.95 s after adapter start, no failures); partner body spawn and follow on the sim tick; park/unpark 5 of 5 cycles (parks about 8 s after link loss: 3 s until the peer counts as gone, then the 5 s timer); far-enemy keepalive every 10.07 s; combat log off with diagnostics=0; partner drives, boards, sits and gets off the truck; vehicle placement follows reported position and heading.
+- NOT TESTED: near-partner keepalive (2 s, no enemy within 50 m); rack_sync and cargo transfers (no faults, but rack_sync logs only on change); dead-body path.
+- Note: a vehicle placed at a reported height stays there after reports stop (the fake peer sent a stale height and the truck floated). A real peer reports the resting height, so this only shows with a fake peer.
+- A direct DS2.exe launch exits at the game's Steam check ("Steam ProcessResult failed"); launch through Steam (gamectl.py launch). Game version is now v1.10.89.0.
+- cleanup.sh deletes version.dll and the coop folder; never run it while the game is running.
+
 ## Dump investigation (answer owed to the user)
 - HashDB.bin (5,629,349 bytes) has no readable asset names.
 - LocalCacheWinGame\package\*\package.XX.XX.core (29 packages, 20.38 GB, header "DSAR" 03 00 01 00) looks like a compressed container with an unknown layout.
