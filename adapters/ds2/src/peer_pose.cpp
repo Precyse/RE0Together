@@ -39,7 +39,8 @@ void tick() {
             std::lock_guard lock(g_mutex);
             at = smoothed(peer);
         }
-        remote_body::setTarget(peer.slot, {at, peer.yaw}, {peer.velocity[0], peer.velocity[1], peer.velocity[2]});
+        remote_body::setTarget(peer.slot, {at, peer.yaw}, {peer.velocity[0], peer.velocity[1], peer.velocity[2]},
+                              partner_status::away(peer.status));
     }
 }
 
