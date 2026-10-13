@@ -235,7 +235,7 @@ def main():
     a = p.parse_args()
     a.status_steps = sorted((float(at), int(word, 16)) for at, word in (step.split(":") for step in a.status_at.split(",") if step))
     server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # a second fake on the port fails instead of sharing it
     server.bind(("127.0.0.1", a.port))
     server.listen(1)
     print("waiting for the adapter", flush=True)
