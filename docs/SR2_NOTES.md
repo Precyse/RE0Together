@@ -36,3 +36,8 @@ Hooks session create, GameSpy code (0x81A590, 0x8360F9, 0xC1BC76, 0xD2526F), mem
 - Order of `net_set_mode` and `session_pool_setup` (log line `inside net_set_mode 1` means the post-return write is too late for the pool sizing).
 - Where "session full" is decided; what a third `join_req` gets.
 - Replication for peers 2 and 3 (deltacomp), partner semantics, Lua: later milestones.
+
+## Live results 2026-10-13 (solo host, SR2 Juiced, build 1076239)
+- Milestone 1: entering co-op raised both limits 2 -> 4; the session pools sized with 4 (the write lands before the sizing). Without pool scaling, Juiced's watcher reported "Failed aligned alloc of 16384 bytes in coop_player cpu pool".
+- Milestone 1b: hosting co-op resized coop_player cpu 2260992 -> 6782976 and gpu 17240064 -> 51720192, raised the limits, allocated the host's player slot, and reached "waiting for player" with no Juiced mempool warning.
+- Not tested: any guest joining (needs other PCs); replication still tracks one remote peer.
