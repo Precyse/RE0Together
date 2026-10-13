@@ -282,7 +282,7 @@ void craterCommand(const std::string& text) {
     if (text.rfind("list", 0) == 0) return craters::logAll();
     if (text.rfind("remove", 0) == 0) {
         if (!given) return logger::write("test_commands: crater remove needs a UUID");
-        return logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::remove(uuid) ? "removal requested" : "not removed");
+        return logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::remove(uuid) ? "removal requested" : "not removed (unknown or not committed yet)");
     }
     decima::WorldTransform where{};
     if (text.rfind("add", 0) != 0 || !ds2::entityTransform(remote_player::samEntity(), where)) return;

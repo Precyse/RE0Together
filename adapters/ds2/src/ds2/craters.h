@@ -27,7 +27,8 @@ bool hostSet(std::vector<crater_wire::Crater>& out);
 void follow(std::vector<crater_wire::Crater> set);
 
 // Simulation thread, for the test commands: logs every crater, adds one through AddCrater at `position` with the countdown
-// of a catcher's crater, removes one through RemoveCrater. False when the manager or the call is not there.
+// of a catcher's crater, removes one through RemoveCrater. False when the manager or the call is not there; `remove` is
+// also false for a crater that is not committed yet (new, or the world update paused by a menu).
 void logAll();
 bool add(const double (&position)[3], float radius, const uint8_t (&uuid)[crater_wire::kUuidSize]);
 bool remove(const uint8_t (&uuid)[crater_wire::kUuidSize]);

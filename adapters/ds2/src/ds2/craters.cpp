@@ -112,24 +112,30 @@ bool readArray(uintptr_t array, int32_t count, std::vector<Crater>& out) {
     return true;
 }
 
+// Appends the live committed entries. The lock is only tried, never waited for: a busy one fails the read.
+bool readCommitted(uintptr_t mgr, std::vector<Crater>& out) {
+    auto* lock = reinterpret_cast<SRWLOCK*>(mgr + kCommittedLock);
+    int32_t count = 0;
+    if (!TryAcquireSRWLockShared(lock)) return false;
+    const bool ok = decima::safeRead(mgr + kCommittedCount, count) &&
+                    readArray(decima::readPointer(mgr + kCommittedEntries), count, out);
+    ReleaseSRWLockShared(lock);
+    return ok;
+}
+
 // The pending array is read before the committed one: the engine moves entries from pending to committed, so an entry in
-// motion is seen at least once. The locks are only tried, never waited for: a busy one skips the tick.
+// motion is seen at least once. A busy lock skips the tick.
 bool readLocal(uintptr_t mgr, std::vector<Crater>& out) {
     out.clear();
     auto* pendingLock = reinterpret_cast<CRITICAL_SECTION*>(mgr + kPendingLock);
-    auto* committedLock = reinterpret_cast<SRWLOCK*>(mgr + kCommittedLock);
-    int32_t pendingCount = 0, committedCount = 0;
+    int32_t pendingCount = 0;
     bool ok = false;
     if (TryEnterCriticalSection(pendingLock)) {
         ok = decima::safeRead(mgr + kPendingCount, pendingCount) &&
              readArray(decima::readPointer(mgr + kPendingEntries), pendingCount, out);
         LeaveCriticalSection(pendingLock);
     }
-    if (!ok || !TryAcquireSRWLockShared(committedLock)) return false;
-    ok = decima::safeRead(mgr + kCommittedCount, committedCount) &&
-         readArray(decima::readPointer(mgr + kCommittedEntries), committedCount, out);
-    ReleaseSRWLockShared(committedLock);
-    if (!ok || out.size() > crater_wire::kMaxCraters) return false;
+    if (!ok || !readCommitted(mgr, out) || out.size() > crater_wire::kMaxCraters) return false;
     crater_wire::sortByUuid(out);
     return true;
 }
@@ -169,6 +175,17 @@ bool callRemove(const uint8_t (&uuid)[crater_wire::kUuidSize]) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
+}
+
+// RemoveCrater only searches the committed array, and the manager's frame update (0x141ebcfb0) is what commits a pending
+// entry, so under a pause menu (the world update is skipped) a new crater cannot be removed yet. False then, and for an
+// unknown UUID: the caller retries while the crater is still there.
+bool removeCommitted(const uint8_t (&uuid)[crater_wire::kUuidSize]) {
+    const uintptr_t mgr = manager();
+    Crater key{};
+    std::memcpy(key.uuid, uuid, sizeof(uuid));
+    std::vector<Crater> committed;
+    return mgr && readCommitted(mgr, committed) && contains(committed, key) && callRemove(uuid);
 }
 
 bool addCrater(const Crater& crater) {
@@ -234,7 +251,7 @@ void followHost() {
     for (const Crater& crater : local) {
         if (contains(wanted, crater)) continue;
         remote_apply::Scope applying;
-        if (callRemove(crater.uuid)) logger::write("craters: removed %s", craters::uuidText(crater.uuid).c_str());
+        if (removeCommitted(crater.uuid)) logger::write("craters: removed %s", craters::uuidText(crater.uuid).c_str());
     }
 }
 
@@ -304,6 +321,6 @@ bool add(const double (&position)[3], float radius, const uint8_t (&uuid)[crater
     return manager() && addCrater(crater);
 }
 
-bool remove(const uint8_t (&uuid)[crater_wire::kUuidSize]) { return manager() && callRemove(uuid); }
+bool remove(const uint8_t (&uuid)[crater_wire::kUuidSize]) { return removeCommitted(uuid); }
 
 }  // namespace craters

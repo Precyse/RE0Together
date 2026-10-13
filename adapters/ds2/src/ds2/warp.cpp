@@ -11,8 +11,8 @@
 #include <cmath>
 #include <mutex>
 
-#include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/game_state.h"
 #include "ds2/place.h"
 #include "ds2/remote_player.h"
 #include "ds2/setdriver_guard.h"
@@ -25,7 +25,6 @@ namespace {
 
 constexpr int kWarpKey = VK_F6;
 constexpr SHORT kKeyDown = static_cast<SHORT>(0x8000);
-constexpr uintptr_t kGameStateGlobal = 0x14623E4C0, kGameStateBits = 0x160;
 // DSGameState bits that refuse a warp: cutscenes (6, 7, 19, 20, 21, 22), the menus (8 weapon selector, 30 system pause),
 // loading (24) and area change (31).
 constexpr uint64_t kRefusingBits = (1ull << 6) | (1ull << 7) | (1ull << 8) | (1ull << 19) | (1ull << 20) | (1ull << 21) |
@@ -50,8 +49,8 @@ constexpr uint64_t kDeadFlag = uint64_t{1} << 8;  // Entity::IsDead
 
 bool refused() {
     if (ds2::field<uint64_t>(remote_player::samEntity(), kEntityFlags) & kDeadFlag) return true;
-    const uintptr_t state = decima::readPointer(ds2::at(kGameStateGlobal));
-    if (!state || (ds2::field<uint64_t>(state, kGameStateBits) & kRefusingBits) != 0) return true;
+    uint64_t low = 0, high = 0;
+    if (!game_state::read(low, high) || (low & kRefusingBits) != 0) return true;
     return game::drivenVehicle().has_value() || setdriver_guard::localPassengerVehicle() != 0;
 }
 

@@ -4,13 +4,15 @@
 // state list (+0x340 count, +0x348 array, type at state +0x10), or when the system pause flag [0x146266968] is set and
 // 0x1426e7190() agrees. While linked and the local player is in gameplay, only the system part is kept: the menus stay
 // pushed and usable, the world runs on (docs/DS2_NOTES.md, "World clock under menus"). Outside gameplay (a load, the title
-// screen) and in cutscenes the game keeps its pause.
+// screen) and in cutscenes the game keeps its pause. The pause menu (Esc) is not one of those module states: it shows as
+// DSGameState bit 2 (measured: 0x240000004 while it is open, 0xa00000000 in play), which is what `menuUp` reads.
 #include "ds2/world_pause.h"
 
 #include <atomic>
 
 #include "decima/safe_read.h"
 #include "ds2/engine.h"
+#include "ds2/game_state.h"
 #include "ds2/sim_tick.h"
 #include "game.h"
 #include "hooks.h"
@@ -21,6 +23,7 @@ namespace {
 constexpr uintptr_t kIsPaused = 0x140709c60;           // (GameModule*) -> bool
 constexpr uintptr_t kSystemPauseFlag = 0x146266968;    // pointer: a system pause is requested while it is set
 constexpr uintptr_t kSystemPauseAgrees = 0x1426e7190;  // () -> bool
+constexpr uint64_t kPauseMenuBit = uint64_t{1} << 2;
 constexpr uintptr_t kStateCount = 0x340, kStateArray = 0x348, kStateType = 0x10;
 constexpr uint32_t kFirstMenuState = 5, kLastMenuState = 19;  // the pausing module states: wheel, rings, pause menu
 
@@ -28,8 +31,6 @@ using IsPausedFn = bool (*)(uintptr_t module);
 
 IsPausedFn g_isPaused = nullptr;
 std::atomic<bool> g_linked{false};
-std::atomic<bool> g_menuUp{false};
-std::atomic<bool> g_systemPause{false};
 std::atomic<uint64_t> g_overridden{0};
 
 bool menuStateUp(uintptr_t module) {
@@ -43,17 +44,17 @@ bool menuStateUp(uintptr_t module) {
     return false;
 }
 
-// Logs each change of the system pause pointer, to see whether the pause menu or losing focus sets it.
-void logSystemPauseChange() {
-    const bool set = decima::readPointer(ds2::at(kSystemPauseFlag)) != 0;
-    if (g_systemPause.exchange(set) != set) logger::write("world_pause: system pause flag %s", set ? "set" : "clear");
+// Runs on the simulation tick, which keeps going under the menus: one line per open or close of the pause menu.
+void logMenuChange() {
+    static bool wasUp = false;
+    const bool up = world_pause::menuUp();
+    if (up != wasUp) logger::write("world_pause: pause menu %s", up ? "open" : "closed");
+    wasUp = up;
 }
 
 bool isPausedDetour(uintptr_t module) {
     const bool paused = g_isPaused(module);
-    g_menuUp = paused && menuStateUp(module);
-    logSystemPauseChange();
-    if (!g_menuUp || !g_linked.load()) return paused;
+    if (!paused || !menuStateUp(module) || !g_linked.load()) return paused;
     // A menu pushed while a load runs (or before gameplay has started) must pause the world: the engine updates half-built
     // or half-freed objects otherwise.
     if (!sim_tick::inWorld()) return paused;
@@ -71,11 +72,15 @@ bool isPausedDetour(uintptr_t module) {
 
 namespace world_pause {
 
-bool menuUp() { return g_menuUp.load(); }
+bool menuUp() {
+    uint64_t low = 0, high = 0;
+    return game_state::read(low, high) && (low & kPauseMenuBit) != 0;
+}
 
 void installEarly() {
     hooks::install("game module IsPaused", ds2::at(kIsPaused), reinterpret_cast<void*>(&isPausedDetour),
                    reinterpret_cast<void**>(&g_isPaused));
+    sim_tick::add(&logMenuChange, "pause menu log");
 }
 
 }  // namespace world_pause
