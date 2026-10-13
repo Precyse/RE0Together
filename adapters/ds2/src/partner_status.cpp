@@ -10,6 +10,7 @@ uint32_t encode(const Status& status) {
     if (status.down) word |= kDown;
     if (status.loading) word |= kLoading;
     if (status.driving) word |= kDriving;
+    if (status.menu) word |= kMenu;
     return word;
 }
 
@@ -23,6 +24,7 @@ Status decode(uint32_t word) {
     status.down = (word & kDown) != 0;
     status.loading = (word & kLoading) != 0;
     status.driving = (word & kDriving) != 0;
+    status.menu = (word & kMenu) != 0;
     return status;
 }
 
@@ -30,8 +32,17 @@ std::string stateText(const Status& status) {
     if (status.dead) return "DEAD";
     if (status.down) return "DOWN";
     if (status.loading) return "LOADING";
+    if (status.menu) return "MENU";
     return {};
 }
+
+Change transition(const Status& lastKnown, const Status& now) {
+    if (!now.known) return Change::None;
+    if (now.dead) return lastKnown.dead ? Change::None : Change::Died;
+    return lastKnown.dead && !now.loading ? Change::Back : Change::None;
+}
+
+bool away(const Status& status) { return status.known && (status.dead || status.loading); }
 
 int healthPercent(const Status& status) {
     if (!status.known || !status.healthKnown) return -1;

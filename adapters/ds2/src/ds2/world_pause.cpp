@@ -28,6 +28,8 @@ using IsPausedFn = bool (*)(uintptr_t module);
 
 IsPausedFn g_isPaused = nullptr;
 std::atomic<bool> g_linked{false};
+std::atomic<bool> g_menuUp{false};
+std::atomic<bool> g_systemPause{false};
 std::atomic<uint64_t> g_overridden{0};
 
 bool menuStateUp(uintptr_t module) {
@@ -41,9 +43,17 @@ bool menuStateUp(uintptr_t module) {
     return false;
 }
 
+// Logs each change of the system pause pointer, to see whether the pause menu or losing focus sets it.
+void logSystemPauseChange() {
+    const bool set = decima::readPointer(ds2::at(kSystemPauseFlag)) != 0;
+    if (g_systemPause.exchange(set) != set) logger::write("world_pause: system pause flag %s", set ? "set" : "clear");
+}
+
 bool isPausedDetour(uintptr_t module) {
     const bool paused = g_isPaused(module);
-    if (!paused || !g_linked.load() || !menuStateUp(module)) return paused;
+    g_menuUp = paused && menuStateUp(module);
+    logSystemPauseChange();
+    if (!g_menuUp || !g_linked.load()) return paused;
     // A menu pushed while a load runs (or before gameplay has started) must pause the world: the engine updates half-built
     // or half-freed objects otherwise.
     if (!sim_tick::inWorld()) return paused;
@@ -60,6 +70,8 @@ bool isPausedDetour(uintptr_t module) {
 }  // namespace
 
 namespace world_pause {
+
+bool menuUp() { return g_menuUp.load(); }
 
 void installEarly() {
     hooks::install("game module IsPaused", ds2::at(kIsPaused), reinterpret_cast<void*>(&isPausedDetour),

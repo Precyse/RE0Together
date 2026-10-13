@@ -16,8 +16,9 @@ void setEnabled(bool enabled);
 // Start-up, before the game builds its player tables (needs setEnabled(true) first): installs the engine hooks.
 void installEarly();
 
-// Simulation thread, once per frame per peer (peer_pose): where that peer's body should be and how fast it is moving.
-void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity);
+// Simulation thread, once per frame per peer (peer_pose): where that peer's body should be and how fast it is moving;
+// `partnerAway` (partner_status::away) parks the body until it clears.
+void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity, bool partnerAway);
 
 // The baggage owner key of the body (its network id), and the slot of the peer it stands for; empty / 0xFF until it
 // is live. Any thread.

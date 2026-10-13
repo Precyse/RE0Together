@@ -8,6 +8,9 @@ namespace cargo_menu {
 // dx12_hook draw callback part (render thread).
 void draw(float width, float height);
 
+// Whether the menu is open. Any thread.
+bool isOpen();
+
 // input_filter: while the menu is open its keys (arrows, Enter) are kept from the game.
 bool claimsKey(unsigned virtualKey);
 

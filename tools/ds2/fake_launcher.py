@@ -157,7 +157,8 @@ def main():
     p.add_argument("--resync-structures", action="store_true", help="after the first local state ask the host for the structures it placed (RESYNC kStructures)")
     p.add_argument("--resync-enemies", action="store_true", help="after the first local state ask the host for every enemy again (a peer that joins a running host gets the enemy list this way)")
     p.add_argument("--throw-at", action="store_true", help="with --weapon and --fire: each throw is a lob at the announced enemy nearest the peer (needs the enemy list: add --resync-enemies)")
-    p.add_argument("--status", type=lambda v: int(v, 16), default=0, help="HEX: the peer's PLAYER_STATE status word (partner_status.h: bits 0-7 health 0-254, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 reports)")
+    p.add_argument("--status", type=lambda v: int(v, 16), default=0, help="HEX: the peer's PLAYER_STATE status word (partner_status.h: bits 0-7 health 0-254, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 reports, 0x2000 menu)")
+    p.add_argument("--status-at", default="", help="SECONDS:HEX,...: switch the status word at these seconds after start, e.g. 30:0x1100,45:0x10fe (dead at 30 s, back at 45 s)")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
@@ -195,6 +196,15 @@ def main():
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
+    status_steps = sorted((float(at), int(word, 16)) for at, word in (step.split(":") for step in a.status_at.split(",") if step))
+
+    def scheduled_status(elapsed):
+        current = a.status
+        for at, word in status_steps:
+            if elapsed >= at:
+                current = word
+        return current
+
     server = socket.socket()
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("127.0.0.1", a.port))
@@ -505,7 +515,7 @@ def serve(sock, a):
                 y = local["y"] + fy * a.offset - fx * a.radius
                 yaw = local["yaw"]
             seq += 1
-            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, a.status), flags=0))
+            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, scheduled_status(now - start)), flags=0))
         time.sleep(1.0 / SEND_HZ)
 
 
