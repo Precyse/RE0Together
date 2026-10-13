@@ -74,6 +74,23 @@ inline uint8_t wantedModel(Role role, bool iniApplied, uint8_t ini, uint8_t repo
     }
 }
 
+// What to do with an APPEARANCE from `senderSlot` for a character whose owner slot is `ownerSlot`
+// (control_rule::kNoOwner while ownership is not decided): hold it until the owner is known, apply it when the sender
+// is the owner, drop it otherwise.
+enum class Verdict { Hold, Apply, Drop };
+
+inline Verdict judgeSender(int ownerSlot, uint8_t senderSlot) {
+    if (ownerSlot == control_rule::kNoOwner) return Verdict::Hold;
+    return ownerSlot == senderSlot ? Verdict::Apply : Verdict::Drop;
+}
+
+// The last APPEARANCE received for a character that is waiting for its owner to be decided.
+struct Pending {
+    bool held = false;
+    uint8_t model = kNoOutfit;
+    uint8_t senderSlot = 0;
+};
+
 inline bool needsChange(uint8_t current, uint8_t wanted) { return wanted != kNoOutfit && wanted != current; }
 
 // Wire payload of APPEARANCE (0x0116): the character an owner plays and the outfit it wears.

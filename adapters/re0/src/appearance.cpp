@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdio>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -52,6 +53,9 @@ NetClient* g_net = nullptr;
 std::array<uint8_t, kCount> g_ini{};                  // the local player's choice per character (config), read-only after enable
 std::array<bool, kCount> g_iniApplied{};              // game thread: the ini choice was put on its character this game
 std::array<std::atomic<uint8_t>, kCount> g_reported;  // the owner's latest APPEARANCE per character (net thread writes)
+std::mutex g_pendingMutex;
+std::array<appearance_rule::Pending, kCount> g_pending;  // guarded by g_pendingMutex: received before its owner was known
+std::array<int, kCount> g_ownerSeen;                  // game thread: the owner slot last seen per character
 std::array<Job, kCount> g_jobs;                       // game thread
 std::array<uint8_t, kCount> g_failed{};               // game thread: the outfit a swap gave up on, not retried
 std::array<uint8_t, kCount> g_lastSent{};             // game thread
@@ -290,8 +294,46 @@ void reconcile(Character character) {
     }
 }
 
+void acceptReported(Character character, uint8_t model) {
+    if (g_reported[indexOf(character)].exchange(model) != model) {
+        logger::write("appearance: %s %02x received", character_owner::name(character), model);
+    }
+}
+
+void logDropped(Character character, uint8_t slot) {
+    logger::write("appearance: %s from slot %u dropped, not its owner", character_owner::name(character), slot);
+}
+
+// A held APPEARANCE is applied or dropped once its character's owner is decided.
+void resolvePending(Character character) {
+    appearance_rule::Pending pending;
+    {
+        const std::lock_guard<std::mutex> lock(g_pendingMutex);
+        appearance_rule::Pending& held = g_pending[indexOf(character)];
+        const appearance_rule::Verdict verdict = appearance_rule::judgeSender(character_owner::ownerSlot(character), held.senderSlot);
+        if (!held.held || verdict == appearance_rule::Verdict::Hold) return;
+        pending = held;
+        held = appearance_rule::Pending{};
+    }
+    if (character_owner::isOwnedBy(character, pending.senderSlot)) acceptReported(character, pending.model);
+    else logDropped(character, pending.senderSlot);
+}
+
+// A newly decided owner makes this machine announce its own outfit again, so a partner that joined earlier gets it.
+void announceOnOwnership(Character character) {
+    const size_t i = indexOf(character);
+    const int owner = character_owner::ownerSlot(character);
+    if (owner == g_ownerSeen[i]) return;
+    g_ownerSeen[i] = owner;
+    if (owner != control_rule::kNoOwner) g_lastSentMs[i] = 0;
+}
+
 void onTick() {
-    for (const Character character : kCharacters) reconcile(character);
+    for (const Character character : kCharacters) {
+        resolvePending(character);
+        announceOnOwnership(character);
+        reconcile(character);
+    }
 }
 
 }  // namespace
@@ -300,6 +342,7 @@ namespace appearance {
 
 bool enable(NetClient& net, const Config& config) {
     g_net = &net;
+    g_ownerSeen.fill(control_rule::kNoOwner);
     g_ini = config.outfit;
     game_tick::addCallback("appearance", onTick);
     return hooks::install("game start", game::kGameStartFunction, reinterpret_cast<void*>(&startDetour),
@@ -314,12 +357,14 @@ void onFrame(const GameFrame& frame) {
     const std::optional<appearance_rule::Appearance> received = appearance_rule::decode(frame.payload);
     if (!received) return;
     const auto character = static_cast<Character>(received->character);
-    if (!character_owner::isOwnedBy(character, frame.slot)) {
-        logger::write("appearance: %s from slot %u dropped, not its owner", character_owner::name(character), frame.slot);
-        return;
-    }
-    if (g_reported[indexOf(character)].exchange(received->model) != received->model) {
-        logger::write("appearance: %s %02x received", character_owner::name(character), received->model);
+    switch (appearance_rule::judgeSender(character_owner::ownerSlot(character), frame.slot)) {
+        case appearance_rule::Verdict::Hold: {
+            const std::lock_guard<std::mutex> lock(g_pendingMutex);
+            g_pending[indexOf(character)] = {true, received->model, frame.slot};
+            return;
+        }
+        case appearance_rule::Verdict::Apply: return acceptReported(character, received->model);
+        case appearance_rule::Verdict::Drop: return logDropped(character, frame.slot);
     }
 }
 

@@ -56,6 +56,17 @@ void checkWanted() {
     check(!appearance_rule::needsChange(0x95, kNoOutfit), "no wish does not");
 }
 
+void checkSenderJudgement() {
+    using appearance_rule::judgeSender;
+    using appearance_rule::Verdict;
+    constexpr int kUndecided = control_rule::kNoOwner;
+    check(judgeSender(kUndecided, 1) == Verdict::Hold, "before ownership a message is held");
+    check(judgeSender(1, 1) == Verdict::Apply, "ownership decided for the sender: the held outfit is applied");
+    check(judgeSender(0, 1) == Verdict::Drop, "ownership decided for another slot: the held outfit is dropped");
+    check(judgeSender(1, 1) == Verdict::Apply, "after ownership the owner's message applies");
+    check(judgeSender(0, 1) == Verdict::Drop, "after ownership a non-owner's message is dropped");
+}
+
 void checkCodec() {
     const appearance_rule::Appearance sent = appearance_rule::encode(Character::Billy, 0xa5);
     check(sizeof(sent) == 4, "payload is 4 bytes");
@@ -75,6 +86,7 @@ int main() {
     checkRefusals();
     checkParse();
     checkWanted();
+    checkSenderJudgement();
     checkCodec();
     if (g_failures == 0) std::printf("appearance_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

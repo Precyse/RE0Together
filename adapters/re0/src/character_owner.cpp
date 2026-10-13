@@ -123,6 +123,10 @@ bool isOwnedBy(Character character, uint8_t slot) {
     return character != Character::Unknown && g_owner[static_cast<size_t>(character)] == slot;
 }
 
+int ownerSlot(Character character) {
+    return character == Character::Unknown ? kNoSlot : g_owner[static_cast<size_t>(character)].load();
+}
+
 bool isHostSlot(uint8_t slot) { return g_linked && slot == g_hostSlot; }
 
 const char* name(Character character) {

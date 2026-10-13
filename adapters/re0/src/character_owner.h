@@ -46,6 +46,9 @@ bool isHost();
 // True when the received ownership says `slot` drives `character`.
 bool isOwnedBy(Character character, uint8_t slot);
 
+// The slot that drives `character`, or control_rule::kNoOwner while ownership is not decided.
+int ownerSlot(Character character);
+
 // True when `slot` is the linked session's host.
 bool isHostSlot(uint8_t slot);
 
