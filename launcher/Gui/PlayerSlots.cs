@@ -11,7 +11,7 @@ internal sealed class PlayerSlots : Control
     private const string OpenSeat = "Open";
 
     private IReadOnlyList<PlayerSlot> _players = Array.Empty<PlayerSlot>();
-    private IReadOnlyList<string> _characters = Array.Empty<string>();
+    private IReadOnlyList<string> _characters = Array.Empty<string>();  // seat order, host first
     private int _seats = 2;
     private int? _pingMs;
 
@@ -23,10 +23,10 @@ internal sealed class PlayerSlots : Control
                  | ControlStyles.ResizeRedraw, true);
     }
 
-    public void Show(GameProfile profile, IReadOnlyList<PlayerSlot> players, int? pingMs)
+    public void Show(GameProfile profile, IReadOnlyList<PlayerSlot> players, int? pingMs, IReadOnlyList<string> characters)
     {
         _seats = Math.Max(profile.MaxPlayers, players.Count);
-        _characters = profile.Characters ?? new List<string>();
+        _characters = characters;
         _players = players;
         _pingMs = pingMs;
         Invalidate();

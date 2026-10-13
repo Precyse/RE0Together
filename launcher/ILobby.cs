@@ -17,6 +17,9 @@ public interface ILobby : IDisposable
 
     ulong OwnerId { get; }
 
+    /// <summary>The host's option values (GameOption.Host), set when the lobby was created and read by every member.</summary>
+    IReadOnlyDictionary<string, string> HostOptions { get; }
+
     /// <summary>Members compatible with our game and protocol.</summary>
     IReadOnlyList<LobbyMember> Members { get; }
 

@@ -2,4 +2,18 @@
   "maxPlayers": 2, "port": 27960, "characters": ["Rebecca", "Billy"], "supportedBuilds": [17178773],
   "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", "adapterIni": "coop/adapter.ini" },
-  "adapterLog": "coop/adapter.log" }
+  "adapterLog": "coop/adapter.log",
+  "options": [
+    { "key": "character", "label": "Character", "host": true, "values": [
+      { "value": "rebecca", "label": "Rebecca" }, { "value": "billy", "label": "Billy" } ] },
+    { "key": "outfit_rebecca", "label": "Rebecca outfit", "values": [
+      { "value": "", "label": "Saved" }, { "value": "02", "label": "S.T.A.R.S. 2002" }, { "value": "7d", "label": "Western" },
+      { "value": "81", "label": "Leather" }, { "value": "91", "label": "Team Wesker" },
+      { "value": "71", "label": "S.T.A.R.S. 1996", "dlcAppId": "381713" }, { "value": "75", "label": "Sportswear", "dlcAppId": "381712" },
+      { "value": "79", "label": "Cheerleader", "dlcAppId": "381710" }, { "value": "85", "label": "Nurse", "dlcAppId": "381711" },
+      { "value": "89", "label": "S.T.A.R.S. Prototype", "dlcAppId": "381713" }, { "value": "8d", "label": "S.T.A.R.S. 1997", "dlcAppId": "381712" } ] },
+    { "key": "outfit_billy", "label": "Billy outfit", "values": [
+      { "value": "", "label": "Saved" }, { "value": "05", "label": "Prisoner" }, { "value": "95", "label": "Jacket" },
+      { "value": "a5", "label": "Wesker" },
+      { "value": "99", "label": "Wolf Force", "dlcAppId": "381710" }, { "value": "9d", "label": "Cody", "dlcAppId": "381711" } ] }
+  ] }

@@ -9,7 +9,9 @@ public sealed record WindowBounds(int X, int Y, int Width, int Height, bool Maxi
 /// The launcher's settings, stored as JSON in %AppData%\CoopLauncher\settings.json. Read once at start; every change
 /// replaces <see cref="Current"/> and writes the file. A missing or unreadable file means the defaults.
 /// </summary>
-public sealed record AppSettings(bool CheckForUpdates = true, Dictionary<string, string>? GameFolders = null, WindowBounds? Window = null)
+public sealed record AppSettings(
+    bool CheckForUpdates = true, Dictionary<string, string>? GameFolders = null, WindowBounds? Window = null,
+    Dictionary<string, Dictionary<string, string>>? GameOptions = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
     private static readonly object Gate = new();
@@ -43,6 +45,20 @@ public sealed record AppSettings(bool CheckForUpdates = true, Dictionary<string,
         if (string.IsNullOrWhiteSpace(folder)) folders.Remove(gameId);
         else folders[gameId] = folder;
         return this with { GameFolders = folders };
+    }
+
+    /// <summary>The value the player chose for a game's option, or null for the option's default.</summary>
+    public string? Option(string gameId, string key) =>
+        GameOptions != null && GameOptions.TryGetValue(gameId, out var options) && options.TryGetValue(key, out var value) ? value : null;
+
+    /// <summary>A copy with the game's option set.</summary>
+    public AppSettings WithOption(string gameId, string key, string value)
+    {
+        var all = GameOptions?.ToDictionary(game => game.Key, game => new Dictionary<string, string>(game.Value))
+                  ?? new Dictionary<string, Dictionary<string, string>>();
+        if (!all.TryGetValue(gameId, out var options)) all[gameId] = options = new Dictionary<string, string>();
+        options[key] = value;
+        return this with { GameOptions = all };
     }
 
     private static AppSettings Read()

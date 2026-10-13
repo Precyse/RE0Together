@@ -114,7 +114,7 @@ public sealed class SaveSyncCoordinator : IDisposable
         return processes.Length > 0;
     }
 
-    public void EnableAdapter() => AdapterSettings.EnableCoop(_gameDir, _config);
+    public void EnableAdapter(IReadOnlyDictionary<string, string> options) => AdapterSettings.EnableCoop(_gameDir, _config, options);
 
     public void Dispose()
     {
