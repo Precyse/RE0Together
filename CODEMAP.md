@@ -377,17 +377,23 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 | file | owns | key members |
 |---|---|---|
 | src/proxy.cpp | `DirectInput8Create` forwarded to the system DLL; DllMain pins the module and starts the init thread | `DirectInput8Create`, `DllMain` |
-| src/init.cpp | start-up order: log, ini, build check, hooks | `initThread` |
+| src/init.cpp | start-up order: log, ini, build check (exe and replication sites), hooks; `max_players` 2 patches no limits, pools or replication | `initThread` |
 | src/config.cpp | `sr2_adapter.ini` (`max_players` clamped 2..12, `trace`); pure parser | `parseConfig`, `loadConfig` |
 | src/sr2_addresses.h | every SR2_pc.exe address, offset and limit constant | `sr2::k*` |
 | src/byte_pattern.h | pure byte compare | `firstMismatch` |
-| src/memory.cpp | safe read of this process | `readMemory` |
-| src/code_check.cpp | refuses to patch a different exe: PE time stamp, prologues of hooked functions, the two limit stores, the two pool size immediates | `gameMatchesBuild` |
-| src/coop_limits.cpp | hooks `net_set_mode`; before mode 1 runs it calls `coop_pools::resize`, after it returns writes `max_players` into both limits | `install`, `insideNetSetMode` |
-| src/coop_pools.cpp | gives the `coop_player cpu` and `coop_player gpu` pools a VirtualAlloc block of size x (max_players - 1), once, with an identity check; logs `pools: <name> <old> -> <new> bytes` | `resize` |
-| src/pool_size.h | pure pool size calculation | `scaledPoolSize` |
-| src/join_trace.cpp | read-only trace of pool sizing, join queue, slot allocator and remote-player getter (log on change) | `install` |
-| tests/config_test.cpp, tests/byte_pattern_test.cpp, tests/pool_size_test.cpp | ctest unit tests, no game | |
+| src/code_patch.cpp | an exe code edit as data (`CodePatch`: address, expected bytes, replacement); batch check and all-or-nothing apply (VirtualProtect, flush); pure `relativeBranch` (call/jmp rel32) | `codeMatches`, `applyCodePatches`, `relativeBranch` |
+| src/memory.cpp | safe read of this process; `dwordField` for always-mapped game objects | `readMemory`, `dwordField` |
+| src/code_check.cpp | refuses to patch a different exe: PE time stamp, prologues of hooked functions, the limit stores, the three pool size immediates, the npc limit store, the activation call and the two set-name loads | `gameMatchesBuild` |
+| src/coop_limits.cpp | hooks `net_set_mode`; before mode 1 runs it calls `coop_pools::resize`, then `replication_switch::enable` when that worked; installs `limit_thunk` | `install`, `insideNetSetMode` |
+| src/limit_thunk.cpp | retargets the allocator-set activation call (0x7F7220) to a naked thunk that writes `max_players` into both limits first | `install` |
+| src/coop_pools.cpp | gives the `coop_player cpu`, `coop_player gpu` and `coop_allocators` pools a VirtualAlloc block (per-pool size rule), once, all or none, with an identity and empty check; logs `pools: <name> <old> -> <new> bytes` | `resize` |
+| src/pool_size.h | pure pool size calculations: guests for the player pools, N=8 deltacomp sets for `coop_allocators` | `scaledPoolSize`, `coopAllocatorsPoolSize` |
+| src/replication_sites.h | constexpr tables copied from the research: 24 N=1 -> N=8 entries, 32 peer-index branches, 8 N=8 allocator objects; slot range rule | `kEntries`, `kBranches`, `kN8Allocators`, `isSessionSlot` |
+| src/replication_patches.h | builds the replication `CodePatch` list from the tables (entry jumps, branch flips, set names) | `replicationPatches`, `branchPatches` |
+| src/replication_switch.cpp | co-op to the 8-peer deltacomp code: start-up site check, first-co-op-entry enable (allocator identity check, patches, pool source), fall back to peer index 0 | `sitesMatch`, `enable`, `fallBackToSinglePeer` |
+| src/member_slots.cpp | reads the session member list, logs changes, guards member session slots against `max_players` | `check` |
+| src/join_trace.cpp | read-only trace of pool sizing, join queue, slot allocator and remote-player getter (log on change); runs `member_slots::check` at those events | `install` |
+| tests/config_test.cpp, tests/byte_pattern_test.cpp, tests/pool_size_test.cpp, tests/replication_sites_test.cpp | ctest unit tests, no game | |
 
 ## release/ (repo root)
 
@@ -415,7 +421,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 - Adapter network behaviour: `adapters/re0/src/net_client.cpp`
 - Control rule (who drives a character): `control_rule.h` (pure) applied in `character_owner::controlOf`; party commands: `command_input.cpp`, `party_mode.cpp`, `camera_parity.cpp` (trace a press or decision in `adapter.log`, lines starting `command:`); pickup crash guard: `pickup_guard.cpp`
 - Overlay contents: `adapters/re0/src/debug_lines.cpp` (add a stat: counter/gauge in `debug_stats.h`, update it where the event happens, add a line)
-- SR2 co-op limits, addresses and the live trace lines: `docs/SR2_NOTES.md`, code in `adapters/sr2/src` (`coop_limits.cpp`, `coop_pools.cpp`, `join_trace.cpp`)
+- SR2 co-op limits, addresses, the 8-peer replication switch (site tables in `replication_sites.h`) and the live trace lines: `docs/SR2_NOTES.md`, code in `adapters/sr2/src` (`coop_limits.cpp`, `limit_thunk.cpp`, `coop_pools.cpp`, `replication_switch.cpp`, `join_trace.cpp`)
 - Reverse-engineering patterns shared across games: `docs/re/PATTERNS.md` (grown by the `coop-re` skill)
 - Enemy combat (guest hits on puppets, enemy hits on the partner, deaths): `enemy_combat.cpp` (net), `ds2/combat_hook.cpp` (engine), wire in `combat_wire.h`; notes `docs/DS2_NOTES.md` "Enemy combat"
 - Weapon sync (the body's weapon, shots, cosmetic damage drop): `weapon_wire.h` (wire), `weapon_sync.cpp` (net), `ds2/local_weapon.cpp`, `ds2/remote_weapon.cpp`, `ds2/damage_veto.cpp`; engine layout in `ds2/weapon_layout.h`; spec `tools/ds2/out/analysis/WEAPONS.md`, results `docs/DS2_NOTES.md` "Weapon sync"
