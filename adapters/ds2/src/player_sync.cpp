@@ -12,6 +12,7 @@
 #include "cargo_transfer.h"
 #include "clock_sync.h"
 #include "debug_stats.h"
+#include "order_handoff.h"
 #include "partner_cargo_sync.h"
 #include "cutscene_sync.h"
 #include "story_sync.h"
@@ -163,6 +164,7 @@ void tick(NetClient& net) {
     bt_sync::tick(net, session);
     struct_sync::tick(net, session);
     story_sync::tick(net, session);
+    order_handoff::tick(net, session);
     cutscene_sync::tick(net, session);
     enemy_sync::tick(net, session);
     camp_sync::tick(net, session);

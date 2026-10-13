@@ -50,8 +50,8 @@ void blockScriptedInteractions(bool block);
 // not readable.
 bool localUseCandidates(int32_t& count, uintptr_t& first);
 
-// Guest restriction on orders: hooks the terminal menus' accept and turn-in callbacks (once, at start-up), and while
-// `block` is true they refuse with a toast. Terminals themselves stay usable. Any thread.
+// Guest orders: hooks the terminal menu's start command (once, at start-up); while `block` is true, accepting an order
+// sends it to the host instead of preparing it here. Terminals themselves stay usable. Any thread.
 void watchOrders();
 void blockOrders(bool block);
 
@@ -111,6 +111,10 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
 // The handle of the piece of this order (an order id, as in Cargo::orderId) that this world holds anywhere outside the
 // local backpack (a locker, a shelf, the ground): order pieces are matched by identity, not by where they lie.
 std::optional<uint64_t> findOrderPiece(uint64_t orderId);
+
+// The pieces of the order with this mission id (as in story events) that lie outside the local backpack and outside the
+// body `bodyKey` (a shelf, a locker, the ground): an accepted order's cargo before anyone carries it. Simulation thread.
+std::vector<Cargo> orderPieces(uint64_t missionId, std::optional<uint64_t> bodyKey);
 
 // What addCargo did: made the request, must be asked again shortly (a stale copy of an order piece was being removed
 // first), or will never work (the backpack already holds that order piece, the game refused).
@@ -309,6 +313,14 @@ void requestStorySnapshot();
 
 // The mission object (DSMissionSystem's map entry, +0x10 its resource) with this full mission id, 0 when there is none.
 uintptr_t missionById(uint64_t id);
+
+// The state of the mission with this full id (story_replay::kStateProgress while in progress), nothing when it is not found.
+// Simulation thread.
+std::optional<uint16_t> missionState(uint64_t id);
+
+// Guest: asks the host to start the order `missionId` reserved at a terminal (`row` and `extra` as the terminal's commit
+// carries them); the host runs it in its world. Any thread.
+void forwardOrderRequest(uint64_t missionId, uint32_t row, int32_t extra);
 
 // Makes the game's own success request for this mission (through the story hook, so a guest's is vetoed and a delivery's
 // forwarded to the host); false when the mission is not found. Test commands only.
