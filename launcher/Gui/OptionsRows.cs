@@ -6,11 +6,13 @@ namespace CoopLauncher.Gui;
 internal sealed class OptionsRows : Panel
 {
     private const int Columns = 2;
-    private static readonly int LabelWidth = Theme.Scale(110);
+    private static readonly int MinLabelWidth = Theme.Scale(110);
+    private static readonly int LabelPad = Theme.Scale(8);
     private static readonly int ColumnGap = Theme.Scale(24);
 
     private readonly List<FlatSelect> _selects = new();
     private string? _shownFor;
+    private int _labelWidth;
 
     public event Action? Changed;
 
@@ -30,8 +32,11 @@ internal sealed class OptionsRows : Panel
         _shownFor = key;
         Controls.Clear();
         _selects.Clear();
+        var options = game.Options ?? [];
+        _labelWidth = options.Select(option => TextRenderer.MeasureText(option.Label, Theme.Body).Width + LabelPad)
+            .Append(MinLabelWidth).Max();
         var cells = new List<Control>();
-        foreach (var option in game.Options ?? [])
+        foreach (var option in options)
         {
             var select = Build(game, option, gameDir);
             _selects.Add(select);
@@ -56,11 +61,11 @@ internal sealed class OptionsRows : Panel
     }
 
     /// <summary>Label, list, gap, label, list; a row with one option leaves the second column empty.</summary>
-    private static TableLayoutPanel GridRow(List<Control> cells)
+    private TableLayoutPanel GridRow(List<Control> cells)
     {
         while (cells.Count < Columns * 2) cells.Add(new Panel { BackColor = Theme.Bg });
         return ControlRow.Create(new[] { cells[0], cells[1], new Panel { BackColor = Theme.Bg }, cells[2], cells[3] },
-            LabelWidth, -1, ColumnGap, LabelWidth, -1);
+            _labelWidth, -1, ColumnGap, _labelWidth, -1);
     }
 
     private static Label Caption(string text) => new()

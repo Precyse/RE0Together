@@ -8,6 +8,21 @@ public static class GameLauncher
     public static bool IsRunning(GameProfile profile) =>
         Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe)).Length > 0;
 
+    /// <summary>Starts a game that matches its players itself: the player's options go into the adapter ini first.</summary>
+    public static bool LaunchWithOptions(GameProfile profile, string gameDir)
+    {
+        try
+        {
+            AdapterSettings.WriteOptions(gameDir, profile, GameOptions.Current(profile, gameDir));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not write the {profile.Name} options: {e.Message}");
+            return false;
+        }
+        return Launch(profile, gameDir);
+    }
+
     /// <summary>False when the game's mod is not installed, the installed game build is not supported or Steam could not start the game, so the session cannot go on.</summary>
     public static bool Launch(GameProfile profile, string? gameDir)
     {

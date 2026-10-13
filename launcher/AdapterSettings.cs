@@ -11,18 +11,22 @@ public static class AdapterSettings
     private const int KeptArchives = 5;
 
     /// <summary>Sets coop=1 and one line per game option (the adapter reads the ini once, at its start).</summary>
-    public static void EnableCoop(string gameDir, SaveSyncProfile config, IReadOnlyDictionary<string, string> options)
+    public static void EnableCoop(string gameDir, GameProfile profile, IReadOnlyDictionary<string, string> options)
     {
         var keys = options.ToDictionary(pair => pair.Key, pair => pair.Value);
         keys[CoopKey] = "1";
-        SetKeys(Path.Combine(gameDir, config.AdapterIni), keys);
+        SetKeys(IniPath(gameDir, profile), keys);
     }
+
+    /// <summary>Sets one line per game option, for a game whose adapter needs no coop flag.</summary>
+    public static void WriteOptions(string gameDir, GameProfile profile, IReadOnlyDictionary<string, string> options) =>
+        SetKeys(IniPath(gameDir, profile), options);
 
     /// <summary>Sets coop=0 and deletes the session folder, so a normal launch plays vanilla. The guest's saves in it are
     /// copied to an archive folder first (the last <see cref="KeptArchives"/> are kept), so the guest's progress is never lost.</summary>
-    public static void Reset(string gameDir, SaveSyncProfile config)
+    public static void Reset(string gameDir, GameProfile profile, SaveSyncProfile config)
     {
-        var ini = Path.Combine(gameDir, config.AdapterIni);
+        var ini = IniPath(gameDir, profile);
         var sessionDir = Path.Combine(gameDir, config.SessionDir);
         if (File.Exists(ini) && ReadLines(ini).Any(IsCoopEnabled)) SetKeys(ini, new Dictionary<string, string> { [CoopKey] = "0" });
         if (!Directory.Exists(sessionDir)) return;
@@ -49,6 +53,8 @@ public static class AdapterSettings
         Log.Info($"Archived {files.Count} session files to {target}");
         foreach (var old in Directory.GetDirectories(archiveRoot).OrderDescending().Skip(KeptArchives)) Directory.Delete(old, recursive: true);
     }
+
+    private static string IniPath(string gameDir, GameProfile profile) => Path.Combine(gameDir, profile.AdapterIni);
 
     private static void SetKeys(string iniPath, IReadOnlyDictionary<string, string> keys)
     {

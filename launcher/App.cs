@@ -321,7 +321,7 @@ public sealed class App
             }
             try
             {
-                AdapterSettings.Reset(gameDir, config);
+                AdapterSettings.Reset(gameDir, profile, config);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {

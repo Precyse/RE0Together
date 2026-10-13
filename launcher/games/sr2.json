@@ -1,0 +1,14 @@
+{ "id": "sr2", "name": "Saints Row 2", "steamAppId": 9480, "exe": "SR2_pc.exe",
+  "maxPlayers": 4, "port": 0, "sessionKind": "native", "supportedBuilds": [1076239],
+  "requires": [ { "file": "DFEngine.dll", "name": "Juiced" } ],
+  "adapterFiles": [ { "src": "adapters/sr2/dinput8.dll", "dst": "dinput8.dll" } ],
+  "adapterIni": "coop/sr2_adapter.ini",
+  "adapterLog": "coop/sr2_adapter.log",
+  "options": [
+    { "key": "max_players", "label": "Players", "values": [
+      { "value": "4", "label": "4" }, { "value": "3", "label": "3" }, { "value": "2", "label": "2" } ] },
+    { "key": "partner_experimental", "label": "Experimental fixes", "values": [
+      { "value": "0", "label": "Off" }, { "value": "1", "label": "On" } ] },
+    { "key": "trace", "label": "Trace", "values": [
+      { "value": "1", "label": "On" }, { "value": "0", "label": "Off" } ] }
+  ] }
