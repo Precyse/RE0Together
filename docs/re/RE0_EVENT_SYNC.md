@@ -94,7 +94,7 @@ opens the item selection, `Sub` / `Sub_GetItem`): train room tr0a trigger 5 (typ
 sound, a message and the panel routine, then `SetEffectFlag 4,0 / 5,1`. The user leads it:
 - the item leaves the inventory once: `item_sub` runs on the user's machine only (leader-only) and inventory_sync
   carries the block to the peer (its owner is the user);
-- the prop's look: effect flags (0x712 + n, sGameChara's effect setter), object animations (`anim_set*`, `obj_move`)
+- the prop's look: effect flags (0x412 + n, SetEffectFlag 0x577c00), object animations (`anim_set*`, `obj_move`)
   and visibility ops run on both, so the slot shows the item and the mechanism moves on both screens; a room loaded
   later builds it from the flags;
 - the script that follows (flags, spawns, cutscene, a door it opens) runs on both as above;

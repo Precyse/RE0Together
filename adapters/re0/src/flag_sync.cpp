@@ -6,6 +6,7 @@
 
 #include "debug_stats.h"
 #include "flag_diff.h"
+#include "flag_family.h"
 #include "game.h"
 #include "game_tick.h"
 #include "log.h"
@@ -29,8 +30,10 @@ uint32_t g_frame = 0;
 std::mutex g_mutex;
 std::vector<Change> g_incoming;  // guarded by g_mutex
 
+uintptr_t managerObject() { return game::readPointer(game::kFlagManagerGlobal); }
+
 uintptr_t flagsAddress() {
-    const uintptr_t manager = game::readPointer(game::kFlagManagerGlobal);
+    const uintptr_t manager = managerObject();
     return manager ? manager + game::kFlagBitsOffset : 0;
 }
 
@@ -44,20 +47,60 @@ void send(const std::vector<Change>& changes) {
     }
 }
 
-void applyIncoming(uintptr_t address, Words& words) {
+void logChanges(const char* direction, const std::vector<Change>& changes) {
+    for (const Change& change : changes) {
+        for (uint32_t bit = 0; bit < 32; ++bit) {
+            const uint32_t index = change.word * 32u + bit;
+            const uint32_t mask = 1u << bit;
+            const char* family = flag_family::name(flag_family::classify(index));
+            if (change.set & mask) logger::write("flag_sync: %s %s flag 0x%x set", direction, family, index);
+            if (change.clear & mask) logger::write("flag_sync: %s %s flag 0x%x clear", direction, family, index);
+        }
+    }
+}
+
+void writeFlagWord(uintptr_t manager, uint16_t word, uint32_t set, uint32_t clear) {
+    const uintptr_t address = manager + game::kFlagBitsOffset + word * sizeof(uint32_t);
+    uint32_t value = 0;
+    if (game::readMemory(address, value)) game::writeMemory(address, (value | set) & ~clear);
+}
+
+// Story, effect, act, display and BGM bits go through the game's setter so the peer runs the same side effects
+// as the local player. Enemy bits stay on the raw mirror: the enemy sync already spawns them, a setter call would spawn twice.
+void applyIncoming(uintptr_t manager, Words& words) {
     std::vector<Change> incoming;
     {
         std::lock_guard lock(g_mutex);
         incoming.swap(g_incoming);
     }
     if (incoming.empty()) return;
+    logChanges("received", incoming);
+    bool bgmChanged = false;
     for (const Change& change : incoming) {
+        uint32_t rawSet = 0;
+        uint32_t rawClear = 0;
+        for (uint32_t bit = 0; bit < 32; ++bit) {
+            const uint32_t mask = 1u << bit;
+            const bool wantSet = change.set & mask;
+            if (!wantSet && !(change.clear & mask)) continue;
+            if (static_cast<bool>(words[change.word] & mask) == wantSet) continue;
+            const uint32_t index = change.word * 32u + bit;
+            const flag_family::Family family = flag_family::classify(index);
+            if (family == flag_family::Family::Enemy) {
+                (wantSet ? rawSet : rawClear) |= mask;
+                continue;
+            }
+            game::callThiscall<void>(game::kFlagSetFunction, reinterpret_cast<void*>(manager), index,
+                                     static_cast<uint32_t>(wantSet));
+            if (family == flag_family::Family::Bgm) bgmChanged = true;
+        }
+        if (rawSet | rawClear) writeFlagWord(manager, change.word, rawSet, rawClear);
         flag_diff::apply(words, change);
         flag_diff::apply(g_known, change);
     }
-    if (game::writeMemory(address, words)) {
-        debug_stats::count(debug_stats::Counter::FlagWordsApplied, static_cast<uint32_t>(incoming.size()));
-    }
+    const uintptr_t bgmObject = game::readPointer(game::kBgmRefreshObjectGlobal);
+    if (bgmChanged && bgmObject) game::callThiscall<void>(game::kBgmRefreshFunction, reinterpret_cast<void*>(bgmObject));
+    debug_stats::count(debug_stats::Counter::FlagWordsApplied, static_cast<uint32_t>(incoming.size()));
 }
 
 void onTick() {
@@ -66,7 +109,8 @@ void onTick() {
         return;
     }
     if (++g_frame % kCheckEveryFrames != 0) return;
-    const uintptr_t address = flagsAddress();
+    const uintptr_t manager = managerObject();
+    const uintptr_t address = manager ? manager + game::kFlagBitsOffset : 0;
     Words words;
     if (!address || !game::readMemory(address, words)) return;
     if (!g_hasKnown) {
@@ -76,10 +120,11 @@ void onTick() {
     }
     const std::vector<Change> local = flag_diff::diff(g_known, words);
     if (!local.empty()) {
+        logChanges("sent", local);
         send(local);
         g_known = words;
     }
-    applyIncoming(address, words);
+    applyIncoming(manager, words);
 }
 
 }  // namespace
@@ -93,6 +138,9 @@ void onFrame(const GameFrame& frame) {
     if (count > kMaxChanges || frame.payload.size() != kHeaderSize + count * sizeof(Change)) return;
     std::vector<Change> changes(count);
     std::memcpy(changes.data(), frame.payload.data() + kHeaderSize, count * sizeof(Change));
+    for (const Change& change : changes) {
+        if (change.word >= flag_diff::kWords) return;
+    }
     std::lock_guard lock(g_mutex);
     g_incoming.insert(g_incoming.end(), changes.begin(), changes.end());
 }

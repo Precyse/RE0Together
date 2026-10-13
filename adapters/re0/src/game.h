@@ -21,6 +21,11 @@ constexpr uintptr_t kFlagManagerGlobal = 0xdcc014; // sFlagManager* (size 0x144,
 // sFlagManager: story flags as a bitset of flag_diff::kWords dwords (0x11c bytes; set(index, count, value) is 0x59c980,
 // the save copy 0x59ba30 copies the same 0x47 dwords)
 constexpr uintptr_t kFlagBitsOffset = 0x20;
+// thiscall(sFlagManager, index, value): the game's own bit write plus per-family side effects (enemy, effect, display)
+constexpr uintptr_t kFlagSetFunction = 0x59bd50;
+// fastcall(object) with the object read from kBgmRefreshObjectGlobal: redraws the BGM after a BGM flag changes
+constexpr uintptr_t kBgmRefreshObjectGlobal = 0xdd20a0;
+constexpr uintptr_t kBgmRefreshFunction = 0x643490;
 
 // sPlayer
 constexpr uintptr_t kPlayerControlledOffset = 0x2c;
