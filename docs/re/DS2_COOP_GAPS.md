@@ -19,7 +19,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 ### Gameplay sync
 | candidate | status | owner | file |
 |---|---|---|---|
-| Local Sam as passenger when the partner drives ("Use Vehicle" prompt red) | missing | ds2-live | `ds2/remote_ride.cpp`, `vehicle_sync.cpp` |
+| Local Sam as passenger when the partner drives ("Use Vehicle" prompt red) | partial: main opens the prompt (free-gate detour), answers Sam's SetDriver as a passenger, seats him in the second pod and boards on an F poll; ds2-passenger adds the passenger report to the driver, one parent-link clear on every exit and probe P1; the F poll is not replaced yet | ds2-passenger | `ds2/remote_ride.cpp`, `vehicle_sync.cpp`, `ds2/setdriver_guard.cpp`, `ds2/ride_probe.cpp` |
 | Spawn crash 0x140F75E12 (DSPlayerSystem singleton writes) | partial | ds2-live | `ds2/remote_player.cpp` (guard on ds2-live) |
 | Enemies and weapons in a normal session | partial | ds2-tester | `config.h`: `enemy_sync` and `weapon_sync` default off |
 | BT grab of the guest's body | missing | ds2-streaming | `ds2/bt_events.h` TODO |
@@ -90,7 +90,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Verify:** `fake_launcher.py` prints the RESYNC it receives; `tests/resync_test.cpp` unchanged.
 
 ### 7. Local Sam cannot ride as passenger when the partner drives (L, ds2-live)
-- **Root change:** roadmap item 4 and audit E1: hook the action request 0x140E5B3F0 (kind 3 = enter vehicle) to see why the prompt is red on a vehicle the partner drives, then seat Sam with the passenger request and keep the local vehicle copy kinematic under him.
+- **Root change:** the red prompt is the single-seat rule (the free gate 0x140beec80 reads vehicle +0x4e8 bit 0, cleared while +0x4fc has a driver); main already detours it, answers Sam's SetDriver as a passenger and boards on an F poll. Left: replace the F poll with the game's own confirm turned into request kind 3 (waits for probe P1, `ds2/ride_probe.cpp`, `diagnostics=1`) and measure the seat against a moving vehicle.
 - **Files:** `adapters/ds2/src/ds2/remote_ride.cpp`, `vehicle_sync.cpp`, `ds2/setdriver_guard.cpp`.
 - **Verify:** `fake_launcher.py --drive ID --drive-role 0` drives a loop with Sam pressing F at the door: Sam seated, camera follows, exits beside the vehicle.
 
