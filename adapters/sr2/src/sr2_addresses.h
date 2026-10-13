@@ -1,0 +1,130 @@
+#pragma once
+#include <cstddef>
+#include <cstdint>
+
+// Addresses of SR2_pc.exe (Steam build 1076239 with the Juiced patch, image base 0x400000). Source: docs/SR2_NOTES.md.
+namespace sr2 {
+
+// Functions.
+constexpr uintptr_t kNetSetMode = 0x7F6F50;           // cdecl(int mode); mode 1 = co-op
+constexpr uintptr_t kSessionPoolSetup = 0x7F91C0;     // sizes the connection and packet pools from the limits below
+constexpr uintptr_t kRemotePlayerGetter = 0x9D7BD0;   // first human that is not the local player, or null
+constexpr uintptr_t kPlayerSlotAllocator = 0x9D7C10;  // refuses a slot index >= kMaxPlayers
+constexpr uintptr_t kJoinQueueAdd = 0x810220;         // stdcall(session, request); queues a join request
+
+// Net limits that net_set_mode writes per mode.
+constexpr uintptr_t kMaxSessionPlayers = 0xE8C434;
+constexpr uintptr_t kMaxPlayers = 0xE8C438;
+constexpr uintptr_t kConnectionsPerPlayer = 0xE8C448;
+
+// net_set_mode's co-op case stores ebp (= 2) into the two limits with these instructions.
+constexpr uintptr_t kStoreMaxSessionPlayers = 0x7F71EC;
+constexpr uintptr_t kStoreMaxPlayers = 0x7F71F2;
+
+constexpr int kNetModeCoop = 1;
+
+// The session object's join request queue count.
+constexpr uintptr_t kSessionJoinQueueCountOffset = 0x7EC;
+
+// Co-op ships with 2 players. The N=8 deltacomp instances that replace co-op's 1-peer ones hold up to 8.
+constexpr uint32_t kCoopDefaultPlayers = 2;
+constexpr uint32_t kMaxReplicatedPlayers = 8;
+
+// net_set_mode's co-op case: the npc limit store (mov [0xE8C43C], 150) and the allocator-set activation. Activation
+// reads the player limit, so the adapter's thunk replaces the call; the sets are loaded by name through
+// kActivateAllocatorSet(edi = name). Leaving co-op deactivates the same set.
+constexpr uintptr_t kCoopNpcLimitStore = 0x7F71F8;
+constexpr uintptr_t kActivateCoopSetsCall = 0x7F7220;  // call kActivateAllocatorSet
+constexpr uintptr_t kActivateAllocatorSet = 0x7F6CE0;
+constexpr uintptr_t kLoadCoopSetNameActivate = 0x7F71D5;    // mov edi, <set name>
+constexpr uintptr_t kLoadCoopSetNameDeactivate = 0x7F7083;  // mov edi, <set name>
+constexpr uintptr_t kCoopSetNameImmediateOffset = 1;        // the name pointer inside the mov
+constexpr uint32_t kSetNameCoopMp = 0xE262B0;               // "coop-mp": the eight N=1 allocators
+constexpr uint32_t kSetNameDeltacompSa = 0xE262B8;          // "deltacomp_sa": the eight N=8 allocators
+constexpr uint32_t kCoopNpcLimit = 150;
+
+// The co-op player memory pools: bump allocator objects in .data (init 0xBF4A10, alloc 0xC00DB0), created at
+// start-up by the arena setup 0x51D800 with a `push size` and a base inside the arena.
+constexpr uintptr_t kCoopPlayerCpuPool = 0x2773F0C;
+constexpr uintptr_t kCoopPlayerGpuPool = 0x2773F68;
+constexpr uintptr_t kCoopPlayerCpuSizePush = 0x51E502;  // push 0x228000
+constexpr uintptr_t kCoopPlayerGpuSizePush = 0x51E8A7;  // push 0x1071000
+// Holds the coop-mp, multiplayer and deltacomp_global allocator sets, so the deltacomp baselines.
+constexpr uintptr_t kCoopAllocatorsPool = 0x2773FC0;
+constexpr uintptr_t kCoopAllocatorsSizePush = 0x51E535;  // push 0x5ADBB0
+// Pool that allocator sets read at activation: co-op points it at kCoopAllocatorsPool, Strong Arm at its own.
+constexpr uintptr_t kCurrentDeltacompPool = 0xFA23A4;
+
+// Pool object layout (bytes from the object).
+constexpr uintptr_t kPoolNameOffset = 0xC;
+constexpr size_t kPoolNameLength = 32;
+constexpr uintptr_t kPoolBaseOffset = 0x38;
+constexpr uintptr_t kPoolSizeOffset = 0x3C;      // the size the "Failed aligned alloc" message prints
+constexpr uintptr_t kPoolUsedOffset = 0x44;      // bump offset from the base
+constexpr uintptr_t kPoolMarkOffset = 0x48;      // restore point of the used offset
+constexpr uintptr_t kPoolLimitOffset = 0x4C;     // free bytes = limit - used
+constexpr uintptr_t kPoolCapacityOffset = 0x50;  // the size again
+
+// Static allocator object layout (bytes from the object).
+constexpr uintptr_t kAllocatorNameOffset = 0x8;           // pointer to the set name
+constexpr uintptr_t kAllocatorBlockOffset = 0x14;         // the block taken at activation, 0 while inactive
+constexpr uintptr_t kAllocatorCountOffset = 0x18;
+constexpr uintptr_t kAllocatorPoolSourceOffset = 0x2C;    // address holding the pool pointer; 0 = the pool at +0x1C
+constexpr uintptr_t kPlayerN8Allocator = 0x2A4AE70;       // player_data_bundle, 8-peer instance
+
+// Session object: [kSessionPointer] -> session. Members form a circular list.
+constexpr uintptr_t kSessionPointer = 0x2528C14;
+constexpr uintptr_t kSessionMemberListOffset = 0x400;
+constexpr uintptr_t kSessionLocalMemberOffset = 0x408;
+constexpr uintptr_t kMemberNextOffset = 0x22CC;
+constexpr uintptr_t kMemberStateOffset = 0x3C;
+constexpr uintptr_t kMemberSlotOffset = 0x1B0;  // byte: the session slot the 8-peer deltacomp arrays are indexed by
+
+// Players (milestone 4). A human is a player or npc object; the player humans form the list at kPlayerListHead.
+constexpr uintptr_t kCoopFlag = 0x2528B49;  // byte: a co-op session is running
+constexpr uintptr_t kPlayerListHead = 0x217043C;
+constexpr uintptr_t kLocalPlayer = 0x21703D4;
+constexpr uintptr_t kHumanNextOffset = 0x1294;
+constexpr uintptr_t kObjectNetRecordOffset = 0xB0;  // pointer to the net record; its byte 0 is the owner's session slot
+constexpr uintptr_t kObjectHandleOffset = 0x44;
+constexpr uintptr_t kObjectPositionOffset = 0x14;   // three floats
+constexpr uintptr_t kHumanJoinFlagsOffset = 0x1161;
+constexpr uint8_t kHumanJoiningBit = 0x10;
+constexpr uintptr_t kHumanDownedTimerOffset = 0xF8C;  // int, -1 while not down
+constexpr uintptr_t kHumanVehicleOffset = 0xD74;      // handle of the vehicle the human is in
+constexpr uintptr_t kHumanDrivenVehicleOffset = 0x18D0;
+constexpr uintptr_t kHumanMoverOffset = 0x374;
+constexpr uintptr_t kHumanActionOffset = 0x1130;
+constexpr uint32_t kActionEnterVehicleFirst = 0x1C5;  // actions 0x1C5..0x1CA: getting into a vehicle
+constexpr uint32_t kActionEnterVehicleCount = 6;
+
+// Session members: host member and the list a member keeps of the object handles it knows.
+constexpr uintptr_t kSessionHostMemberOffset = 0x404;
+constexpr uintptr_t kMemberSendEnabledOffset = 0x1B8;
+constexpr uintptr_t kMemberKnownHandlesOffset = 0x1DF0;
+constexpr uintptr_t kMemberKnownCountOffset = 0x21F0;
+constexpr uint32_t kMemberStateInGame = 0xD;
+constexpr uintptr_t kMaxWalkedPlayers = 12;  // the session is built for 12; every list walk stops here
+
+// Functions the milestone 4 thunks call or replace.
+constexpr uintptr_t kPartnerMemberGetter = 0x8CA380;  // cdecl, first member that is not the local one
+constexpr uintptr_t kSendToMember = 0x814670;        // ESI = member; cdecl(buffer, length, callback, context)
+constexpr uintptr_t kLookSyncA = 0x82B9F0;           // ECX = member, EAX = local human
+constexpr uintptr_t kLookSyncB = 0x82BC50;           // ECX = member, EAX = local human
+constexpr uintptr_t kResyncHuman = 0x9DFE80;         // fastcall(ECX = human)
+constexpr uintptr_t kHoldAssets = 0x6BE1E0;          // cdecl(human, list)
+constexpr uintptr_t kTeleportHuman = 0x9DB480;       // thiscall-like: ECX = human, six stack arguments
+constexpr uintptr_t kKillLocalHuman = 0x9AF560;      // ESI = human
+constexpr uintptr_t kWaitingToRespawn = 0x8CBDB0;    // ESI = human, AL out
+
+// Where the thunks that leave a patched block continue.
+constexpr uintptr_t kLeaveTeardown = 0x8CB3A8;
+constexpr uintptr_t kLeaveDone = 0x8CB42D;
+constexpr uintptr_t kVehicleExitAfterGetter = 0x6A28B9;  // past the getter call that the first patch replaces
+constexpr uintptr_t kVehicleExitDone = 0x6A293B;
+constexpr uintptr_t kTeamWipeResume = 0x9612DB;
+
+// PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
+constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
+
+}  // namespace sr2
