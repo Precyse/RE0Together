@@ -24,6 +24,7 @@ constexpr uint32_t kResendFrames = 60;
 constexpr auto kZapSettle = std::chrono::seconds(2);
 
 NetClient* g_net = nullptr;
+Character g_hostCharacter = Character::Rebecca;  // set once by enable, before any callback runs
 
 std::atomic<bool> g_linked{false};
 std::atomic<uint8_t> g_localSlot{0};
@@ -56,9 +57,12 @@ void sendOwnership() {
     g_framesSinceSend = 0;
 }
 
-// The host owns Rebecca; the first peer owns Billy.
+// The host owns its chosen character; the first peer owns the other one.
 void decide() {
-    setOwners(Ownership{static_cast<uint8_t>(net_pad::peerSlot()), g_localSlot});
+    const uint8_t hostSlot = g_localSlot;
+    const uint8_t peerSlot = static_cast<uint8_t>(net_pad::peerSlot());
+    const bool hostIsBilly = g_hostCharacter == Character::Billy;
+    setOwners(Ownership{hostIsBilly ? hostSlot : peerSlot, hostIsBilly ? peerSlot : hostSlot});
     g_recompute = false;
     logger::write("character_owner: billy=slot %d rebecca=slot %d", g_owner[0].load(), g_owner[1].load());
     sendOwnership();
@@ -108,6 +112,15 @@ Character localCharacter() {
         if (isLocalOwned(character)) return character;
     }
     return Character::Unknown;
+}
+
+Character plannedLocalCharacter() {
+    const Character owned = localCharacter();
+    return owned == Character::Unknown && isHost() ? g_hostCharacter : owned;
+}
+
+bool isOwnedBy(Character character, uint8_t slot) {
+    return character != Character::Unknown && g_owner[static_cast<size_t>(character)] == slot;
 }
 
 bool isHostSlot(uint8_t slot) { return g_linked && slot == g_hostSlot; }
@@ -164,8 +177,9 @@ void onFrame(const GameFrame& frame) {
     }
 }
 
-void enable(NetClient& net) {
+void enable(NetClient& net, Character hostCharacter) {
     g_net = &net;
+    g_hostCharacter = hostCharacter;
     game_tick::addCallback("character_owner", onTick);
 }
 

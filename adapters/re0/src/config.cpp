@@ -5,9 +5,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
+#include "appearance_rule.h"
 #include "log.h"
 #include "paths.h"
 
@@ -38,6 +40,27 @@ std::vector<VtableTrace> parseVtables(const std::string& list) {
     return out;
 }
 
+void parseCharacter(const std::string& value, Config& config) {
+    if (value == "rebecca") {
+        config.hostCharacter = character_owner::Character::Rebecca;
+    } else if (value == "billy") {
+        config.hostCharacter = character_owner::Character::Billy;
+    } else {
+        logger::write("config: character=%s ignored (rebecca or billy)", value.c_str());
+    }
+}
+
+// An outfit key holds a hex model byte offered for that character; anything else is ignored.
+void parseOutfit(const char* key, character_owner::Character character, const std::string& value, Config& config) {
+    if (value.empty()) return;
+    const std::optional<uint8_t> model = appearance_rule::parseModel(value);
+    if (!model || !appearance_rule::find(character, *model)) {
+        logger::write("config: %s=%s ignored (not an outfit of that character)", key, value.c_str());
+        return;
+    }
+    config.outfit[static_cast<size_t>(character)] = *model;
+}
+
 }  // namespace
 
 Config loadConfig() {
@@ -64,11 +87,20 @@ Config loadConfig() {
             config.netTrace = value == "1";
         } else if (key == "auto_join") {
             config.autoJoin = value == "1";
+        } else if (key == "character") {
+            parseCharacter(value, config);
+        } else if (key == "outfit_rebecca") {
+            parseOutfit("outfit_rebecca", character_owner::Character::Rebecca, value, config);
+        } else if (key == "outfit_billy") {
+            parseOutfit("outfit_billy", character_owner::Character::Billy, value, config);
         } else if (key == "trace_vtables") {
             config.traceVtables = parseVtables(value);
         }
     }
     logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d auto_join=%d", config.port, config.trace,
                   config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.autoJoin);
+    logger::write("config: character=%s outfit_rebecca=%02x outfit_billy=%02x", character_owner::name(config.hostCharacter),
+                  config.outfit[static_cast<size_t>(character_owner::Character::Rebecca)],
+                  config.outfit[static_cast<size_t>(character_owner::Character::Billy)]);
     return config;
 }

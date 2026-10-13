@@ -5,6 +5,8 @@
 #include <map>
 #include <string>
 
+#include "appearance.h"
+#include "appearance_rule.h"
 #include "auto_join.h"
 #include "character_owner.h"
 #include "command_input.h"
@@ -127,6 +129,10 @@ void onFrame(const GameFrame& frame) {
     if (frame.type == enemy_protocol::kMsgHitRequest || frame.type == enemy_protocol::kMsgHitApplied ||
         frame.type == enemy_protocol::kMsgEnemyDecision) {
         enemy_net::onFrame(frame);
+        return;
+    }
+    if (frame.type == appearance_rule::kMsgAppearance) {
+        appearance::onFrame(frame);
         return;
     }
     if (frame.type == player_damage::kMsgPlayerDied) {

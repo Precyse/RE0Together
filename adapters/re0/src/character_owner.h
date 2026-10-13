@@ -20,8 +20,8 @@ constexpr Character other(Character character) {
     return character == Character::Billy ? Character::Rebecca : Character::Billy;
 }
 
-// Wire payload of OWNERSHIP (0x0102), host to all: the slot that drives each character. Fixed: the host owns
-// Rebecca and the first peer owns Billy, whoever is focused.
+// Wire payload of OWNERSHIP (0x0102), host to all: the slot that drives each character. Fixed: the host owns the
+// character it chose (adapter.ini character=) and the first peer owns the other, whoever is focused.
 struct Ownership {
     uint8_t billyOwnerSlot;
     uint8_t rebeccaOwnerSlot;
@@ -37,8 +37,14 @@ uintptr_t find(Character character);
 // The character this machine's player owns (Unknown until ownership is known or without a peer).
 Character localCharacter();
 
+// Like localCharacter, but a linked host without a peer yet already plays its chosen character.
+Character plannedLocalCharacter();
+
 // True on the linked session's host.
 bool isHost();
+
+// True when the received ownership says `slot` drives `character`.
+bool isOwnedBy(Character character, uint8_t slot);
 
 // True when `slot` is the linked session's host.
 bool isHostSlot(uint8_t slot);
@@ -77,6 +83,7 @@ void onSession(const SessionSnapshot& session);
 void onFrame(const GameFrame& frame);
 
 // Registers the per-frame host decision. Must be registered before the callbacks that read ownership.
-void enable(NetClient& net);
+// `hostCharacter` is the character the host plays.
+void enable(NetClient& net, Character hostCharacter);
 
 }  // namespace character_owner
