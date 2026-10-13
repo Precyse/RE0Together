@@ -3,7 +3,8 @@
 // by the player" set 0x1411d7530 (what the delivery and order checks count) also walks the remote's owner, scoped to
 // that call so the manager's attached-owner list and Sam's movement code are untouched; and the slot functions (remove
 // 0x141185ca0, add 0x141185b30) report a piece that moves between the remote's owner and a terminal or the local
-// player's own owner, so the partner's machine can delete (a delivery, a take) or create (a give) its copy
+// player's own owner, or that any other known owner puts into the remote's, so the partner's machine can delete (a delivery,
+// a take) or create (a give) its copy
 // (docs/DS2_NOTES.md, "Partner cargo at a terminal").
 #include "ds2/partner_cargo.h"
 
@@ -134,14 +135,15 @@ void queue(std::vector<game::Cargo>& list, const game::Cargo& piece, const char*
     if (list.size() < kMaxQueued) list.push_back(piece);
 }
 
-// Reports a finished move of `piece` from the owner `origin` into the slot's owner `destination`.
+// Reports a finished move of `piece` from the owner `origin` (never 0) into the slot's owner `destination`.
 void report(uintptr_t piece, uintptr_t origin, uintptr_t destination, uintptr_t remote, uintptr_t local) {
     if (origin == remote && isTerminal(destination)) {
         queue(g_moves.left, readPiece(piece), "the partner's piece went into a terminal");
     } else if (origin == remote && destination == local) {
         queue(g_moves.left, readPiece(piece), "the partner's piece was taken by the local player");
-    } else if (origin == local && destination == remote) {
-        queue(g_moves.given, readPiece(piece), "the local player's piece was given to the partner");
+    } else if (origin != remote && destination == remote) {
+        queue(g_moves.given, readPiece(piece), origin == local ? "the local player's piece was given to the partner"
+                                                               : "a piece from outside the local rack went into the partner's rack");
     }
 }
 

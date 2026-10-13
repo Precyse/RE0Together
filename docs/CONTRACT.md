@@ -94,6 +94,8 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 | 0x0101-0x0107 | cargo list/take/add, pickups, drops | | see header | `cargo_transfer.h`, `cargo_ground.h` |
 | 0x011A | CARGO_GONE | to the partner | yes | u32 kind, u32 reserved, u64 order id (0 = plain): the partner's rack lost the piece to a terminal or to the sender, delete your copy (`partner_cargo_wire.h`, 16 bytes) |
 | 0x0130 | MOVE_ACK | to the sender | yes | u32 kind, u32 moved (0 = CARGO_GONE done, 1 = a give created), u64 order id: the receiver's own CARGO_LIST shows the move, the sender may stop holding it (`partner_cargo_wire.h`, 16 bytes) |
+| 0x0131 | CARGO_ASK | guest to host | yes | u64 handle, u8 wants it (1 = the host gives its piece, 0 = the guest offers its own), 7 reserved: the host answers with the same give or take it would make itself (`cargo_transfer.h`, 16 bytes) |
+| 0x0133 | CARGO_GIVE | guest to host | yes | the CARGO_ADD layout (`cargo_transfer.h`, 32 bytes): a piece the game moved into the host's rack; the host creates it and answers MOVE_ACK, or sends it back as CARGO_ADD and MOVE_ACK |
 | 0x0108 | VEHICLE_STATE | driver/passenger to all | no | `vehicle_sync.h` (64 bytes) |
 | 0x0109 | VEHICLE_LOAD | driver to all | yes | `vehicle_load.h` |
 | 0x010A | ANIM_STATE | all | no | AnimHeader, optional u64 sender time, entries (below) |
