@@ -17,7 +17,7 @@ Game: Death Stranding 2 (Decima engine), G:\SteamLibrary\steamapps\common\DEATH 
 - Ride: use-vehicle step 0x141008970 (this, float, float, bool). Dropping the float args broke boarding; fixed in 24c2e22, not re-verified live. E1 (replace the GetAsyncKeyState F poll by hooking the game's Use Vehicle action 0x140E5B3F0, kind 3) not done. E2 (seat table keyed by vehicle resource UUID) not done.
 
 ## Open decisions and tasks (from the review; the user said proceed with all)
-1. STRUCT_REQUEST 0x012A duplicates CUTSCENE_START. Renumbered to 0x0132 (struct_wire.h, fake_launcher.py): main and the uncommitted worktrees of ds2-integration and ds2-tester-stale. ds2-world-sync and ds2-world-sync-rebased have no worktree and still need the same two-line change. Wire change: the peer must match.
+1. STRUCT_REQUEST 0x012A duplicated CUTSCENE_START. Renumbered to 0x0132 and committed on main, ds2-integration, ds2-tester-stale, ds2-world-sync and ds2-world-sync-rebased. Wire change: both peers must run builds with it.
 2. Partner body follows from the simulation thread, not the overlay draw callback (marker_overlay.cpp:169).
 3. Dead body after 3 s: still Entity::Remove plus rebuild (remote_player.cpp, diedLongAgo / forgetBody). Parking is only used for a peer that has gone. Parking a dead body does not help: no revive call is known, so it stays dead and hidden, and the next peer pose would show a corpse. Shipped as drop-and-rebuild. Risk: Entity::Remove in a running world can crash (the next update dereferences a cleared DSPlayerSystem pointer). Needs a live check with a peer killed.
 4. Cargo rebuild: read the baggage pool once per tick; move rack_sync to the sim thread. Needs live checks for rack, terminal and vehicle bed.
