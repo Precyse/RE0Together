@@ -1,0 +1,145 @@
+#pragma once
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <string_view>
+#include <vector>
+
+// Where milestone 4 changes the exe (docs/SR2_NOTES.md, "Partner logic"). Copied from the research table
+// m4_patch_sites.tsv; the bytes are what the exe has there. Hex text is bytes separated by spaces.
+namespace partner_sites {
+
+// What happens at the address.
+enum class Kind : uint8_t {
+    HookEntry,     // MinHook detour of the function that starts here
+    RetargetCall,  // the call or jmp rel32 here goes to the thunk
+    CallBlock,     // a call to the thunk, then `tail`, over the start of a block the thunk replaces
+    JumpOut,       // a jmp to the thunk, nops over the rest; the thunk jumps back into the function
+};
+
+// When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini).
+enum class Gate : uint8_t { Now, ProbeB, ProbeG };
+
+// The code behind a site (partner_thunks_*.cpp). Several sites share a thunk.
+enum class Thunk : uint8_t {
+    PartnerGetter,
+    PartnerMember,
+    AnyRemoteHasChunkLoaded,
+    NearestRemoteEdi,
+    NearestRemoteEdi14,
+    NearestRemoteEsi,
+    NearestRemoteLocal,
+    HostHandoffTarget,
+    AllRemotesReady,
+    FirstJoiningMember,
+    EachRemoteHuman9DFE80,
+    EachRemoteHuman6BE1E0,
+    EachRemoteMember82B9F0,
+    EachRemoteMember82BC50,
+    LastInGameRemoteLeft,
+    DisconnectOthersReturnPartner,
+    MatchRemoteEsi,
+    MatchRemoteEdi,
+    AnyRemoteMemberKnows,
+    MemberKnowingHandleEdi,
+    WrapEachMember,
+    SendToPartnerMember,
+    RemoteOnObject,
+    WrapAnyGoDown,
+    RemoteDrivingVehicle,
+    RemoteEnteringVehicle,
+    VehicleExitEnter,
+    VehicleExitNext,
+    WrapEachVehicleCombat,
+    WrapEachMaxFollowers,
+    WrapEachDismissAll,
+    WrapEachMeleeOnly,
+    TeamWipe,
+    RemoteIfTeamDown,
+    PassengerIsRemote,
+    TeleportRemotePassengers,
+};
+
+struct Site {
+    const char* id;
+    Kind kind;
+    Gate gate;
+    uintptr_t address;
+    std::string_view expected;  // the bytes the exe must have here (and the room the patch has)
+    Thunk thunk;
+    std::string_view tail;  // CallBlock: the bytes written after the call
+};
+
+constexpr Site kSites[] = {
+    {"C1", Kind::HookEntry, Gate::Now, 0x9D7BD0, "A0 49 8B 52 02 84 C0 74", Thunk::PartnerGetter, ""},
+    {"C2", Kind::HookEntry, Gate::Now, 0x8CA380, "8B 15 14 8C 52 02 85 D2", Thunk::PartnerMember, ""},
+    {"O1", Kind::HookEntry, Gate::Now, 0x8CA3C0, "55 8B EC 83 E4 F8 83 EC", Thunk::AnyRemoteHasChunkLoaded, ""},
+    {"O2", Kind::RetargetCall, Gate::Now, 0x9264C2, "E8 09 17 0B 00", Thunk::NearestRemoteEdi, ""},
+    {"O3", Kind::CallBlock, Gate::Now, 0x8069B8, "8B 80 00 04 00 00 8B F8", Thunk::HostHandoffTarget, "EB 1B 90"},
+    {"J1", Kind::CallBlock, Gate::Now, 0x8CB542, "E8 39 EE FF FF 85 C0 74 1B E8 80 C6 10 00 85 C0 74 0E E8 77 C6 10 00 F6 80 61 11 00 00 10 74 04 32 DB EB 02 B3 01", Thunk::AllRemotesReady, "8A D8 EB 1D"},
+    {"J2", Kind::RetargetCall, Gate::Now, 0x8CB575, "E8 06 EE FF FF", Thunk::FirstJoiningMember, ""},
+    {"J3", Kind::RetargetCall, Gate::Now, 0x8CB6F4, "E8 87 47 11 00", Thunk::EachRemoteHuman9DFE80, ""},
+    {"J4", Kind::RetargetCall, Gate::Now, 0x8CB73B, "E8 B0 02 F6 FF", Thunk::EachRemoteMember82B9F0, ""},
+    {"J5", Kind::RetargetCall, Gate::Now, 0x8CB747, "E8 04 05 F6 FF", Thunk::EachRemoteMember82BC50, ""},
+    {"L1", Kind::JumpOut, Gate::Now, 0x8CB39E, "83 7B 3C 0D 0F 85 85 00 00 00", Thunk::LastInGameRemoteLeft, ""},
+    {"L2", Kind::RetargetCall, Gate::Now, 0x752CBC, "E8 BF 76 17 00", Thunk::DisconnectOthersReturnPartner, ""},
+    {"M1", Kind::RetargetCall, Gate::Now, 0x5962F9, "E8 D2 18 44 00", Thunk::MatchRemoteEsi, ""},
+    {"M2", Kind::RetargetCall, Gate::Now, 0x5ED23D, "E8 8E A9 3E 00", Thunk::MatchRemoteEsi, ""},
+    {"M3", Kind::RetargetCall, Gate::Now, 0x68FA83, "E8 48 81 34 00", Thunk::MatchRemoteEdi, ""},
+    {"M4", Kind::RetargetCall, Gate::Now, 0x984A36, "E8 95 31 05 00", Thunk::MatchRemoteEdi, ""},
+    {"M5", Kind::RetargetCall, Gate::Now, 0xAAD770, "E8 5B A4 F2 FF", Thunk::MatchRemoteEsi, ""},
+    {"M6", Kind::RetargetCall, Gate::Now, 0xA6B2E3, "E8 E8 C8 F6 FF", Thunk::MatchRemoteEdi, ""},
+    {"N1", Kind::RetargetCall, Gate::Now, 0x68FAAC, "E8 1F 81 34 00", Thunk::NearestRemoteLocal, ""},
+    {"N2", Kind::RetargetCall, Gate::Now, 0x9A978F, "E8 3C E4 02 00", Thunk::NearestRemoteEdi14, ""},
+    {"N3", Kind::RetargetCall, Gate::Now, 0x9F3D5B, "E8 70 3E FE FF", Thunk::NearestRemoteEsi, ""},
+    {"E1", Kind::RetargetCall, Gate::Now, 0x695DCA, "E8 21 5C 19 00", Thunk::EachRemoteMember82B9F0, ""},
+    {"E2", Kind::RetargetCall, Gate::Now, 0x695DDB, "E8 70 5E 19 00", Thunk::EachRemoteMember82BC50, ""},
+    {"E3", Kind::RetargetCall, Gate::Now, 0x69649B, "E8 B0 57 19 00", Thunk::EachRemoteMember82BC50, ""},
+    {"E4", Kind::RetargetCall, Gate::Now, 0x6A09ED, "E8 5E B2 18 00", Thunk::EachRemoteMember82BC50, ""},
+    {"E5", Kind::RetargetCall, Gate::Now, 0x7CE304, "E9 47 D9 05 00", Thunk::EachRemoteMember82BC50, ""},
+    {"E6", Kind::RetargetCall, Gate::Now, 0x7D933D, "E8 AE 26 05 00", Thunk::EachRemoteMember82B9F0, ""},
+    {"E7", Kind::RetargetCall, Gate::Now, 0x7D934B, "E8 00 29 05 00", Thunk::EachRemoteMember82BC50, ""},
+    {"E8", Kind::RetargetCall, Gate::Now, 0x6A4B71, "E8 0A B3 33 00", Thunk::EachRemoteHuman9DFE80, ""},
+    {"E9", Kind::RetargetCall, Gate::Now, 0x6BE786, "E8 55 FA FF FF", Thunk::EachRemoteHuman6BE1E0, ""},
+    {"E10", Kind::RetargetCall, Gate::Now, 0x6C4105, "E8 D6 A0 FF FF", Thunk::EachRemoteHuman6BE1E0, ""},
+    {"K1", Kind::RetargetCall, Gate::Now, 0x90E0BB, "E8 90 B4 EE FF", Thunk::AnyRemoteMemberKnows, ""},
+    {"K2", Kind::RetargetCall, Gate::Now, 0x9129FB, "E8 50 6B EE FF", Thunk::AnyRemoteMemberKnows, ""},
+    {"K3", Kind::RetargetCall, Gate::Now, 0x9F99E3, "E8 98 09 ED FF", Thunk::MemberKnowingHandleEdi, ""},
+    {"K4", Kind::HookEntry, Gate::Now, 0xA23640, "51 53 8B 5C 24 0C 56 57", Thunk::WrapEachMember, ""},
+    {"K5", Kind::RetargetCall, Gate::Now, 0x6822F9, "E8 42 24 19 00", Thunk::SendToPartnerMember, ""},
+    {"V1", Kind::RetargetCall, Gate::Now, 0x84DA07, "E8 C4 A1 18 00", Thunk::RemoteOnObject, ""},
+    {"D1", Kind::HookEntry, Gate::Now, 0x9AFDD0, "83 EC 0C 53 56 8B F0 A1", Thunk::WrapAnyGoDown, ""},
+    {"D2", Kind::JumpOut, Gate::ProbeB, 0x96127A, "C6 44 24 13 00", Thunk::TeamWipe, ""},
+    {"D3", Kind::RetargetCall, Gate::ProbeB, 0x9AFD01, "E8 CA 7E 02 00", Thunk::RemoteIfTeamDown, ""},
+    {"A1", Kind::RetargetCall, Gate::Now, 0xAAD786, "E8 45 A4 F2 FF", Thunk::RemoteDrivingVehicle, ""},
+    {"A2", Kind::RetargetCall, Gate::Now, 0xB42AFB, "E8 D0 50 E9 FF", Thunk::RemoteEnteringVehicle, ""},
+    {"A3", Kind::RetargetCall, Gate::Now, 0xB42B04, "E8 C7 50 E9 FF", Thunk::RemoteEnteringVehicle, ""},
+    {"A4", Kind::RetargetCall, Gate::Now, 0xB42B19, "E8 B2 50 E9 FF", Thunk::RemoteEnteringVehicle, ""},
+    {"A5", Kind::RetargetCall, Gate::Now, 0xB42DA5, "E8 26 4E E9 FF", Thunk::RemoteEnteringVehicle, ""},
+    {"A6", Kind::RetargetCall, Gate::Now, 0xB42DAE, "E8 1D 4E E9 FF", Thunk::RemoteEnteringVehicle, ""},
+    {"A7", Kind::RetargetCall, Gate::Now, 0xB42DC3, "E8 08 4E E9 FF", Thunk::RemoteEnteringVehicle, ""},
+    {"B1", Kind::JumpOut, Gate::Now, 0x6A28B2, "32 DB E8 17 53 33 00", Thunk::VehicleExitEnter, ""},
+    {"B2", Kind::JumpOut, Gate::Now, 0x6A2935, "8B 15 0C 63 3D 03", Thunk::VehicleExitNext, ""},
+    {"B3", Kind::CallBlock, Gate::ProbeG, 0x7B98A7, "3B F0 8B 7C 24 1C", Thunk::PassengerIsRemote, "90"},
+    {"B4", Kind::RetargetCall, Gate::ProbeG, 0x7B995F, "E8 1C 1B 22 00", Thunk::TeleportRemotePassengers, ""},
+    {"S1", Kind::HookEntry, Gate::Now, 0xA3F5F0, "53 55 8B 6C 24 0C 8B 5D", Thunk::WrapEachVehicleCombat, ""},
+    {"S2", Kind::HookEntry, Gate::Now, 0xA3F6B0, "53 55 8B 6C 24 0C 8B 5D", Thunk::WrapEachMaxFollowers, ""},
+    {"S3", Kind::HookEntry, Gate::Now, 0xA3F930, "51 57 8B 3D D4 03 17 02", Thunk::WrapEachDismissAll, ""},
+    {"S4", Kind::HookEntry, Gate::Now, 0xA3FE70, "51 8B 4C 24 08 8B 51 08", Thunk::WrapEachMeleeOnly, ""},
+};
+
+constexpr size_t kSiteCount = std::size(kSites);
+
+constexpr size_t kHexStep = 3;  // two digits and a space
+
+// "8B 80 00" -> {0x8B, 0x80, 0x00}.
+inline std::vector<uint8_t> parseHex(std::string_view text) {
+    auto digit = [](char c) { return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10; };
+    std::vector<uint8_t> bytes;
+    for (size_t at = 0; at + 1 < text.size(); at += kHexStep) {
+        bytes.push_back(static_cast<uint8_t>(digit(text[at]) * 16 + digit(text[at + 1])));
+    }
+    return bytes;
+}
+
+}  // namespace partner_sites

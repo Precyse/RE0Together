@@ -17,11 +17,9 @@ using GetterFn = uintptr_t(__cdecl*)();
 using JoinQueueAddFn = void(__stdcall*)(uintptr_t session, uintptr_t request);
 
 PoolSetupFn g_poolSetup = nullptr;
-GetterFn g_remotePlayer = nullptr;
 GetterFn g_slotAllocator = nullptr;
 JoinQueueAddFn g_joinQueueAdd = nullptr;
 
-std::atomic<uintptr_t> g_lastRemotePlayer{0};
 std::atomic<uintptr_t> g_lastSlot{0};
 uint32_t g_maxPlayers = sr2::kCoopDefaultPlayers;
 
@@ -42,15 +40,6 @@ uint32_t __cdecl detourPoolSetup() {
                   readU32(sr2::kPlayerN8Allocator + sr2::kAllocatorBlockOffset));
     member_slots::check(g_maxPlayers);
     return g_poolSetup();
-}
-
-uintptr_t __cdecl detourRemotePlayer() {
-    const uintptr_t result = g_remotePlayer();
-    if (g_lastRemotePlayer.exchange(result) != result) {
-        logger::write("trace: remote player getter now 0x%X", static_cast<unsigned>(result));
-        member_slots::check(g_maxPlayers);
-    }
-    return result;
 }
 
 uintptr_t __cdecl detourSlotAllocator() {
@@ -79,8 +68,6 @@ void install(uint32_t maxPlayers) {
     g_maxPlayers = maxPlayers;
     hooks::install("trace_session_pool_setup", sr2::kSessionPoolSetup, reinterpret_cast<void*>(&detourPoolSetup),
                    reinterpret_cast<void**>(&g_poolSetup));
-    hooks::install("trace_remote_player_getter", sr2::kRemotePlayerGetter,
-                   reinterpret_cast<void*>(&detourRemotePlayer), reinterpret_cast<void**>(&g_remotePlayer));
     hooks::install("trace_player_slot_allocator", sr2::kPlayerSlotAllocator,
                    reinterpret_cast<void*>(&detourSlotAllocator), reinterpret_cast<void**>(&g_slotAllocator));
     hooks::install("trace_join_queue_add", sr2::kJoinQueueAdd, reinterpret_cast<void*>(&detourJoinQueueAdd),
