@@ -25,6 +25,7 @@
 //   cutscene.txt   "uuid"     calls the engine's Sequence start on the loaded Sequence entity with that UUID (32 hex digits): the hold, START, READY and GO of a synced cutscene
 //   missions.txt   any        logs every mission id with its state
 //   networks.txt   any        logs every loaded SequenceNetwork (UUID, main Sequence end frame, playing)
+//   crater.txt     "list", "add [uuid]" or "remove uuid"  the voidout craters: log them, AddCrater at the local player (radius 30 m, a random UUID unless one is given; logged), RemoveCrater by UUID (32 hex digits)
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
 #include "ds2/test_commands.h"
@@ -33,11 +34,13 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <random>
 #include <set>
 #include <string>
 
 #include "decima/safe_read.h"
 #include "ds2/camp_alert.h"
+#include "ds2/craters.h"
 #include "ds2/engine.h"
 #include "ds2/cutscene.h"
 #include "ds2/enemy_vitals.h"
@@ -80,6 +83,7 @@ constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: th
 constexpr uintptr_t kMissionResource = 0x10;
 constexpr size_t kMissionDumpBytes = 0x80, kResourceDumpBytes = 0x108, kPointeeDumpBytes = 0x60;
 constexpr int kMaxListedConfigs = 512;
+constexpr float kTestCraterRadius = 30.0f;
 constexpr size_t kMaxFaultsLogged = 30;
 constexpr size_t kStackWordsScanned = 96;
 constexpr uintptr_t kComponentOwner = 0x48;  // a component's entity
@@ -272,6 +276,24 @@ void worldEnv(const std::string& text) {
     logWorldEnv();
 }
 
+void craterCommand(const std::string& text) {
+    uint8_t uuid[crater_wire::kUuidSize];
+    const bool given = text.find(' ') != std::string::npos && parseUuid(text.substr(text.find(' ') + 1), uuid);
+    if (text.rfind("list", 0) == 0) return craters::logAll();
+    if (text.rfind("remove", 0) == 0) {
+        if (!given) return logger::write("test_commands: crater remove needs a UUID");
+        return logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::remove(uuid) ? "removal requested" : "not removed");
+    }
+    decima::WorldTransform where{};
+    if (text.rfind("add", 0) != 0 || !ds2::entityTransform(remote_player::samEntity(), where)) return;
+    if (!given) {
+        std::random_device random;
+        for (uint8_t& byte : uuid) byte = static_cast<uint8_t>(random());
+    }
+    const double position[3] = {where.position.x, where.position.y, where.position.z};
+    logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::add(position, kTestCraterRadius, uuid) ? "added" : "not added");
+}
+
 void watchHealth(const std::string& text) {
     if (text.compare(0, 3, "off") == 0) return health_watch::disarm();
     const int netId = atoi(text.c_str());
@@ -406,6 +428,7 @@ void tick() {
     if (const std::string text = takeCommand(L"area.txt"); !text.empty()) changeArea(text);
     if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
+    if (const std::string text = takeCommand(L"crater.txt"); !text.empty()) craterCommand(text);
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"env.txt"); !text.empty()) worldEnv(text);

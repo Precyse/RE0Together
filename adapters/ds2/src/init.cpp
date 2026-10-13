@@ -45,7 +45,9 @@
 #include "ds2/warp.h"
 #include "ds2/world_pause.h"
 #include "ds2/structures.h"
+#include "ds2/bt_diag.h"
 #include "ds2/bt_events.h"
+#include "ds2/craters.h"
 #include "ds2/world_env.h"
 #include "ds2/world_facts.h"
 #include "remote_body.h"
@@ -95,6 +97,8 @@ DWORD WINAPI initThread(LPVOID) {
     world_facts::installEarly(config.logFacts);
     world_env::installEarly();
     bt_events::installEarly();
+    craters::installEarly();
+    if (config.diagnostics) bt_diag::installEarly();
     if (config.enemySync) {
         enemy_spawn::installEarly();
         enemy_host::installEarly(config.diagnostics);
