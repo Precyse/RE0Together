@@ -370,6 +370,23 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 | tests/proxy_load_test.cpp | loads the built version.dll and calls a forwarded export | |
 | tests/overlay_test.cpp | real D3D12 swap chain created after the hooks: every Present draws, also after the swap chain is recreated on a new queue and format | |
 
+## adapters/sr2/ (C++20, x86, dinput8.dll proxy, Saints Row 2)
+
+Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, cmake + ninja, output `adapters/sr2/build/dinput8.dll`). Compiles the logger, paths, MinHook wrapper and MinHook from `adapters/re0` (the log file name comes from the `COOP_LOG_FILE` define: `<game>\coop\sr2_adapter.log`). Notes and addresses: `docs/SR2_NOTES.md`.
+
+| file | owns | key members |
+|---|---|---|
+| src/proxy.cpp | `DirectInput8Create` forwarded to the system DLL; DllMain pins the module and starts the init thread | `DirectInput8Create`, `DllMain` |
+| src/init.cpp | start-up order: log, ini, build check, hooks | `initThread` |
+| src/config.cpp | `sr2_adapter.ini` (`max_players` clamped 2..12, `trace`); pure parser | `parseConfig`, `loadConfig` |
+| src/sr2_addresses.h | every SR2_pc.exe address, offset and limit constant | `sr2::k*` |
+| src/byte_pattern.h | pure byte compare | `firstMismatch` |
+| src/memory.cpp | safe read of this process | `readMemory` |
+| src/code_check.cpp | refuses to patch a different exe: PE time stamp, prologues of hooked functions, the two limit stores | `gameMatchesBuild` |
+| src/coop_limits.cpp | hooks `net_set_mode`; after mode 1 returns, writes `max_players` into both limits | `install`, `insideNetSetMode` |
+| src/join_trace.cpp | read-only trace of pool sizing, join queue, slot allocator and remote-player getter (log on change) | `install` |
+| tests/config_test.cpp, tests/byte_pattern_test.cpp | ctest unit tests, no game | |
+
 ## release/ (repo root)
 
 | file | owns |
@@ -396,6 +413,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 - Adapter network behaviour: `adapters/re0/src/net_client.cpp`
 - Control rule (who drives a character): `control_rule.h` (pure) applied in `character_owner::controlOf`; party commands: `command_input.cpp`, `party_mode.cpp`, `camera_parity.cpp` (trace a press or decision in `adapter.log`, lines starting `command:`); pickup crash guard: `pickup_guard.cpp`
 - Overlay contents: `adapters/re0/src/debug_lines.cpp` (add a stat: counter/gauge in `debug_stats.h`, update it where the event happens, add a line)
+- SR2 co-op limits, addresses and the live trace lines: `docs/SR2_NOTES.md`, code in `adapters/sr2/src` (`coop_limits.cpp`, `join_trace.cpp`)
 - Reverse-engineering patterns shared across games: `docs/re/PATTERNS.md` (grown by the `coop-re` skill)
 - Enemy combat (guest hits on puppets, enemy hits on the partner, deaths): `enemy_combat.cpp` (net), `ds2/combat_hook.cpp` (engine), wire in `combat_wire.h`; notes `docs/DS2_NOTES.md` "Enemy combat"
 - Weapon sync (the body's weapon, shots, cosmetic damage drop): `weapon_wire.h` (wire), `weapon_sync.cpp` (net), `ds2/local_weapon.cpp`, `ds2/remote_weapon.cpp`, `ds2/damage_veto.cpp`; engine layout in `ds2/weapon_layout.h`; spec `tools/ds2/out/analysis/WEAPONS.md`, results `docs/DS2_NOTES.md` "Weapon sync"
