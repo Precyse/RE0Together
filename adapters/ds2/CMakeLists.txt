@@ -117,6 +117,7 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_appearance.cpp
     src/ds2/remote_animation.cpp
     src/ds2/remote_ride.cpp
+    src/ds2/ride_probe.cpp
     src/ds2/remote_context.cpp
     src/ds2/setdriver_guard.cpp
     src/ds2/use_gate.cpp

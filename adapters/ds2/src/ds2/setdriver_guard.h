@@ -5,6 +5,7 @@
 //
 // The local player can ride as a passenger on a vehicle the partner drives: the game's "free to use" gate is opened for
 // that vehicle only, and Sam's own enter and leave are answered as done without making him its driver.
+// The vehicle id kept for him is also what vehicle_sync reports as the local player's passenger seat.
 #include <cstdint>
 
 namespace setdriver_guard {

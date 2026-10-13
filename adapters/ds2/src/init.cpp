@@ -19,6 +19,7 @@
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/damage_diag.h"
+#include "ds2/ride_probe.h"
 #include "ds2/health_watch.h"
 #include "ds2/orders_diag.h"
 #include "ds2/camp_alert.h"
@@ -128,6 +129,7 @@ DWORD WINAPI initThread(LPVOID) {
     sneaking_focus::installEarly(config.diagnostics);
     structures::installEarly();
     vehicle_sync::installEarly();
+    if (config.diagnostics) ride_probe::installEarly();
     rack_sync::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
