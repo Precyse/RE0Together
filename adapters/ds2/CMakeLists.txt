@@ -139,6 +139,7 @@ add_library(ds2_adapter SHARED
     src/ds2/world_pause.cpp
     src/ds2/bt_events.cpp
     src/ds2/bt_diag.cpp
+    src/ds2/bt_grab.cpp
     src/ds2/craters.cpp
     src/ds2/enemy_spawn.cpp
     src/ds2/enemy_vitals.cpp

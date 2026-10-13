@@ -45,6 +45,7 @@ Shape: inventory and status screens build from the focused character at open tim
 Find it: write-watch the submenu state and take the function that sets it to its first value.
 Replicate: local perspective swap for the menu's lifetime; pause camera parity while the menu is open.
 Seen in: RE0: sSubMenu::open 0x5d9030.
+Also: DS2 BT code (hunters, gazers, catchers) answers "the player" through one variant resolver (0x141cbbae0, 510 call sites; variant kind 0 = local player index 0). A BT therefore always grabs the local Sam, whoever it noticed. The cut is a per-entry-point thread scope that makes the resolver answer the partner's body, not a rewrite of the BT code; and, on the machine whose BTs are puppets, a veto at the one place a grab reaches the player (MsgRequestPlayerInteractiveAction, DSPlayerState handler 0x140e1db40).
 
 ## Pause and menu stop the world through one update  [presentation, authority]
 Shape: a single "update all units" function runs each frame; menus stop the world by not running it.

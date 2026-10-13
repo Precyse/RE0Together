@@ -15,7 +15,6 @@
 
 namespace {
 
-constexpr uintptr_t kGazerCatchEvent = 0x1419cacf0;   // DSGazerAnimationComponent MsgAnimationEventStarts handler
 constexpr uintptr_t kHunterClingEvent = 0x141abf1d0;  // DSHunterClingComponent MsgAnimationEventStarts handler
 constexpr uintptr_t kComponentOwner = 0x48;           // a component's entity
 constexpr uintptr_t kAnnihilationTarget = 0x50;       // DSCatcherAnnihilationComponent: the entity the annihilation hits
@@ -26,15 +25,8 @@ constexpr int kIndexOther = -1;
 // The handlers are message handlers called with the component and the message; every register argument is passed through.
 using HandlerFn = uint64_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 
-HandlerFn g_gazerCatch = nullptr;
 HandlerFn g_hunterCling = nullptr;
 std::atomic<bool> g_enabled{false};
-
-std::string ownerText(uintptr_t component) {
-    std::array<uint8_t, 16> uuid{};
-    if (!ds2::entityUuid(decima::readPointer(component + kComponentOwner), uuid)) return "unreadable";
-    return craters::uuidText(uuid.data());
-}
 
 // The player index of a pointer that is a player entity or a weak reference to one.
 int playerIndex(uintptr_t value) {
@@ -45,13 +37,8 @@ int playerIndex(uintptr_t value) {
     return kIndexOther;
 }
 
-uint64_t gazerDetour(uintptr_t component, uintptr_t a, uintptr_t b, uintptr_t c) {
-    logger::write("bt_diag: gazer catch event, gazer %s", ownerText(component).c_str());
-    return g_gazerCatch(component, a, b, c);
-}
-
 uint64_t hunterDetour(uintptr_t component, uintptr_t a, uintptr_t b, uintptr_t c) {
-    logger::write("bt_diag: hunter cling event, hunter %s", ownerText(component).c_str());
+    logger::write("bt_diag: hunter cling event, hunter %s", bt_diag::ownerText(component).c_str());
     return g_hunterCling(component, a, b, c);
 }
 
@@ -59,9 +46,13 @@ uint64_t hunterDetour(uintptr_t component, uintptr_t a, uintptr_t b, uintptr_t c
 
 namespace bt_diag {
 
+std::string ownerText(uintptr_t component) {
+    std::array<uint8_t, 16> uuid{};
+    if (!ds2::entityUuid(decima::readPointer(component + kComponentOwner), uuid)) return "unreadable";
+    return craters::uuidText(uuid.data());
+}
+
 void installEarly() {
-    hooks::install("gazer catch event", ds2::at(kGazerCatchEvent), reinterpret_cast<void*>(&gazerDetour),
-                   reinterpret_cast<void**>(&g_gazerCatch));
     hooks::install("hunter cling event", ds2::at(kHunterClingEvent), reinterpret_cast<void*>(&hunterDetour),
                    reinterpret_cast<void**>(&g_hunterCling));
     g_enabled = true;

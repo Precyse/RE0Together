@@ -48,6 +48,7 @@
 #include "ds2/structures.h"
 #include "ds2/bt_diag.h"
 #include "ds2/bt_events.h"
+#include "ds2/bt_grab.h"
 #include "ds2/craters.h"
 #include "ds2/lockers.h"
 #include "ds2/user_markers.h"
@@ -107,6 +108,7 @@ DWORD WINAPI initThread(LPVOID) {
         enemy_host::installEarly(config.diagnostics);
         camp_alert::installEarly();
         enemy_puppet::installEarly();
+        bt_grab::installEarly(config.diagnostics);
         combat_hook::installEarly(config.diagnostics);
         combat_hook::setGodMode(config.godMode && config.testCommands);
         if (config.diagnostics) damage_diag::installEarly();

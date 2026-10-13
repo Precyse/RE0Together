@@ -333,6 +333,14 @@ bool animate(uintptr_t manager, uintptr_t owner) {
     return true;
 }
 
+bool isPuppet(uintptr_t entity) {
+    Uuid id{};
+    if (!entity || !decima::safeCopy(id.data(), entity + kEntityUuid, id.size())) return false;
+    std::lock_guard lock(g_mutex);
+    const auto it = g_tamed.find(id);
+    return it != g_tamed.end() && it->second.entity == entity;
+}
+
 void adoptExisting() { g_adoptExisting = true; }
 
 void releaseToHost() { g_releaseToHost = true; }

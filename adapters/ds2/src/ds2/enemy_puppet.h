@@ -19,6 +19,9 @@ void adoptExisting();
 // announces it, on the next simulation tick. Any thread.
 void releaseToHost();
 
+// Whether `entity` is an enemy this guest has tamed (a puppet of the host's enemy). Any thread.
+bool isPuppet(uintptr_t entity);
+
 // Called from the engine's pose evaluation for any animation manager (any thread): when `owner` is a puppet, writes the
 // host's animation variables into `manager`. False for every other entity.
 bool animate(uintptr_t manager, uintptr_t owner);
