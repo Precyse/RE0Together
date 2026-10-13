@@ -26,6 +26,7 @@
 //   missions.txt   any        logs every mission id with its state
 //   networks.txt   any        logs every loaded SequenceNetwork (UUID, main Sequence end frame, playing)
 //   crater.txt     "list", "add [uuid]" or "remove uuid"  the voidout craters: log them, AddCrater at the local player (radius 30 m, a random UUID unless one is given; logged), RemoveCrater by UUID (32 hex digits)
+//   locker.txt     "list" or "add KEY TYPE"  the shared lockers: log every owner with a locker slot (probe P-L1), create a piece of that kind (decimal) in the shared locker with that identifier (hex), as the host's move would (probe P-L3)
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
 #include "ds2/test_commands.h"
@@ -294,6 +295,17 @@ void craterCommand(const std::string& text) {
     logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::add(position, kTestCraterRadius, uuid) ? "added" : "not added");
 }
 
+void lockerCommand(const std::string& text) {
+    if (text.rfind("list", 0) == 0) return game::logLockerOwners();
+    unsigned key = 0, type = 0;
+    if (sscanf(text.c_str(), "add %x %u", &key, &type) != 2) return logger::write("test_commands: locker.txt takes list or add KEY TYPE");
+    game::Cargo piece;
+    piece.type = type;
+    const game::AddResult result = game::addLockerPiece(key, game::kSlotPublic, piece);
+    const char* names[] = {"created", "retry (stale order copies removed)", "refused (no such locker, full, or held)"};
+    logger::write("test_commands: locker %08x add kind %u: %s", key, type, names[static_cast<int>(result)]);
+}
+
 void watchHealth(const std::string& text) {
     if (text.compare(0, 3, "off") == 0) return health_watch::disarm();
     const int netId = atoi(text.c_str());
@@ -429,6 +441,7 @@ void tick() {
     if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
     if (const std::string text = takeCommand(L"crater.txt"); !text.empty()) craterCommand(text);
+    if (const std::string text = takeCommand(L"locker.txt"); !text.empty()) lockerCommand(text);
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"env.txt"); !text.empty()) worldEnv(text);

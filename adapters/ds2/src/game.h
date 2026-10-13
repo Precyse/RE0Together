@@ -197,6 +197,52 @@ bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type);
 // thread.
 AddResult placeCargo(const Cargo& piece, const world_to_screen::Vec3& at);
 
+// Lockers (docs/DS2_NOTES.md, "Shared locker"). Every construction object (key ~0) holds baggage slots of kind 27 (Private),
+// 28 (Public: the shared locker) and 29 (PublicReceived); a locker is named by the owner's identifier (a hash of the
+// construction id, the same in both worlds) and the slot kind.
+constexpr uint8_t kSlotPrivate = 27, kSlotPublic = 28, kSlotPublicReceived = 29;
+
+struct LockerRef {
+    uint32_t key = 0;
+    uint8_t kind = 0;
+};
+
+// The locker a runtime slot (the argument of the slot add and remove calls) belongs to; empty for any other slot. Any thread.
+std::optional<LockerRef> lockerOfSlot(uintptr_t slot);
+
+// Whether the baggage owner is a construction object with a slot of kind 28 or 29. Any thread.
+bool isLockerOwner(uintptr_t owner);
+
+struct LockerContents {
+    uint32_t key = 0;
+    uint8_t kind = 0;
+    std::vector<Cargo> pieces;  // without display names
+};
+
+// Every locker of kind 28 or 29 in this world with what it holds (empty ones too), in one pass over the pool. Any thread.
+std::vector<LockerContents> lockerContents();
+
+// What one locker holds; empty when this world has no such locker. Any thread.
+std::optional<std::vector<Cargo>> lockerPieces(uint32_t key, uint8_t kind);
+
+// Asks the game to create `piece` (kind, order link, durability) in that locker. Refused: no such locker, the slot is full, or
+// this world's backpack or that locker already holds the order piece. Retry: stale copies of an order piece were removed first.
+// Any thread.
+AddResult addLockerPiece(uint32_t key, uint8_t kind, const Cargo& piece);
+
+// A construction object's private locker (kind 27) and the handles of what it holds.
+struct PrivateLocker {
+    uintptr_t owner = 0;
+    std::vector<uint64_t> handles;
+};
+std::vector<PrivateLocker> privateLockers();
+
+// Test commands: logs every owner with a locker slot (kind 27 to 29): address, carrier, key, identifier, slot kinds and counts.
+void logLockerOwners();
+
+// Whether a menu is up that the cargo and locker code must not be changed under: the pause menu or the co-op cargo menu. Any thread.
+bool uiMenuOpen();
+
 // Asks the game to delete a piece, carried or on the ground. Any thread.
 bool removeCargo(uint64_t handle);
 

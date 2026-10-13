@@ -10,6 +10,8 @@
 
 namespace game {
 
+bool uiMenuOpen() { return world_pause::menuUp() || cargo_menu::isOpen(); }
+
 partner_status::Status localStatus() {
     partner_status::Status status;
     const uintptr_t entity = ds2::localPlayerEntity();
@@ -24,7 +26,7 @@ partner_status::Status localStatus() {
     status.down = !status.dead && status.healthKnown && health == 0;
     status.loading = loading_screen::shown();
     status.driving = drivenVehicle().has_value();
-    status.menu = world_pause::menuUp() || cargo_menu::isOpen();
+    status.menu = uiMenuOpen();
     return status;
 }
 

@@ -111,10 +111,13 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 | 0x0115 | CLOCK_PONG | to the pinger | no | u64 echoed ping time, u64 answerer time (µs) |
 | 0x0116 | ANIM_EVENT | all | yes | same payload as ANIM_STATE, entries are pulses |
 | 0x0117 | FACT_SNAPSHOT | host to one slot (or all) | yes | u32 snapshot id, u16 chunk index, u16 chunk count, then a FACT_SET payload |
-| 0x0118 | RESYNC | to one slot or all | yes | u32 scopes (1 facts, 2 authority, 4 anim) |
+| 0x0118 | RESYNC | to one slot or all | yes | u32 scopes (1 facts, 2 authority, 4 anim, 8 story, 16 enemies, 32 structures, 64 lockers) |
 | 0x0128 | BT_ENV | host to all | yes | u64 BT-active region set, bit r = region r (`bt_wire.h`, 8 bytes) |
 | 0x0129 | CATCHER_EVENT | host to all | yes | u8 kind (1 territory, 2 tar), u8 flags (bit 0 the territory's bool), u8[2] reserved, u8[16] locator UUID (20 bytes) |
 | 0x0137 | CRATER_SET | host to all | yes | the host's voidout craters (`crater_wire.h`): u16 count (at most 64), u16 reserved, then count x 48 bytes {u8[16] crater locator UUID, f64[3] position, f32 radius, u16 area, u8 kind, u8 reserved}; sent whole on a change, every 5 s and to a joining peer |
+| 0x0134 | LOCKER_LIST | host to all, or to a joining or resyncing peer | yes | one shared locker's contents (`locker_wire.h`): u32 key (the construction owner's identifier, a hash of the construction id), u8 slot kind (28 Public, 29 PublicReceived), u8 flags (bit 0 = snapshot end: key, kind and count 0, the lockers not named since the snapshot began are empty), u16 count (at most 128), u32 reply-to request id (0 = none), u32 reserved, then count x 32-byte CARGO_ADD pieces; sent on a change, as a snapshot of every non-empty locker plus the end marker, and after a LOCKER_MOVE |
+| 0x0135 | LOCKER_MOVE | guest to host | yes | 56 bytes: u32 request id (from 1), u32 key, u8 slot kind, u8 direction (1 put, 2 take), u16 + u32 reserved, u64 guest handle (the guest's undo only), one CARGO_ADD piece; the host refuses more than 20 per second per guest |
+| 0x0136 | LOCKER_RESULT | host to the requesting guest | yes | u32 request id, u8 accepted, u8 reason (0 ok, 1 unknown locker, 2 full, 3 not there, 4 order piece held, 5 malformed, 6 rate), u16 reserved; a refusal makes the guest undo its move |
 | 0x0119 | STORY_EVENT | host to all (a guest sends an order request to the host) | yes | `story_wire.h` (104 bytes): kind (mission start/success/fail, section active/inactive, area change, order request), mission id, args, section or start-section UUID, area transform |
 | 0x012A | CUTSCENE_START | host to all | yes | `cutscene_wire.h` (60 bytes): u32 id, u8 category, u8[3] reserved, i32 stop frame, u8[16] SequenceResource UUID, u8[16] host Sequence entity UUID, u8[16] SequenceNetwork UUID (zero if unknown) |
 | 0x012B | CUTSCENE_READY | guest to host | yes | u32 id (the guest holds its copy) |

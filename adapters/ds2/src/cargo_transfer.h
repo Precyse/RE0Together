@@ -67,6 +67,15 @@ struct CargoAdd {
 };
 static_assert(sizeof(CargoAdd) == 32);
 
+// A piece as it travels (the display name and this machine's handle stay behind), and back (handle 0, no name).
+inline CargoAdd toAdd(const game::Cargo& piece) {
+    return {piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
+}
+
+inline game::Cargo fromAdd(const CargoAdd& add) {
+    return {0, add.type, {}, add.orderId, add.secondId, add.category, add.durability};
+}
+
 // False for a payload that is not exactly one CargoAdd (CARGO_ADD and CARGO_GIVE).
 inline bool decodeAdd(std::span<const uint8_t> payload, CargoAdd& out) {
     if (payload.size() != sizeof(CargoAdd)) return false;

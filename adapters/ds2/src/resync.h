@@ -19,7 +19,8 @@ enum Scope : uint32_t {
     kStory = 8,      // every mission in progress (story_sync)
     kEnemies = 16,   // every live enemy announced again (enemy_sync)
     kStructures = 32,  // every structure the host placed this session (struct_sync)
-    kAll = kFacts | kAuthority | kAnim | kStory | kEnemies | kStructures
+    kLockers = 64,     // every non-empty shared locker of the host (locker_sync)
+    kAll = kFacts | kAuthority | kAnim | kStory | kEnemies | kStructures | kLockers
 };
 
 struct ResyncRequest {

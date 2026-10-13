@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 
+#include "cargo_diff.h"
 #include "cargo_transfer.h"
 #include "ds2/sim_tick.h"
 #include "game.h"
@@ -23,8 +24,8 @@ constexpr auto kCheckInterval = std::chrono::milliseconds(500);
 constexpr int kMaxChangesPerRound = 6;  // a burst (a cargo theft on the partner) is spread over several rounds
 constexpr auto kSettle = std::chrono::seconds(2);  // the game serves create and delete requests on its next update
 
-// A piece is told apart by its kind and its order id (0 for plain cargo): two pieces of one order never share an id.
-using PieceKey = std::pair<uint32_t, uint64_t>;
+using cargo_diff::keyOf;
+using cargo_diff::PieceKey;
 using Wanted = std::map<PieceKey, std::vector<game::Cargo>>;
 
 // What the net thread hands the simulation thread: the body, and, when the partner's body is this body, the partner's reported
@@ -41,10 +42,8 @@ Target g_target;  // net thread writes, simulation thread reads (guarded by g_mu
 // Simulation thread only.
 Clock::time_point g_lastCheck;
 Clock::time_point g_lastChange;
-std::map<PieceKey, size_t> g_lastWanted;
+cargo_diff::Counts g_lastWanted;
 std::set<PieceKey> g_refused;  // pieces the game refused to create (this world holds the same order piece): not asked again until the target changes
-
-PieceKey keyOf(const game::Cargo& piece) { return {piece.type, piece.orderId}; }
 
 // The partner's rack as the body should hold it: what the partner reported, less the pieces the body just lost to this
 // world (the partner deletes its copy a moment later, and its list may still show it), plus the ones this world just put
@@ -62,44 +61,34 @@ Wanted wantedRack(const Target& target, const std::vector<game::Cargo>& have) {
     return want;
 }
 
-std::map<PieceKey, size_t> counts(const Wanted& want) {
-    std::map<PieceKey, size_t> out;
-    for (const auto& [key, pieces] : want) {
-        if (!pieces.empty()) out[key] = pieces.size();
-    }
-    return out;
-}
-
 // Brings the body's backpack to the partner's pieces: extra pieces deleted, missing ones created with their order link.
 void follow(uint64_t ownerKey, const Target& target, Clock::time_point now) {
     const std::vector<game::Cargo> present = game::backpackCargo(ownerKey);
     const Wanted want = wantedRack(target, present);
     // Only a target that has not changed since the previous check is applied (see equip_sync).
-    const std::map<PieceKey, size_t> wantCounts = counts(want);
+    const cargo_diff::Counts wantCounts = cargo_diff::countsOf(want);
     const bool steady = wantCounts == g_lastWanted;
     if (!steady) g_refused.clear();
     g_lastWanted = wantCounts;
     if (!steady) return;
-    std::map<PieceKey, std::vector<uint64_t>> have;
+    cargo_diff::Handles have;
     for (const game::Cargo& piece : present) have[keyOf(piece)].push_back(piece.handle);
-    bool same = true;
-    for (const auto& [key, count] : wantCounts) same = same && (have[key].size() == count || g_refused.contains(key));
-    for (const auto& [key, handles] : have) same = same && wantCounts.contains(key) && wantCounts.at(key) == handles.size();
-    if (same || now - g_lastChange < kSettle) return;
+    std::vector<uint64_t> surplus = cargo_diff::extra(have, wantCounts);
+    cargo_diff::Counts lacking = cargo_diff::missing(cargo_diff::countsOf(have), wantCounts);
+    for (const PieceKey& key : g_refused) lacking.erase(key);
+    if ((surplus.empty() && lacking.empty()) || now - g_lastChange < kSettle) return;
     g_lastChange = now;
     int removed = 0, added = 0;
-    for (const auto& [key, handles] : have) {
-        const size_t keep = wantCounts.contains(key) ? wantCounts.at(key) : 0;
-        for (size_t i = keep; i < handles.size() && removed + added < kMaxChangesPerRound; ++i) {
-            game::removeCargoLater(handles[i]);
-            ++removed;
-        }
-    }
-    for (const auto& [key, pieces] : want) {
-        for (size_t i = have[key].size(); i < pieces.size() && !g_refused.contains(key) && removed + added < kMaxChangesPerRound; ++i) {
+    for (size_t i = 0; i < surplus.size() && removed < kMaxChangesPerRound; ++i, ++removed) game::removeCargoLater(surplus[i]);
+    for (const auto& [key, shortfall] : lacking) {
+        const std::vector<game::Cargo>& pieces = want.at(key);
+        for (size_t i = pieces.size() - shortfall; i < pieces.size() && removed + added < kMaxChangesPerRound; ++i) {
             const game::AddResult result = game::addBackpackCargo(ownerKey, pieces[i]);
             added += result == game::AddResult::Done ? 1 : 0;
-            if (result == game::AddResult::Refused) g_refused.insert(key);
+            if (result == game::AddResult::Refused) {
+                g_refused.insert(key);
+                break;
+            }
         }
     }
     logger::write("rack_sync: the body's rack: %d pieces removed, %d added (%zu reported)", removed, added, target.reported->size());

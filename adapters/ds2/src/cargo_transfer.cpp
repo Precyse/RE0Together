@@ -77,10 +77,6 @@ std::optional<cargo_transfer::Partner> parseList(uint8_t slot, const std::vector
     return partner;
 }
 
-game::Cargo pieceOf(const cargo_transfer::CargoAdd& add) {
-    return {0, add.type, {}, add.orderId, add.secondId, add.category, add.durability};
-}
-
 // Guest: the host asked for one of our pieces. It goes only if we still carry it.
 void giveUp(NetClient& net, uint8_t hostSlot, uint64_t handle) {
     const std::vector<game::Cargo> carried = game::carriedCargo();
@@ -259,20 +255,12 @@ void runRequests(NetClient& net, bool host) {
 
 namespace cargo_transfer {
 
-namespace {
-
-CargoAdd addOf(const game::Cargo& piece) {
-    return {piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
-}
-
-}  // namespace
-
 bool sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece) {
-    return net.send(kMsgCargoAdd, true, slot, proto::bytesOf(addOf(piece)));
+    return net.send(kMsgCargoAdd, true, slot, proto::bytesOf(toAdd(piece)));
 }
 
 void offerPiece(NetClient& net, uint8_t hostSlot, const game::Cargo& piece) {
-    if (!net.send(kMsgCargoGive, true, hostSlot, proto::bytesOf(addOf(piece)))) logger::write("cargo: could not send CARGO_GIVE");
+    if (!net.send(kMsgCargoGive, true, hostSlot, proto::bytesOf(toAdd(piece)))) logger::write("cargo: could not send CARGO_GIVE");
 }
 
 bool handOver(NetClient& net, uint8_t slot, const game::Cargo& piece) {
@@ -299,15 +287,15 @@ void onFrame(NetClient& net, const GameFrame& frame) {
         CargoAdd add;
         if (!decodeAdd(frame.payload, add)) return;
         if (host) {
-            received(pieceOf(add));
+            received(fromAdd(add));
         } else {
-            receive(pieceOf(add));
+            receive(fromAdd(add));
             logger::write("cargo: received %u from the host (order %llx)", add.type,
                           static_cast<unsigned long long>(add.orderId));
         }
     } else if (frame.type == kMsgCargoGive && host) {
         CargoAdd add;
-        if (decodeAdd(frame.payload, add)) acceptGive(net, frame.slot, pieceOf(add));
+        if (decodeAdd(frame.payload, add)) acceptGive(net, frame.slot, fromAdd(add));
     }
 }
 

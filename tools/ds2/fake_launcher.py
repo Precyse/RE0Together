@@ -56,6 +56,14 @@ CRATER_SET = 0x0137
 CRATER_HEADER = struct.Struct("<HH")  # count, reserved (crater_wire.h)
 CRATER_FORMAT = struct.Struct("<16s3dfHBB")  # uuid, position, radius, area, kind, reserved (48 bytes)
 CRATER_RESEND_SECONDS = 5.0  # the host peer repeats its crater set
+LOCKER_LIST, LOCKER_MOVE, LOCKER_RESULT = 0x0134, 0x0135, 0x0136
+LOCKER_HEADER = struct.Struct("<IBBHII")  # key, slot kind, flags, count, reply to, reserved (locker_wire.h; then count CARGO_ADD pieces)
+LOCKER_MOVE_FORMAT = struct.Struct("<IIBBHIQ")  # request id, key, slot kind, direction, reserved, reserved, guest handle; then one CARGO_ADD piece (56 bytes)
+LOCKER_RESULT_FORMAT = struct.Struct("<IBBH")  # request id, accepted, reason, reserved
+LOCKER_FLAG_SNAPSHOT_END = 1
+LOCKER_PUT, LOCKER_TAKE = 1, 2
+LOCKER_REASON_FULL, LOCKER_REASON_NOT_THERE = 2, 3
+LOCKER_RESEND_SECONDS = 5.0  # the host peer repeats its lockers
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
@@ -135,6 +143,36 @@ def print_crater_set(body):
     for i in range(count):
         uuid, x, y, z, radius, area, kind, _ = CRATER_FORMAT.unpack_from(body, CRATER_HEADER.size + i * CRATER_FORMAT.size)
         print(f"craters:   {uuid.hex()} at {x:.1f} {y:.1f} {z:.1f} radius {radius:.1f} area {area} kind {kind}", flush=True)
+
+
+def parse_locker_piece(text):
+    """TYPE or TYPE@ORDER_HEX as (type, order id)."""
+    kind, _, order = text.partition("@")
+    return int(kind), int(order, 16) if order else 0
+
+
+def locker_piece_bytes(piece):
+    return CARGO_ADD_FORMAT.pack(piece[0], 0, 0.0, 0, piece[1], 0)
+
+
+def parse_locker_spec(spec):
+    """KEY_HEX:KIND:PIECE,PIECE;... as {(key, kind): [pieces]} (an empty text names no locker)."""
+    model = {}
+    for item in (part for part in spec.split(";") if part):
+        key, kind, pieces = item.split(":")
+        model[(int(key, 16), int(kind))] = [parse_locker_piece(p) for p in pieces.split(",") if p]
+    return model
+
+
+def locker_list_payload(key, kind, pieces, reply_to=0):
+    return LOCKER_HEADER.pack(key, kind, 0, len(pieces), reply_to, 0) + b"".join(locker_piece_bytes(p) for p in pieces)
+
+
+def print_locker_list(body):
+    key, kind, flags, count, reply_to, _ = LOCKER_HEADER.unpack_from(body)
+    shown = [CARGO_ADD_FORMAT.unpack_from(body, LOCKER_HEADER.size + i * CARGO_ADD_FORMAT.size) for i in range(count)]
+    what = "snapshot end" if flags & LOCKER_FLAG_SNAPSHOT_END else f"locker {key:08x} kind {kind}"
+    print(f"locker: LOCKER_LIST {what}, {count} pieces {[(p[0], hex(p[4])) for p in shown]}, reply to {reply_to}", flush=True)
 
 
 def kind_payload(local, kind, index):
@@ -225,6 +263,10 @@ def main():
     p.add_argument("--crater-set", default=None, help='UUID:X,Y,Z:RADIUS:AREA[;...]: as the host (use --guest), send this CRATER_SET every 5 s ("" is the empty set)')
     p.add_argument("--crater-clear", type=float, default=0.0, help="SECONDS after the first --crater-set send: from then on send the empty set")
     p.add_argument("--crater-log", action="store_true", help="print every CRATER_SET received")
+    p.add_argument("--locker-list", default=None, help='KEY_HEX:KIND:TYPE[@ORDER_HEX],...;...: as the host (use --guest), send these lockers and then the snapshot end every 5 s ("" sends only the end: every locker the guest has is emptied)')
+    p.add_argument("--locker-answer", choices=("accept", "refuse"), help="as the host (use --guest): answer each LOCKER_MOVE of the adapter (accept applies it to the lockers of --locker-list and sends the list, then the result)")
+    p.add_argument("--locker-move", default="", help="SECONDS:KEY_HEX:KIND:put|take:TYPE[@ORDER_HEX]: as the guest peer (without --guest), send this LOCKER_MOVE once")
+    p.add_argument("--locker-log", action="store_true", help="print every LOCKER_LIST and LOCKER_RESULT received")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
@@ -288,6 +330,13 @@ def serve(sock, a):
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
             elif msg_type == CRATER_SET and a.crater_log:
                 print_crater_set(body[4:])
+            elif msg_type == LOCKER_MOVE and len(body) - 4 == LOCKER_MOVE_FORMAT.size + CARGO_ADD_FORMAT.size:
+                on_locker_move(body[4:])
+            elif msg_type == LOCKER_LIST and a.locker_log:
+                print_locker_list(body[4:])
+            elif msg_type == LOCKER_RESULT and a.locker_log:
+                request_id, accepted, reason, _ = LOCKER_RESULT_FORMAT.unpack_from(body, 4)
+                print(f"locker: LOCKER_RESULT request {request_id} {'accepted' if accepted else f'refused (reason {reason})'}", flush=True)
             elif msg_type == STRUCT_CREATE and a.struct_request:
                 requested.update(id=struct.unpack_from('<I', body, 8)[0], at=time.time())
                 print(f"struct: STRUCT_CREATE kind {body[4]} id {requested['id']}", flush=True)
@@ -350,6 +399,29 @@ def serve(sock, a):
             sock.sendall(encode(MOVE_ACK, peer_slot, MOVE_ACK_FORMAT.pack(kind, MOVED_ADDED, order)))
             print(f"cargo: {'refused' if a.refuse_gives else 'accepted'} the give", flush=True)
 
+    lockers = parse_locker_spec(a.locker_list) if a.locker_list else {}
+
+    def on_locker_move(payload):
+        request_id, key, kind, direction, _, _, handle = LOCKER_MOVE_FORMAT.unpack_from(payload)
+        type_, _, _, _, order, _ = CARGO_ADD_FORMAT.unpack_from(payload, LOCKER_MOVE_FORMAT.size)
+        print(f"locker: LOCKER_MOVE request {request_id} {'put' if direction == LOCKER_PUT else 'take'} locker {key:08x} kind {kind} piece {type_} order {order:x}", flush=True)
+        if not a.locker_answer:
+            return
+        pieces = lockers.setdefault((key, kind), [])
+        accepted = a.locker_answer == "accept"
+        reason = 0
+        if accepted and direction == LOCKER_PUT:
+            pieces.append((type_, order))
+        elif accepted and (type_, order) in pieces:
+            pieces.remove((type_, order))
+        elif accepted:
+            accepted, reason = False, LOCKER_REASON_NOT_THERE
+        else:
+            reason = LOCKER_REASON_FULL if direction == LOCKER_PUT else LOCKER_REASON_NOT_THERE
+        sock.sendall(encode(LOCKER_LIST, peer_slot, locker_list_payload(key, kind, pieces, request_id)))
+        sock.sendall(encode(LOCKER_RESULT, peer_slot, LOCKER_RESULT_FORMAT.pack(request_id, 1 if accepted else 0, reason, 0)))
+        print(f"locker: request {request_id} {'accepted' if accepted else 'refused'}", flush=True)
+
     cutscene = {"id": 0}
 
     def on_cutscene(msg_type, body):
@@ -392,6 +464,8 @@ def serve(sock, a):
     struct_sent = 0
     last_bt = 0.0
     last_crater = crater_start = None
+    last_locker = None
+    locker_moved = False
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -533,6 +607,19 @@ def serve(sock, a):
             crater_start = crater_start or now
             cleared = a.crater_clear and now - crater_start >= a.crater_clear
             sock.sendall(encode(CRATER_SET, peer_slot, crater_set_payload("" if cleared else a.crater_set)))
+        if a.locker_list is not None and (last_locker is None or now - last_locker >= LOCKER_RESEND_SECONDS):
+            last_locker = now
+            for (key, kind), pieces in lockers.items():
+                sock.sendall(encode(LOCKER_LIST, peer_slot, locker_list_payload(key, kind, pieces)))
+            sock.sendall(encode(LOCKER_LIST, peer_slot, LOCKER_HEADER.pack(0, 0, LOCKER_FLAG_SNAPSHOT_END, 0, 0, 0)))
+            print(f"locker: sent {len(lockers)} lockers and the snapshot end", flush=True)
+        if a.locker_move and start is not None and not locker_moved and now - start >= float(a.locker_move.split(":")[0]):
+            locker_moved = True
+            _, key, kind, direction, piece = a.locker_move.split(":")
+            piece_type, piece_order = parse_locker_piece(piece)
+            move = LOCKER_MOVE_FORMAT.pack(1, int(key, 16), int(kind), LOCKER_PUT if direction == "put" else LOCKER_TAKE, 0, 0, 0x77)
+            sock.sendall(encode(LOCKER_MOVE, peer_slot, move + locker_piece_bytes((piece_type, piece_order))))
+            print(f"locker: sent a LOCKER_MOVE ({direction}) for locker {key} kind {kind}", flush=True)
         if a.struct_all and local and start is not None and now - start >= a.struct_all + 8.0 * struct_sent:
             if struct_sent < len(STRUCT_KINDS):
                 kind = sorted(STRUCT_KINDS)[struct_sent]

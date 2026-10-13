@@ -49,6 +49,7 @@
 #include "ds2/bt_diag.h"
 #include "ds2/bt_events.h"
 #include "ds2/craters.h"
+#include "ds2/lockers.h"
 #include "ds2/world_env.h"
 #include "ds2/world_facts.h"
 #include "remote_body.h"
@@ -129,7 +130,8 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.testCommands) test_commands::installEarly();
     if (config.cutsceneLog) cutscene_log::enable();
     if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync, config.testCommands ? config.cutsceneShareMinFrames : 0);
-    partner_cargo::installEarly();
+    partner_cargo::installEarly(config.diagnostics);
+    lockers::installEarly();
     partner_focus::installEarly(config.diagnostics);
     sneaking_focus::installEarly(config.diagnostics);
     structures::installEarly();

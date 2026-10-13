@@ -20,6 +20,7 @@
 #include "struct_sync.h"
 #include "bt_sync.h"
 #include "crater_sync.h"
+#include "locker_sync.h"
 #include "env_sync.h"
 #include "enemy_combat.h"
 #include "camp_sync.h"
@@ -147,6 +148,7 @@ void tick(NetClient& net) {
         env_sync::onFrame(frame);
         bt_sync::onFrame(frame);
         crater_sync::onFrame(frame);
+        locker_sync::onFrame(net, frame);
         struct_sync::onFrame(frame);
         story_sync::onFrame(frame);
         cutscene_sync::onFrame(frame);
@@ -176,6 +178,7 @@ void tick(NetClient& net) {
     env_sync::tick(net, session);
     bt_sync::tick(net, session);
     crater_sync::tick(net, session);
+    locker_sync::tick(net, session);
     struct_sync::tick(net, session);
     story_sync::tick(net, session);
     order_handoff::tick(net, session);

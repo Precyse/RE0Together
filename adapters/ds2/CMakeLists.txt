@@ -65,6 +65,8 @@ add_library(ds2_adapter SHARED
     src/env_sync.cpp
     src/bt_sync.cpp
     src/crater_sync.cpp
+    src/locker_sync.cpp
+    src/ds2/lockers.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
     src/cutscene_sync.cpp
@@ -206,6 +208,9 @@ add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
 add_unit_test(fact_snapshot_test)
 add_unit_test(bt_wire_test)
 add_unit_test(crater_wire_test)
+add_unit_test(locker_wire_test)
+add_unit_test(cargo_diff_test)
+add_unit_test(locker_table_test)
 add_unit_test(cutscene_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
