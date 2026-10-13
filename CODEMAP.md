@@ -20,7 +20,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | GameFolders.cs | a game's folder: the settings override, else Steam's (`SteamLibrary.FindGameDir`) | `Find` |
 | ParentConsole.cs | command-line starts attach to the starting console (the exe is windowed, no console flash) | `Attach` |
 | Gui/GuiHost.cs | GUI entry: log file, unhandled UI errors logged, App loop on a background thread (retried every 3 s while it cannot start, e.g. Steam not running: state Offline), window on the STA thread | `Run` |
-| Gui/MainForm.cs | the window in the broadcast tool's operator look (a ChromelessForm; the top bar is its caption; title, icon, remembered bounds): composes the views below, wires the session row's mod button (Install/Update only; Host needs the mod installed) and the settings view's Uninstall, Host / Join / Copy / Invite / Leave to App, swaps the main pane (scrolls when it outgrows the window) and the settings view inside one content panel so neither docks against the rail, selects a joined lobby's game, closing with a session open asks first, applies AppStatus | `MainForm`, `Apply`, `BringForward` |
+| Gui/MainForm.cs | the window in the broadcast tool's operator look (a ChromelessForm; the top bar is its caption; title, icon, remembered bounds): composes the views below, wires the session row's mod button (Install/Update only; Host needs the mod installed; for a native-session game the main button reads Launch and the join row and the Players section are hidden) and the settings view's Uninstall, Host / Join / Copy / Invite / Leave to App, swaps the main pane (scrolls when it outgrows the window) and the settings view inside one content panel so neither docks against the rail, selects a joined lobby's game, closing with a session open asks first, applies AppStatus | `MainForm`, `Apply`, `BringForward` |
 | Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed; shared primary/tool button widths, content max width, arrow size, top resize band); every pixel metric goes through `Scale` (system DPI) | `Theme`, `Scale`, `Unscale` |
 | Gui/Draw.cs | shared painting: text, paths (middle ellipsis), captions, lamps, arrows, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Arrow`, `Draw.Path`, `Draw.Wrapped` |
 | Gui/ChromelessForm.cs | base window without the system title bar: WM_NCCALCSIZE gives the title bar to the client (maximized: client = work area), WM_NCHITTEST answers the top resize band and the caption strip; native side/bottom borders, shadow, Snap, Alt+F4, animations kept; size it with `SizeFromClientSize` | `ChromelessForm`, `CaptionHeight` |
@@ -30,7 +30,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
 | Gui/TopBar.cs | top strip and title bar (its empty surface hit-tests transparent so the window drags by it): brand, newer launcher build on GitHub, build, state lamp and state, Settings (Back with a left arrow while open) and Update buttons (Update idle only), window buttons | `TopBar.Show`, `ShowAvailable`, `ShowSettingsOpen`, `SettingsButton`, `UpdateButton` |
 | Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus`, `StatusOf` |
-| Gui/GameStatus.cs | rail line and mod button label for a game (Game not found, Game build N unsupported, Not installed, Installed (Build N), Update available (Build M)); `CanHost` needs the mod and a supported game build | `GameStatus.Line`, `Action`, `CanHost` |
+| Gui/GameStatus.cs | rail line and mod button label for a game (Game not found, Game build N unsupported, `<name> not found` for a missing profile `requires` file, Not installed, Installed (Build N), Update available (Build M)); `CanHost` needs the mod and a supported game build | `GameStatus.Line`, `Action`, `CanHost` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
 | Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name over character (seat order given by the caller, host first), role and partner ping on the right | `PlayerSlots.Show` |
 | Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost; optional arrow before the label (Back) | `FlatButton` |
@@ -38,7 +38,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | Gui/FlatSelect.cs | flat dropdown list in the tool's greys (owner-drawn ComboBox; border and large arrow painted over the closed box) | `FlatSelect` |
 | Gui/FlatToggle.cs | flat squared on/off switch with a label | `FlatToggle.Checked`, `Flipped` |
 | Gui/SectionPanel.cs | captioned pane section with a separator, content capped at the max content width, sized to its content on request (no content = no height) | `SectionPanel`, `FitToContent`, `FittedHeight` |
-| Gui/OptionsRows.cs | the selected game's options as a two-column label + dropdown grid (the main pane's Options section, between Session and Players); saved at once to AppSettings, rebuilt only when the game or its folder changes, locked while a session is open | `OptionsRows.Show`, `SetLocked`, `Changed` |
+| Gui/OptionsRows.cs | the selected game's options as a two-column label + dropdown grid (the main pane's Options section, between Session and Players); saved at once to AppSettings, rebuilt only when the game or its folder changes, locked while a session is open; the label column is as wide as the longest label | `OptionsRows.Show`, `SetLocked`, `Changed` |
 | Gui/ControlRow.cs | a row of controls at control height, spacers, top-down stacking | `ControlRow.Create`, `Spacer`, `Stack` |
 | Gui/SettingsView.cs | the settings pane (scrolls): Launcher section (check for updates at start, logs folder, report zip), then one section per game (folder path, Browse / Reset, Uninstall); saved on change | `SettingsView`, `ShowMods`, `GameFolderChanged`, `UninstallRequested` |
 | Gui/WindowMemory.cs | restores and saves the window rectangle and maximized state | `Restore`, `Save` |
@@ -58,7 +58,7 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SteamLobby.cs | Steam lobby create/join, cf_* data; a request Steam rejects or never answers (30 s) becomes `Failure` | `Create`, `Join`, `Pump` |
 | LocalLobby.cs | fake lobby for local testing | |
 | SteamBootstrap.cs | SteamAPI init/callbacks, overlay invites | `PendingInviteLobby` |
-| GameProfile.cs | `games/<id>.json` loader, optional `supportedBuilds` (Steam build ids the adapter fits), optional `saveSync` block (fixed Steam-cloud files, or `hostSaveDir`/`guestSaveDir`/`filePattern`), optional `options` (`GameOption`: key, label, `host` flag, values; a value with `dlcAppId` is offered only when `<game>\DLC\<id>` exists) | `Load`, `ListIds`, `GameOption.AvailableIn` |
+| GameProfile.cs | `games/<id>.json` loader, `adapterIni` (the adapter ini in the game folder), optional `sessionKind` (`lobby` default; `native` = the game matches players itself, so no lobby, transport, seats, save sync or adapter link: the launcher installs the mod, writes the options and starts the game), optional `requires` (files the game folder must hold, e.g. Juiced's `DFEngine.dll`, with the name the status line uses), optional `supportedBuilds` (Steam build ids the adapter fits), optional `saveSync` block (fixed Steam-cloud files, or `hostSaveDir`/`guestSaveDir`/`filePattern`), optional `options` (`GameOption`: key, label, `host` flag, values; a value with `dlcAppId` is offered only when `<game>\DLC\<id>` exists) | `Load`, `ListIds`, `NativeSession`, `MissingRequirement`, `GameOption.AvailableIn` |
 | GameOptions.cs | the player's option values (settings choice if still offered, else the first value): all for the adapter ini, host options for the lobby (`cf_opts`), seat characters with the host's character first | `Current`, `HostValues`, `Encode`, `Decode`, `SeatCharacters` |
 | SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate, 60 s timeout; host re-sends the save to every peer on SAVE_CHANGED, and (profiles with `filePattern`) sends every save its game writes later, found by SaveWatcher; guest moves staged saves into the session folder while the game exe is not running | `Create`, `Ready`, `TimedOut`, `EnableAdapter`, `Pump` |
 | LogForwarder.cs | guest diagnostics to the host: new adapter-log bytes every 2 s (LOG_APPEND 0x0050) and any crash-*.dmp written during the session (CRASH_DUMP 0x0051, 32 KiB chunks, retried while still being written); host writes `peer_<steamid>.log` and `peer_<steamid>_<dump>` beside its adapter log | `Create`, `Pump` |
@@ -71,10 +71,10 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | SaveWatcher.cs | host: FileSystemWatcher on the save folder; reports a changed save once it has been quiet for 3 s (retry by touching it again) | `Touch`, `TakeSettled` |
 | SaveReceiver.cs | guest: temp file, sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest; after the first full set, later files go to `<sessionDir>/staging` and `PromoteStaged` moves them into the session dir | `OnFrame`, `Complete`, `PromoteStaged` |
 | FileMessages.cs | FILE_* payload builders/parsers | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest` |
-| AdapterSettings.cs | `coop=` and the game's option keys in the adapter ini (one `SetKeys` writer), session dir cleanup after copying its files (not staging) to `<sessionDir's parent>/archive/<stamp>/`, last 5 kept | `EnableCoop(gameDir, config, options)`, `Reset` |
-| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs) or the installed game build is not supported; a failed Steam start is logged | `Launch` |
+| AdapterSettings.cs | `coop=` and the game's option keys in the adapter ini (one `SetKeys` writer; `WriteOptions` = the option keys alone, for a native-session game), session dir cleanup after copying its files (not staging) to `<sessionDir's parent>/archive/<stamp>/`, last 5 kept | `EnableCoop(gameDir, profile, options)`, `WriteOptions`, `Reset` |
+| GameLauncher.cs | Steam game start; refuses when the mod is not installed (never installs) or the installed game build is not supported; a failed Steam start is logged; `LaunchWithOptions` writes the options to the adapter ini first (native-session games) | `Launch`, `LaunchWithOptions` |
 | GameBuilds.cs | the installed Steam build of a game (appmanifest beside its folder, else any library) against the profile's `supportedBuilds` (the adapter's addresses fit one executable); a known build outside a non-empty list is unsupported | `Installed`, `IsSupported`, `Describe` |
-| GameWatch.cs | polled by the window while a session is open: the game exited or crashed (Relaunch is offered), or has run 20 s without the adapter link (started outside the launcher); the main loop is untouched | `GameWatch.Update`, `GameCondition` |
+| GameWatch.cs | polled by the window while a session is open: the game exited or crashed (Relaunch is offered), or has run 20 s without the adapter link (started outside the launcher); only for a lobby session, so a native-session game (no lobby) is never watched; the main loop is untouched | `GameWatch.Update`, `GameCondition` |
 | ReportBundle.cs | one zip for sending: launcher logs, version.txt, per game the coop folder's adapter.log/ini, peer logs and crash dumps | `Create` |
 | SteamLibrary.cs | game folder and installed build id from libraryfolders.vdf + appmanifest | `FindGameDir`, `InstalledBuild(appId, gameDir)` |
 | RepoPaths.cs | repo root / games dir discovery | |
@@ -383,7 +383,7 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 
 ## adapters/sr2/ (C++20, x86, dinput8.dll proxy, Saints Row 2)
 
-Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, cmake + ninja, output `adapters/sr2/build/dinput8.dll`). Compiles the logger, paths, MinHook wrapper and MinHook from `adapters/re0` (the log file name comes from the `COOP_LOG_FILE` define: `<game>\coop\sr2_adapter.log`). Notes and addresses: `docs/SR2_NOTES.md`.
+Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, cmake + ninja, output `adapters/sr2/build/dinput8.dll`, copied to the git-ignored `adapters/sr2/dinput8.dll` that the launcher profile and the release package use). Compiles the logger, paths, MinHook wrapper and MinHook from `adapters/re0` (the log file name comes from the `COOP_LOG_FILE` define: `<game>\coop\sr2_adapter.log`). Notes and addresses: `docs/SR2_NOTES.md`.
 
 | file | owns | key members |
 |---|---|---|
@@ -424,7 +424,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 
 | file | owns |
 |---|---|
-| .github/workflows/release.yml | on push to main: build adapter (x86), publish launcher (self-contained), assemble the package (`launcher\app`, `launcher\games\re0.json`, `adapters\re0\dinput8.dll`, `README.txt`, `version.txt` = run number, `update.json` = this repo), zip `RE0-Coop.zip`, replace the release tagged `latest` (title `Build <run number>`) |
+| .github/workflows/release.yml | on push to main: build the RE0 and SR2 adapters (x86, with their unit tests), publish launcher (self-contained), assemble the package (`launcher\app`, `launcher\games\re0.json`, `adapters\re0\dinput8.dll`, `adapters\sr2\dinput8.dll`, `README.txt`, `version.txt` = run number, `update.json` = this repo), zip `RE0-Coop.zip`, replace the release tagged `latest` (title `Build <run number>`) |
 | launcher/package/README.txt | player README shipped in the package |
 | launcher/update.json | `{ "repo": "Precyse/RE0Together" }` copied next to the exe; a missing file or the `OWNER/REPO` placeholder disables updating (the workflow writes the real repo into the package) |
 
@@ -435,7 +435,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 - Wire format or control messages: `Framing.cs`, `ControlMessages.cs`
 - Slot / epoch rules: `Session.cs`, `SlotAssigner.cs`
 - Adapter link behaviour: `LoopbackBridge.cs`
-- Add a game: new `launcher/games/<id>.json` (DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`, stages `docs/DS2_ROADMAP.md`)
+- Add a game: new `launcher/games/<id>.json` (DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`, stages `docs/DS2_ROADMAP.md`; SR2: `sr2.json`, a native session, adapter `adapters/sr2`, notes `docs/SR2_NOTES.md`)
 - Native `steam_api64.dll` (Valve-signed redistributable from the Steamworks.NET 2024.8.0 standalone release, SDK 1.60): `launcher/native/`
 - Items (inventory blocks): `inventory_sync.cpp`; floor items: `floor_items_sync.cpp`; layouts in `docs/RE0_NOTES.md` Items
 - What RE0 co-op still lacks (done / not needed / open): `docs/re/RE0_COOP_GAPS.md`
