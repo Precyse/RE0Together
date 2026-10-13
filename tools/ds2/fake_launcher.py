@@ -64,6 +64,10 @@ LOCKER_FLAG_SNAPSHOT_END = 1
 LOCKER_PUT, LOCKER_TAKE = 1, 2
 LOCKER_REASON_FULL, LOCKER_REASON_NOT_THERE = 2, 3
 LOCKER_RESEND_SECONDS = 5.0  # the host peer repeats its lockers
+PING_SET = 0x013A
+PING_HEADER = struct.Struct("<HH")  # count, reserved (ping_wire.h)
+PING_FORMAT = struct.Struct("<Q3fBBBB")  # id, position, group, index, sequence, reserved (24 bytes)
+PING_RESEND_SECONDS = 5.0  # the peer repeats its pings
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
@@ -175,6 +179,22 @@ def print_locker_list(body):
     print(f"locker: LOCKER_LIST {what}, {count} pieces {[(p[0], hex(p[4])) for p in shown]}, reply to {reply_to}", flush=True)
 
 
+def ping_set_payload(offsets, base):
+    """DX,DY,DZ[;...] (metres from `base`, the local player's first position) as a PING_SET payload: ids 1.., group 0, index by order, sequence 1."""
+    spots = [item.split(",") for item in offsets.split(";") if item]
+    pings = b"".join(PING_FORMAT.pack(i + 1, base[0] + float(dx), base[1] + float(dy), base[2] + float(dz), 0, i, 1, 0)
+                     for i, (dx, dy, dz) in enumerate(spots))
+    return PING_HEADER.pack(len(spots), 0) + pings
+
+
+def print_ping_set(body):
+    count, _ = PING_HEADER.unpack_from(body)
+    print(f"ping: PING_SET of {count}", flush=True)
+    for i in range(count):
+        ping_id, x, y, z, group, index, sequence, _ = PING_FORMAT.unpack_from(body, PING_HEADER.size + i * PING_FORMAT.size)
+        print(f"ping:   id {ping_id} at {x:.1f} {y:.1f} {z:.1f} group {group} index {index} sequence {sequence}", flush=True)
+
+
 def kind_payload(local, kind, index):
     """STRUCT_CREATE of one kind with a zero tail, ahead of the local player on a fan (index spreads them 5 m apart)."""
     fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
@@ -267,6 +287,9 @@ def main():
     p.add_argument("--locker-answer", choices=("accept", "refuse"), help="as the host (use --guest): answer each LOCKER_MOVE of the adapter (accept applies it to the lockers of --locker-list and sends the list, then the result)")
     p.add_argument("--locker-move", default="", help="SECONDS:KEY_HEX:KIND:put|take:TYPE[@ORDER_HEX]: as the guest peer (without --guest), send this LOCKER_MOVE once")
     p.add_argument("--locker-log", action="store_true", help="print every LOCKER_LIST and LOCKER_RESULT received")
+    p.add_argument("--ping", default=None, help="DX,DY,DZ[;...]: the peer pings, metres from the local player first position (empty text is the empty set); sent every 5 s so a joining adapter sees them")
+    p.add_argument("--ping-clear", type=float, default=0.0, help="SECONDS after the first --ping send: from then on send the empty set")
+    p.add_argument("--ping-log", action="store_true", help="print every PING_SET received (the markers of the local player)")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
@@ -332,6 +355,8 @@ def serve(sock, a):
                 print_crater_set(body[4:])
             elif msg_type == LOCKER_MOVE and len(body) - 4 == LOCKER_MOVE_FORMAT.size + CARGO_ADD_FORMAT.size:
                 on_locker_move(body[4:])
+            elif msg_type == PING_SET and a.ping_log:
+                print_ping_set(body[4:])
             elif msg_type == LOCKER_LIST and a.locker_log:
                 print_locker_list(body[4:])
             elif msg_type == LOCKER_RESULT and a.locker_log:
@@ -465,6 +490,7 @@ def serve(sock, a):
     last_bt = 0.0
     last_crater = crater_start = None
     last_locker = None
+    last_ping = ping_start = ping_base = None
     locker_moved = False
     while True:
         now = time.monotonic()
@@ -607,6 +633,13 @@ def serve(sock, a):
             crater_start = crater_start or now
             cleared = a.crater_clear and now - crater_start >= a.crater_clear
             sock.sendall(encode(CRATER_SET, peer_slot, crater_set_payload("" if cleared else a.crater_set)))
+        if a.ping is not None and local and (ping_base is None or now - last_ping >= PING_RESEND_SECONDS):
+            ping_base = ping_base or (local["x"], local["y"], local["z"])
+            last_ping = now
+            ping_start = ping_start or now
+            cleared = a.ping_clear and now - ping_start >= a.ping_clear
+            sock.sendall(encode(PING_SET, peer_slot, ping_set_payload("" if cleared else a.ping, ping_base)))
+            print(f"ping: sent {0 if cleared else len([s for s in a.ping.split(';') if s])} pings", flush=True)
         if a.locker_list is not None and (last_locker is None or now - last_locker >= LOCKER_RESEND_SECONDS):
             last_locker = now
             for (key, kind), pieces in lockers.items():

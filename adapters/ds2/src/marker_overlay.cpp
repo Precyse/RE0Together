@@ -14,6 +14,7 @@
 #include "load_overlay.h"
 #include "partner_status.h"
 #include "peer_pose.h"
+#include "ping_sync.h"
 #include "player_sync.h"
 #include "remote_body.h"
 #include "toast_queue.h"
@@ -26,6 +27,7 @@ constexpr float kOutline = 2.0f;
 constexpr float kLabelSize = 20.0f;
 constexpr float kLabelGap = 6.0f;
 constexpr float kLabelPadding = 4.0f;
+constexpr float kPingHalf = 8.0f;     // half the side of a ping's square
 constexpr float kArrowSize = 12.0f;   // half the arrow's length and width
 constexpr float kEdgeMargin = 70.0f;  // pixels from the screen edge: nearer than this the partner counts as off screen
 constexpr ImU32 kFill = IM_COL32(235, 235, 235, 255);
@@ -98,6 +100,26 @@ void drawMarker(ImDrawList* list, const world_to_screen::Camera& camera, const w
     drawLabel(list, ImVec2(c.x - size.x * 0.5f, c.y - kDiamondRadius - kLabelGap - size.y), text.c_str(), size);
 }
 
+// A ping the partner placed: an outlined square on its spot with the distance above it, or the edge arrow when it is off
+// screen.
+void drawPing(ImDrawList* list, const world_to_screen::Camera& camera, const ping_wire::Ping& ping, float width, float height) {
+    const world_to_screen::Vec3 at{ping.position[0], ping.position[1], ping.position[2]};
+    char text[32];
+    if (const auto arrow = world_to_screen::edgeArrow(camera, at, width, height, kEdgeMargin)) {
+        std::snprintf(text, sizeof(text), "%.0f m", distanceTo(camera, at));
+        drawEdgeArrow(list, *arrow, text, width, height);
+        return;
+    }
+    const auto point = world_to_screen::project(camera, at, width, height);
+    if (!point) return;
+    const ImVec2 low(point->x - kPingHalf, point->y - kPingHalf), high(point->x + kPingHalf, point->y + kPingHalf);
+    list->AddRectFilled(low, high, kFill);
+    list->AddRect(low, high, kEdge, 0.0f, 0, kOutline);
+    std::snprintf(text, sizeof(text), "%.0f m", point->distance);
+    const ImVec2 size = ImGui::GetFont()->CalcTextSizeA(kLabelSize, FLT_MAX, 0.0f, text);
+    drawLabel(list, ImVec2(point->x - size.x * 0.5f, low.y - kLabelGap - size.y), text, size);
+}
+
 // Session messages (peer joined / left), stacked top-centre, fading out. Returns the y below the last one.
 float drawToasts(ImDrawList* list, float width) {
     ImFont* font = ImGui::GetFont();
@@ -155,6 +177,7 @@ void draw(float width, float height) {
         }
         drawMarker(list, *camera, *at, peer.name, peer.status, width, height);
     }
+    for (const ping_sync::PartnerPing& ping : ping_sync::partnerPings()) drawPing(list, *camera, ping.ping, width, height);
     if (!g_selfMarker.load()) return;
     if (const auto self = game::localPlayer()) drawMarker(list, *camera, self->position, "local", {}, width, height);
 }

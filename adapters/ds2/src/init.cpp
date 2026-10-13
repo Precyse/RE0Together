@@ -50,6 +50,7 @@
 #include "ds2/bt_events.h"
 #include "ds2/craters.h"
 #include "ds2/lockers.h"
+#include "ds2/user_markers.h"
 #include "ds2/world_env.h"
 #include "ds2/world_facts.h"
 #include "remote_body.h"
@@ -132,6 +133,7 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync, config.testCommands ? config.cutsceneShareMinFrames : 0);
     partner_cargo::installEarly(config.diagnostics);
     lockers::installEarly();
+    user_markers::installEarly(config.diagnostics);
     partner_focus::installEarly(config.diagnostics);
     sneaking_focus::installEarly(config.diagnostics);
     structures::installEarly();

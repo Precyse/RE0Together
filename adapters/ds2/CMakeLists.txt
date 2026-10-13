@@ -66,6 +66,9 @@ add_library(ds2_adapter SHARED
     src/bt_sync.cpp
     src/crater_sync.cpp
     src/locker_sync.cpp
+    src/ping_sync.cpp
+    src/ds2/user_markers.cpp
+    src/ds2/checked_hook.cpp
     src/ds2/lockers.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
@@ -209,6 +212,7 @@ add_unit_test(fact_snapshot_test)
 add_unit_test(bt_wire_test)
 add_unit_test(crater_wire_test)
 add_unit_test(locker_wire_test)
+add_unit_test(ping_wire_test)
 add_unit_test(cargo_diff_test)
 add_unit_test(locker_table_test)
 add_unit_test(cutscene_test)

@@ -117,6 +117,14 @@ int main() {
     odd.reserved2 = 1;
     check(listRejected(encodeList(header(), std::vector<CargoAdd>{odd})), "a set piece reserved field is rejected");
 
+    // The bytes tools/ds2/fake_launcher.py sends for locker CAFE1234 kind 28 holding piece 100, as the answer to request 7.
+    const std::vector<uint8_t> fromFakeLauncher = {
+        0x34, 0x12, 0xFE, 0xCA, 0x1C, 0x00, 0x01, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    check(decodeList(fromFakeLauncher, got, list) && got.key == 0xCAFE1234 && got.replyTo == 7 && list.size() == 1 && list[0].type == 100,
+          "the fake launcher's LOCKER_LIST decodes");
+
     LockerMove decoded{};
     check(decodeMove(bytes(move()), decoded) && decoded.requestId == 5 && decoded.key == 0xCAFE1234 && decoded.direction == kDirectionPut &&
               decoded.guestHandle == 0x99 && decoded.piece.orderId == 0x1000071000018Eull,

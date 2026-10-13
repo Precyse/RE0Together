@@ -20,7 +20,6 @@
 
 namespace {
 
-constexpr uintptr_t kMarkerManagerGlobal = 0x14623E638;
 constexpr uintptr_t kLock = 0x10;           // SRW lock
 constexpr uintptr_t kMarkers = 0x20;        // array of marker pointers
 constexpr uintptr_t kMarkerCount = 0x7520;  // i32
@@ -36,7 +35,7 @@ struct Single {
 };
 std::array<Single, kMarkerTypes> g_singles;
 
-uintptr_t managerOf() { return decima::readPointer(ds2::at(kMarkerManagerGlobal)); }
+uintptr_t managerOf() { return decima::readPointer(ds2::at(ds2::kMarkerManagerGlobal)); }
 int32_t& count(uintptr_t manager) { return ds2::field<int32_t>(manager, kMarkerCount); }
 int32_t& groupCount(uintptr_t manager, int type) { return ds2::field<int32_t>(manager, kGroupCounts + type * sizeof(int32_t)); }
 int32_t& groupStart(uintptr_t manager, int type) { return ds2::field<int32_t>(manager, kGroupStarts + type * sizeof(int32_t)); }

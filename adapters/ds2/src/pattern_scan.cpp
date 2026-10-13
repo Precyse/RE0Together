@@ -6,6 +6,8 @@
 #include <cstring>
 #include <vector>
 
+#include "decima/safe_read.h"
+
 namespace {
 
 constexpr int kWildcard = -1;
@@ -59,6 +61,17 @@ uintptr_t find(const char* pattern) {
         if (k == bytes.size()) return begin + i;
     }
     return 0;
+}
+
+bool matches(uintptr_t address, const char* pattern) {
+    const std::vector<int> bytes = parse(pattern);
+    if (bytes.empty()) return false;
+    std::vector<uint8_t> code(bytes.size());
+    if (!decima::safeCopy(code.data(), address, code.size())) return false;
+    for (size_t i = 0; i < bytes.size(); ++i) {
+        if (bytes[i] != kWildcard && code[i] != bytes[i]) return false;
+    }
+    return true;
 }
 
 uintptr_t ripTarget(uintptr_t match, int dispOffset, int instructionEnd) {
