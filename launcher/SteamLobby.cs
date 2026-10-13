@@ -8,6 +8,7 @@ public sealed class SteamLobby : ILobby
     private const string KeyGame = "cf_game";
     private const string KeyProto = "cf_proto";
     private const string KeyVersion = "cf_ver";
+    private const string KeyHostOptions = "cf_opts";
     private const string LauncherVersion = "1.0.0";
     private const long AnswerTimeoutMs = 30_000;
     private const uint EnterSuccess = (uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess;
@@ -17,6 +18,7 @@ public sealed class SteamLobby : ILobby
     private readonly Callback<LobbyChatUpdate_t> _chatUpdate;
     private readonly Callback<LobbyDataUpdate_t> _dataUpdate;
     private readonly long _answerDeadlineMs = Environment.TickCount64 + AnswerTimeoutMs;
+    private IReadOnlyDictionary<string, string> _createdOptions = new Dictionary<string, string>();
     private bool _publishedPresence;
     private CSteamID _lobby;
     private List<LobbyMember> _members = new();
@@ -39,13 +41,16 @@ public sealed class SteamLobby : ILobby
 
     public ulong OwnerId => IsReady ? SteamMatchmaking.GetLobbyOwner(_lobby).m_SteamID : 0;
 
+    public IReadOnlyDictionary<string, string> HostOptions =>
+        _lobby.IsValid() ? GameOptions.Decode(SteamMatchmaking.GetLobbyData(_lobby, KeyHostOptions)) : new Dictionary<string, string>();
+
     public IReadOnlyList<LobbyMember> Members => _members;
 
     public int Revision { get; private set; }
 
-    public static SteamLobby Create(GameProfile profile)
+    public static SteamLobby Create(GameProfile profile, IReadOnlyDictionary<string, string> hostOptions)
     {
-        var lobby = new SteamLobby { GameId = profile.Id };
+        var lobby = new SteamLobby { GameId = profile.Id, _createdOptions = hostOptions };
         lobby.Track(lobby._created, SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, profile.MaxPlayers));
         return lobby;
     }
@@ -92,6 +97,7 @@ public sealed class SteamLobby : ILobby
         SteamMatchmaking.SetLobbyData(_lobby, KeyGame, GameId);
         SteamMatchmaking.SetLobbyData(_lobby, KeyProto, Framing.ProtocolVersion.ToString());
         SteamMatchmaking.SetLobbyData(_lobby, KeyVersion, LauncherVersion);
+        SteamMatchmaking.SetLobbyData(_lobby, KeyHostOptions, GameOptions.Encode(_createdOptions));
         Announce();
         LobbyPresence.Publish(_lobby.m_SteamID, GameId!);
         _publishedPresence = true;

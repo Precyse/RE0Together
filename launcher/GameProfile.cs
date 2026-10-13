@@ -11,10 +11,25 @@ public sealed record SaveSyncProfile(
     List<string> SteamRemoteFiles, string SessionDir, string AdapterIni,
     string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
 
+/// <summary>One value of a game option. A value with a DlcAppId is offered only when the game folder holds that DLC.</summary>
+public sealed record OptionValue(string Value, string Label, string? DlcAppId = null);
+
+/// <summary>A per-game choice shown as a dropdown and written to the adapter ini under Key; the first value is the
+/// default. A Host option is the host's alone (the guest takes what follows from it).</summary>
+public sealed record GameOption(string Key, string Label, List<OptionValue> Values, bool Host = false)
+{
+    private const string DlcFolder = "DLC";
+
+    public string Default => Values[0].Value;
+
+    public IEnumerable<OptionValue> AvailableIn(string? gameDir) =>
+        Values.Where(v => v.DlcAppId == null || (gameDir != null && Directory.Exists(Path.Combine(gameDir, DlcFolder, v.DlcAppId))));
+}
+
 public sealed record GameProfile(
     string Id, string Name, int SteamAppId, string Exe, int MaxPlayers, int Port,
     List<AdapterFile> AdapterFiles, SaveSyncProfile? SaveSync = null, string? AdapterLog = null,
-    List<string>? Characters = null, List<int>? SupportedBuilds = null)
+    List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

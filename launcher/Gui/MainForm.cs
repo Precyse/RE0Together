@@ -16,7 +16,7 @@ public sealed class MainForm : Form
     private const int RelaunchColumn = 1;
 
     private static readonly int WindowWidth = Theme.Scale(840);
-    private static readonly int WindowHeight = Theme.Scale(540);
+    private static readonly int WindowHeight = Theme.Scale(680);
     private static readonly int LogHeight = Theme.Scale(180);
     private static readonly int SectionHeight = Theme.Scale(92);
     private static readonly int HostWidth = Theme.Scale(140);
@@ -31,6 +31,7 @@ public sealed class MainForm : Form
     private readonly SectionPanel _session = new("Session") { Dock = DockStyle.Top, Height = SectionHeight };
     private readonly SectionPanel _playersSection = new("Players") { Dock = DockStyle.Fill, BottomLine = false };
     private readonly PlayerSlots _players = new() { Dock = DockStyle.Top };
+    private readonly OptionsRows _options = new();
     private readonly Panel _pane = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
     private readonly LogFooter _footer = new();
     private readonly TextBox _log = new()
@@ -85,6 +86,7 @@ public sealed class MainForm : Form
         {
             if (AppSettings.Current.CheckForUpdates) ReadReleaseInBackground();
         };
+        _options.Changed += () => Apply(_app.Status);
         _host.Click += (_, _) => { if (_rail.Selected is { } game) _app.Host(game.Id); };
         _mod.Click += (_, _) => ChangeMod();
         _join.Click += (_, _) => JoinTypedCode();
@@ -150,6 +152,7 @@ public sealed class MainForm : Form
     {
         _session.Controls.Add(_lobbyRow);
         _session.Controls.Add(_idleRow);
+        _playersSection.Controls.Add(_options);
         _playersSection.Controls.Add(_players);
 
         _pane.Controls.Add(_playersSection);
@@ -331,8 +334,14 @@ public sealed class MainForm : Form
         _rail.SetRunning(running ? _rail.Selected?.Id : null);
         if (_rail.Selected is { } game)
         {
+            var gameDir = GameFolders.Find(game);
             _hero.Show(game, _rail.SelectedArt!);
-            _players.Show(game, status.Players, status.RttMs);
+            _options.Show(game, gameDir);
+            _options.SetLocked(!free);
+            var seats = status.SeatCharacters.Count > 0
+                ? status.SeatCharacters
+                : GameOptions.SeatCharacters(game, GameOptions.HostValues(game, gameDir));
+            _players.Show(game, status.Players, status.RttMs, seats);
         }
 
         _session.Title = inLobby ? "Lobby" : "Session";

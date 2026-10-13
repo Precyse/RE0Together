@@ -95,9 +95,9 @@ public sealed class App
         switch (command, _options.Transport)
         {
             case (Command.Host, TransportKind.Steam):
-                return SteamLobby.Create(GameProfile.Load(argument!));
+                return SteamLobby.Create(GameProfile.Load(argument!), HostOptionsOf(argument!));
             case (Command.Host, _):
-                return new LocalLobby((LocalTransport)_transport!, argument!, isHost: true);
+                return new LocalLobby((LocalTransport)_transport!, argument!, isHost: true, HostOptionsOf(argument!));
             case (Command.Join, TransportKind.Steam):
                 return SteamLobby.Join(ulong.Parse(argument!));
             case (Command.Join, _):
@@ -106,6 +106,12 @@ public sealed class App
                 Log.Info("Waiting for a Steam invite");
                 return null;
         }
+    }
+
+    private Dictionary<string, string> HostOptionsOf(string gameId)
+    {
+        var profile = GameProfile.Load(gameId);
+        return GameOptions.HostValues(profile, ResolveGameDir(profile));
     }
 
     private void Open(Command command, string argument)
@@ -243,7 +249,7 @@ public sealed class App
         }
         if (_saveSync?.Ready == false) return true;
         _launchPending = false;
-        _saveSync?.EnableAdapter();
+        _saveSync?.EnableAdapter(GameOptions.Current(_profile!, _gameDir));
         return _options.NoLaunch || GameLauncher.Launch(_profile!, _gameDir);
     }
 
@@ -283,7 +289,10 @@ public sealed class App
             : _bridge?.IsReady == true ? AppState.GameRunning
             : _lobby.OwnerId == _transport!.LocalId ? AppState.Hosting
             : AppState.Joined;
-        return new AppStatus(state, _lobby.Id, _session?.RttMs) { Players = PlayerSlots(_lobby), GameId = _lobby.GameId };
+        return new AppStatus(state, _lobby.Id, _session?.RttMs)
+        {
+            Players = PlayerSlots(_lobby), GameId = _lobby.GameId, SeatCharacters = SeatCharacters(_lobby),
+        };
     }
 
     private IReadOnlyList<PlayerSlot> PlayerSlots(ILobby lobby) =>
@@ -291,6 +300,9 @@ public sealed class App
             .OrderByDescending(member => member.Id == lobby.OwnerId)
             .Select(member => new PlayerSlot(member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId))
             .ToList();
+
+    private List<string> SeatCharacters(ILobby lobby) =>
+        lobby.GameId is { } id ? GameOptions.SeatCharacters(GameProfile.Load(id), lobby.HostOptions) : [];
 
     private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? GameFolders.Find(profile);
 
