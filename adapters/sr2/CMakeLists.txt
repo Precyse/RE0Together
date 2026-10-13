@@ -39,6 +39,9 @@ add_library(sr2_adapter SHARED
     src/replication_switch.cpp
     src/member_slots.cpp
     src/join_trace.cpp
+    src/remote_players.cpp
+    src/partner_scope.cpp
+    src/guest_call.cpp
     ${RE0_DIR}/dinput8.def)
 target_include_directories(sr2_adapter PRIVATE src ${SHARED_DIR})
 # The shared logger writes <game>\coop\<this name>.
@@ -46,6 +49,13 @@ target_compile_definitions(sr2_adapter PRIVATE COOP_LOG_FILE=L"sr2_adapter.log")
 set_target_properties(sr2_adapter PROPERTIES OUTPUT_NAME dinput8 PREFIX "")
 target_link_libraries(sr2_adapter PRIVATE minhook ws2_32)
 target_compile_options(sr2_adapter PRIVATE /W4 /WX /utf-8)
+
+# The partner thunks run inside game code that keeps floats on the x87 stack and may keep values in xmm registers across
+# the calls they replace. They are built without SSE so that they never touch xmm; the few that do float math save the
+# whole FPU state (fpu_guard.h).
+set_source_files_properties(
+    src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
+    PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
@@ -61,3 +71,6 @@ add_unit_test(byte_pattern_test)
 add_unit_test(pool_size_test)
 add_unit_test(replication_sites_test)
 add_unit_test(partner_rules_test)
+add_unit_test(guest_call_test src/guest_call.cpp)
+add_unit_test(remote_players_test src/remote_players.cpp src/partner_scope.cpp src/member_slots.cpp src/replication_switch.cpp
+    src/code_patch.cpp src/memory.cpp)
