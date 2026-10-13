@@ -25,18 +25,20 @@ bool g_resized = false;
 
 uint32_t& field(uintptr_t pool, uintptr_t offset) { return *reinterpret_cast<uint32_t*>(pool + offset); }
 
-// The pool carries the expected name and one consistent size.
+// The pool carries the expected name and one consistent size, and holds nothing yet: moving a pool with live
+// allocations would orphan them.
 bool looksLikePool(const PoolSpec& spec) {
     const char* name = reinterpret_cast<const char*>(spec.address + sr2::kPoolNameOffset);
     const uint32_t size = field(spec.address, sr2::kPoolSizeOffset);
+    const uint32_t used = field(spec.address, sr2::kPoolUsedOffset);
     const bool nameMatches = strncmp(name, spec.name, sr2::kPoolNameLength) == 0;
     const bool sizesAgree = size != 0 && size == field(spec.address, sr2::kPoolLimitOffset) &&
                             size == field(spec.address, sr2::kPoolCapacityOffset);
-    if (!nameMatches || !sizesAgree) {
-        logger::write("pools: %s not resized, object at 0x%X does not match (name \"%.32s\", size %u)", spec.name,
-                      static_cast<unsigned>(spec.address), name, size);
+    if (!nameMatches || !sizesAgree || used != 0) {
+        logger::write("pools: %s not resized, object at 0x%X does not match (name \"%.32s\", size %u, used %u)",
+                      spec.name, static_cast<unsigned>(spec.address), name, size, used);
     }
-    return nameMatches && sizesAgree;
+    return nameMatches && sizesAgree && used == 0;
 }
 
 // Same writes as the pool's own init (0xBF4A10): a fresh, empty pool on the new block.
