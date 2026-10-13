@@ -6,7 +6,7 @@ the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead an
 --drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
 when the reports start and leaves when they stop. --follow stands the peer beside the local player (--offset ahead, --radius to its right, same heading) wherever it goes. --guest makes the local player the guest (slot 1) of a host peer (slot 0). --echo-anim sends the local player's ANIM_STATE back as the peer's
-(the remote then copies the local player through the real wire format). Prints the local player's pose.
+(the remote then copies the local player through the real wire format). Prints the local player's pose and the role of each vehicle report it receives (driver or passenger).
 
 usage: python fake_launcher.py [--port 27980] [--radius 1.2] [--speed 1.4] [--hold 5] [--offset 3.5] [--phase 0]
                                [--drive ID --drive-pos X,Y,Z --drive-window START,END]
@@ -277,6 +277,11 @@ def serve(sock, a):
                 if status != local.get("status"):
                     local["status"] = status
                     print(f"local status word {status:#06x}", flush=True)
+            elif msg_type == VEHICLE_STATE and len(body) - 4 == VEHICLE.size:
+                _, role, vehicle_id, x, y, z, *_ = VEHICLE.unpack_from(body, 4)
+                if (role, vehicle_id) != local.get("vehicle"):
+                    local["vehicle"] = (role, vehicle_id)
+                    print(f"vehicle: received role {'passenger' if role else 'driver'} ({role}) id {vehicle_id:x} at {x:.2f},{y:.2f},{z:.2f}", flush=True)
             elif msg_type == WORLD_ENV and len(body) - 4 == ENV.size:
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]

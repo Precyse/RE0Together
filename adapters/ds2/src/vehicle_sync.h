@@ -4,30 +4,18 @@
 // extrapolated by the vehicle's speed between reports. When the reports stop, the copy stays where it was left. If
 // both players claim the same vehicle, the one that claimed it first drives it and the other rides along: the
 // passenger's machine moves its copy by the driver's reports (it keeps no driver of its own), and its report says
-// so (role), so the driver's machine seats the partner's body beside its player.
+// so (role, see vehicle_wire.h), so the driver's machine seats the partner's body beside its player. The local player
+// riding the partner's vehicle through setdriver_guard reports the same way.
 #include <cstdint>
 #include <optional>
 
 #include "net_client.h"
 #include "protocol.h"
+#include "vehicle_wire.h"
 
 namespace vehicle_sync {
 
-constexpr uint16_t kMsgVehicleState = proto::kFirstGameType + 8;  // 0x0108, driver or passenger to all, unreliable
-constexpr float kSendHz = 30.0f;
-constexpr uint32_t kRoleDriver = 0;
-constexpr uint32_t kRolePassenger = 1;
-
-struct VehicleState {
-    uint32_t seq;
-    uint32_t role;        // kRoleDriver, or kRolePassenger when the sender rides a vehicle the receiver drives
-    uint64_t id;          // the game's vehicle id, the same in both worlds
-    float position[3];    // world metres
-    float rotation[3][3]; // rows: right, forward, up
-};
-static_assert(sizeof(VehicleState) == 64);
-
-// Net thread: the partner's reports, and sending the local player's vehicle.
+// Net thread: the partner's reports, and sending the local player's vehicle (driven, or ridden as a passenger).
 void onFrame(const GameFrame& frame);
 void tick(NetClient& net, const SessionSnapshot& session);
 

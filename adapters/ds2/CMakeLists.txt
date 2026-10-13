@@ -120,6 +120,7 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_appearance.cpp
     src/ds2/remote_animation.cpp
     src/ds2/remote_ride.cpp
+    src/ds2/ride_probe.cpp
     src/ds2/remote_context.cpp
     src/ds2/setdriver_guard.cpp
     src/ds2/use_gate.cpp
@@ -208,6 +209,7 @@ add_unit_test(crater_wire_test)
 add_unit_test(cutscene_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
+add_unit_test(vehicle_wire_test)
 add_unit_test(partner_status_test src/partner_status.cpp)
 add_unit_test(frame_gen_test src/ds2/frame_gen.cpp)
 target_link_libraries(frame_gen_test PRIVATE advapi32)
