@@ -31,8 +31,11 @@ static_assert(sizeof(VehicleState) == 64);
 void onFrame(const GameFrame& frame);
 void tick(NetClient& net, const SessionSnapshot& session);
 
-// Simulation thread (main_thread tick): moves the vehicles partners are driving.
+// Simulation thread (sim_tick): moves the vehicles partners are driving.
 void place();
+
+// Start-up: registers `place` on the simulation thread's per-frame tick.
+void installEarly();
 
 struct Riding {
     uint64_t id;    // the vehicle

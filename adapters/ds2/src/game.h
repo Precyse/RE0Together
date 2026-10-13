@@ -38,10 +38,6 @@ partner_status::Status localStatus();
 // The camera the game renders from.
 std::optional<world_to_screen::Camera> camera();
 
-// A function the game's simulation thread calls every frame, taking one pointer and returning one
-// (DS2: Player::GetLastActivatedCamera); 0 before resolve() succeeds.
-uintptr_t frameFunction();
-
 // Starts following which use locations are driven by the story's sequence networks (terminals, order and quest
 // triggers). Call once at start-up, before the world loads, so none is missed. False on an unsupported build.
 bool watchInteractions();

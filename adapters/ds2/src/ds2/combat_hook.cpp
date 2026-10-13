@@ -61,6 +61,7 @@ constexpr float kMinForwardedAmount = 0.5f;  // contact and physics touches carr
 using ApplyFn = void (*)(uintptr_t manager, uintptr_t victim, uintptr_t params);
 using NodeFn = void (*)(uintptr_t node);
 ApplyFn g_apply = nullptr;
+bool g_logCombat = false;
 
 std::atomic<game::CombatRole> g_role{game::CombatRole::None};
 std::atomic<bool> g_godMode{false};
@@ -166,10 +167,14 @@ struct Waiting {
 };
 std::vector<Waiting> g_forwardWaiting;  // simulation thread only
 
+void logHit(const combat_log::Snapshot& snapshot, uintptr_t victim, uintptr_t params, const char* outcome) {
+    if (g_logCombat) combat_log::after(snapshot, victim, params, outcome);
+}
+
 void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
-    const combat_log::Snapshot snapshot = combat_log::before(victim, params);
+    const combat_log::Snapshot snapshot = g_logCombat ? combat_log::before(victim, params) : combat_log::Snapshot{};
     if (g_godMode && params && victim && victim == remote_player::samEntity()) {
-        combat_log::after(snapshot, victim, params, "dropped, god mode");
+        logHit(snapshot, victim, params, "dropped, god mode");
         return;
     }
     if (params && victim && !remote_apply::active()) {
@@ -177,12 +182,12 @@ void applyDetour(uintptr_t manager, uintptr_t victim, uintptr_t params) {
         const bool diverted = (role == game::CombatRole::Guest && divertEnemyHit(victim, params)) ||
                               divertPlayerHit(victim, params, role == game::CombatRole::Host);
         if (diverted) {
-            combat_log::after(snapshot, victim, params, "diverted, not applied here");
+            logHit(snapshot, victim, params, "diverted, not applied here");
             return;
         }
     }
     g_apply(manager, victim, params);
-    combat_log::after(snapshot, victim, params, "applied");
+    logHit(snapshot, victim, params, "applied");
 }
 
 void unlinkGuarded(uintptr_t node) {
@@ -344,7 +349,8 @@ std::vector<T> take(std::vector<T>& queue) {
 
 namespace combat_hook {
 
-void installEarly() {
+void installEarly(bool logCombat) {
+    g_logCombat = logCombat;
     hooks::install("combat damage", ds2::at(kApplyDamage), reinterpret_cast<void*>(&applyDetour),
                    reinterpret_cast<void**>(&g_apply));
     sim_tick::add(&tick, "combat", sim_tick::Gate::Gameplay);

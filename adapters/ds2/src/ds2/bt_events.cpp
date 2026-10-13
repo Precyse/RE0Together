@@ -40,7 +40,7 @@ constexpr uintptr_t kTerritoryActivate = 0x1418e1300;  // (manager, locator, boo
 constexpr uintptr_t kTarActivate = 0x141a0b980;        // (locator)
 
 constexpr size_t kMaxQueued = 64;
-constexpr ULONGLONG kLocatorWaitMs = 10'000;  // a locator that is not loaded here by then is not coming (PendingQueue::kHoldUs)
+constexpr ULONGLONG kLocatorWaitMs = 10'000;  // a locator that is not loaded here by then is not coming
 
 using SetRegionFn = void (*)(uint8_t region, uint8_t active);
 using TerritoryFn = void (*)(uintptr_t manager, uintptr_t locator, bool flag);

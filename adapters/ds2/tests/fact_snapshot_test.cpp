@@ -4,8 +4,6 @@
 #include <vector>
 
 #include "../src/fact_snapshot.h"
-#include "../src/pending_queue.h"
-#include "../src/reject_counters.h"
 
 namespace {
 
@@ -80,39 +78,11 @@ void rejections() {
     check(!fact_snapshot::decode(empty, header, part), "a snapshot of no chunks is rejected");
 }
 
-void pendingQueue() {
-    reject_counters::reset();
-    PendingQueue queue;
-    const uint8_t payload[] = {1, 2, 3};
-    constexpr uint16_t kType = 0x0108;
-    check(queue.hold(10, kType, 1, payload, 1'000'000) && queue.hold(11, kType, 1, payload, 2'000'000) &&
-              queue.hold(10, kType + 1, 2, payload, 3'000'000),
-          "messages for objects not there yet are held");
-    check(queue.size() == 3, "all three wait");
-    const std::vector<PendingQueue::Message> first = queue.take(10);
-    check(first.size() == 2 && first[0].type == kType && first[1].type == kType + 1 && first[0].payload.size() == 3 &&
-              first[1].slot == 2,
-          "an object that appears gets its messages, oldest first");
-    check(queue.size() == 1 && queue.take(10).empty(), "they are removed once handed out");
-
-    check(queue.expire(2'000'000 + PendingQueue::kHoldUs - 1) == 0, "nothing expires before the hold time");
-    check(queue.expire(2'000'000 + PendingQueue::kHoldUs) == 1 && queue.size() == 0, "a message past ten seconds is dropped");
-    check(reject_counters::total(kType, reject_counters::Reason::Expired) == 1, "and counted against its type");
-
-    for (size_t i = 0; i < PendingQueue::kMaxHeld; ++i) queue.hold(i, kType, 1, payload, 5'000'000);
-    check(!queue.hold(999'999, kType, 1, payload, 5'000'000) &&
-              reject_counters::total(kType, reject_counters::Reason::Overflow) == 1,
-          "a full queue refuses more and counts the overflow");
-    queue.clear();
-    check(queue.size() == 0, "clear empties it");
-}
-
 }  // namespace
 
 int main() {
     chunking();
     rejections();
-    pendingQueue();
     std::printf(g_failures ? "%d FAILED\n" : "all passed\n", g_failures);
     return g_failures ? 1 : 0;
 }

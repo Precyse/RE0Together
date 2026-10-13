@@ -5,7 +5,6 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
-#include <map>
 #include <string>
 
 #include "cargo_transfer.h"
@@ -14,8 +13,8 @@
 #include "imgui.h"
 #include "load_overlay.h"
 #include "partner_status.h"
+#include "peer_pose.h"
 #include "player_sync.h"
-#include "position_blend.h"
 #include "remote_body.h"
 #include "toast_queue.h"
 
@@ -36,24 +35,8 @@ constexpr ImU32 kLabelText = IM_COL32(240, 240, 240, 255);
 
 constexpr float kToastTop = 40.0f;
 constexpr float kToastSpacing = 8.0f;
-constexpr float kSnapMetres = 10.0f;  // a jump this large (teleport, respawn) moves the marker at once
 
 std::atomic<bool> g_selfMarker{false};
-std::map<uint8_t, std::array<float, 3>> g_shown;  // per peer slot: the position drawn last frame (render thread)
-
-// Moves the drawn position part of the way toward the peer's extrapolated position each frame.
-world_to_screen::Vec3 smoothed(const player_sync::RemotePlayer& peer) {
-    auto [it, fresh] = g_shown.try_emplace(peer.slot, std::array<float, 3>{peer.position[0], peer.position[1], peer.position[2]});
-    float shown[3] = {it->second[0], it->second[1], it->second[2]};
-    if (!fresh && position_blend::distance(shown, peer.position) <= kSnapMetres) {
-        float blended[3];
-        position_blend::blendPosition(shown, peer.position, blended);
-        it->second = {blended[0], blended[1], blended[2]};
-    } else {
-        it->second = {peer.position[0], peer.position[1], peer.position[2]};
-    }
-    return {it->second[0], it->second[1], it->second[2]};
-}
 
 void drawLabel(ImDrawList* list, ImVec2 at, const char* text, ImVec2 size) {
     list->AddRectFilled(ImVec2(at.x - kLabelPadding, at.y - kLabelPadding),
@@ -165,12 +148,12 @@ void draw(float width, float height) {
     if (!camera) return;
     const auto partner = cargo_transfer::partner();
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
-        const world_to_screen::Vec3 at = smoothed(peer);
-        remote_body::setTarget(peer.slot, {at, peer.yaw}, {peer.velocity[0], peer.velocity[1], peer.velocity[2]});
+        const auto at = peer_pose::shown(peer.slot);
+        if (!at) continue;
         if (partner && partner->slot == peer.slot && !remote_body::ownerKey()) {  // the body carries the real rack once it exists
-            load_overlay::draw(list, *camera, at, peer.yaw, static_cast<int>(partner->cargo.size()), width, height);
+            load_overlay::draw(list, *camera, *at, peer.yaw, static_cast<int>(partner->cargo.size()), width, height);
         }
-        drawMarker(list, *camera, at, peer.name, peer.status, width, height);
+        drawMarker(list, *camera, *at, peer.name, peer.status, width, height);
     }
     if (!g_selfMarker.load()) return;
     if (const auto self = game::localPlayer()) drawMarker(list, *camera, self->position, "local", {}, width, height);

@@ -7,6 +7,7 @@
 #include <mutex>
 
 #include "authority_sync.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "log.h"
 #include "position_blend.h"
@@ -139,5 +140,7 @@ std::optional<Riding> partnerRiding(uint8_t slot) {
     if (driven == g_driven.end() || Clock::now() - driven->second.at > kStaleAfter) return std::nullopt;
     return Riding{driven->second.state.id, driven->second.state.role};
 }
+
+void installEarly() { sim_tick::add(&place, "vehicle placement", sim_tick::Gate::Gameplay); }
 
 }  // namespace vehicle_sync
