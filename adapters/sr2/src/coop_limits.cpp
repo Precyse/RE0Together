@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "coop_pools.h"
 #include "hooks.h"
 #include "log.h"
 #include "sr2_addresses.h"
@@ -26,6 +27,7 @@ void raiseLimits() {
 }
 
 void __cdecl detourNetSetMode(int mode) {
+    if (mode == sr2::kNetModeCoop) coop_pools::resize(g_maxPlayers);
     ++g_running;
     g_original(mode);
     --g_running;

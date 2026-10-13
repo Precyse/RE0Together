@@ -29,6 +29,9 @@ const std::vector<CodePattern>& patterns() {
         {"store_max_session_players", sr2::kStoreMaxSessionPlayers, {0x89, 0x2D, 0x34, 0xC4, 0xE8, 0x00}},
         // mov [kMaxPlayers], ebp
         {"store_max_players", sr2::kStoreMaxPlayers, {0x89, 0x2D, 0x38, 0xC4, 0xE8, 0x00}},
+        // push <size>: the shipped sizes of the two co-op player pools (0x228000 and 0x1071000)
+        {"coop_player_cpu_size", sr2::kCoopPlayerCpuSizePush, {0x68, 0x00, 0x80, 0x22, 0x00}},
+        {"coop_player_gpu_size", sr2::kCoopPlayerGpuSizePush, {0x68, 0x00, 0x10, 0x07, 0x01}},
     };
     return list;
 }

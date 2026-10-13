@@ -22,6 +22,16 @@ Hooks session create, GameSpy code (0x81A590, 0x8360F9, 0xC1BC76, 0xD2526F), mem
 - Hook: `net_set_mode`; after the original returns for mode 1, both limits are set to `max_players`.
 - Trace (trace=1, read-only): `session_pool_setup` entry (with the limits it sees and whether `net_set_mode` is still running), `join_queue_add` (queue count before/after), `player_slot_allocator` and `remote_player_getter` return value changes.
 
+## Co-op player pools (milestone 1b)
+- Live: Juiced's mempool watcher reported "Failed aligned alloc of 16384 bytes in coop_player cpu pool (max pool size 2260992)" with a second guest's data.
+- Arena setup 0x51D800 creates every startup pool with `vtable[0x44]` (init 0xBF4A10: base, size, name, ...) on a base inside one arena. Pools that depend on the guest count (shipped for 1 guest): `coop_player cpu` object 0x2773F0C, size 0x228000 (`push` at 0x51E502, base arena+0x24D2450); `coop_player gpu` object 0x2773F68, size 0x1071000 (`push` at 0x51E8A7, base arena+0x10A30000). The cpu pool object links the gpu one (`[0x2773F60]`).
+- Not resized: `coop_allocators` (0x2773FC0, 0x5ADBB0) holds the deltacomp baselines and is already allocated from inside net_set_mode; it belongs to the deltacomp milestone. The pools are packed in the arena (cpu pool ends where `coop_allocators` begins), so none can grow in place.
+- Pool object (bump allocator, alloc 0xC00DB0): name +0xC, base +0x38, size +0x3C, used +0x44, mark +0x48, limit +0x4C (free = limit - used), capacity +0x50. Init also zeroes used and mark.
+- Change: just before `net_set_mode(1)` runs its co-op case (which resets both pools), each pool gets a VirtualAlloc block of its current size x (max_players - 1) and the fields above are rewritten like init does. Scaling by guests because the shipped size is for one guest (host + 1). Done once per process; max_players 2 changes nothing. The current size is read, so a size Juiced set stays the base. Identity check at that moment: name and three equal size fields; otherwise the pool is left and the log says why.
+- Start-up check also compares the two `push size` immediates.
+- Juiced overlap: none of 0x2773F0C..0x2773F5C, 0x2773F68..0x2773FB8, 0x51E500..0x51E506, 0x51E8A5..0x51E8AB, 0xBF4A10..0xBF4A5D appears among the 3100 addresses in `df_sr2_targets.tsv`. Juiced hooks the alloc failure call 0xC00E4A and reads pool objects only to print the error.
+- Live log: `pools: coop_player cpu 2260992 -> 6782976 bytes`, `pools: coop_player gpu 17367040 -> 52101120 bytes` (max_players 4).
+
 ## Open questions for the live run
 - Order of `net_set_mode` and `session_pool_setup` (log line `inside net_set_mode 1` means the post-return write is too late for the pool sizing).
 - Where "session full" is decided; what a third `join_req` gets.

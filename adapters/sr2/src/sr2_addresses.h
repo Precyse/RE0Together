@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 
 // Addresses of SR2_pc.exe (Steam build 1076239 with the Juiced patch, image base 0x400000). Source: docs/SR2_NOTES.md.
@@ -28,6 +29,23 @@ constexpr uintptr_t kSessionJoinQueueCountOffset = 0x7EC;
 // The player human pool holds 12 slots; co-op ships with 2.
 constexpr uint32_t kPoolPlayerSlots = 12;
 constexpr uint32_t kCoopDefaultPlayers = 2;
+
+// The co-op player memory pools: bump allocator objects in .data (init 0xBF4A10, alloc 0xC00DB0), created at
+// start-up by the arena setup 0x51D800 with a `push size` and a base inside the arena.
+constexpr uintptr_t kCoopPlayerCpuPool = 0x2773F0C;
+constexpr uintptr_t kCoopPlayerGpuPool = 0x2773F68;
+constexpr uintptr_t kCoopPlayerCpuSizePush = 0x51E502;  // push 0x228000
+constexpr uintptr_t kCoopPlayerGpuSizePush = 0x51E8A7;  // push 0x1071000
+
+// Pool object layout (bytes from the object).
+constexpr uintptr_t kPoolNameOffset = 0xC;
+constexpr size_t kPoolNameLength = 32;
+constexpr uintptr_t kPoolBaseOffset = 0x38;
+constexpr uintptr_t kPoolSizeOffset = 0x3C;      // the size the "Failed aligned alloc" message prints
+constexpr uintptr_t kPoolUsedOffset = 0x44;      // bump offset from the base
+constexpr uintptr_t kPoolMarkOffset = 0x48;      // restore point of the used offset
+constexpr uintptr_t kPoolLimitOffset = 0x4C;     // free bytes = limit - used
+constexpr uintptr_t kPoolCapacityOffset = 0x50;  // the size again
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
