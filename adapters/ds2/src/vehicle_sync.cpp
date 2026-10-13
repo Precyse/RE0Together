@@ -7,21 +7,23 @@
 #include <mutex>
 
 #include "authority_sync.h"
+#include "ds2/setdriver_guard.h"
 #include "ds2/sim_tick.h"
 #include "game.h"
 #include "log.h"
 #include "position_blend.h"
+#include "vehicle_wire.h"
 
 namespace {
 
 using Clock = std::chrono::steady_clock;
 
-constexpr auto kSendInterval = std::chrono::microseconds(static_cast<int>(1'000'000 / vehicle_sync::kSendHz));
+constexpr auto kSendInterval = std::chrono::microseconds(static_cast<int>(1'000'000 / vehicle_wire::kSendHz));
 constexpr auto kStaleAfter = std::chrono::milliseconds(500);  // no report this long: the partner left the vehicle
 constexpr uint32_t kSeqRestartGap = 300;  // a sequence this far behind means the sender restarted
 
 struct Driven {
-    vehicle_sync::VehicleState state;
+    vehicle_wire::VehicleState state;
     Clock::time_point at;
     float velocity[3] = {};
     bool failed = false;  // the vehicle is not loaded here, or moving it faulted (logged once)
@@ -35,7 +37,7 @@ bool partnerDrives(uint64_t id) {
     std::lock_guard lock(g_mutex);
     const auto now = Clock::now();
     for (const auto& [slot, driven] : g_driven) {
-        if (driven.state.id == id && driven.state.role == vehicle_sync::kRoleDriver && now - driven.at <= kStaleAfter) {
+        if (driven.state.id == id && driven.state.role == vehicle_wire::kRoleDriver && now - driven.at <= kStaleAfter) {
             return true;
         }
     }
@@ -46,10 +48,25 @@ bool partnerDrives(uint64_t id) {
 Clock::time_point g_lastSend;
 uint32_t g_seq = 0;
 uint64_t g_lastDriven = 0;
-std::atomic<uint32_t> g_localRole{vehicle_sync::kRoleDriver};  // of the vehicle the local player is in
+std::atomic<uint32_t> g_localRole{vehicle_wire::kRoleDriver};  // of the vehicle the local player is in
+
+// The vehicle the local player is in: the one he drives, else the one he rides as a passenger of the partner's.
+std::optional<game::VehiclePose> localVehicle() {
+    if (const auto driven = game::drivenVehicle()) return driven;
+    const uint64_t seatedIn = setdriver_guard::localPassengerVehicle();
+    return seatedIn ? game::vehiclePose(seatedIn) : std::nullopt;
+}
+
+// The first to claim the vehicle drives it; the one that gets in second rides along. A passenger of the partner's vehicle
+// (setdriver_guard) never claims it.
+uint32_t roleOnEntering(uint64_t id, bool drivesIt) {
+    if (!drivesIt) return vehicle_wire::kRolePassenger;
+    const bool claimed = authority_sync::claim(id);
+    return claimed && !partnerDrives(id) ? vehicle_wire::kRoleDriver : vehicle_wire::kRolePassenger;
+}
 
 void sendLocal(NetClient& net) {
-    const auto vehicle = game::drivenVehicle();
+    const auto vehicle = localVehicle();
     if (!vehicle) {
         if (g_lastDriven) {
             logger::write("vehicle_sync: left vehicle %llx", static_cast<unsigned long long>(g_lastDriven));
@@ -58,19 +75,18 @@ void sendLocal(NetClient& net) {
         g_lastDriven = 0;
         return;
     }
-    if (vehicle->id != g_lastDriven) {  // the first to claim the vehicle drives it; the one that gets in second rides along
+    if (vehicle->id != g_lastDriven) {
         if (g_lastDriven) authority_sync::release(g_lastDriven);
-        const bool claimed = authority_sync::claim(vehicle->id);
-        g_localRole = claimed && !partnerDrives(vehicle->id) ? vehicle_sync::kRoleDriver : vehicle_sync::kRolePassenger;
-        logger::write("vehicle_sync: %s vehicle %llx", g_localRole == vehicle_sync::kRolePassenger ? "riding" : "driving",
+        g_localRole = roleOnEntering(vehicle->id, game::drivenVehicle().has_value());
+        logger::write("vehicle_sync: %s vehicle %llx", g_localRole == vehicle_wire::kRolePassenger ? "riding" : "driving",
                       static_cast<unsigned long long>(vehicle->id));
     }
     g_lastDriven = vehicle->id;
-    vehicle_sync::VehicleState state{++g_seq, g_localRole.load(), vehicle->id, {static_cast<float>(vehicle->position.x),
+    vehicle_wire::VehicleState state{++g_seq, g_localRole.load(), vehicle->id, {static_cast<float>(vehicle->position.x),
                                      static_cast<float>(vehicle->position.y), static_cast<float>(vehicle->position.z)},
                                      {}};
     std::memcpy(state.rotation, vehicle->rotation, sizeof(state.rotation));
-    net.send(vehicle_sync::kMsgVehicleState, false, proto::kSlotAll, proto::bytesOf(state));
+    net.send(vehicle_wire::kMsgVehicleState, false, proto::kSlotAll, proto::bytesOf(state));
 }
 
 }  // namespace
@@ -78,21 +94,20 @@ void sendLocal(NetClient& net) {
 namespace vehicle_sync {
 
 void onFrame(const GameFrame& frame) {
-    if (frame.type != kMsgVehicleState || frame.payload.size() != sizeof(VehicleState)) return;
     Driven heard{{}, Clock::now()};
-    std::memcpy(&heard.state, frame.payload.data(), sizeof(heard.state));
+    if (frame.type != vehicle_wire::kMsgVehicleState || !vehicle_wire::decode(frame.payload, heard.state)) return;
     std::lock_guard lock(g_mutex);
     const auto previous = g_driven.find(frame.slot);
     if (previous != g_driven.end() && previous->second.state.id == heard.state.id) {
         const Driven& last = previous->second;
         const bool restarted = heard.state.seq < last.state.seq && last.state.seq - heard.state.seq > kSeqRestartGap;
         if (heard.state.seq <= last.state.seq && !restarted) return;  // late or duplicate datagram
-        const float gap = restarted ? 0.0f : static_cast<float>(heard.state.seq - last.state.seq) / kSendHz;
+        const float gap = restarted ? 0.0f : static_cast<float>(heard.state.seq - last.state.seq) / vehicle_wire::kSendHz;
         position_blend::velocity(last.state.position, heard.state.position, gap, heard.velocity);
         heard.failed = last.failed;
     } else {
         logger::write("vehicle_sync: slot %u %s vehicle %llx", frame.slot,
-                      heard.state.role == kRolePassenger ? "rides" : "drives", static_cast<unsigned long long>(heard.state.id));
+                      heard.state.role == vehicle_wire::kRolePassenger ? "rides" : "drives", static_cast<unsigned long long>(heard.state.id));
     }
     g_driven[frame.slot] = heard;
 }
@@ -115,8 +130,8 @@ void place() {
             it = g_driven.erase(it);
             continue;
         }
-        const bool localKeeps = own && own->id == driven.state.id && g_localRole == vehicle_sync::kRoleDriver;
-        if (!driven.failed && driven.state.role == vehicle_sync::kRoleDriver && !localKeeps) {
+        const bool localKeeps = own && own->id == driven.state.id && g_localRole == vehicle_wire::kRoleDriver;
+        if (!driven.failed && driven.state.role == vehicle_wire::kRoleDriver && !localKeeps) {
             game::VehiclePose pose{driven.state.id, {}, {}};
             float at[3];
             position_blend::extrapolate(driven.state.position, driven.velocity,

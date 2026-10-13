@@ -73,6 +73,9 @@ struct VehiclePose {
 // The vehicle the local player is driving now, where it is. Any thread.
 std::optional<VehiclePose> drivenVehicle();
 
+// Where the loaded vehicle `id` is, empty when it is not loaded here. Any thread.
+std::optional<VehiclePose> vehiclePose(uint64_t id);
+
 // Moves this world's copy of the vehicle `pose.id` there, with the velocity it moves at so its physics can follow.
 // False when no such vehicle is loaded or the move faulted. Simulation thread only.
 bool placeVehicle(const VehiclePose& pose, const world_to_screen::Vec3& velocity);

@@ -15,6 +15,8 @@
 
 namespace {
 
+using game::VehiclePose;
+
 // VehicleEntity_sExportedMovePlayerDrivingVehicle (0x141f6d050): `mov rax, [DSVehicleManager]` at +16.
 constexpr const char* kMovePlayerDrivingVehicle =
     "48 89 6C 24 18 48 89 74 24 20 41 56 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 45 33 F6 48 8B E9 48 85 C0 74 08 48 05 E0 "
@@ -51,6 +53,12 @@ void forEachRecord(uintptr_t vehicles, Visit visit) {
     }
 }
 
+VehiclePose poseOf(uint64_t id, const decima::WorldTransform& t) {
+    VehiclePose pose{id, {t.position.x, t.position.y, t.position.z}, {}};
+    std::memcpy(pose.rotation, t.orientation.row, sizeof(pose.rotation));
+    return pose;
+}
+
 }  // namespace
 
 namespace ds2 {
@@ -79,12 +87,17 @@ std::optional<VehiclePose> drivenVehicle() {
     std::optional<VehiclePose> out;
     forEachRecord(vehicles, [&](uint64_t id, uintptr_t entity) {
         if (entity != driven) return false;
-        VehiclePose pose{id, {t.position.x, t.position.y, t.position.z}, {}};
-        std::memcpy(pose.rotation, t.orientation.row, sizeof(pose.rotation));
-        out = pose;
+        out = poseOf(id, t);
         return true;
     });
     return out;
+}
+
+std::optional<VehiclePose> vehiclePose(uint64_t id) {
+    const uintptr_t entity = ds2::loadedVehicle(id);
+    decima::WorldTransform t;
+    if (!entity || !ds2::entityTransform(entity, t)) return std::nullopt;
+    return poseOf(id, t);
 }
 
 bool placeVehicle(const VehiclePose& pose, const world_to_screen::Vec3& velocity) {
