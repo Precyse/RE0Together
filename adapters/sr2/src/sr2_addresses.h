@@ -26,9 +26,22 @@ constexpr int kNetModeCoop = 1;
 // The session object's join request queue count.
 constexpr uintptr_t kSessionJoinQueueCountOffset = 0x7EC;
 
-// The player human pool holds 12 slots; co-op ships with 2.
-constexpr uint32_t kPoolPlayerSlots = 12;
+// Co-op ships with 2 players. The N=8 deltacomp instances that replace co-op's 1-peer ones hold up to 8.
 constexpr uint32_t kCoopDefaultPlayers = 2;
+constexpr uint32_t kMaxReplicatedPlayers = 8;
+
+// net_set_mode's co-op case: the npc limit store (mov [0xE8C43C], 150) and the allocator-set activation. Activation
+// reads the player limit, so the adapter's thunk replaces the call; the sets are loaded by name through
+// kActivateAllocatorSet(edi = name). Leaving co-op deactivates the same set.
+constexpr uintptr_t kCoopNpcLimitStore = 0x7F71F8;
+constexpr uintptr_t kActivateCoopSetsCall = 0x7F7220;  // call kActivateAllocatorSet
+constexpr uintptr_t kActivateAllocatorSet = 0x7F6CE0;
+constexpr uintptr_t kLoadCoopSetNameActivate = 0x7F71D5;    // mov edi, <set name>
+constexpr uintptr_t kLoadCoopSetNameDeactivate = 0x7F7083;  // mov edi, <set name>
+constexpr uintptr_t kCoopSetNameImmediateOffset = 1;        // the name pointer inside the mov
+constexpr uint32_t kSetNameCoopMp = 0xE262B0;               // "coop-mp": the eight N=1 allocators
+constexpr uint32_t kSetNameDeltacompSa = 0xE262B8;          // "deltacomp_sa": the eight N=8 allocators
+constexpr uint32_t kCoopNpcLimit = 150;
 
 // The co-op player memory pools: bump allocator objects in .data (init 0xBF4A10, alloc 0xC00DB0), created at
 // start-up by the arena setup 0x51D800 with a `push size` and a base inside the arena.
@@ -36,6 +49,11 @@ constexpr uintptr_t kCoopPlayerCpuPool = 0x2773F0C;
 constexpr uintptr_t kCoopPlayerGpuPool = 0x2773F68;
 constexpr uintptr_t kCoopPlayerCpuSizePush = 0x51E502;  // push 0x228000
 constexpr uintptr_t kCoopPlayerGpuSizePush = 0x51E8A7;  // push 0x1071000
+// Holds the coop-mp, multiplayer and deltacomp_global allocator sets, so the deltacomp baselines.
+constexpr uintptr_t kCoopAllocatorsPool = 0x2773FC0;
+constexpr uintptr_t kCoopAllocatorsSizePush = 0x51E535;  // push 0x5ADBB0
+// Pool that allocator sets read at activation: co-op points it at kCoopAllocatorsPool, Strong Arm at its own.
+constexpr uintptr_t kCurrentDeltacompPool = 0xFA23A4;
 
 // Pool object layout (bytes from the object).
 constexpr uintptr_t kPoolNameOffset = 0xC;
@@ -46,6 +64,21 @@ constexpr uintptr_t kPoolUsedOffset = 0x44;      // bump offset from the base
 constexpr uintptr_t kPoolMarkOffset = 0x48;      // restore point of the used offset
 constexpr uintptr_t kPoolLimitOffset = 0x4C;     // free bytes = limit - used
 constexpr uintptr_t kPoolCapacityOffset = 0x50;  // the size again
+
+// Static allocator object layout (bytes from the object).
+constexpr uintptr_t kAllocatorNameOffset = 0x8;           // pointer to the set name
+constexpr uintptr_t kAllocatorBlockOffset = 0x14;         // the block taken at activation, 0 while inactive
+constexpr uintptr_t kAllocatorCountOffset = 0x18;
+constexpr uintptr_t kAllocatorPoolSourceOffset = 0x2C;    // address holding the pool pointer; 0 = the pool at +0x1C
+constexpr uintptr_t kPlayerN8Allocator = 0x2A4AE70;       // player_data_bundle, 8-peer instance
+
+// Session object: [kSessionPointer] -> session. Members form a circular list.
+constexpr uintptr_t kSessionPointer = 0x2528C14;
+constexpr uintptr_t kSessionMemberListOffset = 0x400;
+constexpr uintptr_t kSessionLocalMemberOffset = 0x408;
+constexpr uintptr_t kMemberNextOffset = 0x22CC;
+constexpr uintptr_t kMemberStateOffset = 0x3C;
+constexpr uintptr_t kMemberSlotOffset = 0x1B0;  // byte: the session slot the 8-peer deltacomp arrays are indexed by
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;

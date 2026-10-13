@@ -31,9 +31,13 @@ add_library(sr2_adapter SHARED
     src/init.cpp
     src/config.cpp
     src/memory.cpp
+    src/code_patch.cpp
     src/code_check.cpp
+    src/limit_thunk.cpp
     src/coop_limits.cpp
     src/coop_pools.cpp
+    src/replication_switch.cpp
+    src/member_slots.cpp
     src/join_trace.cpp
     ${RE0_DIR}/dinput8.def)
 target_include_directories(sr2_adapter PRIVATE src ${SHARED_DIR})
@@ -55,3 +59,4 @@ endfunction()
 add_unit_test(config_test src/config.cpp ${SHARED_DIR}/paths.cpp)
 add_unit_test(byte_pattern_test)
 add_unit_test(pool_size_test)
+add_unit_test(replication_sites_test)

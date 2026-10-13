@@ -41,7 +41,7 @@ Config parseConfig(const std::string& text) {
         if (!parseNumber(trim(line.substr(eq + 1)), number)) continue;
         if (key == "max_players") {
             config.maxPlayers = static_cast<uint32_t>(
-                std::clamp<unsigned long>(number, sr2::kCoopDefaultPlayers, sr2::kPoolPlayerSlots));
+                std::clamp<unsigned long>(number, sr2::kCoopDefaultPlayers, sr2::kMaxReplicatedPlayers));
         } else if (key == "trace") {
             config.trace = number != 0;
         }

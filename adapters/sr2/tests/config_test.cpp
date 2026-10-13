@@ -20,7 +20,7 @@ int main() {
     check(parseConfig(" max_players = 2 \r\ntrace=0\r\n").maxPlayers == 2, "spaces and CRLF trimmed");
     check(!parseConfig("trace=0\n").trace, "trace off");
     check(parseConfig("max_players=1\n").maxPlayers == 2, "below 2 clamps to 2");
-    check(parseConfig("max_players=99\n").maxPlayers == 12, "above 12 clamps to 12");
+    check(parseConfig("max_players=99\n").maxPlayers == 8, "above 8 clamps to 8");
     check(parseConfig("max_players=abc\ntrace=x\n").maxPlayers == 4, "bad values keep the defaults");
     check(parseConfig("max_players=\nunknown=5\nnoequals\n").maxPlayers == 4, "empty value and unknown keys ignored");
     return g_failures == 0 ? 0 : 1;
