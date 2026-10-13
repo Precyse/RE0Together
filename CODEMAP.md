@@ -20,25 +20,27 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | GameFolders.cs | a game's folder: the settings override, else Steam's (`SteamLibrary.FindGameDir`) | `Find` |
 | ParentConsole.cs | command-line starts attach to the starting console (the exe is windowed, no console flash) | `Attach` |
 | Gui/GuiHost.cs | GUI entry: log file, unhandled UI errors logged, App loop on a background thread (retried every 3 s while it cannot start, e.g. Steam not running: state Offline), window on the STA thread | `Run` |
-| Gui/MainForm.cs | the window in the broadcast tool's operator look (title, icon, remembered bounds): composes the views below, wires the mod button (Install/Update/Uninstall; Host needs the mod installed), Host / Join / Copy / Invite / Leave to App, switches the right pane to the settings view, selects a joined lobby's game, closing with a session open asks first, applies AppStatus | `MainForm`, `Apply`, `BringForward` |
-| Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed); every pixel metric goes through `Scale` (system DPI) | `Theme`, `Scale`, `Unscale` |
-| Gui/Draw.cs | shared painting: text, captions, lamps, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Wrapped` |
+| Gui/MainForm.cs | the window in the broadcast tool's operator look (title, icon, remembered bounds): composes the views below, wires the session row's mod button (Install/Update only; Host needs the mod installed) and the settings view's Uninstall, Host / Join / Copy / Invite / Leave to App, swaps the main pane (scrolls when it outgrows the window) and the settings view inside one content panel so neither docks against the rail, selects a joined lobby's game, closing with a session open asks first, applies AppStatus | `MainForm`, `Apply`, `BringForward` |
+| Gui/Theme.cs | palette, fonts and metrics (colour on state only: red connected, amber armed; shared primary/tool button widths, content max width, arrow size); every pixel metric goes through `Scale` (system DPI) | `Theme`, `Scale`, `Unscale` |
+| Gui/Draw.cs | shared painting: text, paths (middle ellipsis), captions, lamps, arrows, separators, cover/fit images | `Draw.Cover`, `Draw.Lamp`, `Draw.Arrow`, `Draw.Path`, `Draw.Wrapped` |
+| Gui/NativeTheme.cs | Windows' dark title bar and dark native scrollbars | `DarkTitleBar`, `DarkScrollbars` |
 | Gui/SteamArt.cs | a game's capsule, hero and logo from Steam's local librarycache | `SteamArt` |
 | Gui/TopBar.cs | top strip: brand, newer launcher build on GitHub, build, state lamp and state, Settings (Back while open) and Update buttons (Update idle only) | `TopBar.Show`, `ShowAvailable`, `ShowSettingsOpen`, `SettingsButton`, `UpdateButton` |
-| Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus` |
+| Gui/GameRail.cs | left rail of games with capsule art and each game's mod status line; selection, Running mark, locks during a session | `GameRail`, `SetStatus`, `SelectedStatus`, `StatusOf` |
 | Gui/GameStatus.cs | rail line and mod button label for a game (Game not found, Game build N unsupported, Not installed, Installed (Build N), Update available (Build M)); `CanHost` needs the mod and a supported game build | `GameStatus.Line`, `Action`, `CanHost` |
 | Gui/HeroBanner.cs | selected game's hero art, left shade, logo | `HeroBanner.Show` |
-| Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name, role, character (seat order given by the caller, host first), partner ping | `PlayerSlots.Show` |
+| Gui/PlayerSlots.cs | one outlined cell per seat: lamp, name over character (seat order given by the caller, host first), role and partner ping on the right | `PlayerSlots.Show` |
 | Gui/FlatButton.cs | flat squared button: Primary, Normal, Ghost | `FlatButton` |
 | Gui/FieldBox.cs | dark one-line text field with focus border | `FieldBox.Input` |
-| Gui/FlatSelect.cs | flat dropdown list in the tool's greys (owner-drawn ComboBox) | `FlatSelect` |
+| Gui/FlatSelect.cs | flat dropdown list in the tool's greys (owner-drawn ComboBox; border and large arrow painted over the closed box) | `FlatSelect` |
 | Gui/FlatToggle.cs | flat squared on/off switch with a label | `FlatToggle.Checked`, `Flipped` |
-| Gui/SectionPanel.cs | captioned pane section with a separator, sized to its content on request | `SectionPanel`, `FitToContent` |
-| Gui/OptionsRows.cs | one label + dropdown row per option of the selected game under the player seats; saved at once to AppSettings, rebuilt only when the game or its folder changes, locked while a session is open | `OptionsRows.Show`, `SetLocked`, `Changed` |
+| Gui/SectionPanel.cs | captioned pane section with a separator, content capped at the max content width, sized to its content on request (no content = no height) | `SectionPanel`, `FitToContent`, `FittedHeight` |
+| Gui/OptionsRows.cs | the selected game's options as a two-column label + dropdown grid (the main pane's Options section, between Session and Players); saved at once to AppSettings, rebuilt only when the game or its folder changes, locked while a session is open | `OptionsRows.Show`, `SetLocked`, `Changed` |
 | Gui/ControlRow.cs | a row of controls at control height, spacers, top-down stacking | `ControlRow.Create`, `Spacer`, `Stack` |
-| Gui/SettingsView.cs | the settings pane: each game's folder (Browse / Reset), check for updates at start, open the logs folder, create the report zip; saved on change | `SettingsView`, `GameFolderChanged` |
+| Gui/SettingsView.cs | the settings pane (scrolls): Launcher section (check for updates at start, logs folder, report zip), then one section per game (folder path, Browse / Reset, Uninstall); saved on change | `SettingsView`, `ShowMods`, `GameFolderChanged`, `UninstallRequested` |
 | Gui/WindowMemory.cs | restores and saves the window rectangle and maximized state | `Restore`, `Save` |
-| Gui/LogFooter.cs | newest log line; arrow toggles the full log drawer | `LogFooter.Toggled` |
+| Gui/LogDrawer.cs | bottom of the window: the footer and the full log above it, opened by growing the drawer (the log box is never hidden); trims the log | `LogDrawer.ShowLine` |
+| Gui/LogFooter.cs | newest log line; a large arrow toggles the log drawer | `LogFooter.Toggled` |
 | Gui/StatusText.cs | state words and the state lamp colour; a game problem (exited, not linked) replaces the state | `Format`, `Lamp` |
 | Session.cs | slots, epochs, membership diffs, frame routing | `ApplyMembership`, `OnPeerFrame`, `OnAdapterFrame`, `End` |
 | SlotAssigner.cs | owner = 0, rest sorted by id | `Assign` |

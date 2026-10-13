@@ -18,6 +18,11 @@ internal static class Draw
         TextRenderer.DrawText(g, text, font, bounds, color,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
 
+    /// <summary>A file path on one line, shortened in the middle when it does not fit.</summary>
+    public static void Path(Graphics g, string path, Font font, Color color, Rectangle bounds) =>
+        TextRenderer.DrawText(g, path, font, bounds, color,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.PathEllipsis);
+
     public static int Width(string text, Font font) => TextRenderer.MeasureText(text, font).Width;
 
     private const TextFormatFlags Wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak
@@ -40,6 +45,18 @@ internal static class Draw
     {
         using var brush = new SolidBrush(color);
         g.FillRectangle(brush, x, centerY - Theme.LampSize / 2, Theme.LampSize, Theme.LampSize);
+    }
+
+    /// <summary>A solid triangle pointing up or down, Theme.ArrowSize wide, centred on the point.</summary>
+    public static void Arrow(Graphics g, Color color, Point center, bool up)
+    {
+        var half = Theme.ArrowSize / 2;
+        var rise = up ? -half / 2 : half / 2;
+        using var brush = new SolidBrush(color);
+        g.FillPolygon(brush, new[]
+        {
+            new Point(center.X - half, center.Y - rise), new Point(center.X + half, center.Y - rise), new Point(center.X, center.Y + rise),
+        });
     }
 
     public static void HorizontalLine(Graphics g, int x1, int x2, int y)

@@ -33,6 +33,12 @@ internal static class Theme
     public static readonly int SectionPadX = Scale(20);
     public static readonly int SectionPadY = Scale(16);
     public static readonly int Gap = Scale(8);
+    public static readonly int ArrowSize = Scale(12);
+    public static readonly int PrimaryWidth = Scale(120);
+    public static readonly int ToolWidth = Scale(104);
+
+    /// <summary>The widest a pane section's content grows; wider windows leave the rest of the row empty.</summary>
+    public static readonly int ContentMaxWidth = Scale(760);
 
     /// <summary>A size in 96 dpi units as pixels at the screen's scale. The process is system DPI aware, so the scale is
     /// fixed for its lifetime; every metric is converted once.</summary>

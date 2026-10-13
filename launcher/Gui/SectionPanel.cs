@@ -1,6 +1,7 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>A section of a pane: a caption, its content under it, a separator under the section.</summary>
+/// <summary>A section of a pane: a caption, its content under it (no wider than Theme.ContentMaxWidth), a separator
+/// under the section.</summary>
 internal sealed class SectionPanel : Panel
 {
     private static readonly int CaptionGap = Theme.Scale(26);
@@ -15,7 +16,7 @@ internal sealed class SectionPanel : Panel
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.OptimizedDoubleBuffer, true);
     }
 
-    public bool BottomLine { get; init; } = true;
+    public bool BottomLine { get; set; } = true;
 
     public string Title
     {
@@ -28,8 +29,24 @@ internal sealed class SectionPanel : Panel
         }
     }
 
-    /// <summary>Sets the height to the caption, the stacked content and the bottom padding.</summary>
-    public void FitToContent() => Height = Padding.Top + Controls.Cast<Control>().Sum(c => c.Height) + Theme.SectionPadY;
+    /// <summary>The caption, the stacked content and the bottom padding; a section without content takes no space.</summary>
+    public int FittedHeight
+    {
+        get
+        {
+            var content = Controls.Cast<Control>().Sum(c => c.Height);
+            return content == 0 ? 0 : Padding.Top + content + Theme.SectionPadY;
+        }
+    }
+
+    public void FitToContent() => Height = FittedHeight;
+
+    protected override void OnResize(EventArgs e)
+    {
+        var right = Math.Max(Theme.SectionPadX, Width - Theme.SectionPadX - Theme.ContentMaxWidth);
+        if (Padding.Right != right) Padding = Padding with { Right = right };
+        base.OnResize(e);
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {

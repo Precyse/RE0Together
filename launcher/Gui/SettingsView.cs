@@ -3,52 +3,61 @@ using System.Diagnostics;
 
 namespace CoopLauncher.Gui;
 
-/// <summary>The settings pane: each game's folder (Browse / Reset to the one Steam knows) and the launcher's own options.
-/// Every change is saved at once through AppSettings.</summary>
+/// <summary>The settings pane: the launcher's own options, then one section per game (its folder with Browse / Reset to
+/// the one Steam knows, and Uninstall). Scrolls when the sections outgrow the window. Every change is saved at once
+/// through AppSettings.</summary>
 internal sealed class SettingsView : Panel
 {
-    private static readonly int NameHeight = Theme.Scale(20);
-    private static readonly int BrowseWidth = Theme.Scale(84);
-    private static readonly int ResetWidth = Theme.Scale(72);
-    private static readonly int LogsButtonWidth = Theme.Scale(170);
-    private static readonly int ReportButtonWidth = Theme.Scale(150);
+    private readonly List<GameSection> _games = new();
 
     public SettingsView(IEnumerable<GameProfile> games)
     {
         var gameList = games.ToList();
         BackColor = Theme.Bg;
         Dock = DockStyle.Fill;
-        var gamesSection = new SectionPanel("Games");
-        var launcherSection = new SectionPanel("Launcher") { BottomLine = false, Dock = DockStyle.Fill };
+        AutoScroll = true;
+        NativeTheme.DarkScrollbars(this);
 
-        var parts = new List<Control>();
+        var sections = new List<SectionPanel> { LauncherSection(gameList) };
         foreach (var game in gameList)
         {
-            var row = new GameFolderRow(game);
-            row.Changed += () => GameFolderChanged?.Invoke();
-            parts.Add(row.Name);
-            parts.Add(row.Row);
-            parts.Add(ControlRow.Spacer(Theme.Gap * 2));
+            var section = new GameSection(game);
+            section.Changed += () => GameFolderChanged?.Invoke();
+            section.UninstallClicked += () => UninstallRequested?.Invoke(game);
+            _games.Add(section);
+            sections.Add(section.Panel);
         }
-        ControlRow.Stack(gamesSection, parts.ToArray());
-        gamesSection.FitToContent();
-
-        var updates = new FlatToggle("Check for updates at start") { Checked = AppSettings.Current.CheckForUpdates };
-        updates.Flipped += SetCheckForUpdates;
-        var logs = new FlatButton("Open logs folder", ButtonKind.Normal);
-        logs.Click += (_, _) => OpenLogsFolder();
-        var report = new FlatButton("Create report", ButtonKind.Normal);
-        report.Click += (_, _) => CreateReport(gameList);
-        var logsRow = ControlRow.Create(new Control[] { logs, report, new Panel() }, LogsButtonWidth, ReportButtonWidth, -1);
-        ControlRow.Stack(launcherSection, updates, ControlRow.Spacer(Theme.Gap), logsRow);
-
-        Controls.Add(launcherSection);
-        Controls.Add(gamesSection);
-        gamesSection.Dock = DockStyle.Top;
+        sections[^1].BottomLine = false;
+        foreach (var section in sections) section.FitToContent();
+        ControlRow.Stack(this, sections.ToArray<Control>());
+        AutoScrollMinSize = new Size(0, sections.Sum(section => section.Height));
     }
 
     /// <summary>Raised after a game's folder setting changed.</summary>
     public event Action? GameFolderChanged;
+
+    /// <summary>Raised when the player asks to remove a game's mod.</summary>
+    public event Action<GameProfile>? UninstallRequested;
+
+    /// <summary>Uninstall is offered for an installed mod while no session is open.</summary>
+    public void ShowMods(Func<string, GameStatus> statusOf, bool free)
+    {
+        foreach (var game in _games) game.ShowMod(statusOf(game.Id), free);
+    }
+
+    private static SectionPanel LauncherSection(List<GameProfile> games)
+    {
+        var section = new SectionPanel("Launcher");
+        var updates = new FlatToggle("Check for updates at start") { Checked = AppSettings.Current.CheckForUpdates };
+        updates.Flipped += SetCheckForUpdates;
+        var logs = new FlatButton("Logs folder", ButtonKind.Normal);
+        logs.Click += (_, _) => OpenLogsFolder();
+        var report = new FlatButton("Create report", ButtonKind.Normal);
+        report.Click += (_, _) => CreateReport(games);
+        var toolsRow = ControlRow.Create(new Control[] { logs, report, new Panel() }, Theme.ToolWidth, Theme.ToolWidth, -1);
+        ControlRow.Stack(section, updates, ControlRow.Spacer(Theme.Gap), toolsRow);
+        return section;
+    }
 
     private static void SetCheckForUpdates(bool on)
     {
@@ -88,34 +97,39 @@ internal sealed class SettingsView : Panel
         }
     }
 
-    /// <summary>One game's name, its folder, and the Browse and Reset buttons.</summary>
-    private sealed class GameFolderRow
+    /// <summary>One game's section: its folder, Browse, Reset and Uninstall.</summary>
+    private sealed class GameSection
     {
         private readonly GameProfile _game;
-        private readonly FieldBox _path = new();
+        private readonly PathText _path = new();
         private readonly FlatButton _reset = new("Reset", ButtonKind.Ghost);
+        private readonly FlatButton _uninstall = new("Uninstall", ButtonKind.Ghost);
 
-        public GameFolderRow(GameProfile game)
+        public GameSection(GameProfile game)
         {
             _game = game;
-            Name = new Label
-            {
-                Text = game.Name, Font = Theme.Strong, ForeColor = Theme.Text, BackColor = Theme.Bg, Height = NameHeight,
-                AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true,
-            };
-            _path.Input.ReadOnly = true;
+            Panel = new SectionPanel(game.Name);
             var browse = new FlatButton("Browse", ButtonKind.Normal);
             browse.Click += (_, _) => Browse();
             _reset.Click += (_, _) => Reset();
-            Row = ControlRow.Create(new Control[] { _path, browse, _reset }, -1, BrowseWidth, ResetWidth);
+            _uninstall.Click += (_, _) => UninstallClicked?.Invoke();
+            var row = ControlRow.Create(new Control[] { _path, browse, _reset, _uninstall }, -1, Theme.ToolWidth, Theme.ToolWidth, Theme.ToolWidth);
+            ControlRow.Stack(Panel, row);
             Refresh();
         }
 
-        public Label Name { get; }
+        public SectionPanel Panel { get; }
 
-        public TableLayoutPanel Row { get; }
+        public string Id => _game.Id;
 
         public event Action? Changed;
+
+        public event Action? UninstallClicked;
+
+        public void ShowMod(GameStatus status, bool free)
+        {
+            _uninstall.Enabled = free && status.GameFound && status.ModInstalled;
+        }
 
         private void Browse()
         {
@@ -141,8 +155,26 @@ internal sealed class SettingsView : Panel
 
         private void Refresh()
         {
-            _path.Input.Text = GameFolders.Find(_game) ?? string.Empty;
+            _path.Text = GameFolders.Find(_game) ?? string.Empty;
+            _path.Invalidate();
             _reset.Enabled = AppSettings.Current.GameFolder(_game.Id) != null;
+        }
+    }
+
+    /// <summary>A folder path as plain text, shortened in the middle when it does not fit.</summary>
+    private sealed class PathText : Control
+    {
+        public PathText()
+        {
+            BackColor = Theme.Bg;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+                     | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(BackColor);
+            Draw.Path(e.Graphics, Text, Theme.Mono, Theme.Muted, ClientRectangle);
         }
     }
 }

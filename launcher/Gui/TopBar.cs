@@ -83,7 +83,7 @@ internal sealed class TopBar : Control
         if (_available is { } available)
         {
             var availableWidth = Draw.Width(available, Theme.Mono);
-            Draw.Text(g, available, Theme.Mono, Theme.Armed, new Rectangle(buildX - Theme.Gap * 2 - availableWidth, 0, availableWidth, Height));
+            Draw.Text(g, available, Theme.Mono, Theme.Text, new Rectangle(buildX - Theme.Gap * 2 - availableWidth, 0, availableWidth, Height));
         }
 
         Draw.HorizontalLine(g, 0, Width, Height - 1);
