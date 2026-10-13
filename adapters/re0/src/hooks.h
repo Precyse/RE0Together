@@ -9,6 +9,11 @@ namespace hooks {
 // unpacks, and logs the MinHook status on final failure.
 bool install(const char* name, uintptr_t address, void* detour, void** original);
 
+// Between beginBatch and applyBatch, installs on the calling thread create their hooks and queue the enables;
+// applyBatch enables them all in one thread suspension, logging any that fail and keeping the rest.
+void beginBatch();
+void applyBatch();
+
 void remove(uintptr_t address);
 
 }  // namespace hooks

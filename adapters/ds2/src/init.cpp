@@ -7,6 +7,7 @@
 #include "documents_redirect.h"
 #include "dx12_hook.h"
 #include "game.h"
+#include "hooks.h"
 #include "input_filter.h"
 #include "log.h"
 #include "main_thread.h"
@@ -86,6 +87,7 @@ DWORD WINAPI initThread(LPVOID) {
         toast_queue::push("Unsupported game version: co-op is off", kBuildToastSeconds);
         return 0;
     }
+    hooks::beginBatch();
     marker_overlay::setSelfMarker(config.selfMarker);
     remote_body::setEnabled(config.remoteBody);
     if (config.remoteBody) remote_body::installEarly();
@@ -130,6 +132,7 @@ DWORD WINAPI initThread(LPVOID) {
     structures::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
+    hooks::applyBatch();
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
     if (!main_thread::install(game::frameFunction(), simulationTick)) {
