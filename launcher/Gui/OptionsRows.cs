@@ -1,12 +1,13 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>One dropdown row per option of the selected game (label left, list right); a change is saved at once and
-/// reaches the adapter ini when the session launches the game. The rows are rebuilt only when the game or its folder
-/// changes, so an open list is never disturbed by a status refresh.</summary>
+/// <summary>The selected game's options as a two-column grid of label and dropdown, filled row by row; a change is saved
+/// at once and reaches the adapter ini when the session launches the game. The grid is rebuilt only when the game or its
+/// folder changes, so an open list is never disturbed by a status refresh.</summary>
 internal sealed class OptionsRows : Panel
 {
-    private static readonly int LabelWidth = Theme.Scale(130);
-    private static readonly int RowGap = Theme.Scale(8);
+    private const int Columns = 2;
+    private static readonly int LabelWidth = Theme.Scale(110);
+    private static readonly int ColumnGap = Theme.Scale(24);
 
     private readonly List<FlatSelect> _selects = new();
     private string? _shownFor;
@@ -20,6 +21,8 @@ internal sealed class OptionsRows : Panel
         Height = 0;
     }
 
+    public bool HasOptions => _selects.Count > 0;
+
     public void Show(GameProfile game, string? gameDir)
     {
         var key = game.Id + "|" + gameDir;
@@ -27,13 +30,20 @@ internal sealed class OptionsRows : Panel
         _shownFor = key;
         Controls.Clear();
         _selects.Clear();
-        var rows = new List<Control> { ControlRow.Spacer(RowGap * 2) };
+        var cells = new List<Control>();
         foreach (var option in game.Options ?? [])
         {
             var select = Build(game, option, gameDir);
             _selects.Add(select);
-            rows.Add(ControlRow.Create(new Control[] { Caption(option.Label), select }, LabelWidth, -1));
-            rows.Add(ControlRow.Spacer(RowGap));
+            cells.Add(Caption(option.Label));
+            cells.Add(select);
+        }
+
+        var rows = new List<Control>();
+        for (var start = 0; start < cells.Count; start += Columns * 2)
+        {
+            if (rows.Count > 0) rows.Add(ControlRow.Spacer(Theme.Gap));
+            rows.Add(GridRow(cells.Skip(start).Take(Columns * 2).ToList()));
         }
         ControlRow.Stack(this, rows.ToArray());
         Height = rows.Sum(row => row.Height);
@@ -45,10 +55,18 @@ internal sealed class OptionsRows : Panel
         foreach (var select in _selects) select.Enabled = !locked;
     }
 
+    /// <summary>Label, list, gap, label, list; a row with one option leaves the second column empty.</summary>
+    private static TableLayoutPanel GridRow(List<Control> cells)
+    {
+        while (cells.Count < Columns * 2) cells.Add(new Panel { BackColor = Theme.Bg });
+        return ControlRow.Create(new[] { cells[0], cells[1], new Panel { BackColor = Theme.Bg }, cells[2], cells[3] },
+            LabelWidth, -1, ColumnGap, LabelWidth, -1);
+    }
+
     private static Label Caption(string text) => new()
     {
         Text = text, AutoSize = false, Font = Theme.Body, ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleLeft,
-        BackColor = Theme.Bg,
+        BackColor = Theme.Bg, AutoEllipsis = true,
     };
 
     private FlatSelect Build(GameProfile game, GameOption option, string? gameDir)

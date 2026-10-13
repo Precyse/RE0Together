@@ -1,5 +1,7 @@
 namespace CoopLauncher.Gui;
 
+internal enum ArrowDirection { Up, Down, Left }
+
 /// <summary>Shared painting: text, lamps, separators and image placement.</summary>
 internal static class Draw
 {
@@ -17,6 +19,11 @@ internal static class Draw
     public static void Centered(Graphics g, string text, Font font, Color color, Rectangle bounds) =>
         TextRenderer.DrawText(g, text, font, bounds, color,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+
+    /// <summary>A file path on one line, shortened in the middle when it does not fit.</summary>
+    public static void Path(Graphics g, string path, Font font, Color color, Rectangle bounds) =>
+        TextRenderer.DrawText(g, path, font, bounds, color,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.PathEllipsis);
 
     public static int Width(string text, Font font) => TextRenderer.MeasureText(text, font).Width;
 
@@ -40,6 +47,21 @@ internal static class Draw
     {
         using var brush = new SolidBrush(color);
         g.FillRectangle(brush, x, centerY - Theme.LampSize / 2, Theme.LampSize, Theme.LampSize);
+    }
+
+    /// <summary>A solid triangle Theme.ArrowSize across its base, pointing the given way, centred on the point.</summary>
+    public static void Arrow(Graphics g, Color color, Point center, ArrowDirection direction)
+    {
+        var half = Theme.ArrowSize / 2;
+        var tip = half / 2;
+        var points = direction switch
+        {
+            ArrowDirection.Up => new[] { new Point(center.X - half, center.Y + tip), new Point(center.X + half, center.Y + tip), new Point(center.X, center.Y - tip) },
+            ArrowDirection.Down => new[] { new Point(center.X - half, center.Y - tip), new Point(center.X + half, center.Y - tip), new Point(center.X, center.Y + tip) },
+            _ => new[] { new Point(center.X + tip, center.Y - half), new Point(center.X + tip, center.Y + half), new Point(center.X - tip, center.Y) },
+        };
+        using var brush = new SolidBrush(color);
+        g.FillPolygon(brush, points);
     }
 
     public static void HorizontalLine(Graphics g, int x1, int x2, int y)

@@ -1,6 +1,7 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>The window's top strip: the brand on the left; the build, the state lamp and the state on the right.</summary>
+/// <summary>The window's top strip and title bar: the brand on the left; the build, the state lamp, the state, Settings,
+/// Update and the window buttons on the right. Its empty surface is left to the window, which drags by it.</summary>
 internal sealed class TopBar : Control
 {
     private const string BrandText = "CO-OP";
@@ -17,6 +18,7 @@ internal sealed class TopBar : Control
     private string _state = string.Empty;
     private string? _available;
     private Color _lamp = Theme.Dim;
+    private readonly WindowButtons _windowButtons = new();
 
     public TopBar()
     {
@@ -25,6 +27,7 @@ internal sealed class TopBar : Control
         BackColor = Theme.Bg2;
         Controls.Add(UpdateButton);
         Controls.Add(SettingsButton);
+        Controls.Add(_windowButtons);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw, true);
     }
@@ -39,15 +42,22 @@ internal sealed class TopBar : Control
     public void ShowSettingsOpen(bool open)
     {
         SettingsButton.Text = open ? SettingsCloseLabel : SettingsLabel;
+        SettingsButton.Arrow = open ? ArrowDirection.Left : null;
         SettingsButton.Invalidate();
     }
 
-    protected override void OnResize(EventArgs e)
+    protected override void OnLayout(LayoutEventArgs e)
     {
+        base.OnLayout(e);
         var top = (Height - ButtonHeight) / 2;
-        UpdateButton.Location = new Point(Width - PadX - UpdateButtonWidth, top);
+        UpdateButton.Location = new Point(_windowButtons.Left - Theme.Gap - UpdateButtonWidth, top);
         SettingsButton.Location = new Point(UpdateButton.Left - Theme.Gap - SettingsButtonWidth, top);
-        base.OnResize(e);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg == NcHitTest.WindowMessage) m.Result = NcHitTest.Transparent;
     }
 
     /// <summary>A newer launcher build on GitHub, shown beside the build; null clears it.</summary>
@@ -83,7 +93,7 @@ internal sealed class TopBar : Control
         if (_available is { } available)
         {
             var availableWidth = Draw.Width(available, Theme.Mono);
-            Draw.Text(g, available, Theme.Mono, Theme.Armed, new Rectangle(buildX - Theme.Gap * 2 - availableWidth, 0, availableWidth, Height));
+            Draw.Text(g, available, Theme.Mono, Theme.Text, new Rectangle(buildX - Theme.Gap * 2 - availableWidth, 0, availableWidth, Height));
         }
 
         Draw.HorizontalLine(g, 0, Width, Height - 1);

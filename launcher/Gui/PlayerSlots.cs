@@ -1,13 +1,13 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>One cell per player the game allows, side by side in one outlined card: lamp, name, role and character,
-/// and the partner's ping. An empty seat reads Open.</summary>
+/// <summary>One cell per player the game allows, side by side in one outlined card: lamp, name over character, and the
+/// role with the partner's ping on the right. An empty seat reads Open.</summary>
 internal sealed class PlayerSlots : Control
 {
     private static readonly int CardHeight = Theme.Scale(64);
     private static readonly int PadX = Theme.Scale(14);
     private static readonly int NameX = PadX + Theme.LampSize + Theme.Scale(12);
-    private static readonly int MetaLineHeight = Theme.Scale(16);
+    private static readonly int LineHeight = Theme.Scale(18);
     private const string OpenSeat = "Open";
 
     private IReadOnlyList<PlayerSlot> _players = Array.Empty<PlayerSlot>();
@@ -52,24 +52,23 @@ internal sealed class PlayerSlots : Control
         var middle = cell.Y + cell.Height / 2;
         Draw.Lamp(g, player != null ? Theme.Live : Theme.Dim, cell.X + PadX, middle);
 
+        var quiet = player != null ? Theme.Muted : Theme.Dim;
         var role = seat == 0 ? "Host" : "Guest";
-        var detail = seat < _characters.Count ? _characters[seat] : string.Empty;
-        if (player is { IsLocal: false } && _pingMs is { } ping) detail = $"{detail} {ping} ms".Trim();
-        var metaWidth = Math.Max(Draw.Width(role, Theme.Small), Draw.Width(detail, Theme.Small));
-        var metaX = cell.Right - PadX - metaWidth;
-        var metaColor = player != null ? Theme.Muted : Theme.Dim;
-        if (detail.Length == 0)
-        {
-            Draw.TextRight(g, role, Theme.Small, metaColor, new Rectangle(metaX, cell.Y, metaWidth, cell.Height));
-        }
-        else
-        {
-            Draw.TextRight(g, role, Theme.Small, metaColor, new Rectangle(metaX, middle - MetaLineHeight, metaWidth, MetaLineHeight));
-            Draw.TextRight(g, detail, Theme.Small, metaColor, new Rectangle(metaX, middle, metaWidth, MetaLineHeight));
-        }
+        if (player is { IsLocal: false } && _pingMs is { } ping) role = $"{role}  {ping} ms";
+        var roleWidth = Draw.Width(role, Theme.Small);
+        var roleX = cell.Right - PadX - roleWidth;
+        Draw.TextRight(g, role, Theme.Small, quiet, new Rectangle(roleX, cell.Y, roleWidth, cell.Height));
 
         var name = player?.Name ?? OpenSeat;
-        Draw.Text(g, name, Theme.Strong, player != null ? Theme.Text : Theme.Dim,
-            new Rectangle(cell.X + NameX, cell.Y, metaX - cell.X - NameX - Theme.Gap, cell.Height));
+        var character = seat < _characters.Count ? _characters[seat] : string.Empty;
+        var textWidth = roleX - cell.X - NameX - Theme.Gap;
+        var nameColor = player != null ? Theme.Text : Theme.Dim;
+        if (character.Length == 0)
+        {
+            Draw.Text(g, name, Theme.Strong, nameColor, new Rectangle(cell.X + NameX, cell.Y, textWidth, cell.Height));
+            return;
+        }
+        Draw.Text(g, name, Theme.Strong, nameColor, new Rectangle(cell.X + NameX, middle - LineHeight, textWidth, LineHeight));
+        Draw.Text(g, character, Theme.Small, quiet, new Rectangle(cell.X + NameX, middle, textWidth, LineHeight));
     }
 }

@@ -5,10 +5,7 @@ internal sealed class LogFooter : Control
 {
     private static readonly int FooterHeight = Theme.Scale(30);
     private static readonly int PadX = Theme.Scale(14);
-    private static readonly int ArrowWidth = Theme.Scale(18);
-    private const string ArrowOpen = "▲";
-    private const string ArrowClose = "▼";
-    private static readonly Font ArrowFont = new("Segoe UI", 9f, FontStyle.Bold);
+    private static readonly int ArrowWidth = Theme.Scale(20);
 
     private string _line = string.Empty;
     private bool _expanded;
@@ -44,7 +41,7 @@ internal sealed class LogFooter : Control
         var g = e.Graphics;
         g.Clear(BackColor);
         Draw.HorizontalLine(g, 0, Width, 0);
-        Draw.Text(g, _expanded ? ArrowClose : ArrowOpen, ArrowFont, Theme.Text, new Rectangle(PadX, 0, ArrowWidth, Height));
+        Draw.Arrow(g, Theme.Text, new Point(PadX + ArrowWidth / 2, Height / 2), _expanded ? ArrowDirection.Down : ArrowDirection.Up);
         var textX = PadX + ArrowWidth + Theme.Gap;
         Draw.Text(g, _line, Theme.Mono, Theme.Muted, new Rectangle(textX, 0, Width - textX - PadX, Height));
     }
