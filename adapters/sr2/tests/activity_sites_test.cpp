@@ -21,6 +21,7 @@ using activity_sites::Kind;
 using activity_sites::Site;
 
 constexpr size_t kPhase1Sites = 32;
+constexpr size_t kPhase2Sites = 51;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr uintptr_t kThunk = 0x10004000;
@@ -34,7 +35,9 @@ void check(bool ok, const char* what) {
 
 std::vector<Site> allSites() {
     std::vector<Site> all;
-    for (const auto phase : {std::span<const Site>(activity_sites::kPhase1)}) all.insert(all.end(), phase.begin(), phase.end());
+    for (const auto phase : {std::span<const Site>(activity_sites::kPhase1), std::span<const Site>(activity_sites::kPhase2)}) {
+        all.insert(all.end(), phase.begin(), phase.end());
+    }
     return all;
 }
 
@@ -120,6 +123,8 @@ int main() {
     const std::vector<Site> sites = allSites();
     check(std::span<const Site>(activity_sites::kPhase1).size() == kPhase1Sites,
           "phase 1: 32 sites (AF1-AF8, AV1, AV4-AV7, AV16, AC1-AC14, AD1-AD4)");
+    check(std::span<const Site>(activity_sites::kPhase2).size() == kPhase2Sites,
+          "phase 2: 51 sites (AV2, AV3, AV8-AV15, AC15-AC53, AD5, AD6)");
     check(idsAndAddressesAreUnique(sites), "ids and addresses are unique");
     check(sitesDoNotOverlap(sites), "no two sites overlap");
     check(shapesFit(sites), "a retargeted call is a 5 byte call, a hook covers 5 bytes, a block has room for its tail");
@@ -130,7 +135,7 @@ int main() {
     for (const Site& site : sites) {
         if (site.gate != Gate::Now) gated.insert(site.id);
     }
-    check(gated == std::set<std::string_view>{"AV16"}, "phase 1 gates only the derby filter (probe E)");
+    check(gated == std::set<std::string_view>{"AV16", "AD6"}, "the gated sites are the derby filter (probe E) and the chop list send (probe H)");
 
     const Site* block = siteNamed(sites, "AV1");
     const auto written = partner_replacement::replacementFor(*block, 0x10000000);

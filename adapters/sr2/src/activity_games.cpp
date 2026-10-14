@@ -1,5 +1,5 @@
-// Thunks of the activities and diversions themselves: Insurance Fraud, Demolition Derby, Zombie Uprising and the two
-// competitive diversions.
+// Thunks of the activities and diversions themselves: Insurance Fraud, Trail Blazing, Demolition Derby, Zombie Uprising,
+// Chop Shop and the two competitive diversions.
 #include <atomic>
 
 #include "activity_rules.h"
@@ -57,6 +57,22 @@ void __declspec(naked) anyRemoteRagdollingStub() {
         ret
     }
 }
+
+// AV2, AV3 (freeze), AV12-AV15 (Trail Blazing flags): the game function runs for every remote player human, not the
+// partner only. The functions are stdcall(human, flag) and send to the human's owner themselves.
+void forEachRemote(uintptr_t function, uint32_t flag) {
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    for (size_t i = 0; i < snapshot.humanCount; ++i) {
+        guest_call::call(function, {}, {static_cast<uint32_t>(snapshot.humans[i].human), flag});
+    }
+}
+
+void __stdcall freezeEachRemote(uint32_t, uint32_t flag) { forEachRemote(sr2::kFreezeHuman, flag); }
+
+void __stdcall flagAEachRemote(uint32_t, uint32_t flag) { forEachRemote(sr2::kHumanFlagA, flag); }
+
+void __stdcall flagBEachRemote(uint32_t, uint32_t flag) { forEachRemote(sr2::kHumanFlagB, flag); }
 
 // AV16: a spectator ignores the garage, car spawn and arena warp of a derby it does not drive in.
 void __cdecl derbyParticipantsOnly(GuestFrame* frame) {
@@ -121,6 +137,36 @@ void __cdecl blockCatAndMouse(GuestFrame* frame) { blockOrStart(frame, g_catAndM
 
 void __cdecl blockDeathTag(GuestFrame* frame) { blockOrStart(frame, g_deathTagOriginal, "death tag"); }
 
+// AD5: Chop Shop delivery: the remote riding in the delivered car, else the default partner. ebx is the delivery; the
+// car is the object its vehicle slot holds.
+uintptr_t __cdecl remoteInDeliveredCar(uintptr_t delivery) {
+    const uint32_t car = readDword(readDword(delivery + sr2::kDeliveryVehicleOffset) + sr2::kObjectHandleOffset);
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    for (size_t i = 0; i < snapshot.humanCount; ++i) {
+        const uintptr_t human = snapshot.humans[i].human;
+        if (readDword(human + sr2::kHumanVehicleOffset) == car) return human;
+    }
+    return partner_scope::partnerHuman();
+}
+
+PARTNER_REG_STUB(remoteInDeliveredCarStub, ebx, remoteInDeliveredCar)
+
+// AD6 (probe H): the Chop Shop credit goes to the remotes riding in the delivered car instead of to everyone. The car is
+// the only argument of the sender, [esp + 0x538] where it was entered.
+void __cdecl sendToRidersOfDeliveredCar(GuestFrame* frame) {
+    const uint32_t car = readDword(readDword(reinterpret_cast<uintptr_t>(&frame->returnAddress) + sr2::kChopCreditCarArg) +
+                                   sr2::kObjectHandleOffset);
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
+        const partner_rules::Remote& remote = snapshot.pairing.items[i];
+        if (!remote.human || !remote.member || readDword(remote.human + sr2::kHumanVehicleOffset) != car) continue;
+        guest_call::call(sr2::kSendToMember, {.esi = remote.member}, {frame->args[0], frame->args[1], 0, 0});
+    }
+}
+
+PARTNER_WRAP_STUB(chopCreditStub, sendToRidersOfDeliveredCar, 0)
 PARTNER_WRAP_STUB(derbyStub, derbyParticipantsOnly, 0)
 PARTNER_WRAP_STUB(zombieAnswerStub, zombieAnswerGate, 0)
 PARTNER_WRAP_STUB(catAndMouseStub, blockCatAndMouse, 0)
@@ -132,6 +178,11 @@ namespace activity_thunks {
 
 partner_thunks::Binding bindGames(Thunk thunk) {
     switch (thunk) {
+        case Thunk::EachRemote965F40: return {reinterpret_cast<void*>(&freezeEachRemote), nullptr};
+        case Thunk::EachRemote968010: return {reinterpret_cast<void*>(&flagAEachRemote), nullptr};
+        case Thunk::EachRemote9682A0: return {reinterpret_cast<void*>(&flagBEachRemote), nullptr};
+        case Thunk::RemoteInVehicleEbx1c: return {reinterpret_cast<void*>(&remoteInDeliveredCarStub), nullptr};
+        case Thunk::SendToRemotesInVehicleEsp538: return {reinterpret_cast<void*>(&chopCreditStub), nullptr};
         case Thunk::AnyRemoteRagdolling: return {reinterpret_cast<void*>(&anyRemoteRagdollingStub), nullptr};
         case Thunk::DerbyParticipantsOnly: return {reinterpret_cast<void*>(&derbyStub), &g_derbyOriginal};
         case Thunk::RecordZombieRequester: return {reinterpret_cast<void*>(&recordZombieRequester), nullptr};
