@@ -36,6 +36,9 @@ struct GetterHook {
 GetterHook humanHook();
 GetterHook memberHook();
 
+// True while an Override is alive on this thread.
+bool overrideActive();
+
 // What the game's getters answer to this thread now: the override of the turn, else the default partner.
 uintptr_t partnerHuman();
 uintptr_t partnerMember();

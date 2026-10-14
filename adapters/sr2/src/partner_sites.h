@@ -17,8 +17,9 @@ enum class Kind : uint8_t {
     JumpOut,       // a jmp to the thunk, nops over the rest; the thunk jumps back into the function
 };
 
-// When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini).
-enum class Gate : uint8_t { Now, ProbeB, ProbeG };
+// When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). B and G are
+// milestone 4 probes, E and H milestone 7's.
+enum class Gate : uint8_t { Now, ProbeB, ProbeG, ProbeE, ProbeH };
 
 // The code behind a site (partner_thunks_*.cpp). Several sites share a thunk.
 enum class Thunk : uint8_t {
@@ -58,6 +59,44 @@ enum class Thunk : uint8_t {
     RemoteIfTeamDown,
     PassengerIsRemote,
     TeleportRemotePassengers,
+    // Milestone 7 (activity_sites.h).
+    ScopeActPacket,
+    ScopeMiscPacket,
+    ScopeMissionRequest,
+    ScopeGameplayChanged,
+    ScopeRaceRequest,
+    DeclineUnlessAllDeclined,
+    SendToEachRemoteMember,
+    TeleportRemotesForActivity,
+    ScriptOverridePath,
+    AnyRemoteRagdolling,
+    EachRemote965F40,
+    EachRemote968010,
+    EachRemote9682A0,
+    MatchRemoteEbx,
+    MatchRemoteEbp,
+    MatchRemoteEcx,
+    MatchRemoteEsp560,
+    MatchRemoteStack14,
+    MatchRemoteStack18,
+    MatchRemoteRememberEsi,
+    SendToLastMatched,
+    SendToHumanOwnerEsp568,
+    SendToHumanOwnerEbp,
+    NearestRemoteEbx,
+    NearestRemoteEbp,
+    NearestRemoteEsi14,
+    NearestRemoteStack1c14,
+    NearestRemoteToCelebEbx,
+    DerbyParticipantsOnly,
+    RecordZombieRequester,
+    ZombiePartner,
+    ZombieAnswerGate,
+    SendToScopedMember,
+    BlockCatAndMouse,
+    BlockDeathTag,
+    RemoteInVehicleEbx1c,
+    SendToRemotesInVehicleEsp538,
 };
 
 struct Site {
