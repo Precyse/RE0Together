@@ -140,6 +140,17 @@ int main() {
     check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(phaseSize("creation queue") == 4, "creation queue: 4 sites (W8a to W8d)");
     check(phaseSize("upload share") == 1, "upload share: 1 site (W9a)");
+    check(phaseSize("remote views") == 8, "remote views: 8 sites (W3a to W3h)");
+    bool testsCallTheFrustumTest = true;
+    for (const char* id : {"W3d", "W3e", "W3f", "W3g", "W3h"}) {
+        const Site* site = siteNamed(sites, id);
+        const auto bytes = partner_sites::parseHex(site->expected);
+        const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
+        testsCallTheFrustumTest = testsCallTheFrustumTest && site->address + 5 + displacement == 0xA020C0;
+    }
+    check(testsCallTheFrustumTest, "W3d to W3h: each call goes to the frustum test 0xA020C0");
+    check(flipsOnlyTheBranchAt(siteNamed(sites, "W3a"), 7) && flipsOnlyTheBranchAt(siteNamed(sites, "W3c"), 7),
+          "W3a and W3c: the render frame's jne after the human count compare becomes jl");
     check(phaseSize("population partner") == 16, "population partner: 16 sites (14 calls W10_*, W10a, W10b)");
     bool allCallTheGetter = true;
     for (const Site& site : sites) {

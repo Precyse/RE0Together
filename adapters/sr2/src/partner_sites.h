@@ -104,6 +104,8 @@ enum class Thunk : uint8_t {
     AreaBudget,
     ClusterLeaderFar,
     VehicleHeadroom,
+    BuildRemoteFrustums,
+    FrustumTestAnyRemote,
     QueueAppendCreate,
     QueueAppendBatch,
     QueueAppendFunction,

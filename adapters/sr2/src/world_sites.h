@@ -50,6 +50,19 @@ inline constexpr Site kPartnerView[] = {
     {"W10b", Kind::JumpOut, Gate::Now, 0x93C1F3, "E8 D8 B9 09 00 85 C0 8B C6 74 03 8D 46 FC 5E", Thunk::VehicleHeadroom, ""},
 };
 
+// Spawns and despawns respect every remote's view (W3): the frustum is built for each remote and the five tests against the
+// partner frustum ask all of them. The two flipped branches turn the render frame's `[0x21603CC] == 2` into `>= 2`.
+inline constexpr Site kViews[] = {
+    {"W3a", Kind::Bytes, Gate::Now, 0x5251CA, "83 3D CC 03 16 02 02 75 75", Thunk::None, "83 3D CC 03 16 02 02 7C 75"},
+    {"W3b", Kind::HookEntry, Gate::Now, 0x523EB0, "81 EC B0 00 00 00", Thunk::BuildRemoteFrustums, ""},
+    {"W3c", Kind::Bytes, Gate::Now, 0x525053, "83 3D CC 03 16 02 02 75 15", Thunk::None, "83 3D CC 03 16 02 02 7C 15"},
+    {"W3d", Kind::RetargetCall, Gate::Now, 0x524542, "E8 79 DB 4D 00", Thunk::FrustumTestAnyRemote, ""},
+    {"W3e", Kind::RetargetCall, Gate::Now, 0x524FB7, "E8 04 D1 4D 00", Thunk::FrustumTestAnyRemote, ""},
+    {"W3f", Kind::RetargetCall, Gate::Now, 0x525065, "E8 56 D0 4D 00", Thunk::FrustumTestAnyRemote, ""},
+    {"W3g", Kind::RetargetCall, Gate::Now, 0x9256F4, "E8 C7 C9 0D 00", Thunk::FrustumTestAnyRemote, ""},
+    {"W3h", Kind::RetargetCall, Gate::Now, 0x93619B, "E8 20 BF 0C 00", Thunk::FrustumTestAnyRemote, ""},
+};
+
 // Each member gets the upload rate it reported (W9), not that rate divided by the number of remotes.
 inline constexpr Site kUpload[] = {
     {"W9a", Kind::Bytes, Gate::Now, 0x814267, "F7 74 24 18", Thunk::None, "90 90 90 90"},
