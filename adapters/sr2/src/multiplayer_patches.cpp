@@ -21,7 +21,7 @@ bool sitesMatch() {
     return ok;
 }
 
-bool install(bool trace, bool leavePathInstalled) {
+bool install(bool trace, bool leavePathInstalled, bool experimental) {
     sender_scope::setTrace(trace);
     creation_queue::setTrace(trace);
     join_admission::setTrace(trace);
@@ -36,9 +36,9 @@ bool install(bool trace, bool leavePathInstalled) {
             continue;
         }
 
-        const site_installer::Result result = site_installer::install(phase.sites, false, &multiplayer_thunks::bindingOf);
+        const site_installer::Result result = site_installer::install(phase.sites, experimental, &multiplayer_thunks::bindingOf);
         if (result.installed) {
-            logger::write("players 3 and 4: %s, %zu sites patched", phase.name, result.patched);
+            logger::write("players 3 and 4: %s, %zu sites patched, %zu waiting for a probe", phase.name, result.patched, result.gated);
         } else {
             logger::write("players 3 and 4: %s not patched", phase.name);
         }

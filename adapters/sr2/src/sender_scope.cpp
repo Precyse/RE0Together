@@ -82,13 +82,6 @@ void __cdecl scopeInOrder(GuestFrame* frame) {
     frame->regs.eax = runScoped(frame, g_inOrderOriginal, frame->regs.edx);
 }
 
-// The net id of a human, kNoNetId while it has no net record.
-uint16_t netIdOf(uintptr_t human) {
-    const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
-    uint16_t id = sender_scope_rules::kNoNetId;
-    if (record) readMemory(record + sr2::kRecordIdOffset, &id, sizeof(id));
-    return id;
-}
 
 // LK1, LK2: the look handlers (cdecl(payload, context)) resolve the human by the net id in the payload. The payload is
 // made to name the sender's own human before the handler queues the look, which is applied later outside the sender scope.
@@ -99,7 +92,7 @@ void bindLookToSender(const GuestFrame* frame, const char* handler) {
     if (!human) return;
     uint16_t payloadId = 0;
     if (!readMemory(args[kBufferArg], &payloadId, sizeof(payloadId))) return;
-    const uint16_t wanted = sender_scope_rules::lookNetId(payloadId, netIdOf(human));
+    const uint16_t wanted = sender_scope_rules::lookNetId(payloadId, remote_players::netIdOf(human));
     if (wanted == payloadId) return;
     if (g_trace) {
         logger::write("trace: %s from member 0x%X named net id 0x%04X, the sender's human 0x%X has 0x%04X", handler,

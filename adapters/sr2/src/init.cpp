@@ -53,7 +53,7 @@ DWORD WINAPI initThread(LPVOID) {
         lan_address::install(config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
-        if (crowd) multiplayer_patches::install(config.trace, playerCap);
+        if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
 
         if (config.trace) {
             join_trace::install(config.maxPlayers);

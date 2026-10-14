@@ -20,8 +20,9 @@ enum class Kind : uint8_t {
 };
 
 // When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). G is a
-// milestone 4 probe (B passed in the logs and D2 and D3 are on), E and H are milestone 7's.
-enum class Gate : uint8_t { Now, ProbeG, ProbeE, ProbeH };
+// milestone 4 probe (B passed in the logs and D2 and D3 are on), E and H are milestone 7's, T (players placed on one spot)
+// and CP (a checkpoint with a passenger) milestone 9's.
+enum class Gate : uint8_t { Now, ProbeG, ProbeE, ProbeH, ProbeT, ProbeCp };
 
 // The code behind a site (partner_thunks_*.cpp). Several sites share a thunk.
 enum class Thunk : uint8_t {
@@ -106,6 +107,9 @@ enum class Thunk : uint8_t {
     VehicleHeadroom,
     BuildRemoteFrustums,
     FrustumTestAnyRemote,
+    SendCutsceneEndPerRemote,
+    SharedVehicleHolder,
+    SpreadRemoteTeleport,
     QueueAppendCreate,
     QueueAppendBatch,
     QueueAppendFunction,

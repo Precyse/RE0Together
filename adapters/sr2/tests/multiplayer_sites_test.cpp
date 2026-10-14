@@ -42,6 +42,13 @@ const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
     return nullptr;
 }
 
+// Where the `call rel32` of a retargeted call site goes.
+uintptr_t callTarget(const Site& site) {
+    const auto bytes = partner_sites::parseHex(site.expected);
+    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
+    return site.address + kBranchBytes + displacement;
+}
+
 size_t phaseSize(std::string_view name) {
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {
         if (name == phase.name) return phase.sites.size();
@@ -140,26 +147,24 @@ int main() {
     check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(phaseSize("creation queue") == 4, "creation queue: 4 sites (W8a to W8d)");
     check(phaseSize("upload share") == 1, "upload share: 1 site (W9a)");
+    check(phaseSize("mission players") == 3, "mission players: 3 sites (MC3, MC4, MC5), probe gated");
+    check(siteNamed(sites, "MC3")->gate == partner_sites::Gate::ProbeT && siteNamed(sites, "MC5")->gate == partner_sites::Gate::ProbeT &&
+              siteNamed(sites, "MC4")->gate == partner_sites::Gate::ProbeCp,
+          "MC3 and MC5 wait for probe T, MC4 for probe CP");
     check(phaseSize("remote views") == 8, "remote views: 8 sites (W3a to W3h)");
     bool testsCallTheFrustumTest = true;
     for (const char* id : {"W3d", "W3e", "W3f", "W3g", "W3h"}) {
-        const Site* site = siteNamed(sites, id);
-        const auto bytes = partner_sites::parseHex(site->expected);
-        const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-        testsCallTheFrustumTest = testsCallTheFrustumTest && site->address + 5 + displacement == 0xA020C0;
+        testsCallTheFrustumTest = testsCallTheFrustumTest && callTarget(*siteNamed(sites, id)) == 0xA020C0;
     }
+    check(callTarget(*siteNamed(sites, "MC3")) == 0x814740 && callTarget(*siteNamed(sites, "MC4")) == 0x9D7BD0,
+          "MC3 replaces the broadcast 0x814740, MC4 the partner getter 0x9D7BD0");
     check(testsCallTheFrustumTest, "W3d to W3h: each call goes to the frustum test 0xA020C0");
     check(flipsOnlyTheBranchAt(siteNamed(sites, "W3a"), 7) && flipsOnlyTheBranchAt(siteNamed(sites, "W3c"), 7),
           "W3a and W3c: the render frame's jne after the human count compare becomes jl");
     check(phaseSize("population partner") == 16, "population partner: 16 sites (14 calls W10_*, W10a, W10b)");
     bool allCallTheGetter = true;
     for (const Site& site : sites) {
-        if (std::string_view(site.id).starts_with("W10_")) {
-            // the call goes to the game's partner getter 0x9D7BD0
-            const auto bytes = partner_sites::parseHex(site.expected);
-            const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-            allCallTheGetter = allCallTheGetter && site.address + 5 + displacement == 0x9D7BD0;
-        }
+        if (std::string_view(site.id).starts_with("W10_")) allCallTheGetter = allCallTheGetter && callTarget(site) == 0x9D7BD0;
     }
     check(allCallTheGetter, "the 14 W10_* calls all go to get_remote_player (0x9D7BD0)");
     check(flipsOnlyTheBranchAt(siteNamed(sites, "W10a"), 7), "W10a: the same bytes with the jne (75) after the compare turned into jl (7C)");

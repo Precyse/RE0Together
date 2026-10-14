@@ -9,8 +9,9 @@ namespace multiplayer_patches {
 bool sitesMatch();
 
 // Writes the phases (the trace phase only with `trace`, the guest leave phase only when the leave path edits of milestone
-// 5i are in); a phase whose sites cannot all be written is left out and logged. True when every phase went in.
-bool install(bool trace, bool leavePathInstalled);
+// 5i are in); a phase whose sites cannot all be written is left out and logged. The sites that wait for a live probe (the
+// mission placement rows) are written with `experimental` only. True when every phase went in.
+bool install(bool trace, bool leavePathInstalled, bool experimental);
 
 
 }  // namespace multiplayer_patches

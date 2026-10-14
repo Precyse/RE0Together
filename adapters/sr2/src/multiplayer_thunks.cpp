@@ -4,6 +4,7 @@
 #include "cutscene_sync.h"
 #include "join_admission.h"
 #include "leave_path.h"
+#include "mission_players.h"
 #include "partner_thunks.h"
 #include "pause_mask.h"
 #include "player_trace.h"
@@ -14,7 +15,7 @@
 namespace multiplayer_thunks {
 
 partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
-    for (const auto bind : {&sender_scope::bind, &population::bind, &creation_queue::bind, &join_admission::bind, &leave_path::bind, &pause_mask::bind, &cutscene_sync::bind, &player_trace::bind, &partner_thunks::bindCalls, &remote_frustum::bind}
+    for (const auto bind : {&sender_scope::bind, &population::bind, &creation_queue::bind, &join_admission::bind, &leave_path::bind, &pause_mask::bind, &cutscene_sync::bind, &player_trace::bind, &partner_thunks::bindCalls, &remote_frustum::bind, &mission_players::bind}
 
 
 

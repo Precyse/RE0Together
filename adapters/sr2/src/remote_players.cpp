@@ -161,6 +161,11 @@ size_t remoteHumanCount() {
     return snapshot.humanCount;
 }
 
+uint16_t netIdOf(uintptr_t human) {
+    const uintptr_t record = human ? read32(human + sr2::kObjectNetRecordOffset) : 0;
+    return record ? *reinterpret_cast<const uint16_t*>(record + sr2::kRecordIdOffset) : sr2::kNoNetId;
+}
+
 uintptr_t localHuman() { return read32(sr2::kLocalPlayer); }
 
 bool isRemotePlayerHuman(uintptr_t human) {

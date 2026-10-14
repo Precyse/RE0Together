@@ -210,6 +210,7 @@ constexpr uintptr_t kRecordOwnerOffset = 0;          // byte: the owner's sessio
 constexpr uintptr_t kRecordIdOffset = 2;             // word: the id, its top 4 bits are the creator's slot
 constexpr uint32_t kRecordIdSlotShift = 12;
 constexpr uintptr_t kRecordHandleOffset = 4;
+constexpr uint16_t kNoNetId = 0xFFFF;                // the net id lookup treats it as no object
 constexpr uintptr_t kRecordNextOffset = 0x66C;
 constexpr uintptr_t kRecordCreatedMaskOffset = 0x67E;  // word: a bit per member slot that has the object
 constexpr uintptr_t kObjectTable = 0x2149C64;

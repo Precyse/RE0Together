@@ -1,10 +1,12 @@
 #pragma once
 #include <cstdint>
 
+#include "sr2_addresses.h"
+
 // The pure rules of the sender scope (milestone 9, unit tested).
 namespace sender_scope_rules {
 
-constexpr uint16_t kNoNetId = 0xFFFF;  // the net id lookup treats it as no object
+constexpr uint16_t kNoNetId = sr2::kNoNetId;
 
 // The net id a look message (player_morph 0x45, player_components 0x46) must name. A look can only describe the sender's
 // own player, so it names the sender's human; the id in the payload (a stale or reissued one may name someone else) is only

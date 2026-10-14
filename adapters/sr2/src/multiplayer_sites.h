@@ -1,6 +1,7 @@
 #pragma once
 #include <span>
 
+#include "mission_sites.h"
 #include "partner_sites.h"
 #include "session_sites.h"
 #include "trace_sites.h"
@@ -32,6 +33,7 @@ inline constexpr Phase kPhases[] = {
     {"population cluster", world_sites::kCluster, false},
     {"population partner", world_sites::kPartnerView, false},
     {"remote views", world_sites::kViews, false},
+    {"mission players", mission_sites::kPlayers, false},
     {"creation queue", world_sites::kQueue, false},
     {"upload share", world_sites::kUpload, false},
 
