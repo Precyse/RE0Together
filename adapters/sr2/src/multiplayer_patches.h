@@ -8,8 +8,9 @@ namespace multiplayer_patches {
 // Checks the bytes of every site and logs each difference. True when all match.
 bool sitesMatch();
 
-// Writes the phases (the trace phase only with `trace`); a phase whose sites cannot all be written is left out and logged.
-// True when every phase went in.
-bool install(bool trace);
+// Writes the phases (the trace phase only with `trace`, the guest leave phase only when the leave path edits of milestone
+// 5i are in); a phase whose sites cannot all be written is left out and logged. True when every phase went in.
+bool install(bool trace, bool leavePathInstalled);
+
 
 }  // namespace multiplayer_patches

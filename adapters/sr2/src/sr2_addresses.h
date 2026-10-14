@@ -213,7 +213,12 @@ constexpr uintptr_t kRecordHandleOffset = 4;
 constexpr uintptr_t kRecordNextOffset = 0x66C;
 constexpr uintptr_t kRecordCreatedMaskOffset = 0x67E;  // word: a bit per member slot that has the object
 constexpr uintptr_t kObjectTable = 0x2149C64;
-constexpr uintptr_t kWideHeaderFlag = 0xE8C30C;      // byte: the transport header is 4 bytes
+constexpr uintptr_t kRecordClassOffset = 8;          // dword: the class (index into kRecordClassTable); the byte goes in messages
+constexpr uintptr_t kRecordClassTable = 0x212E25C;   // per class: the object whose vtable +0x14 appends a destroy message's payload
+constexpr uintptr_t kClassDestroyPayloadSlot = 0x14; // thiscall(handle, message, int* length)
+constexpr uintptr_t kSessionValueOffset = 8;         // dword in the session that every destroy message starts with
+constexpr uintptr_t kDestroyWideHeaderFlag = 0xE8C084;  // byte: the rop_destroy header is 4 bytes
+
 constexpr uintptr_t kSendMessage = 0x814670;         // cdecl(buffer, length, 0, 0), ESI = member
 constexpr uintptr_t kIsHumanHandle = 0x9D7DD0;       // ECX = handle: the object when it is a human, else 0
 constexpr uintptr_t kVehicleOfHandle = 0xA009C0;     // ECX = handle: the object when it is a vehicle, else 0
@@ -262,6 +267,9 @@ constexpr uintptr_t kCameraPosition = 0x25F5B14;       // three floats: the loca
 constexpr uintptr_t kHumanCameraOffset = 0x12A0;       // three floats: a human's camera
 constexpr uintptr_t kClusterRadius = 0xE5C660;         // float: how near a partner must be for one spawner to do for both
 constexpr uintptr_t kClusterRadiusWide = 0xDD078C;     // float: the same for the callers that ask for the wide test
+
+// Guest member left (milestone 9 N2a): the cutscene cleanup the guest branch of the callback 0x8CB260 calls.
+constexpr uintptr_t kCutsceneCleanup = 0x6C6B90;
 
 // Join admission (milestone 9). The host answers one joiner at a time: the setup_request handler 0x831CA0 keeps the joiner in
 // kAdmissionPendingMember and its address block, opens the accept dialog (kAdmissionAcceptDialog) or defers the answer until

@@ -35,6 +35,8 @@ const uintptr_t g_otherOwner = sr2::kLeaveOtherOwner;
 const uintptr_t g_nextRecord = sr2::kLeaveNextRecord;
 const uintptr_t g_renameBody = sr2::kLeaveRenameBody;
 const uintptr_t g_renameSkip = sr2::kLeaveRenameSkip;
+const uintptr_t g_cutsceneCleanup = sr2::kCutsceneCleanup;
+
 
 uint8_t readByte(uintptr_t address) {
     uint8_t value = 0;
@@ -148,12 +150,28 @@ std::vector<remote_players::MemberInfo> usableMembers(uint8_t leaver) {
     return members;
 }
 
+// The destroy of a record under its old id, built as the game's own 0x8053B0 does, with the payload its class appends.
+leave_rules::Message destroyMessageOf(const leave_rules::Item& item) {
+    const uintptr_t session = readDword(sr2::kSessionPointer);
+    const uint32_t recordClass = readDword(item.record + sr2::kRecordClassOffset);
+    leave_rules::Message message = leave_rules::destroyMessage(readDword(session + sr2::kSessionValueOffset),
+                                                               static_cast<uint8_t>(recordClass), item.oldId,
+                                                               readByte(sr2::kDestroyWideHeaderFlag) != 0);
+    uint32_t length = static_cast<uint32_t>(message.length);
+    const uintptr_t classObject = readDword(sr2::kRecordClassTable + recordClass * sizeof(uint32_t));
+    guest_call::call(readDword(readDword(classObject) + sr2::kClassDestroyPayloadSlot), {.ecx = static_cast<uint32_t>(classObject)},
+                     {readDword(item.record + sr2::kRecordHandleOffset),
+                      static_cast<uint32_t>(reinterpret_cast<uintptr_t>(message.bytes.data())),
+                      static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&length))});
+    message.length = length;
+    return leave_rules::sealed(message);
+}
+
 // Every record of the set: destroy the old id on each member, then queue the creation.
 void reissue(const leave_rules::ReissueSet& set, const std::vector<remote_players::MemberInfo>& members) {
-    const bool wideHeader = readByte(sr2::kWideHeaderFlag) != 0;
-    for (const remote_players::MemberInfo& member : members) {
-        for (const leave_rules::Item& item : set.items()) {
-            leave_rules::Message message = leave_rules::destroyMessage(item.oldId, wideHeader);
+    for (const leave_rules::Item& item : set.items()) {
+        const leave_rules::Message message = destroyMessageOf(item);
+        for (const remote_players::MemberInfo& member : members) {
             guest_call::call(sr2::kSendMessage, {.esi = static_cast<uint32_t>(member.address)},
                              {static_cast<uint32_t>(reinterpret_cast<uintptr_t>(message.bytes.data())),
                               static_cast<uint32_t>(message.length), 0, 0});
@@ -161,8 +179,8 @@ void reissue(const leave_rules::ReissueSet& set, const std::vector<remote_player
             if (g_trace) {
                 logger::write("trace: leave: reissued id 0x%04X to slot %u%s", item.oldId, member.slot,
                               queued ? "" : " (behind the full creation queue)");
-
             }
+
         }
     }
 }
@@ -248,9 +266,44 @@ void __declspec(naked) keepRenameStub() {
     }
 }
 
+// N2a, N3: replaces `call 0x6C6B90` (the guest branch of the member left callback 0x8CB260, also reached with an idle
+// session). ebx = the leaver, esi = the session. 1 = the cutscene cleanup the game had; 0 = done here.
+uint32_t __cdecl guestMemberLeft(uintptr_t session, uintptr_t leaver) {
+    const uint32_t state = readDword(session + sr2::kSessionBusyStateOffset);
+    const leave_rules::GuestLeave action = leave_rules::guestLeave(
+        state, leaver == readDword(session + sr2::kSessionHostMemberOffset), leaver == readDword(session + sr2::kSessionLocalMemberOffset));
+    if (action == leave_rules::GuestLeave::CutsceneCleanup) return 1;
+    if (action == leave_rules::GuestLeave::ObjectPass) {
+        guest_call::call(sr2::kLeaveFunction, {}, {readByte(leaver + sr2::kMemberSlotOffset)});
+    }
+    return 0;
+}
+
+void __declspec(naked) guestMemberLeftStub() {
+    __asm {
+        pushad
+        push ebx
+        push esi
+        call guestMemberLeft
+        add esp, 8
+        mov dword ptr [esp + 28], eax
+        popad
+        test eax, eax
+        jnz cleanup
+        ret
+    cleanup:
+        jmp dword ptr [g_cutsceneCleanup]
+    }
+}
+
 }  // namespace
 
 namespace leave_path {
+
+partner_thunks::Binding bind(partner_sites::Thunk thunk) {
+    if (thunk != partner_sites::Thunk::GuestMemberLeft) return {nullptr, nullptr};
+    return {reinterpret_cast<void*>(&guestMemberLeftStub), nullptr};
+}
 
 Thunks thunks() {
     return {reinterpret_cast<uintptr_t>(&dropLeaverRecordStub), reinterpret_cast<uintptr_t>(&keepRenameStub)};

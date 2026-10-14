@@ -10,6 +10,11 @@ void write(const char*, ...) {}
 void writeUnlessRepeated(const char*, ...) {}
 }  // namespace logger
 
+namespace debug_stats {
+void setError(const char*, ...) {}
+}  // namespace debug_stats
+
+
 namespace {
 
 int g_failures = 0;

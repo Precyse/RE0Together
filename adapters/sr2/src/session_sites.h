@@ -26,6 +26,11 @@ inline constexpr Site kLooks[] = {
     {"LK2", Kind::HookEntry, Gate::Now, 0x82BD00, "8B 0D 44 65 A4 02 83 EC", Thunk::LookComponentsFromSender, ""},
 };
 
+// A guest runs the leave pass for another guest that leaves, and ends a cutscene only for the host leaving (N2a, N3).
+inline constexpr Site kGuestLeave[] = {
+    {"N2a", Kind::RetargetCall, Gate::Now, 0x8CB428, "E8 63 B7 DF FF", Thunk::GuestMemberLeft, ""},
+};
+
 // The host admits several joiners one after the other (N1).
 inline constexpr Site kAdmission[] = {
     {"N1a", Kind::HookEntry, Gate::Now, 0x831CA0, "8B 4C 24 08 8B 01", Thunk::AdmissionGate, ""},

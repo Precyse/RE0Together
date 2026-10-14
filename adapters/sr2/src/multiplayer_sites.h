@@ -12,12 +12,16 @@ struct Phase {
     const char* name;
     std::span<const partner_sites::Site> sites;
     bool traceOnly;  // written only with trace=1
+    bool needsLeavePath = false;  // runs the leave pass, which needs the milestone 5i edits (player_cap)
 };
 
 inline constexpr Phase kPhases[] = {
     {"sender scope", session_sites::kScope, false},
     {"looks", session_sites::kLooks, false},
+    {"guest leave", session_sites::kGuestLeave, false, true},
+
     {"join admission", session_sites::kAdmission, false},
+
     {"population budgets", world_sites::kBudget, false},
 
     {"population cluster", world_sites::kCluster, false},

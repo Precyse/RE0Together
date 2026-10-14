@@ -21,7 +21,7 @@ bool sitesMatch() {
     return ok;
 }
 
-bool install(bool trace) {
+bool install(bool trace, bool leavePathInstalled) {
     sender_scope::setTrace(trace);
     creation_queue::setTrace(trace);
     join_admission::setTrace(trace);
@@ -30,6 +30,12 @@ bool install(bool trace) {
     bool all = true;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {
         if (phase.traceOnly && !trace) continue;
+        if (phase.needsLeavePath && !leavePathInstalled) {
+            logger::write("players 3 and 4: %s not patched, the member leave edits are not in", phase.name);
+            all = false;
+            continue;
+        }
+
         const site_installer::Result result = site_installer::install(phase.sites, false, &multiplayer_thunks::bindingOf);
         if (result.installed) {
             logger::write("players 3 and 4: %s, %zu sites patched", phase.name, result.patched);

@@ -48,12 +48,13 @@ DWORD WINAPI initThread(LPVOID) {
             logger::write("replication: off, max_players %u is the shipped co-op, limits and pools are not patched",
                           config.maxPlayers);
         }
-        player_cap::install(config.maxPlayers, config.trace);
+        const bool playerCap = player_cap::install(config.maxPlayers, config.trace);
         game_port::install(config.gamePort, config.maxPlayers, config.trace);
         lan_address::install(config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
-        if (crowd) multiplayer_patches::install(config.trace);
+        if (crowd) multiplayer_patches::install(config.trace, playerCap);
+
         if (config.trace) {
             join_trace::install(config.maxPlayers);
             join_net_trace::install();

@@ -48,13 +48,27 @@ std::vector<uint8_t> jumpTo(uintptr_t address, uintptr_t thunk, size_t size) {
 int main() {
     using namespace leave_rules;
 
-    const Message narrow = destroyMessage(0x1234, false);
-    check(narrow.length == 5 && narrow.bytes[0] == 0x2A && narrow.bytes[1] == 2 && narrow.bytes[2] == 0 &&
-              narrow.bytes[3] == 0x34 && narrow.bytes[4] == 0x12,
-          "a destroy message: 0x2A, payload length 2, the id at +3");
-    const Message wide = destroyMessage(0x1234, true);
-    check(wide.length == 6 && wide.bytes[1] == 3 && wide.bytes[4] == 0x34 && wide.bytes[5] == 0x12,
-          "with the 4 byte header the id is at +4 and the payload is 3 bytes");
+    const Message narrow = destroyMessage(0xAABBCCDD, 5, 0x1234, false);
+    check(narrow.length == 10 && narrow.bytes[0] == 0x0F && narrow.bytes[3] == 0xDD && narrow.bytes[6] == 0xAA &&
+              narrow.bytes[7] == 5 && narrow.bytes[8] == 0x34 && narrow.bytes[9] == 0x12,
+          "a destroy message is rop_destroy 0x0F, not rop_new_owner 0x2A: the session value, the class, the id");
+    const Message sealedNarrow = sealed(narrow);
+    check(sealedNarrow.bytes[1] == 7 && sealedNarrow.bytes[2] == 0, "its payload length counts the bytes after the 3 byte header");
+    const Message wide = destroyMessage(0xAABBCCDD, 5, 0x1234, true);
+    check(wide.length == 11 && wide.bytes[3] == 0 && wide.bytes[4] == 0xDD && wide.bytes[10] == 0x12 && sealed(wide).bytes[1] == 8,
+          "with the 4 byte header everything is one byte later and the length is still counted from byte 3");
+    Message withPayload = narrow;
+    withPayload.length += 40;
+    check(sealed(withPayload).bytes[1] == 47, "the class payload the game appends is part of the length");
+
+    check(guestLeave(0, false, false) == GuestLeave::CutsceneCleanup && guestLeave(1, true, false) == GuestLeave::CutsceneCleanup &&
+              guestLeave(6, false, true) == GuestLeave::CutsceneCleanup,
+          "an idle session, the host or this machine leaving: the shipped cutscene cleanup");
+    check(guestLeave(1, false, false) == GuestLeave::ObjectPass && guestLeave(6, false, false) == GuestLeave::ObjectPass &&
+              guestLeave(8, false, false) == GuestLeave::ObjectPass,
+          "another guest leaving in the states 1, 6 and 8: the host's pass over the objects, and no cutscene end");
+    check(guestLeave(3, false, false) == GuestLeave::Nothing, "another guest leaving in any other state: nothing");
+
 
     check(usableMember(false, 1, 8, kGuestOne, kGuestTwo), "a remote member that can receive and is connected gets the reissue");
     check(!usableMember(true, 1, 13, kHost, kGuestTwo) && !usableMember(false, 0, 13, kGuestOne, kGuestTwo) &&

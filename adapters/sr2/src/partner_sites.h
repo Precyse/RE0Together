@@ -109,6 +109,8 @@ enum class Thunk : uint8_t {
     AdmissionGate,
     ClearAdmissionIfLeaver,
     AdmissionPump,
+    GuestMemberLeft,
+
 
 
 
