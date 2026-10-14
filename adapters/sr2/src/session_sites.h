@@ -26,4 +26,12 @@ inline constexpr Site kLooks[] = {
     {"LK2", Kind::HookEntry, Gate::Now, 0x82BD00, "8B 0D 44 65 A4 02 83 EC", Thunk::LookComponentsFromSender, ""},
 };
 
+// The host admits several joiners one after the other (N1).
+inline constexpr Site kAdmission[] = {
+    {"N1a", Kind::HookEntry, Gate::Now, 0x831CA0, "8B 4C 24 08 8B 01", Thunk::AdmissionGate, ""},
+    {"N1b", Kind::RetargetCall, Gate::Now, 0x8CB2CE, "E8 DD 76 F6 FF", Thunk::ClearAdmissionIfLeaver, ""},
+    {"N1c", Kind::HookEntry, Gate::Now, 0x8CB490, "81 EC 94 04 00 00", Thunk::AdmissionPump, ""},
+};
+
 }  // namespace session_sites
+

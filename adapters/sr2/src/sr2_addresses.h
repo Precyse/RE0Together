@@ -263,6 +263,19 @@ constexpr uintptr_t kHumanCameraOffset = 0x12A0;       // three floats: a human'
 constexpr uintptr_t kClusterRadius = 0xE5C660;         // float: how near a partner must be for one spawner to do for both
 constexpr uintptr_t kClusterRadiusWide = 0xDD078C;     // float: the same for the callers that ask for the wide test
 
+// Join admission (milestone 9). The host answers one joiner at a time: the setup_request handler 0x831CA0 keeps the joiner in
+// kAdmissionPendingMember and its address block, opens the accept dialog (kAdmissionAcceptDialog) or defers the answer until
+// the mission ends (kAdmissionDeferred), and a friends query may run first (kFriendsQueryCallback).
+constexpr uintptr_t kAdmissionPendingMember = 0x2528D1C;
+constexpr uintptr_t kAdmissionAcceptDialog = 0x2528D14;
+constexpr uintptr_t kAdmissionDeferred = 0x2528CF3;       // byte
+constexpr uintptr_t kFriendsQueryCallback = 0x2528C40;
+constexpr uintptr_t kFriendsQueryHandler = 0x831C40;
+constexpr uintptr_t kClearAdmission = 0x8329B0;           // closes the pending joiner and both dialogs
+constexpr uintptr_t kSetupResponseWideFlag = 0xE8C174;    // byte: the setup_response header is 4 bytes
+constexpr uint8_t kSetupResponseId = 0x19;
+constexpr uint8_t kSetupResponseWait = 2;                 // code: wait, the answer comes later
+
 // Creation queue writers (milestone 9): where the patched appends continue.
 constexpr uintptr_t kQueueAppendResumeCreate = 0x805199;  // 0x805000, after the append and `mov cl, [eax+0x1B0]`
 constexpr uintptr_t kQueueAppendResumeBatch = 0x80525E;   // 0x8051F0, after the append

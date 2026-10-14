@@ -17,7 +17,9 @@ struct Phase {
 inline constexpr Phase kPhases[] = {
     {"sender scope", session_sites::kScope, false},
     {"looks", session_sites::kLooks, false},
+    {"join admission", session_sites::kAdmission, false},
     {"population budgets", world_sites::kBudget, false},
+
     {"population cluster", world_sites::kCluster, false},
     {"creation queue", world_sites::kQueue, false},
 

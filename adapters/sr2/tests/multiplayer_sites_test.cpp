@@ -122,7 +122,9 @@ int main() {
     const std::vector<Site> sites = allSites();
     check(phaseSize("sender scope") == 2, "sender scope: 2 sites (SS1, SS2)");
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
-    check(phaseSize("population budgets") == 3, "population budgets: 3 sites (W1a, W1b, W1c)");
+    check(phaseSize("join admission") == 3, "join admission: 3 sites (N1a to N1c)");
+    check(phaseSize("population budgets") == 3,
+ "population budgets: 3 sites (W1a, W1b, W1c)");
     check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(phaseSize("creation queue") == 4, "creation queue: 4 sites (W8a to W8d)");
 

@@ -106,6 +106,10 @@ enum class Thunk : uint8_t {
     QueueAppendBatch,
     QueueAppendFunction,
     QueueDrain,
+    AdmissionGate,
+    ClearAdmissionIfLeaver,
+    AdmissionPump,
+
 
 
 
