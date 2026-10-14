@@ -14,6 +14,7 @@
 #include "player_cap.h"
 #include "replication_switch.h"
 #include "sr2_addresses.h"
+#include "version_gate.h"
 
 DWORD WINAPI initThread(LPVOID) {
     try {
@@ -31,6 +32,8 @@ DWORD WINAPI initThread(LPVOID) {
         if (!supported) return 0;
         const bool partnering = replicating && partner_patches::sitesMatch();
         if (replicating && !partnering) logger::write("partner: sites differ, the partner logic is not installed");
+
+        version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, config.trace);
 
         hooks::beginBatch();
         if (replicating) {

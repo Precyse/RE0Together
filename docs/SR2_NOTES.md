@@ -109,6 +109,15 @@ A newcomer never got the human of a guest that was already in the session. The m
 - The world, mission and script sync of the host batch stay host-only. `trace=1` logs `welcomed member ... queued K objects`.
 - Live test: P2 in, then P3 joins; P3 should log a remote human owned by slot 1 within a second or two of reaching state 13, and P2's hits on P3 should land.
 
+## Version gate (milestone 8)
+Only peers running the same mod build play together. Research: `C:\Users\ahmal\coop-scratch\sr2\M8_VERSION_GATE.md`, sites `m8_patch_sites.tsv`.
+- Every join_req and join_acc a modded peer sends ends with an 8-byte trailer: `CFVG`, u16 `version::kProtocolVersion` (version.h, bumped whenever the wire behaviour changes), max_players, flags (bit 0: partner_experimental sites patched). The handlers parse their fields in order and never read the length, and the dispatcher steps over a message by its declared length, so an unmodded game ignores the extra bytes. The two sends (call 0x814670 at 0x815B9D and 0x8162BB) go to one thunk that appends it and adds 8 to the payload length (the u16 at buffer + 1) and to the send's length argument; the send refuses 0x1FF bytes or more, so a message without room goes out as it is.
+- Host: the join_req handler pointer in the transport message table (0xE8BF3C) points at `gateJoinReq`. A stranger's join_req (no mapped member) needs all three fields equal; otherwise `join_deny` reason 1 (the game's own wrong game version, shown as MULTI_ERROR_JOIN_REJECTED) goes to the real sender (address block {ip, port, 0, 0, 0}, 0x816F60) and the handler is not called: no member is allocated. A mapped sender's message goes straight to the handler, which drops it itself.
+- Guest: the join_acc pointer (0xE8BF54) points at `gateJoinAcc`; without a matching trailer from the host it calls the join_deny handler 0x8163F0 with {0xC9, 1}, the shipped refusal path, so the joiner backs out to the menu. An unmodded host keeps its leftover member until its own join timeout (live probe).
+- On whenever the mod runs, also at max_players 2: an unmodded player is always refused. All sites are checked together before the trace hooks are enabled, so the trace still sees the original entries.
+- `trace=1` logs each accept and refusal: `version gate: join_req from ... refused, no mod` or `..., version V players P flags F, ours ...`.
+- Not built yet: the browser name tag `cfv<VVV>[-<token>]` with the M6 filter, the M6 password check in the host gate, and `noteJoinDeny` (V9). They come with the M6 merge.
+
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).
