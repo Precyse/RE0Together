@@ -1,6 +1,7 @@
 #include "player_cap.h"
 
 #include "code_patch.h"
+#include "home_network.h"
 #include "log.h"
 #include "player_cap_patches.h"
 #include "remote_players.h"
@@ -22,14 +23,17 @@ PARTNER_REG_STUB(coopMemberReadyStub, ecx, someMemberReady)
 
 namespace player_cap {
 
-bool install(uint32_t maxPlayers) {
-    const auto patches = player_cap_patches::forPlayers(maxPlayers, reinterpret_cast<uintptr_t>(&coopMemberReadyStub));
+bool install(uint32_t maxPlayers, bool trace) {
+    home_network::setTrace(trace);
+    const player_cap_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&coopMemberReadyStub),
+                                            home_network::duplicateJoinSenderThunk(), home_network::hostByNameThunk()};
+    const auto patches = player_cap_patches::forPlayers(maxPlayers, thunks);
     if (patches.empty()) return false;
     if (!applyCodePatches(patches)) {
         logger::write("player cap: sites differ, the maximum stays 2");
         return false;
     }
-    logger::write("player cap: session maximum %u, isCoop counts ready members", maxPlayers);
+    logger::write("player cap: session maximum %u, isCoop counts ready members, home network calls retargeted", maxPlayers);
     return true;
 }
 

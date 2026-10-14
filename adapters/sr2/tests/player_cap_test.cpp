@@ -11,6 +11,9 @@
 namespace {
 
 constexpr uintptr_t kThunk = 0x10002000;
+constexpr uintptr_t kSenderThunk = 0x10002100;
+constexpr uintptr_t kHostByNameThunk = 0x10002200;
+constexpr player_cap_patches::Thunks kThunks{kThunk, kSenderThunk, kHostByNameThunk};
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kEightPlayers = 8;
@@ -53,6 +56,15 @@ bool clearOfEarlierMilestones(const std::vector<CodePatch>& patches) {
     return true;
 }
 
+bool editsAreDisjoint(const std::vector<CodePatch>& patches) {
+    for (const CodePatch& a : patches) {
+        for (const CodePatch& b : patches) {
+            if (&a != &b && overlaps(a, b.address, b.expected.size())) return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -60,8 +72,8 @@ int main() {
     check(player_cap_patches::sessionInfoMask(3) == 0xF7 && player_cap_patches::sessionInfoMask(kEightPlayers) == 0xFC,
           "3 players F7, 8 players FC");
 
-    const auto patches = player_cap_patches::forPlayers(kFourPlayers, kThunk);
-    check(patches.size() == 2, "two edits");
+    const auto patches = player_cap_patches::forPlayers(kFourPlayers, kThunks);
+    check(patches.size() == 5, "five edits: the maximum, isCoop and the three retargeted calls");
     const CodePatch& max = patches[0];
     check(max.address == 0x82FD81 && max.expected == std::vector<uint8_t>{0x83, 0xE3, 0xF6, 0x83, 0xC3, 0x0C},
           "session info maximum: 83 E3 F6 83 C3 0C at 0x82FD81 is checked");
@@ -77,12 +89,23 @@ int main() {
                                                    static_cast<uint8_t>(displacement >> 24), 0x90},
           "isCoop: jmp rel32 to the thunk and a nop");
 
-    check(player_cap_patches::forPlayers(kEightPlayers, kThunk)[0].replacement[2] == 0xFC, "8 players write FC");
-    check(player_cap_patches::forPlayers(2, kThunk).empty() && player_cap_patches::forPlayers(1, kThunk).empty(),
+    check(player_cap_patches::forPlayers(kEightPlayers, kThunks)[0].replacement[2] == 0xFC, "8 players write FC");
+    check(player_cap_patches::forPlayers(2, kThunks).empty() && player_cap_patches::forPlayers(1, kThunks).empty(),
           "max_players 2 (the shipped co-op) patches nothing");
-    check(patches[0].address + patches[0].expected.size() <= patches[1].address ||
-              patches[1].address + patches[1].expected.size() <= patches[0].address,
-          "the two edits do not overlap");
+    check(editsAreDisjoint(patches), "no two edits overlap");
+
+    const auto call = [&](size_t index, uintptr_t address, std::vector<uint8_t> expected, uintptr_t thunk) {
+        const uint32_t to = static_cast<uint32_t>(thunk - (address + 5));
+        return patches[index].address == address && patches[index].expected == expected &&
+               patches[index].replacement == std::vector<uint8_t>{0xE8, static_cast<uint8_t>(to), static_cast<uint8_t>(to >> 8),
+                                                                  static_cast<uint8_t>(to >> 16), static_cast<uint8_t>(to >> 24)};
+    };
+    check(call(2, 0x815EAE, {0xE8, 0xFD, 0x9F, 0xFF, 0xFF}, kSenderThunk),
+          "duplicate search call 0x815EAE (call 0x80FEB0) goes to the sender thunk");
+    check(call(3, 0x810C94, {0xE8, 0xAB, 0x28, 0x41, 0x00}, kHostByNameThunk),
+          "gethostbyname call 0x810C94 goes to the host name thunk");
+    check(call(4, 0x7F79D0, {0xE8, 0x6F, 0xBB, 0x42, 0x00}, kHostByNameThunk),
+          "gethostbyname call 0x7F79D0 goes to the host name thunk");
     check(clearOfJuiced(patches), "no edit within 16 bytes of an address Juiced touches");
     check(clearOfEarlierMilestones(patches), "no edit overlaps a milestone 3 or 4 site");
     return g_failures == 0 ? 0 : 1;

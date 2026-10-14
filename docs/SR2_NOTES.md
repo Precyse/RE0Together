@@ -86,6 +86,11 @@ The third player's join stalled at "please wait" with no new member on the host.
 - Reading it: no `nat request` line = the request never reached the host; a request but no `nat negotiation complete` = a stuck negotiation; no `join_req` message = the request never arrived; `join_req dropped` names the silent drop; `member add returned` with 3, 4 or 5 names the refusal.
 - The trace is read-only. The two drop branches become a `jmp` to a thunk that takes the branch itself; the entries are MinHook detours that run the original after logging. B1 to B3 of the research (skip a refusal) are not applied. B3's site (0x815EB5) is T4b's: applying B3 means giving up that trace line.
 
+## Home network (milestone 5d)
+Players 2 and 3 on one home network share the public IP, and the host dropped the second one's join_req without a reply. Research: `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, section M5d. Three calls are retargeted with the player cap edits (same all-or-nothing apply, `max_players` > 2):
+- D1 (0x815EAE, the call to the duplicate member search 0x80FEB0 in the join_req handler): the search matches on the reported public IP, reported private IP and sub-index. Both machines report the first address Windows lists for the host name, often the same virtual adapter. The thunk keeps the search's member only when the member's real source (+0x28 IP, word +0x2C port) equals the sender block's (+0 IP, word +4 port); a resend from the same source is still dropped (and the handler's own mapped-sender check at 0x815BEB drops it too). `trace=1` logs each decision.
+- D2, D2b (0x810C94 and 0x7F79D0, the gethostbyname calls behind the advertised private IP): the thunk calls gethostbyname, then puts the default route interface's IPv4 (GetBestInterface toward 8.8.8.8, no packet sent, then GetAdaptersAddresses) first in the address list. Players on the same public IP reach each other by that private IP (0x8CDA00), so a wrong one fails quietly. `trace=1` logs the address chosen.
+
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).
