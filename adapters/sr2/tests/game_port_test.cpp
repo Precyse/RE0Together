@@ -44,7 +44,7 @@ bool clearOfJuiced(const std::vector<CodePatch>& patches) {
 }
 
 bool clearOfOtherMilestones(const std::vector<CodePatch>& patches) {
-    const player_cap_patches::Thunks thunks{kOtherThunk, kOtherThunk, kOtherThunk};
+    const player_cap_patches::Thunks thunks{kOtherThunk, kOtherThunk};
     const auto playerCap = player_cap_patches::forPlayers(kFourPlayers, thunks);
     for (const CodePatch& patch : patches) {
         const size_t size = patch.expected.size();
