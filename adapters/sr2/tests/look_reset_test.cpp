@@ -59,9 +59,11 @@ int main() {
           "the count tables end where their entry tables start (12 indices of 4 bytes)");
 
     check(describeSend(1, {}) == "looks: send 0 body tints from index 1:", "a send without tints");
-    check(describeSend(2, {{3, 0xFF00FF00, 0x11}, {4, 1, 2}}) ==
-              "looks: send 2 body tints from index 2: slot 3 FF00FF00/00000011 slot 4 00000001/00000002",
-          "a send lists each slot with its two tints");
+    check(describeSend(2, {{3, 7, 11}, {4, 1, 2}}) == "looks: send 2 body tints from index 2: slot 3 7/11 slot 4 1/2",
+          "a send lists each slot with the wire index of its two tints");
+    check(wireIndex(0x4364CAB4 + 0x28 * 6, 0x4364CAB4) == 6 && wireIndex(0x4364CAB4, 0x4364CAB4) == 0,
+          "a tint record's wire index is its place in the table, the same on every machine");
+    check(wireIndex(0x1000, 0x4364CAB4) == kNoTint && wireIndex(0, 0x4364CAB4) == kNoTint, "an address below the table has no index");
 
     const player_cap_patches::Thunks thunks{kThunk, kThunk, kThunk, kResetThunk, kTraceThunk};
     const auto patches = player_cap_patches::forPlayers(kFourPlayers, thunks);

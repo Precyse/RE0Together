@@ -101,6 +101,7 @@ bool shapesFit(const std::vector<Site>& sites) {
         if (site.kind == Kind::HookEntry && bytes.size() < kBranchBytes) return false;
         if (site.kind == Kind::CallBlock && bytes.size() < kBranchBytes + partner_sites::parseHex(site.tail).size()) return false;
         if (site.kind == Kind::JumpOut && bytes.size() < kBranchBytes) return false;
+        if (site.kind == Kind::PointerSwap && bytes.size() != sizeof(uint32_t)) return false;
     }
     return true;
 }
@@ -122,6 +123,7 @@ int main() {
     const std::vector<Site> sites = allSites();
     check(phaseSize("sender scope") == 2, "sender scope: 2 sites (SS1, SS2)");
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
+    check(phaseSize("player traces") == 3, "player traces: 3 sites (TF1, TF2, TL2), written with trace=1 only");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
     check(phaseSize("cutscene handshake") == 2, "cutscene handshake: 2 sites (MC1, MC2)");
     check(phaseSize("guest leave") == 1,
@@ -145,6 +147,10 @@ int main() {
               inOrder && inOrder->address == 0x813390 && partner_sites::parseHex(inOrder->expected).size() == 8,
           "SS1 and SS2 hook the two dispatchers, 8 checked bytes each");
     check(dispatch && partner_replacement::replacementFor(*dispatch, kThunk).empty(), "a hook is written by MinHook, not by the table");
+    const Site* playback = siteNamed(sites, "TF2");
+    check(playback && partner_replacement::replacementFor(*playback, 0x10004000) == std::vector<uint8_t>{0x00, 0x40, 0x00, 0x10} &&
+              partner_sites::parseHex(playback->expected) == std::vector<uint8_t>{0xD0, 0x33, 0x86, 0x00},
+          "TF2: the player bundle's vtable slot (0x8633D0) becomes the thunk, its address little endian");
     check(flipsOnlyTheBranch(siteNamed(sites, "W1b")) && flipsOnlyTheBranch(siteNamed(sites, "W1c")),
           "W1b and W1c: the same bytes with the last one, jne (75), turned into jl (7C)");
     return g_failures == 0 ? 0 : 1;

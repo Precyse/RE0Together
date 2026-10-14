@@ -32,6 +32,9 @@ inline std::vector<uint8_t> replacementFor(const partner_sites::Site& site, uint
             bytes.resize(expected.size(), kNop);
             break;
         case Kind::Bytes: return partner_sites::parseHex(site.tail);
+        case Kind::PointerSwap:
+            for (size_t shift = 0; shift < sizeof(uint32_t) * 8; shift += 8) bytes.push_back(static_cast<uint8_t>(thunk >> shift));
+            break;
     }
     return bytes;
 }

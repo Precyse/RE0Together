@@ -16,6 +16,7 @@ enum class Kind : uint8_t {
     CallBlock,     // a call to the thunk, then `tail`, over the start of a block the thunk replaces
     JumpOut,       // a jmp to the thunk, nops over the rest; the thunk jumps back into the function
     Bytes,         // `tail` over the checked bytes, no thunk (a flipped branch, a nop)
+    PointerSwap,   // the checked bytes are a function pointer in a table; it points to the thunk, which gets the old one
 };
 
 // When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). B and G are
@@ -114,6 +115,9 @@ enum class Thunk : uint8_t {
     PauseClearLeaver,
     CutsceneAllRemotes,
     CutsceneSetsReset,
+    TraceShot,
+    TracePlayerPlayback,
+    TraceCoopBuffers,
 
 
 

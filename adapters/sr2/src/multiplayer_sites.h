@@ -3,6 +3,7 @@
 
 #include "partner_sites.h"
 #include "session_sites.h"
+#include "trace_sites.h"
 #include "world_sites.h"
 
 // The phases of milestone 9 (docs/SR2_NOTES.md): each table is byte-checked and written all or nothing.
@@ -24,6 +25,7 @@ inline constexpr Phase kPhases[] = {
 
 
     {"join admission", session_sites::kAdmission, false},
+    {"player traces", trace_sites::kPlayers, true},
 
     {"population budgets", world_sites::kBudget, false},
 

@@ -39,11 +39,12 @@ void __cdecl traceTintSend(uint32_t human) {
     if (poolIndex >= look_reset_rules::kPoolIndices) return;
     const uint32_t count = readDword(look_reset_rules::kAppliedCounts + poolIndex * sizeof(uint32_t));
     const uintptr_t entries = look_reset_rules::kAppliedEntries + poolIndex * look_reset_rules::kTintRowBytes;
+    const uint32_t table = readDword(look_reset_rules::kTintTableCell);
     std::vector<look_reset_rules::Tint> tints;
     for (uint32_t i = 0; i < count && i < look_reset_rules::kTintEntries; ++i) {
         const uintptr_t entry = entries + i * look_reset_rules::kTintEntryBytes;
-        tints.push_back({readDword(entry + kEntrySlotOffset), readDword(entry + kEntryTintAOffset),
-                         readDword(entry + kEntryTintBOffset)});
+        tints.push_back({readDword(entry + kEntrySlotOffset), look_reset_rules::wireIndex(readDword(entry + kEntryTintAOffset), table),
+                         look_reset_rules::wireIndex(readDword(entry + kEntryTintBOffset), table)});
     }
     logger::write("trace: %s", look_reset_rules::describeSend(poolIndex, tints).c_str());
 }

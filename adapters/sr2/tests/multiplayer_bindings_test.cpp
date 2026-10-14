@@ -41,7 +41,7 @@ int main() {
                 allBound = false;
                 continue;
             }
-            if (site.kind != partner_sites::Kind::HookEntry) continue;
+            if (site.kind != partner_sites::Kind::HookEntry && site.kind != partner_sites::Kind::PointerSwap) continue;
             if (site.thunk == partner_sites::Thunk::QueueAppendFunction) continue;  // replaces a leaf function whole
             hooksHaveSlots = hooksHaveSlots && binding.original;
             slotsAreDistinct = slotsAreDistinct && slots.insert(binding.original).second;

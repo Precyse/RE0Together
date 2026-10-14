@@ -42,7 +42,17 @@ inline std::vector<Range> rangesFor(uint32_t poolIndex) {
             {kMorphValues + poolIndex * kMorphValueBytes, kMorphValueBytes}};
 }
 
-// A body part tint as a look send packs it.
+constexpr uintptr_t kTintTableCell = 0x25289B0;  // holds the address of the table of tint records
+constexpr uint32_t kTintRecordBytes = 0x28;
+constexpr uint32_t kNoTint = 0xFFFFFFFF;
+
+// The number a look send puts on the wire for a tint record (its index in the table), the same on every machine; the
+// record's address differs per process. kNoTint for an address below the table.
+inline uint32_t wireIndex(uint32_t record, uint32_t table) {
+    return record >= table ? (record - table) / kTintRecordBytes : kNoTint;
+}
+
+// A body part tint as a look send packs it: the slot and the wire index of each of its two tint records.
 struct Tint {
     uint32_t slot;
     uint32_t a;
@@ -54,7 +64,7 @@ inline std::string describeSend(uint32_t poolIndex, const std::vector<Tint>& tin
     std::string line = "looks: send " + std::to_string(tints.size()) + " body tints from index " + std::to_string(poolIndex) + ":";
     for (const Tint& tint : tints) {
         char text[64];
-        snprintf(text, sizeof(text), " slot %u %08X/%08X", tint.slot, tint.a, tint.b);
+        snprintf(text, sizeof(text), " slot %u %u/%u", tint.slot, tint.a, tint.b);
         line += text;
     }
     return line;
