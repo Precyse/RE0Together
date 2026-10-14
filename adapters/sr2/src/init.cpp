@@ -3,6 +3,7 @@
 #include "code_check.h"
 #include "config.h"
 #include "coop_limits.h"
+#include "force_join.h"
 #include "hooks.h"
 #include "join_net_trace.h"
 #include "join_trace.h"
@@ -33,6 +34,7 @@ DWORD WINAPI initThread(LPVOID) {
                           config.maxPlayers);
         }
         player_cap::install(config.maxPlayers);
+        force_join::install(config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (config.trace) {
             join_trace::install(config.maxPlayers);

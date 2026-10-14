@@ -86,6 +86,15 @@ The third player's join stalled at "please wait" with no new member on the host.
 - Reading it: no `nat request` line = the request never reached the host; a request but no `nat negotiation complete` = a stuck negotiation; no `join_req` message = the request never arrived; `join_req dropped` names the silent drop; `member add returned` with 3, 4 or 5 names the refusal.
 - The trace is read-only. The two drop branches become a `jmp` to a thunk that takes the branch itself; the entries are MinHook detours that run the original after logging. B1 to B3 of the research (skip a refusal) are not applied. B3's site (0x815EB5) is T4b's: applying B3 means giving up that trace line.
 
+## Force join (milestone 6)
+Spec and probes: `coop-scratch\sr2\M6_FORCE_JOIN.md`, sites `m6_patch_sites.tsv`. Only the front end tick (0x73DCB0) is hooked; the game's own co-op browser does the rest.
+- The launcher (`NativeJoin.cs`, profile `sessionKind` `rendezvous`) writes `coop\sr2_join.txt`: `role=host|guest`, `token=<Steam lobby id>`, `password=<9 digits from lobby data cf_join_pw>`. The adapter follows it by last write time (every 60 ticks); no file or no valid role/token/password = nothing happens.
+- Host, every front end tick: `[0x212AA08]` (online_name) gets ` cf<token>` (older tags dropped, cut to 63 bytes, the tag whole), `[0xE97310]` = 0 (public, else QR2 never lists the session), `[0x212AA88]` = the password. Status `advertising`; in a session a thread writes `in_session N` (the tick does not run there).
+- Guest: the front end must be free (no start request `[0x144E75C]`, no pending game `[0xEB2230]`, no dialog `[0x2528D20]`, no session) and logged in (`[0x2529334]` = 4; else 0x80A150 twice, 30 s apart, then status `login_needed`). It writes `cf<token>` into the browser filter `[0x212A9C8]`, `[0x212A980]` = 0, `[0x2528BC4]` = 1 and calls 0x827620; every tick it walks the browser entries (module type 4 in the ring `[0x252933C]`, `+0x3C`, next `+0x98`), reads `online_name` with 0x8E4960 and takes the first listed entry (`+0x65`) that holds the tag. Then `[0x212AA48]` = the password, entry `+0x8E` = 0, `[0x2528D91]` = 0 and 0x73E5A0 with EAX = the index among the listed entries. The load/create dialog is the player's.
+- A query ends when it is done, errors, or after 12 s; the next one starts 5 s later (no cap). A join that ends at the idle front end for 10 s is a failed attempt; the third gives up (0x827540, filter cleared) until the join file is rewritten.
+- Status (`coop\sr2_status.txt`, `state=<s> detail=<d>`): `advertising`, `in_session N`, `waiting`, `login_needed`, `searching N`, `found`, `dialog`, `joining`, `joined`, `failed`, `stopped`. The launcher publishes it as lobby member data `cf_status`.
+- `trace=1` logs every step (`force join:` lines). Live probes still open: spec section 9 (1 to 9).
+
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).

@@ -21,6 +21,8 @@ public sealed class App
     private Session? _session;
     private SaveSyncCoordinator? _saveSync;
     private LogForwarder? _logForwarder;
+    private NativeJoin? _nativeJoin;
+    private bool _sessionStarted;
     private GameProfile? _profile;
     private string? _gameDir;
     private bool _launchPending;
@@ -143,17 +145,18 @@ public sealed class App
             if (_lobby?.Failure is { } failure)
             {
                 Log.Info($"Lobby failure: {failure}");
-                var guestOf = _session != null && _lobby.OwnerId != _transport!.LocalId ? _lobby.Id : (ulong?)null;
+                var guestOf = _sessionStarted && _lobby.OwnerId != _transport!.LocalId ? _lobby.Id : (ulong?)null;
                 EndSession();
                 if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId);
                 else if (!_interactive) return 1;
             }
             FollowHost();
-            if (_session == null && _lobby is { IsReady: true }) StartSession();
+            if (!_sessionStarted && _lobby is { IsReady: true }) StartSession();
             _bridge?.Pump();
             _session?.Pump();
             _saveSync?.Pump();
             _logForwarder?.Pump();
+            _nativeJoin?.Pump();
             if (_launchPending && !TryLaunch())
             {
                 if (!_interactive) return 1;
@@ -225,16 +228,28 @@ public sealed class App
         _rejoin = null;
         _profile = GameProfile.Load(_lobby!.GameId!);
         _gameDir = ResolveGameDir(_profile);
-        _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
-        _session = new Session(_profile, _lobby, _transport!, _bridge);
-        _buildCheck = BuildCheck.Create(_profile, _gameDir, _session, _transport!, _lobby);
-        if (_gameDir != null)
+        _sessionStarted = true;
+        if (_profile.RendezvousSession)
         {
-            _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby);
-            _logForwarder = LogForwarder.Create(_profile, _gameDir, _session, _transport!, _lobby);
+            if (_gameDir != null) _nativeJoin = NativeJoin.Create(_profile, _gameDir, _lobby, _transport!.LocalId);
+        }
+        else
+        {
+            StartBridgedSession();
         }
         _follow = _steam != null && _lobby.OwnerId != _transport!.LocalId ? new HostFollow(_lobby.OwnerId, _profile.Id) : null;
         _launchPending = true;
+    }
+
+    /// <summary>The bridge, frames between launchers, build check, save sync and log forwarding of a lobby game.</summary>
+    private void StartBridgedSession()
+    {
+        _bridge = new LoopbackBridge(_profile!, _options.BridgePort != 0 ? _options.BridgePort : _profile!.Port);
+        _session = new Session(_profile!, _lobby!, _transport!, _bridge);
+        _buildCheck = BuildCheck.Create(_profile!, _gameDir, _session, _transport!, _lobby!);
+        if (_gameDir == null) return;
+        _saveSync = SaveSyncCoordinator.Create(_profile!, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby!);
+        _logForwarder = LogForwarder.Create(_profile!, _gameDir, _session, _transport!, _lobby!);
     }
 
     /// <summary>Starts the game once save sync is ready. False when the save sync timed out.</summary>
@@ -250,7 +265,10 @@ public sealed class App
         if (_saveSync?.Ready == false) return true;
         _launchPending = false;
         _saveSync?.EnableAdapter(GameOptions.Current(_profile!, _gameDir));
-        return _options.NoLaunch || GameLauncher.Launch(_profile!, _gameDir);
+        if (_options.NoLaunch) return true;
+        return _profile!.RendezvousSession
+            ? _gameDir != null && GameLauncher.LaunchWithOptions(_profile, _gameDir)
+            : GameLauncher.Launch(_profile, _gameDir);
     }
 
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
@@ -259,6 +277,8 @@ public sealed class App
         _follow = null;
         _buildCheck = null;
         _logForwarder = null;
+        _nativeJoin?.Dispose();
+        _nativeJoin = null;
         _saveSync?.Dispose();
         _saveSync = null;
         _session?.Dispose();
@@ -270,6 +290,7 @@ public sealed class App
         _profile = null;
         _gameDir = null;
         _launchPending = false;
+        _sessionStarted = false;
         ResetAdapterSettings();
     }
 
@@ -298,7 +319,8 @@ public sealed class App
     private IReadOnlyList<PlayerSlot> PlayerSlots(ILobby lobby) =>
         lobby.Members
             .OrderByDescending(member => member.Id == lobby.OwnerId)
-            .Select(member => new PlayerSlot(member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId))
+            .Select(member => new PlayerSlot(
+                member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId, NativeJoin.Readable(lobby.MemberStatus(member))))
             .ToList();
 
     private List<string> SeatCharacters(ILobby lobby) =>

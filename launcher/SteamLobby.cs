@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Steamworks;
 
 namespace CoopLauncher;
@@ -9,6 +10,10 @@ public sealed class SteamLobby : ILobby
     private const string KeyProto = "cf_proto";
     private const string KeyVersion = "cf_ver";
     private const string KeyHostOptions = "cf_opts";
+    private const string KeyJoinSecret = "cf_join_pw";
+    private const string KeyStatus = "cf_status";
+    private const int JoinSecretMin = 100_000_000;  // nine digits
+    private const int JoinSecretMax = 1_000_000_000;
     private const string LauncherVersion = "1.0.0";
     private const long AnswerTimeoutMs = 30_000;
     private const uint EnterSuccess = (uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess;
@@ -19,6 +24,7 @@ public sealed class SteamLobby : ILobby
     private readonly Callback<LobbyDataUpdate_t> _dataUpdate;
     private readonly long _answerDeadlineMs = Environment.TickCount64 + AnswerTimeoutMs;
     private IReadOnlyDictionary<string, string> _createdOptions = new Dictionary<string, string>();
+    private string _createdJoinSecret = string.Empty;
     private bool _publishedPresence;
     private CSteamID _lobby;
     private List<LobbyMember> _members = new();
@@ -44,13 +50,19 @@ public sealed class SteamLobby : ILobby
     public IReadOnlyDictionary<string, string> HostOptions =>
         _lobby.IsValid() ? GameOptions.Decode(SteamMatchmaking.GetLobbyData(_lobby, KeyHostOptions)) : new Dictionary<string, string>();
 
+    public string JoinSecret => _lobby.IsValid() ? SteamMatchmaking.GetLobbyData(_lobby, KeyJoinSecret) : string.Empty;
+
     public IReadOnlyList<LobbyMember> Members => _members;
 
     public int Revision { get; private set; }
 
     public static SteamLobby Create(GameProfile profile, IReadOnlyDictionary<string, string> hostOptions)
     {
-        var lobby = new SteamLobby { GameId = profile.Id, _createdOptions = hostOptions };
+        var lobby = new SteamLobby
+        {
+            GameId = profile.Id, _createdOptions = hostOptions,
+            _createdJoinSecret = profile.RendezvousSession ? RandomNumberGenerator.GetInt32(JoinSecretMin, JoinSecretMax).ToString() : string.Empty,
+        };
         lobby.Track(lobby._created, SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, profile.MaxPlayers));
         return lobby;
     }
@@ -80,6 +92,14 @@ public sealed class SteamLobby : ILobby
         _dataUpdate.Dispose();
     }
 
+    public void SetMemberStatus(string status)
+    {
+        if (_lobby.IsValid()) SteamMatchmaking.SetLobbyMemberData(_lobby, KeyStatus, status);
+    }
+
+    public string MemberStatus(LobbyMember member) =>
+        _lobby.IsValid() ? SteamMatchmaking.GetLobbyMemberData(_lobby, new CSteamID(member.Id), KeyStatus) : string.Empty;
+
     private void Track<T>(CallResult<T> result, SteamAPICall_t call) where T : struct
     {
         if (call == SteamAPICall_t.Invalid) Failure = "Steam did not accept the lobby request (is Steam online?)";
@@ -98,6 +118,7 @@ public sealed class SteamLobby : ILobby
         SteamMatchmaking.SetLobbyData(_lobby, KeyProto, Framing.ProtocolVersion.ToString());
         SteamMatchmaking.SetLobbyData(_lobby, KeyVersion, LauncherVersion);
         SteamMatchmaking.SetLobbyData(_lobby, KeyHostOptions, GameOptions.Encode(_createdOptions));
+        if (_createdJoinSecret.Length > 0) SteamMatchmaking.SetLobbyData(_lobby, KeyJoinSecret, _createdJoinSecret);
         Announce();
         LobbyPresence.Publish(_lobby.m_SteamID, GameId!);
         _publishedPresence = true;
