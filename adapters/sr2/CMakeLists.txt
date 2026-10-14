@@ -39,6 +39,7 @@ add_library(sr2_adapter SHARED
     src/replication_switch.cpp
     src/member_slots.cpp
     src/join_trace.cpp
+    src/join_net_trace.cpp
     src/remote_players.cpp
     src/partner_scope.cpp
     src/guest_call.cpp
@@ -61,6 +62,7 @@ target_compile_options(sr2_adapter PRIVATE /W4 /WX /utf-8)
 set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
+    src/join_net_trace.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
@@ -79,6 +81,8 @@ add_unit_test(replication_sites_test)
 add_unit_test(partner_rules_test)
 add_unit_test(partner_sites_test)
 add_unit_test(player_cap_test)
+add_unit_test(join_net_trace_sites_test)
+add_unit_test(trace_stub_test)
 add_unit_test(guest_call_test src/guest_call.cpp)
 add_unit_test(remote_players_test src/remote_players.cpp src/partner_scope.cpp src/member_slots.cpp src/replication_switch.cpp
     src/code_patch.cpp src/memory.cpp)

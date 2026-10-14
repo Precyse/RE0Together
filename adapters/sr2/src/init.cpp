@@ -4,6 +4,7 @@
 #include "config.h"
 #include "coop_limits.h"
 #include "hooks.h"
+#include "join_net_trace.h"
 #include "join_trace.h"
 #include "log.h"
 #include "partner_patches.h"
@@ -33,7 +34,10 @@ DWORD WINAPI initThread(LPVOID) {
         }
         player_cap::install(config.maxPlayers);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
-        if (config.trace) join_trace::install(config.maxPlayers);
+        if (config.trace) {
+            join_trace::install(config.maxPlayers);
+            join_net_trace::install();
+        }
         hooks::applyBatch();
         logger::write("sr2 adapter ready");
     } catch (...) {

@@ -23,21 +23,15 @@ JoinQueueAddFn g_joinQueueAdd = nullptr;
 std::atomic<uintptr_t> g_lastSlot{0};
 uint32_t g_maxPlayers = sr2::kCoopDefaultPlayers;
 
-uint32_t readU32(uintptr_t address) {
-    uint32_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 uint32_t __cdecl detourPoolSetup() {
     logger::write("trace: session pools sized, max session players %u, max players %u, connections per player %u, inside net_set_mode %d",
-                  readU32(sr2::kMaxSessionPlayers), readU32(sr2::kMaxPlayers), readU32(sr2::kConnectionsPerPlayer),
+                  readDword(sr2::kMaxSessionPlayers), readDword(sr2::kMaxPlayers), readDword(sr2::kConnectionsPerPlayer),
                   coop_limits::insideNetSetMode() ? 1 : 0);
     logger::write("trace: coop_allocators used %u of %u bytes, player N=8 allocator count %u block 0x%X",
-                  readU32(sr2::kCoopAllocatorsPool + sr2::kPoolUsedOffset),
-                  readU32(sr2::kCoopAllocatorsPool + sr2::kPoolSizeOffset),
-                  readU32(sr2::kPlayerN8Allocator + sr2::kAllocatorCountOffset),
-                  readU32(sr2::kPlayerN8Allocator + sr2::kAllocatorBlockOffset));
+                  readDword(sr2::kCoopAllocatorsPool + sr2::kPoolUsedOffset),
+                  readDword(sr2::kCoopAllocatorsPool + sr2::kPoolSizeOffset),
+                  readDword(sr2::kPlayerN8Allocator + sr2::kAllocatorCountOffset),
+                  readDword(sr2::kPlayerN8Allocator + sr2::kAllocatorBlockOffset));
     member_slots::check(g_maxPlayers);
     return g_poolSetup();
 }
@@ -53,10 +47,10 @@ uintptr_t __cdecl detourSlotAllocator() {
 
 void __stdcall detourJoinQueueAdd(uintptr_t session, uintptr_t request) {
     const uintptr_t countAddress = session + sr2::kSessionJoinQueueCountOffset;
-    const uint32_t before = readU32(countAddress);
+    const uint32_t before = readDword(countAddress);
     g_joinQueueAdd(session, request);
     logger::write("trace: join request queued, session 0x%X, request 0x%X, queue %u -> %u",
-                  static_cast<unsigned>(session), static_cast<unsigned>(request), before, readU32(countAddress));
+                  static_cast<unsigned>(session), static_cast<unsigned>(request), before, readDword(countAddress));
     member_slots::check(g_maxPlayers);
 }
 

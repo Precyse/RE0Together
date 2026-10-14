@@ -79,6 +79,13 @@ Research (not in the repo): `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, 
 - Both edits are checked and written together (`player_cap::install`), only when `max_players` > 2. Neither is within 16 bytes of a Juiced target (Juiced only calls isCoop).
 - Log line: `player cap: session maximum 4, isCoop counts ready members`; `player cap: sites differ, the maximum stays 2` when the bytes are not the supported build's.
 
+## Join trace (milestone 5b)
+The third player's join stalled at "please wait" with no new member on the host. Research: `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, section M5b. With `trace=1` the adapter byte-checks 12 sites and logs (all lines start `trace:`):
+- Host: `nat request, cookie, negotiation running` (T1, 0x8CFDE0); `nat negotiation complete, result (0 ok), cookie` (T2, 0x8CC1F0); `message join_req|join_acc|join_deny|join_new_session ... mapped member` for join messages reaching the dispatcher (T3, 0x8138F0); `join_req handler, name, sender words, session members/reserved/max` (T4, 0x815BC0); `join_req dropped, the sender is already mapped` (T4a, 0x815BEB) and `... a member has the sender's address` (T4b, 0x815EB5), the two silent drops; `join_deny sent, reason` (T5, 0x816F60); `member add returned N, busy state, join type, counts` (T6, 0x80F640: 0 ok, 3 full, 4 invite only, 5 busy); `member allocated 0x..` (T7, 0x7F9590, 0 = pool exhausted).
+- Joiner: `join_req sent` (T8, 0x815930), `join_deny received, reason` (T9, 0x8163F0), `join_acc received` (T10, 0x8162E0).
+- Reading it: no `nat request` line = the request never reached the host; a request but no `nat negotiation complete` = a stuck negotiation; no `join_req` message = the request never arrived; `join_req dropped` names the silent drop; `member add returned` with 3, 4 or 5 names the refusal.
+- The trace is read-only. The two drop branches become a `jmp` to a thunk that takes the branch itself; the entries are MinHook detours that run the original after logging. B1 to B3 of the research (skip a refusal) are not applied. B3's site (0x815EB5) is T4b's: applying B3 means giving up that trace line.
+
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).

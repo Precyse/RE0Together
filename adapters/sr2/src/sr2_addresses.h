@@ -133,6 +133,23 @@ constexpr uintptr_t kSessionInfoMaxMaskOffset = 2;              // the imm8 insi
 constexpr uint32_t kSessionInfoBaseMax = 12;                    // what the block adds back (the non-co-op maximum)
 constexpr uintptr_t kCoopMemberCountTest = 0x7F7AFD;            // cmp dword ptr [ecx+0x30], 2 ; jne false
 
+// Join path trace (milestone 5b): the host's NAT negotiation gate, the advertised session and the session fields
+// the join checks read. Message ids are the first byte of a transport message.
+constexpr uintptr_t kNatBusyFlag = 0x212A631;       // byte: a NAT negotiation is running, the next one waits
+constexpr uintptr_t kAdvertisedSessionPointer = 0x2528C18;
+constexpr uintptr_t kSessionInfoOffset = 0xC;       // pointer to the session info
+constexpr uintptr_t kSessionMemberCountOffset = 0x30;
+constexpr uintptr_t kSessionBusyStateOffset = 0x1C;  // the states 2, 4, 7..12 refuse a join with reason 5
+constexpr uintptr_t kSessionBusySubstateAOffset = 0x20;
+constexpr uintptr_t kSessionBusySubstateBOffset = 0x24;
+constexpr uintptr_t kSessionReservedOffset = 0x3F4;
+constexpr uintptr_t kInfoMaxPlayersOffset = 0x38;
+constexpr uintptr_t kInfoJoinTypeOffset = 0x3C;      // 2 = open, 3 = invite only
+constexpr uint8_t kMessageJoinReq = 2;
+constexpr uint8_t kMessageJoinAcc = 3;
+constexpr uint8_t kMessageJoinDeny = 4;
+constexpr uint8_t kMessageJoinNewSession = 5;
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
