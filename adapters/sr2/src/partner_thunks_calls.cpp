@@ -16,7 +16,8 @@ static_assert(sr2::kObjectPositionOffset == 0x14, "nearestRemoteEdi14Stub assemb
 
 uintptr_t __cdecl nearestToLocal() {
     FpuGuard guard;
-    return remote_players::nearestRemoteTo(remote_players::positionOf(remote_players::localHuman()));
+    const uintptr_t local = remote_players::localHuman();
+    return local ? remote_players::nearestRemoteTo(remote_players::positionOf(local)) : 0;
 }
 
 void __cdecl lookSyncEach(uintptr_t target, uint32_t localHuman) {

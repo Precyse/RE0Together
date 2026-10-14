@@ -30,6 +30,7 @@ inline constexpr Phase kPhases[] = {
     {"population budgets", world_sites::kBudget, false},
 
     {"population cluster", world_sites::kCluster, false},
+    {"population partner", world_sites::kPartnerView, false},
     {"creation queue", world_sites::kQueue, false},
     {"upload share", world_sites::kUpload, false},
 

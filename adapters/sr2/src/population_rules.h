@@ -17,6 +17,7 @@ struct Point {
 
 constexpr uint32_t kNpcBudgetBase = 0x96;    // the total humans budget (single player and multiplayer use 0x4B)
 constexpr uint32_t kNpcPoolCapacity = 150;   // humans the static NPC pool holds
+constexpr int32_t kVehicleHeadroomPerRemote = 4;
 constexpr size_t kBudgetRemotesAtLeast
  = 2;  // below this the game's own function answers
 
@@ -72,6 +73,11 @@ inline bool clusterFar(bool localIsHost, uint8_t localSlot, const Point& local, 
         if (localIsHost || peers[i].slot < localSlot) return false;
     }
     return true;
+}
+
+// The vehicles this machine may still add: the shipped function takes 4 off while a partner exists, here 4 per remote.
+inline int32_t vehicleHeadroom(int32_t free, size_t remotes) {
+    return free - kVehicleHeadroomPerRemote * static_cast<int32_t>(remotes);
 }
 
 }  // namespace population_rules

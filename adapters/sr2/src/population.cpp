@@ -94,8 +94,25 @@ void __cdecl clusterLeaderFar(GuestFrame* frame) {
 remotes.localIsHost, remotes.localSlot, local, peers, remotes.count, radius) ? 1 : 0;
 }
 
+// W10b: esi = the vehicles still allowed (0x20 less this machine's own), returns it less 4 per remote player.
+int32_t __cdecl vehicleHeadroom(int32_t free) {
+    return population_rules::vehicleHeadroom(free, remote_players::remoteHumanCount());
+}
+
 PARTNER_WRAP_STUB(areaBudgetStub, areaBudget, 0)
 PARTNER_WRAP_STUB(clusterLeaderFarStub, clusterLeaderFar, 0)
+
+// Replaces the call to the partner getter, the test and the subtraction of 4 at the end of 0x93C1D0; the function's own
+// `ret` follows after the pop of esi.
+void __declspec(naked) vehicleHeadroomStub() {
+    __asm {
+        push esi
+        call vehicleHeadroom
+        add esp, 4
+        pop esi
+        ret
+    }
+}
 
 }  // namespace
 
@@ -105,6 +122,7 @@ partner_thunks::Binding bind(Thunk thunk) {
     switch (thunk) {
         case Thunk::AreaBudget: return {reinterpret_cast<void*>(&areaBudgetStub), &g_areaBudgetOriginal};
         case Thunk::ClusterLeaderFar: return {reinterpret_cast<void*>(&clusterLeaderFarStub), &g_clusterOriginal};
+        case Thunk::VehicleHeadroom: return {reinterpret_cast<void*>(&vehicleHeadroomStub), nullptr};
         default:
  return {nullptr, nullptr};
     }

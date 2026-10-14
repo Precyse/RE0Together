@@ -84,6 +84,13 @@ void theHumansBudgetFitsThePool() {
           "two areas fit the pool exactly");
 }
 
+void vehicleHeadroomTakesFourPerRemote() {
+    check(population_rules::vehicleHeadroom(20, 0) == 20 && population_rules::vehicleHeadroom(20, 1) == 16,
+          "no remote: nothing off; one remote: 4 off, as the shipped function does");
+    check(population_rules::vehicleHeadroom(20, 3) == 8 && population_rules::vehicleHeadroom(2, 3) == -10,
+          "three remotes: 12 off (it can go negative, the caller compares)");
+}
+
 void theLowestSlotOfAClusterAnswersFar() {
     const Peer farRemote[] = {{1, at(1000)}};
     const Peer nearHost[] = {{0, at(50)}};
@@ -113,5 +120,6 @@ int main() {
     areasCountSeparatePlayerAreas();
     theHumansBudgetFitsThePool();
     theLowestSlotOfAClusterAnswersFar();
+    vehicleHeadroomTakesFourPerRemote();
     return g_failures == 0 ? 0 : 1;
 }

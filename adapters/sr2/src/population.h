@@ -6,7 +6,8 @@
 // population_rules.h):
 //   W1a  the area budget 0x93E8D0 follows the number of separate player areas (the game's own function answers with one
 //        remote, so 2 players are bit-exact),
-//   W2a  the cluster rule 0x957A40: the lowest slot of a cluster spawns for it.
+//   W2a  the cluster rule 0x957A40: the lowest slot of a cluster spawns for it,
+//   W10b the vehicle headroom 0x93C1D0 takes 4 off per remote.
 namespace population {
 
 

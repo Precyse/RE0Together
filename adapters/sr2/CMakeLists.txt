@@ -139,6 +139,6 @@ add_unit_test(pause_mask_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)
 add_unit_test(multiplayer_sites_test)
-add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/cutscene_sync.cpp src/player_trace.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
+add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/cutscene_sync.cpp src/player_trace.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)

@@ -106,14 +106,19 @@ bool shapesFit(const std::vector<Site>& sites) {
     return true;
 }
 
-// A bytes site that changes nothing but its last byte from jne to jl.
-bool flipsOnlyTheBranch(const Site* site) {
+// A bytes site that changes nothing but the jne (75) at `at` into jl (7C).
+bool flipsOnlyTheBranchAt(const Site* site, size_t at) {
     if (!site || site->kind != Kind::Bytes) return false;
     auto expected = partner_sites::parseHex(site->expected);
     const auto written = partner_replacement::replacementFor(*site, 0);
-    if (expected.size() != written.size() || expected.back() != 0x75 || written.back() != 0x7C) return false;
-    expected.back() = written.back();
+    if (expected.size() != written.size() || expected[at] != 0x75 || written[at] != 0x7C) return false;
+    expected[at] = written[at];
     return expected == written;
+}
+
+// A bytes site whose last byte is the one that changes.
+bool flipsOnlyTheBranch(const Site* site) {
+    return site && flipsOnlyTheBranchAt(site, partner_sites::parseHex(site->expected).size() - 1);
 }
 
 }  // namespace
@@ -135,6 +140,18 @@ int main() {
     check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(phaseSize("creation queue") == 4, "creation queue: 4 sites (W8a to W8d)");
     check(phaseSize("upload share") == 1, "upload share: 1 site (W9a)");
+    check(phaseSize("population partner") == 16, "population partner: 16 sites (14 calls W10_*, W10a, W10b)");
+    bool allCallTheGetter = true;
+    for (const Site& site : sites) {
+        if (std::string_view(site.id).starts_with("W10_")) {
+            // the call goes to the game's partner getter 0x9D7BD0
+            const auto bytes = partner_sites::parseHex(site.expected);
+            const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
+            allCallTheGetter = allCallTheGetter && site.address + 5 + displacement == 0x9D7BD0;
+        }
+    }
+    check(allCallTheGetter, "the 14 W10_* calls all go to get_remote_player (0x9D7BD0)");
+    check(flipsOnlyTheBranchAt(siteNamed(sites, "W10a"), 7), "W10a: the same bytes with the jne (75) after the compare turned into jl (7C)");
     const Site* upload = siteNamed(sites, "W9a");
     check(upload && partner_replacement::replacementFor(*upload, 0) == std::vector<uint8_t>(4, 0x90) &&
               partner_sites::parseHex(upload->expected) == std::vector<uint8_t>{0xF7, 0x74, 0x24, 0x18},
