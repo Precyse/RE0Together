@@ -27,6 +27,11 @@ inline constexpr Site kCluster[] = {
     {"W2a", Kind::HookEntry, Gate::Now, 0x957A40, "A0 48 8B 52 02 83 EC 08", Thunk::ClusterLeaderFar, ""},
 };
 
+// Each member gets the upload rate it reported (W9), not that rate divided by the number of remotes.
+inline constexpr Site kUpload[] = {
+    {"W9a", Kind::Bytes, Gate::Now, 0x814267, "F7 74 24 18", Thunk::None, "90 90 90 90"},
+};
+
 // A member's creation queue never overflows (W8): the three appends and the drain.
 inline constexpr Site kQueue[] = {
     {"W8a", Kind::JumpOut, Gate::Now, 0x80517F, "8B 88 F0 21 00 00 89 BC 88 F0 1D 00 00 8A 88 B0 01 00 00 83 80 F0 21 00 00 01", Thunk::QueueAppendCreate, ""},

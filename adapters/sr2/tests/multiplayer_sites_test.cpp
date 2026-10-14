@@ -134,6 +134,11 @@ int main() {
  "population budgets: 3 sites (W1a, W1b, W1c)");
     check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(phaseSize("creation queue") == 4, "creation queue: 4 sites (W8a to W8d)");
+    check(phaseSize("upload share") == 1, "upload share: 1 site (W9a)");
+    const Site* upload = siteNamed(sites, "W9a");
+    check(upload && partner_replacement::replacementFor(*upload, 0) == std::vector<uint8_t>(4, 0x90) &&
+              partner_sites::parseHex(upload->expected) == std::vector<uint8_t>{0xF7, 0x74, 0x24, 0x18},
+          "W9a: the div by the number of remotes (div dword [esp+0x18]) becomes four nops");
 
     check(idsAndAddressesAreUnique(sites), "ids and addresses are unique");
     check(sitesDoNotOverlap(sites), "no two sites overlap");
