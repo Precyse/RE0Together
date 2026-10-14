@@ -257,6 +257,12 @@ constexpr uintptr_t kMemberLiveOffset = 0x4A;        // byte: the dispatcher for
 constexpr uintptr_t kMessageIdOffset = 0;            // byte, in a message
 constexpr uintptr_t kMessageLengthOffset = 1;        // word: the payload length, the payload starts 3 bytes in
 
+// Ambient population (milestone 9). The budgets measure from the local camera to each remote human's camera.
+constexpr uintptr_t kCameraPosition = 0x25F5B14;       // three floats: the local camera
+constexpr uintptr_t kHumanCameraOffset = 0x12A0;       // three floats: a human's camera
+constexpr uintptr_t kClusterRadius = 0xE5C660;         // float: how near a partner must be for one spawner to do for both
+constexpr uintptr_t kClusterRadiusWide = 0xDD078C;     // float: the same for the callers that ask for the wide test
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

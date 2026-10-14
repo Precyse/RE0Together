@@ -105,12 +105,25 @@ bool shapesFit(const std::vector<Site>& sites) {
     return true;
 }
 
+// A bytes site that changes nothing but its last byte from jne to jl.
+bool flipsOnlyTheBranch(const Site* site) {
+    if (!site || site->kind != Kind::Bytes) return false;
+    auto expected = partner_sites::parseHex(site->expected);
+    const auto written = partner_replacement::replacementFor(*site, 0);
+    if (expected.size() != written.size() || expected.back() != 0x75 || written.back() != 0x7C) return false;
+    expected.back() = written.back();
+    return expected == written;
+}
+
 }  // namespace
 
 int main() {
+
     const std::vector<Site> sites = allSites();
     check(phaseSize("sender scope") == 2, "sender scope: 2 sites (SS1, SS2)");
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
+    check(phaseSize("population budgets") == 3, "population budgets: 3 sites (W1a, W1b, W1c)");
+    check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(idsAndAddressesAreUnique(sites), "ids and addresses are unique");
     check(sitesDoNotOverlap(sites), "no two sites overlap");
     check(shapesFit(sites), "a retargeted call is a 5 byte call, a hook or a jump covers 5 bytes, a block has room for its tail");
@@ -123,5 +136,7 @@ int main() {
               inOrder && inOrder->address == 0x813390 && partner_sites::parseHex(inOrder->expected).size() == 8,
           "SS1 and SS2 hook the two dispatchers, 8 checked bytes each");
     check(dispatch && partner_replacement::replacementFor(*dispatch, kThunk).empty(), "a hook is written by MinHook, not by the table");
+    check(flipsOnlyTheBranch(siteNamed(sites, "W1b")) && flipsOnlyTheBranch(siteNamed(sites, "W1c")),
+          "W1b and W1c: the same bytes with the last one, jne (75), turned into jl (7C)");
     return g_failures == 0 ? 0 : 1;
 }

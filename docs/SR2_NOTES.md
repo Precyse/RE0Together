@@ -157,7 +157,16 @@ The game's own co-op reacts to the one partner of 2-player play; milestone 9 mak
 - Look tints that were saved while contaminated stay in the save or look store: restore the backup or pick the looks again (no code change).
 
 
+### Population (W1, W2)
+- How 2-player co-op keeps the world at single-player density: every machine spawns ambient NPCs and traffic around its own player and networks them (0x9D0DE0 -> 0x805000 queues the creation to every member with no distance filter). The budgets call 0x93E8D0(radius, base): half the base while the partner's camera (human +0x12A0, against the local camera 0x25F5B14) is within the radius, the whole base from twice the radius, linear in between (callers: total humans base 0x96 radius 130, traffic 0x1A / 70, parked vehicles 0xC / 130, the ped cap 0x22 or 0x30 / 70). The cluster rule 0x957A40 answers "near" while the partner is within 160 (400 wide); then a guest does not spawn and the host spawns for both. M5i said the host streams chunks around every remote (O1); O1 is a geometric query only, so the 3-player crash pressure is the population (1.5 to 3 times the density), not streaming.
+- W1a (hook 0x93E8D0): with fewer than two remote humans the game's function answers (2 players are bit-exact). Otherwise `half + trunc(half * extra)` with `half = base >> 1` and `extra` the soft count of other player areas: the remotes in ascending owner slot, each adding its farness (0 within the radius, 1 from twice the radius, linear) from the local player, but no more than its farness from any remote before it, so players standing together are one area. Together it is `half`, all apart `half * (remotes + 1)`, two remotes together far from the local player `base`. The humans budget (base 0x96) is held at the 150 humans of the static NPC pool; growing the pools (W4, W5) waits for a live count.
+- W1b (0x9292B8) and W1c (0x90D176): the ped cap's and the concurrent spawn slots' `[0x21603CC] == 2` become `>= 2` (the humans in the game): the ped cap takes the area budget, and every machine keeps the 2-player 3 concurrent spawns instead of 6.
+- W2a (hook 0x957A40): with no remote human or outside co-op the game's function answers. Otherwise "far" unless a player is within the radius: the host is near to any player in range, a guest only to a player in range with a lower owner slot, so the lowest slot of a cluster spawns for it (a guest-led cluster spawns around that guest only: the callers' guest branch never uses partner origins). With one remote it is the game's answer (a guest's one remote is the host).
+- The spawn budget hook of milestone 5i stays as the safety net for the 2400 element pool.
+- Live test: three players together for 10 minutes: no `spawn budget` refusal in the trace, the human count near 75; three apart: about 75 per area.
+
 ## Open questions for the live run
+
 
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).

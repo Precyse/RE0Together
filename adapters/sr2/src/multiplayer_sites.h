@@ -3,6 +3,7 @@
 
 #include "partner_sites.h"
 #include "session_sites.h"
+#include "world_sites.h"
 
 // The phases of milestone 9 (docs/SR2_NOTES.md): each table is byte-checked and written all or nothing.
 namespace multiplayer_sites {
@@ -16,6 +17,10 @@ struct Phase {
 inline constexpr Phase kPhases[] = {
     {"sender scope", session_sites::kScope, false},
     {"looks", session_sites::kLooks, false},
+    {"population budgets", world_sites::kBudget, false},
+    {"population cluster", world_sites::kCluster, false},
+
+
 };
 
 }  // namespace multiplayer_sites

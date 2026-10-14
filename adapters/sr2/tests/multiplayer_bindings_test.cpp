@@ -28,7 +28,9 @@ int main() {
     bool slotsAreDistinct = true;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {
         for (const partner_sites::Site& site : phase.sites) {
+            if (site.kind == partner_sites::Kind::Bytes) continue;
             const partner_thunks::Binding binding = multiplayer_thunks::bindingOf(site.thunk);
+
             if (!binding.entry) {
                 std::printf("     %s has no thunk\n", site.id);
                 allBound = false;

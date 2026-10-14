@@ -15,6 +15,7 @@ enum class Kind : uint8_t {
     RetargetCall,  // the call or jmp rel32 here goes to the thunk
     CallBlock,     // a call to the thunk, then `tail`, over the start of a block the thunk replaces
     JumpOut,       // a jmp to the thunk, nops over the rest; the thunk jumps back into the function
+    Bytes,         // `tail` over the checked bytes, no thunk (a flipped branch, a nop)
 };
 
 // When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). B and G are
@@ -23,6 +24,7 @@ enum class Gate : uint8_t { Now, ProbeB, ProbeG, ProbeE, ProbeH };
 
 // The code behind a site (partner_thunks_*.cpp). Several sites share a thunk.
 enum class Thunk : uint8_t {
+    None,  // a Bytes site has no code of its own
     PartnerGetter,
     PartnerMember,
     AnyRemoteHasChunkLoaded,
@@ -98,6 +100,10 @@ enum class Thunk : uint8_t {
     ScopeInOrder,
     LookMorphFromSender,
     LookComponentsFromSender,
+    AreaBudget,
+    ClusterLeaderFar,
+
+
 };
 
 struct Site {

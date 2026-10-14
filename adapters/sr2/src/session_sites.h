@@ -13,6 +13,7 @@ using partner_sites::Kind;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
+
 // The message handlers answer for their sender.
 inline constexpr Site kScope[] = {
     {"SS1", Kind::HookEntry, Gate::Now, 0x8138F0, "51 8B 44 24 08 8A 10 80", Thunk::ScopeDispatch, ""},

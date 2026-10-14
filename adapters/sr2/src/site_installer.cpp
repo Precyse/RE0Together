@@ -38,8 +38,13 @@ Result install(std::span<const Site> sites, bool experimental, Binder binder) {
             ++gated;
             continue;
         }
+        if (site.kind == Kind::Bytes) {
+            patches.push_back(patchFor(site, 0));
+            continue;
+        }
         const partner_thunks::Binding binding = binder(site.thunk);
         if (!binding.entry) {
+
             logger::write("sites: no thunk for %s, nothing patched", site.id);
             return {false, 0, gated};
         }
