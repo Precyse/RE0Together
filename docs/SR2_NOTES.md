@@ -9,7 +9,7 @@ Full research plan (static, not in the repo): `C:\Users\ahmal\coop-scratch\sr2\N
 - `0x7F91C0` sizes the connection pool (`[0xE8C434]` x `[0xE8C448]`) and packet buffers from those limits; whether it runs before or after `net_set_mode` returns is not known yet (milestone 1 trace logs it).
 - Player human pool: 12 slots at 0x2CD0590, allocator 0x9D7C10 refuses an index >= `[0xE8C438]`. `#PLAYER1#..#PLAYER12#` script names and `styletest_pc_MP2..MP12` assets already exist.
 - `get_remote_player` 0x9D7BD0 (cdecl, no arguments): first human in the list `[0x217043C]` that is not the local player `[0x21703D4]`; about 700 call sites treat it as "the partner".
-- Join: `join_req` handler 0x8162E0, queue add 0x810220 (stdcall(session, request); queue count at session +0x7EC, 12 entries).
+- Join: message table rows are `{id, handler, name}`: `join_req` handler 0x815BC0 (host accept/refuse), `join_acc` 0x8162E0 (joiner side; calls queue add 0x810220), `join_deny` 0x8163F0. Queue add 0x810220 (stdcall(session, request); queue count at session +0x7EC, 12 entries).
 - Replication baselines (deltacomp) are 1 peer in co-op; milestone 3 switches them to the 8-peer instances (see "Replication"). Partner-singular code and Lua scripts (`REMOTE_PLAYER`) come after that.
 
 ## Juiced (DFEngine.dll)
@@ -70,6 +70,14 @@ Design and research tables (not in the repo): `C:\Users\ahmal\coop-scratch\sr2\M
 4. Probe B (3 players, trace=1, then `partner_experimental=1`): P3 goes down away from the others; the remote lines show P3's `downed` at 0 or more while down and -1 after a revive or death, on the host and on P2. If they do, keep the flag on and check the team wipe (D2, D3) with all players down; if not, D2 and D3 stay off and need a downed message of their own.
 5. Probe G (3 players, P3 a passenger in the customised car leaving the shop): first without the flag, is P3 left behind in the garage? Then with `partner_experimental=1`, `trace: probe G` gives where B4 puts P3. Ship B3 and B4 only if P3 is left behind otherwise.
 6. Probe E (not gating): the host and P2 play an activity (demo derby, insurance fraud); P3's screen shows whether partner broadcasts cause prompts or activity HUD.
+
+## Player cap (milestone 5)
+Research (not in the repo): `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, `m5_patch_sites.tsv`.
+- "1/2" in the server browser is the session info maximum (+0x38). The builder 0x82FD10 sets it to 2 for co-op (`and ebx, imm8` with imm8 F6, then `add ebx, 12`) and never reads the limit globals. Every full check reads that field: the host's `join_req` handler 0x815BC0 (`join_deny` reason 3, shown as session full), member add, the "joinable" checks, the QR2 `maxplayers`/`open_slots` keys and the guest browser filter.
+- P1 (`session_info_max`, 0x82FD81): the imm8 at 0x82FD83 becomes (`max_players` - 12) and 0xFF (F8 for 4). Written at init, before a session exists; a session keeps the maximum it was created with. Guests copy the host's value.
+- P2 (`coop_member_count_test`, 0x7F7AFD): isCoop required exactly 2 members (`cmp [ecx+0x30], 2`), so with a third member co-op was off on every machine. The 6 bytes become `jmp` to a thunk (`player_cap.cpp`, `remote_players::anyRemoteMemberAtLeast`) that answers 1 when a member other than the local one has state >= 0xB. With 2 members it is the shipped test; a member still joining is ignored, so a third join does not drop co-op for the two already in.
+- Both edits are checked and written together (`player_cap::install`), only when `max_players` > 2. Neither is within 16 bytes of a Juiced target (Juiced only calls isCoop).
+- Log line: `player cap: session maximum 4, isCoop counts ready members`; `player cap: sites differ, the maximum stays 2` when the bytes are not the supported build's.
 
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.

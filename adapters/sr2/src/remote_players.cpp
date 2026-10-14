@@ -112,6 +112,18 @@ Partner defaultPartner(const Snapshot& snapshot) {
     return {true, snapshot.pairing.items[index].human, snapshot.pairing.items[index].member};
 }
 
+bool anyRemoteMemberAtLeast(uintptr_t session, int32_t minState) {
+    const uintptr_t head = read32(session + sr2::kSessionMemberListOffset);
+    const uintptr_t local = read32(session + sr2::kSessionLocalMemberOffset);
+    uintptr_t member = head;
+    for (size_t steps = 0; member && steps < kMaxWalked; ++steps) {
+        if (member != local && static_cast<int32_t>(read32(member + sr2::kMemberStateOffset)) >= minState) return true;
+        member = read32(member + sr2::kMemberNextOffset);
+        if (member == head) break;
+    }
+    return false;
+}
+
 uintptr_t localHuman() { return read32(sr2::kLocalPlayer); }
 
 bool isRemotePlayerHuman(uintptr_t human) {
