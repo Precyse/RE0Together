@@ -45,6 +45,18 @@ Partner defaultPartner(const Snapshot& snapshot);
 // True when a member of `session` other than its local one has a state of at least `minState`.
 bool anyRemoteMemberAtLeast(uintptr_t session, int32_t minState);
 
+// The player human a remote member owns, 0 when it has none yet or the mapping cannot be trusted.
+uintptr_t humanOfMember(uintptr_t member);
+
+// The remote member that owns `human`, 0 for the local player, an unknown human or an untrusted mapping.
+uintptr_t memberOfHuman(uintptr_t human);
+
+// True when `member` is a member of the session other than the local one.
+bool isRemoteMember(uintptr_t member);
+
+// How many remote player humans there are.
+size_t remoteHumanCount();
+
 // The game's local player human, 0 outside a session.
 uintptr_t localHuman();
 

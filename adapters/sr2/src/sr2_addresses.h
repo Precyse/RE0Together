@@ -219,6 +219,37 @@ constexpr uintptr_t kIsHumanHandle = 0x9D7DD0;       // ECX = handle: the object
 constexpr uintptr_t kVehicleOfHandle = 0xA009C0;     // ECX = handle: the object when it is a vehicle, else 0
 constexpr uintptr_t kExitVehicle = 0x9CAF90;         // cdecl(0, 0): the local player leaves its vehicle
 constexpr uintptr_t kUnlinkRecord = 0x804140;        // ESI = record
+// Activities (milestone 7). The running mission, its activity instance and the participants.
+constexpr uintptr_t kMissionPointer = 0x27B3C60;           // [..] -> the running mission, 0 when none
+constexpr uintptr_t kMissionKindOffset = 0x3C;             // 1 = activity
+constexpr uint32_t kMissionKindActivity = 1;
+constexpr uintptr_t kMissionInstanceOffset = 0x90;         // the activity instance; its vtable +4 returns the type id
+constexpr uintptr_t kInstanceTypeIdSlot = 4;               // byte offset in the instance's vtable
+constexpr uintptr_t kPendingMissionId = 0x27B3C8C;         // the id a start request waits on
+constexpr uintptr_t kMissionOwnerHandle = 0x2527CA0;
+constexpr uintptr_t kMissionPartnerHandle = 0x2527CA4;
+constexpr uintptr_t kZombieDialog = 0x25276AC;             // handle of the zombie request dialog, 0 when closed
+constexpr uintptr_t kSessionHostFlagOffset = 0x3F8;        // byte: this machine hosts the session
+constexpr uintptr_t kMessageContextMemberOffset = 4;       // [ctx+4]: the member a message came from
+constexpr uintptr_t kHumanRagdollOffset = 0x595;           // byte: the human is in a ragdoll
+constexpr uintptr_t kSecurityCelebOwnerOffset = 0x27A8;    // Crowd Control: the object whose vtable +0x34 gives the celeb
+constexpr uintptr_t kSecurityCelebSlot = 0x34;             // byte offset in that object's vtable
+constexpr uintptr_t kRaceRequestFlag = 0xE8BAF4;           // byte: race_req carries one more header byte
+constexpr uintptr_t kRaceRequestSubOffset = 3;             // the race_req sub id in a built message (+1 with the flag)
+constexpr uint8_t kRaceSubAccept = 1;
+constexpr uint8_t kRaceSubDecline = 2;
+constexpr uint8_t kRaceSubInvite = 0;
+
+constexpr uintptr_t kDeliveryVehicleOffset = 0x1C;   // Chop Shop delivery: pointer to the delivered car
+constexpr uintptr_t kChopCreditCarArg = 0x538;       // the car argument of the act 0x2B sender, from its return address
+constexpr uintptr_t kScriptNameCopy = 0xCDD2F0;      // eax = 0x400 byte buffer, cdecl(name): AL = 1 when the path was built
+constexpr size_t kScriptPathBytes = 0x400;
+constexpr uintptr_t kSendBroadcast = 0x814740;       // EDI = session; cdecl(buffer, length): every member but the local one
+constexpr uintptr_t kFreezeHuman = 0x965F40;         // stdcall(human, flag); sends to the human's owner itself
+constexpr uintptr_t kHumanFlagA = 0x968010;          // stdcall(human, flag)
+constexpr uintptr_t kHumanFlagB = 0x9682A0;          // stdcall(human, flag)
+constexpr uintptr_t kHumanIsBusy = 0x985630;         // cdecl(human), AL out; 0 = free to be moved
+constexpr uintptr_t kDeclineHandler = 0x6A8960;      // the host's decline message and cancel
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;

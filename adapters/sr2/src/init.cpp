@@ -1,5 +1,6 @@
 #include "init.h"
 
+#include "activity_patches.h"
 #include "code_check.h"
 #include "config.h"
 #include "coop_limits.h"
@@ -32,6 +33,8 @@ DWORD WINAPI initThread(LPVOID) {
         if (!supported) return 0;
         const bool partnering = replicating && partner_patches::sitesMatch();
         if (replicating && !partnering) logger::write("partner: sites differ, the partner logic is not installed");
+        const bool activities = partnering && activity_patches::sitesMatch();
+        if (partnering && !activities) logger::write("activities: sites differ, the activity logic is not installed");
 
         version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, config.trace);
 
@@ -46,6 +49,7 @@ DWORD WINAPI initThread(LPVOID) {
         game_port::install(config.gamePort, config.maxPlayers, config.trace);
         lan_address::install(config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
+        if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (config.trace) {
             join_trace::install(config.maxPlayers);
             join_net_trace::install();

@@ -6,6 +6,7 @@
 #include <cstring>
 #include <vector>
 
+#include "../src/activity_state.h"
 #include "../src/partner_scope.h"
 #include "../src/remote_players.h"
 #include "../src/sr2_addresses.h"
@@ -266,6 +267,49 @@ void anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes() {
     check(remote_players::anyRemoteMemberAtLeast(session, kReady), "a guest sees the host in the game: ready");
 }
 
+void membersAndHumansMapToEachOther() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    check(remote_players::humanOfMember(world.member(1)) == world.human(1) &&
+              remote_players::humanOfMember(world.member(2)) == world.human(2),
+          "the human of a remote member is the one that member owns");
+    check(remote_players::humanOfMember(world.member(0)) == 0 && remote_players::humanOfMember(0) == 0,
+          "the local member and no member have no remote human");
+    check(remote_players::memberOfHuman(world.human(2)) == world.member(2) && remote_players::memberOfHuman(world.human(0)) == 0 &&
+              remote_players::memberOfHuman(0) == 0,
+          "the member of a remote human is its owner, none for the local player");
+    check(remote_players::isRemoteMember(world.member(1)) && !remote_players::isRemoteMember(world.member(0)) &&
+              !remote_players::isRemoteMember(0x1234),
+          "a remote member is in the session and not the local one");
+    check(remote_players::remoteHumanCount() == 2, "two remote humans");
+    world.records[1][0] = 9;
+    check(remote_players::humanOfMember(world.member(1)) == 0 && remote_players::memberOfHuman(world.human(1)) == 0,
+          "an owner slot that matches no member gives no mapping");
+}
+
+void activityStateReadsTheSession() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    world.session[sr2::kSessionHostFlagOffset] = 1;
+    check(activity_state::isHost(), "the host flag of the session");
+    world.session[sr2::kSessionHostFlagOffset] = 0;
+    check(!activity_state::isHost(), "a guest is not the host");
+    uint32_t context[2] = {0, static_cast<uint32_t>(world.member(2))};
+    check(activity_state::senderOf(addr(context)) == world.member(2) && activity_state::senderOf(0) == 0,
+          "the sender of a message is [context + 4]");
+    uintptr_t members[activity_rules::kMaxMembers];
+    check(activity_state::remoteMembersInGame(members) == 2 && members[0] == world.member(1) && members[1] == world.member(2),
+          "both remote members are in the game");
+    at(world.members[1].data(), sr2::kMemberStateOffset) = sr2::kMemberStateReady;
+    check(activity_state::remoteMembersInGame(members) == 1 && members[0] == world.member(2),
+          "a member still joining is left out");
+    activity_state::setRacePeer(world.member(2));
+    check(activity_state::takeRacePeer() == world.member(2) && activity_state::takeRacePeer() == 0,
+          "the race peer is taken once");
+}
+
 }  // namespace
 
 int main() {
@@ -283,5 +327,7 @@ int main() {
     withoutRemotesALoopRunsOnceWithoutAnOverride();
     nearestAndIdentity();
     anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes();
+    membersAndHumansMapToEachOther();
+    activityStateReadsTheSession();
     return g_failures == 0 ? 0 : 1;
 }

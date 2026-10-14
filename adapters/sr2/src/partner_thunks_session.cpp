@@ -1,5 +1,7 @@
 // Thunks of the session layer: the two getters, chunk streaming and object hand-over, the join tick, a member leaving,
 // the pause-menu Disconnect and the messages that name one partner.
+#include "activity_rules.h"
+#include "activity_state.h"
 #include "fpu_guard.h"
 #include "guest_call.h"
 #include "partner_scope.h"
@@ -131,9 +133,14 @@ void __cdecl wrapEachMember(GuestFrame* frame) {
     });
 }
 
-// K5: the activity invite goes to the default member instead of every member.
+// K5: the race message goes to one member instead of every member: inside a handler the sender, an answer to an invite
+// the member that invited, else the default partner.
 void __cdecl sendToPartner(uint32_t buffer, uint32_t length) {
-    const uintptr_t member = partner_scope::partnerMember();
+    uintptr_t member = 0;
+    if (!partner_scope::overrideActive() && activity_rules::racePeerGetsReply(activity_state::raceRequestSub(buffer))) {
+        member = activity_state::takeRacePeer();
+    }
+    if (!member) member = partner_scope::partnerMember();
     if (member) guest_call::call(sr2::kSendToMember, {.esi = member}, {buffer, length, 0, 0});
 }
 

@@ -124,6 +124,43 @@ bool anyRemoteMemberAtLeast(uintptr_t session, int32_t minState) {
     return false;
 }
 
+uintptr_t humanOfMember(uintptr_t member) {
+    Snapshot snapshot;
+    take(snapshot);
+    if (!snapshot.pairing.trusted) return 0;
+    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
+        if (snapshot.pairing.items[i].member == member) return snapshot.pairing.items[i].human;
+    }
+    return 0;
+}
+
+uintptr_t memberOfHuman(uintptr_t human) {
+    if (!human) return 0;
+    Snapshot snapshot;
+    take(snapshot);
+    if (!snapshot.pairing.trusted) return 0;
+    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
+        if (snapshot.pairing.items[i].human == human) return snapshot.pairing.items[i].member;
+    }
+    return 0;
+}
+
+bool isRemoteMember(uintptr_t member) {
+    if (!member) return false;
+    Snapshot snapshot;
+    takeMembers(snapshot);
+    for (size_t i = 0; i < snapshot.memberCount; ++i) {
+        if (snapshot.members[i].address == member) return !snapshot.members[i].local;
+    }
+    return false;
+}
+
+size_t remoteHumanCount() {
+    Snapshot snapshot;
+    take(snapshot);
+    return snapshot.humanCount;
+}
+
 uintptr_t localHuman() { return read32(sr2::kLocalPlayer); }
 
 bool isRemotePlayerHuman(uintptr_t human) {

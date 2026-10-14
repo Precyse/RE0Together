@@ -68,6 +68,8 @@ Override::~Override() {
     t_active = previousActive_;
 }
 
+bool overrideActive() { return t_active; }
+
 uintptr_t partnerHuman() { return reinterpret_cast<GetterFn>(sr2::kRemotePlayerGetter)(); }
 
 uintptr_t partnerMember() { return reinterpret_cast<GetterFn>(sr2::kPartnerMemberGetter)(); }
