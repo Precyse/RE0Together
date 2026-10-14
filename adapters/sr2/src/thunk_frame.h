@@ -22,3 +22,21 @@ struct GuestFrame {
 // Replacement of a call whose input is register `reg`: `impl(reg)` returns in eax; eax, ecx and edx are clobbered.
 #define PARTNER_REG_STUB(name, reg, impl) \
     void __declspec(naked) name() { __asm push reg __asm call impl __asm add esp, 4 __asm ret }
+
+// Entry trace of a game function: `impl(GuestFrame*)` runs with all registers and the flags saved, then the function
+// runs as the game has it. `original` holds the MinHook trampoline.
+#define TRACE_ENTRY_STUB(name, impl, original) \
+    void __declspec(naked) name() { \
+        __asm pushad __asm pushfd __asm lea eax, [esp + 4] __asm push eax __asm call impl __asm add esp, 4 \
+        __asm popfd __asm popad __asm jmp dword ptr [original] \
+    }
+
+// Entry and exit of a function whose result is logged. `enter(GuestFrame*)` may swap the frame's return address for
+// `exitName`, which the caller declares before `enter`; the exit stub then calls `leave(eax)`, which returns the real
+// return address. Registers and flags survive both.
+#define TRACE_RETURN_STUBS(entryName, exitName, enter, leave, original) \
+    TRACE_ENTRY_STUB(entryName, enter, original) \
+    void __declspec(naked) exitName() { \
+        __asm push 0 __asm pushad __asm pushfd __asm push eax __asm call leave __asm add esp, 4 \
+        __asm mov [esp + 36], eax __asm popfd __asm popad __asm ret \
+    }
