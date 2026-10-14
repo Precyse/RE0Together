@@ -276,6 +276,9 @@ constexpr uintptr_t kCutsceneRemoteReady = 0x2527D1D;    // byte
 constexpr uintptr_t kCutsceneRemoteSkipped = 0x2527D1F;  // byte
 constexpr uintptr_t kCutsceneRemoteDone = 0x2527D20;     // byte
 
+// A world object's chunk id is a word at +0x48 (0xBEEF = none); the chunk query O1 takes it in edi.
+constexpr uintptr_t kObjectChunkOffset = 0x48;
+
 // The pause flag (milestone 9 N4): a byte the pausing message sets, read as zero or not.
 constexpr uintptr_t kPartnerPaused = 0x252932F;
 constexpr uintptr_t kPauseLeaveResume = 0x8CB2A3;  // the member left callback after the clear of the flag and the resume

@@ -4,6 +4,7 @@
 #include "activity_state.h"
 #include "fpu_guard.h"
 #include "guest_call.h"
+#include "handoff_rules.h"
 #include "partner_scope.h"
 #include "partner_thunks.h"
 #include "remote_players.h"
@@ -30,19 +31,42 @@ void __cdecl wrapChunkLoaded(GuestFrame* frame) {
     frame->regs.eax = loaded ? 1 : 0;
 }
 
-// O3: the remote member nearest to the object, else the first member that is not the local one.
+// Whether the game's chunk query O1 (edi = the chunk id) says the chunk is loaded around this remote.
+bool chunkLoadedAround(const partner_rules::Remote& remote, uint16_t chunk) {
+    partner_scope::Override scope({remote.human, remote.member});
+    return (guest_call::call(reinterpret_cast<uintptr_t>(g_chunkLoadedOriginal), {.edi = chunk}) & 0xFF) != 0;
+}
+
+// O3, W6a: the nearest remote member that has the object's chunk, else the nearest remote member, else the first member that
+// is not the local one.
 uintptr_t __cdecl handoffTarget(uintptr_t object) {
     FpuGuard guard;
-    partner_rules::Remote nearest;
-    if (remote_players::nearestRemote(remote_players::positionOf(object), nearest) && nearest.member) {
-        return nearest.member;
-    }
     remote_players::Snapshot snapshot;
-    remote_players::takeMembers(snapshot);
-    for (size_t i = 0; i < snapshot.memberCount; ++i) {
-        if (!snapshot.members[i].local) return snapshot.members[i].address;
+    remote_players::take(snapshot);
+    const partner_rules::Vec3 at = remote_players::positionOf(object);
+    handoff_rules::Candidate candidates[partner_rules::kMaxWalked];
+    const partner_rules::Remote* remotes[partner_rules::kMaxWalked];
+    size_t count = 0;
+    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
+        const partner_rules::Remote& remote = snapshot.pairing.items[i];
+        if (!remote.human || !remote.member) continue;
+        const partner_rules::Vec3 there = remote_players::positionOf(remote.human);
+        const float dx = there.x - at.x, dy = there.y - at.y, dz = there.z - at.z;
+        candidates[count] = {remote.member, dx * dx + dy * dy + dz * dz};
+        remotes[count++] = &remote;
     }
-    return 0;
+    handoff_rules::nearestFirst(candidates, count);
+    uintptr_t firstOther = 0;
+    for (size_t i = 0; i < snapshot.memberCount && !firstOther; ++i) {
+        if (!snapshot.members[i].local) firstOther = snapshot.members[i].address;
+    }
+    const uint16_t chunk = static_cast<uint16_t>(read32(object + sr2::kObjectChunkOffset));
+    return handoff_rules::target(candidates, count, chunk, [&](uintptr_t member) {
+        for (size_t i = 0; i < count; ++i) {
+            if (remotes[i]->member == member) return chunkLoadedAround(*remotes[i], chunk);
+        }
+        return false;
+    }, firstOther);
 }
 
 // J1: 1 when there is no remote member or every remote member has a player human that is done joining.

@@ -133,6 +133,7 @@ add_unit_test(activity_bindings_test src/activity_framework.cpp src/activity_cre
     src/memory.cpp src/guest_call.cpp src/script_override.cpp ${SHARED_DIR}/paths.cpp)
 add_unit_test(sender_scope_rules_test)
 add_unit_test(population_rules_test)
+add_unit_test(handoff_rules_test)
 add_unit_test(cutscene_sync_rules_test)
 add_unit_test(pause_mask_rules_test)
 add_unit_test(join_admission_rules_test)
