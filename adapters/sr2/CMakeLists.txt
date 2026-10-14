@@ -66,6 +66,9 @@ add_library(sr2_adapter SHARED
     src/spawn_budget.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
+    src/multiplayer_patches.cpp
+    src/multiplayer_thunks.cpp
+    src/sender_scope.cpp
     ${RE0_DIR}/dinput8.def)
 target_include_directories(sr2_adapter PRIVATE src ${SHARED_DIR})
 # The shared logger writes <game>\coop\<this name>.
@@ -81,6 +84,7 @@ set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
     src/join_net_trace.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/leave_path.cpp
+    src/sender_scope.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
@@ -122,3 +126,6 @@ add_unit_test(activity_bindings_test src/activity_framework.cpp src/activity_cre
     src/partner_identity.cpp src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
     src/memory.cpp src/guest_call.cpp src/script_override.cpp ${SHARED_DIR}/paths.cpp)
+add_unit_test(multiplayer_sites_test)
+add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/sender_scope.cpp src/partner_scope.cpp src/remote_players.cpp
+    src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp)

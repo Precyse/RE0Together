@@ -68,6 +68,19 @@ Override::~Override() {
     t_active = previousActive_;
 }
 
+bool targetOfSender(uintptr_t member, Target& out) {
+    if (!member) return false;
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    if (!snapshot.active || !snapshot.pairing.trusted) return false;
+    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
+        if (snapshot.pairing.items[i].member != member) continue;
+        out = {snapshot.pairing.items[i].human, member};
+        return true;
+    }
+    return false;
+}
+
 bool overrideActive() { return t_active; }
 
 uintptr_t partnerHuman() { return reinterpret_cast<GetterFn>(sr2::kRemotePlayerGetter)(); }

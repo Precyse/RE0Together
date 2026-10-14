@@ -12,13 +12,10 @@ using partner_sites::Kind;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
-// Phase 1: the sender scope, the start handshake and the first activities and diversions.
+// Phase 1: the race invite memory, the start handshake and the first activities and diversions. The sender scope of the
+// message handlers (the milestone 7 rows AF1 to AF4, and AF5's scope) is milestone 9's SS1 and SS2 (session_sites.h).
 inline constexpr Site kPhase1[] = {
-    {"AF1", Kind::HookEntry, Gate::Now, 0x8CA340, "8B 4C 24 04 0F BE 01", Thunk::ScopeActPacket, ""},
-    {"AF2", Kind::HookEntry, Gate::Now, 0x8CA360, "8B 4C 24 04 0F BE 01", Thunk::ScopeMiscPacket, ""},
-    {"AF3", Kind::HookEntry, Gate::Now, 0x6A8AD0, "A1 14 8C 52 02", Thunk::ScopeMissionRequest, ""},
-    {"AF4", Kind::HookEntry, Gate::Now, 0x68FD40, "8B 0D 14 8C 52 02", Thunk::ScopeGameplayChanged, ""},
-    {"AF5", Kind::HookEntry, Gate::Now, 0x682770, "51 56 8B 74 24 0C", Thunk::ScopeRaceRequest, ""},
+    {"AF5", Kind::HookEntry, Gate::Now, 0x682770, "51 56 8B 74 24 0C", Thunk::RememberRaceInviter, ""},
     {"AF6", Kind::RetargetCall, Gate::Now, 0x6A8B46, "E8 15 FE FF FF", Thunk::DeclineUnlessAllDeclined, ""},
     {"AF7", Kind::RetargetCall, Gate::Now, 0x5E38AE, "E8 BD 0D 23 00", Thunk::SendToEachRemoteMember, ""},
     {"AF8", Kind::RetargetCall, Gate::Now, 0x53E3DA, "E8 A1 D0 49 00", Thunk::TeleportRemotesForActivity, ""},

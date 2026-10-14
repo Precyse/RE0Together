@@ -16,8 +16,8 @@ namespace {
 using join_net_trace_sites::Kind;
 using join_net_trace_sites::Site;
 
-constexpr size_t kExpectedSites = 12;
-constexpr size_t kExpectedEntries = 10;
+constexpr size_t kExpectedSites = 11;
+constexpr size_t kExpectedEntries = 9;
 constexpr size_t kMinEntryBytes = 5;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uintptr_t kThunk = 0x10003000;
@@ -101,10 +101,11 @@ bool clearOfOtherMilestones() {
 }  // namespace
 
 int main() {
-    check(join_net_trace_sites::kSiteCount == kExpectedSites, "12 sites: T1 to T10 and the two drop branches of T4");
+    check(join_net_trace_sites::kSiteCount == kExpectedSites,
+          "11 sites: T1, T2, T4 to T10 and the two drop branches of T4 (T3 moved to the sender scope of milestone 9)");
     check(std::count_if(std::begin(join_net_trace_sites::kSites), std::end(join_net_trace_sites::kSites),
                         [](const Site& s) { return s.kind == Kind::Entry; }) == kExpectedEntries,
-          "10 of them are function entries");
+          "9 of them are function entries");
     check(uniqueAndDisjoint(), "ids are unique and no two sites overlap");
     check(shapesFit(), "an entry has the 5 bytes MinHook overwrites, a drop branch is a 6 byte jne rel32");
     check(join_net_trace_sites::takenTarget(*siteNamed("T4a")) == join_net_trace_sites::kJoinReqDropExit &&

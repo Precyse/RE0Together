@@ -1,5 +1,5 @@
-// Thunks of the activity framework: the sender scope of the message handlers, the start request handshake, the cleanup
-// message and the start position.
+// Thunks of the activity framework: the race invite memory, the start request handshake, the cleanup message and the start
+// position.
 #include "activity_rules.h"
 #include "activity_state.h"
 #include "activity_thunks.h"
@@ -19,10 +19,6 @@ using partner_sites::Thunk;
 constexpr size_t kBufferArg = 0;
 constexpr size_t kContextArg = 1;
 
-void* g_actPacketOriginal = nullptr;
-void* g_miscPacketOriginal = nullptr;
-void* g_missionRequestOriginal = nullptr;
-void* g_gameplayChangedOriginal = nullptr;
 void* g_raceRequestOriginal = nullptr;
 
 const uintptr_t g_declineHandler = sr2::kDeclineHandler;
@@ -35,42 +31,13 @@ uint8_t byteAt(uintptr_t address) {
     return value;
 }
 
-// SENDER_SCOPE: the handler runs with every getter of "the partner" answering the member the message came from, which
-// is what the 2-player code means by "the partner" there. Returns the handler's result.
-uint32_t runScoped(GuestFrame* frame, void* original, const char* hook) {
+// AF5: the member that invites this machine to a race is remembered for the answer, which is sent from a dialog (the
+// sender scope of milestone 9 only covers the handler).
+void __cdecl rememberRaceInviter(GuestFrame* frame) {
     const uint32_t* args = frame->args;
+    if (byteAt(args[kBufferArg]) != sr2::kRaceSubInvite) return;
     const uintptr_t member = activity_state::senderOf(args[kContextArg]);
-    const uintptr_t human = remote_players::isRemoteMember(member) ? remote_players::humanOfMember(member) : 0;
-    if (activity_state::tracing()) {
-        logger::writeUnlessRepeated("trace: scope %s sub %u sender member 0x%X human 0x%X%s", hook, byteAt(args[kBufferArg]),
-                                    static_cast<unsigned>(member), static_cast<unsigned>(human), human ? "" : " (no scope)");
-    }
-    const uintptr_t target = reinterpret_cast<uintptr_t>(original);
-    if (!human) return guest_call::call(target, frame->regs, {args[kBufferArg], args[kContextArg]});
-    partner_scope::Override scope({human, member});
-    return guest_call::call(target, frame->regs, {args[kBufferArg], args[kContextArg]});
-}
-
-void __cdecl scopeActPacket(GuestFrame* frame) { frame->regs.eax = runScoped(frame, g_actPacketOriginal, "act"); }
-
-void __cdecl scopeMiscPacket(GuestFrame* frame) { frame->regs.eax = runScoped(frame, g_miscPacketOriginal, "misc"); }
-
-void __cdecl scopeMissionRequest(GuestFrame* frame) {
-    frame->regs.eax = runScoped(frame, g_missionRequestOriginal, "mssn_req");
-}
-
-void __cdecl scopeGameplayChanged(GuestFrame* frame) {
-    frame->regs.eax = runScoped(frame, g_gameplayChangedOriginal, "gameplay_changed");
-}
-
-// The inviting member is remembered for the answer, which is sent from a dialog.
-void __cdecl scopeRaceRequest(GuestFrame* frame) {
-    const uint32_t* args = frame->args;
-    if (byteAt(args[kBufferArg]) == sr2::kRaceSubInvite) {
-        const uintptr_t member = activity_state::senderOf(args[kContextArg]);
-        if (remote_players::isRemoteMember(member)) activity_state::setRacePeer(member);
-    }
-    frame->regs.eax = runScoped(frame, g_raceRequestOriginal, "race_req");
+    if (remote_players::isRemoteMember(member)) activity_state::setRacePeer(member);
 }
 
 // AF6: a decline, busy or low respect reply cancels the start for everyone only once every remote member in the game
@@ -158,11 +125,7 @@ void __cdecl overrideScriptPath(GuestFrame* frame) {
     if ((frame->regs.eax & 0xFF) == 1) script_override::redirect(path, sr2::kScriptPathBytes);
 }
 
-PARTNER_WRAP_STUB(scopeActPacketStub, scopeActPacket, 0)
-PARTNER_WRAP_STUB(scopeMiscPacketStub, scopeMiscPacket, 0)
-PARTNER_WRAP_STUB(scopeMissionRequestStub, scopeMissionRequest, 0)
-PARTNER_WRAP_STUB(scopeGameplayChangedStub, scopeGameplayChanged, 0)
-PARTNER_WRAP_STUB(scopeRaceRequestStub, scopeRaceRequest, 0)
+TRACE_ENTRY_STUB(rememberRaceInviterStub, rememberRaceInviter, g_raceRequestOriginal)
 PARTNER_WRAP_STUB(sendToEachRemoteStub, sendToEachRemote, 0)
 PARTNER_WRAP_STUB(teleportForActivityStub, teleportForActivity, 0)
 PARTNER_WRAP_STUB(sendDenialStub, sendDenial, 0)
@@ -174,13 +137,8 @@ namespace activity_thunks {
 
 partner_thunks::Binding bindFramework(Thunk thunk) {
     switch (thunk) {
-        case Thunk::ScopeActPacket: return {reinterpret_cast<void*>(&scopeActPacketStub), &g_actPacketOriginal};
-        case Thunk::ScopeMiscPacket: return {reinterpret_cast<void*>(&scopeMiscPacketStub), &g_miscPacketOriginal};
-        case Thunk::ScopeMissionRequest:
-            return {reinterpret_cast<void*>(&scopeMissionRequestStub), &g_missionRequestOriginal};
-        case Thunk::ScopeGameplayChanged:
-            return {reinterpret_cast<void*>(&scopeGameplayChangedStub), &g_gameplayChangedOriginal};
-        case Thunk::ScopeRaceRequest: return {reinterpret_cast<void*>(&scopeRaceRequestStub), &g_raceRequestOriginal};
+        case Thunk::RememberRaceInviter:
+            return {reinterpret_cast<void*>(&rememberRaceInviterStub), &g_raceRequestOriginal};
         case Thunk::DeclineUnlessAllDeclined: return {reinterpret_cast<void*>(&declineStub), nullptr};
         case Thunk::SendToEachRemoteMember: return {reinterpret_cast<void*>(&sendToEachRemoteStub), nullptr};
         case Thunk::TeleportRemotesForActivity: return {reinterpret_cast<void*>(&teleportForActivityStub), nullptr};

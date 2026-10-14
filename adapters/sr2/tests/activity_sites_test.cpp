@@ -18,7 +18,7 @@ using activity_sites::Gate;
 using activity_sites::Kind;
 using activity_sites::Site;
 
-constexpr size_t kPhase1Sites = 32;
+constexpr size_t kPhase1Sites = 28;
 constexpr size_t kPhase2Sites = 51;
 constexpr size_t kPhase3Sites = 6;
 constexpr uintptr_t kJuicedMargin = 16;
@@ -109,7 +109,7 @@ const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
 int main() {
     const std::vector<Site> sites = allSites();
     check(std::span<const Site>(activity_sites::kPhase1).size() == kPhase1Sites,
-          "phase 1: 32 sites (AF1-AF8, AV1, AV4-AV7, AV16, AC1-AC14, AD1-AD4)");
+          "phase 1: 28 sites (AF5-AF8, AV1, AV4-AV7, AV16, AC1-AC14, AD1-AD4)");
     check(std::span<const Site>(activity_sites::kPhase2).size() == kPhase2Sites,
           "phase 2: 51 sites (AV2, AV3, AV8-AV15, AC15-AC53, AD5, AD6)");
     check(std::span<const Site>(activity_sites::kPhase3).size() == kPhase3Sites, "phase 3: 6 sites (AD7-AD11, AF9)");

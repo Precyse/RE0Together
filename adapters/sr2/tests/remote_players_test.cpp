@@ -288,6 +288,38 @@ void membersAndHumansMapToEachOther() {
           "an owner slot that matches no member gives no mapping");
 }
 
+void aMessageIsAnsweredForItsSender() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    partner_scope::Target target{};
+    check(partner_scope::targetOfSender(world.member(2), target) && target.human == world.human(2) &&
+              target.member == world.member(2),
+          "a message from slot 2 is answered with slot 2's human and member, not the default partner's");
+    check(!partner_scope::targetOfSender(world.member(0), target) && !partner_scope::targetOfSender(0, target) &&
+              !partner_scope::targetOfSender(0x1234, target),
+          "the local member, no member and an unknown member run as they are");
+    at(world.humans[2].data(), sr2::kHumanNextOffset) = 0;
+    at(world.humans[1].data(), sr2::kHumanNextOffset) = 0;
+    word(sr2::kPlayerListHead) = world.human(0);
+    check(partner_scope::targetOfSender(world.member(2), target) && target.human == 0 && target.member == world.member(2),
+          "a member that has no human yet is answered with none, as the 2-player game would");
+    world.records[1][0] = 9;
+    world.place(order, order, 0);
+    check(!partner_scope::targetOfSender(world.member(2), target), "an untrusted pairing leaves the handler alone");
+
+    world.records[1][0] = 1;
+    world.place(order, order, 0);
+    at(world.members[1].data(), sr2::kMemberNextOffset) = world.member(0);
+    at(world.humans[1].data(), sr2::kHumanNextOffset) = 0;
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    const remote_players::Partner partner = remote_players::defaultPartner(snapshot);
+    check(snapshot.pairing.count == 1 && partner_scope::targetOfSender(world.member(1), target) && target.human == partner.human &&
+              target.member == partner.member,
+          "with one remote the sender is the default partner, the 2-player answer");
+}
+
 void activityStateReadsTheSession() {
     World world;
     const size_t order[] = {0, 1, 2};
@@ -328,6 +360,7 @@ int main() {
     nearestAndIdentity();
     anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes();
     membersAndHumansMapToEachOther();
+    aMessageIsAnsweredForItsSender();
     activityStateReadsTheSession();
     return g_failures == 0 ? 0 : 1;
 }

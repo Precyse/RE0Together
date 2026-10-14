@@ -21,13 +21,11 @@ constexpr size_t kReturnDepth = 4;
 constexpr uintptr_t kNatCookieOffset = 0;      // the first field of a queued negotiation
 constexpr uintptr_t kRequestMemberOffset = 4;  // ctx[1]: the member the sender is mapped to
 constexpr uintptr_t kDenyReasonOffset = 4;     // the reason byte inside a join_deny payload
-constexpr uintptr_t kMessageLengthOffset = 1;
 constexpr size_t kNatResultArg = 0;
 constexpr size_t kNatQueuedArg = 3;
 
 void* g_natRequest = nullptr;
 void* g_natComplete = nullptr;
-void* g_dispatch = nullptr;
 void* g_joinReq = nullptr;
 void* g_denySend = nullptr;
 void* g_memberAdd = nullptr;
@@ -73,16 +71,6 @@ SessionCounts countsOf(uintptr_t session) {
             readDword(readDword(session + sr2::kSessionInfoOffset) + sr2::kInfoMaxPlayersOffset)};
 }
 
-const char* messageName(uint8_t id) {
-    switch (id) {
-        case sr2::kMessageJoinReq: return "join_req";
-        case sr2::kMessageJoinAcc: return "join_acc";
-        case sr2::kMessageJoinDeny: return "join_deny";
-        case sr2::kMessageJoinNewSession: return "join_new_session";
-        default: return nullptr;
-    }
-}
-
 // A player name from a message, printable ASCII only.
 void readName(uintptr_t address, char (&out)[kNameBytes]) {
     memset(out, 0, sizeof(out));
@@ -119,17 +107,6 @@ void __cdecl traceNatComplete(GuestFrame* frame) {
     const uint32_t* args = argsOf(frame);
     logger::write("trace: nat negotiation complete, result %u, cookie %d", args[kNatResultArg],
                   static_cast<int>(readDword(args[kNatQueuedArg] + kNatCookieOffset)));
-}
-
-// T3: a join message reached the dispatcher (the other messages are far too frequent to log).
-void __cdecl traceDispatch(GuestFrame* frame) {
-    const uint32_t* args = argsOf(frame);
-    uint8_t id = 0;
-    if (!readMemory(args[0], &id, sizeof(id)) || !messageName(id)) return;
-    uint16_t length = 0;
-    readMemory(args[0] + kMessageLengthOffset, &length, sizeof(length));
-    logger::write("trace: message %s (id %u) length %u, context 0x%X, mapped member 0x%X", messageName(id), id, length,
-                  static_cast<unsigned>(args[1]), static_cast<unsigned>(readDword(args[1] + kRequestMemberOffset)));
 }
 
 // T4: the host's join_req handler: the requested name, the sender's address words and the session counts.
@@ -202,7 +179,6 @@ void __cdecl traceJoinAccReceive(GuestFrame*) { logger::write("trace: join_acc r
 
 TRACE_ENTRY_STUB(natRequestStub, traceNatRequest, g_natRequest)
 TRACE_ENTRY_STUB(natCompleteStub, traceNatComplete, g_natComplete)
-TRACE_ENTRY_STUB(dispatchStub, traceDispatch, g_dispatch)
 TRACE_ENTRY_STUB(joinReqStub, traceJoinReq, g_joinReq)
 TRACE_ENTRY_STUB(denySendStub, traceDenySend, g_denySend)
 TRACE_RETURN_STUBS(memberAddStub, exitMemberAddStub, enterMemberAdd, leaveMemberAdd, g_memberAdd)
@@ -254,7 +230,7 @@ struct Binding {
 
 const Binding kBindings[] = {
     {"T1", natRequestStub, &g_natRequest},     {"T2", natCompleteStub, &g_natComplete},
-    {"T3", dispatchStub, &g_dispatch},         {"T4", joinReqStub, &g_joinReq},
+    {"T4", joinReqStub, &g_joinReq},
     {"T4a", mappedDropStub, nullptr},          {"T4b", duplicateDropStub, nullptr},
     {"T5", denySendStub, &g_denySend},         {"T6", memberAddStub, &g_memberAdd},
     {"T7", memberCreateStub, &g_memberCreate}, {"T8", joinReqSendStub, &g_joinReqSend},

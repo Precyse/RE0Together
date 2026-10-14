@@ -27,6 +27,10 @@ private:
     Target previous_;
 };
 
+// What the getters answer while a message from `member` is handled: that member and its human (0 until it has one).
+// False, so the handler runs as it is, for the local member, an unknown member or a pairing that cannot be trusted.
+bool targetOfSender(uintptr_t member, Target& out);
+
 // A detour for hooks::install and the slot that receives the trampoline of the original getter.
 struct GetterHook {
     void* detour;

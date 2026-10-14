@@ -60,11 +60,7 @@ enum class Thunk : uint8_t {
     PassengerIsRemote,
     TeleportRemotePassengers,
     // Milestone 7 (activity_sites.h).
-    ScopeActPacket,
-    ScopeMiscPacket,
-    ScopeMissionRequest,
-    ScopeGameplayChanged,
-    ScopeRaceRequest,
+    RememberRaceInviter,
     DeclineUnlessAllDeclined,
     SendToEachRemoteMember,
     TeleportRemotesForActivity,
@@ -97,6 +93,9 @@ enum class Thunk : uint8_t {
     BlockDeathTag,
     RemoteInVehicleEbx1c,
     SendToRemotesInVehicleEsp538,
+    // Milestone 9 (session_sites.h, world_sites.h, mission_sites.h, trace_sites.h).
+    ScopeDispatch,
+    ScopeInOrder,
 };
 
 struct Site {

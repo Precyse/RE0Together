@@ -11,6 +11,7 @@
 #include "join_trace.h"
 #include "lan_address.h"
 #include "log.h"
+#include "multiplayer_patches.h"
 #include "partner_patches.h"
 #include "player_cap.h"
 #include "replication_switch.h"
@@ -35,6 +36,8 @@ DWORD WINAPI initThread(LPVOID) {
         if (replicating && !partnering) logger::write("partner: sites differ, the partner logic is not installed");
         const bool activities = partnering && activity_patches::sitesMatch();
         if (partnering && !activities) logger::write("activities: sites differ, the activity logic is not installed");
+        const bool crowd = partnering && multiplayer_patches::sitesMatch();
+        if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
 
         version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, config.trace);
 
@@ -50,6 +53,7 @@ DWORD WINAPI initThread(LPVOID) {
         lan_address::install(config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
+        if (crowd) multiplayer_patches::install(config.trace);
         if (config.trace) {
             join_trace::install(config.maxPlayers);
             join_net_trace::install();

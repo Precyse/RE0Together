@@ -30,7 +30,6 @@ constexpr size_t kBranchBytes = 6;                     // 0F 85 rel32
 inline constexpr Site kSites[] = {
     {"T1", Kind::Entry, 0x8CFDE0, "51 A1 18 8C 52 02 85 C0"},
     {"T2", Kind::Entry, 0x8CC1F0, "51 56 8B 74 24 0C 57 56"},
-    {"T3", Kind::Entry, 0x8138F0, "51 8B 44 24 08 8A 10 80"},
     {"T4", Kind::Entry, kJoinReqHandler, "55 8B EC 83 E4 F8 81 EC"},
     {"T4a", Kind::DropBranch, kJoinReqMappedDrop, "0F 85 2D 05 00 00"},
     {"T4b", Kind::DropBranch, kJoinReqDuplicateDrop, "0F 85 63 02 00 00"},

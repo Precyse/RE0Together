@@ -251,6 +251,12 @@ constexpr uintptr_t kHumanFlagB = 0x9682A0;          // stdcall(human, flag)
 constexpr uintptr_t kHumanIsBusy = 0x985630;         // cdecl(human), AL out; 0 = free to be moved
 constexpr uintptr_t kDeclineHandler = 0x6A8960;      // the host's decline message and cancel
 
+// Milestone 9, the message dispatchers: every handler is called cdecl(payload, context) and the context's [+4] names the
+// sender member.
+constexpr uintptr_t kMemberLiveOffset = 0x4A;        // byte: the dispatcher forgets a sender whose byte is 0
+constexpr uintptr_t kMessageIdOffset = 0;            // byte, in a message
+constexpr uintptr_t kMessageLengthOffset = 1;        // word: the payload length, the payload starts 3 bytes in
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
