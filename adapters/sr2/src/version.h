@@ -7,7 +7,7 @@
 namespace version {
 
 // The one place that is bumped whenever the wire behaviour of the mod changes.
-inline constexpr uint16_t kProtocolVersion = 1;
+inline constexpr uint16_t kProtocolVersion = 2;  // 2: milestone 9 (sender scope, join admission queue, creation queue overflow, destroy messages)
 
 inline constexpr uint32_t kTrailerMagic = 0x47564643;  // 'C' 'F' 'V' 'G' in memory order
 inline constexpr size_t kTrailerBytes = 8;
