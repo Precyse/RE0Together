@@ -22,6 +22,7 @@ using activity_sites::Site;
 
 constexpr size_t kPhase1Sites = 32;
 constexpr size_t kPhase2Sites = 51;
+constexpr size_t kPhase3Sites = 6;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr uintptr_t kThunk = 0x10004000;
@@ -35,7 +36,8 @@ void check(bool ok, const char* what) {
 
 std::vector<Site> allSites() {
     std::vector<Site> all;
-    for (const auto phase : {std::span<const Site>(activity_sites::kPhase1), std::span<const Site>(activity_sites::kPhase2)}) {
+    for (const auto phase : {std::span<const Site>(activity_sites::kPhase1), std::span<const Site>(activity_sites::kPhase2),
+                             std::span<const Site>(activity_sites::kPhase3)}) {
         all.insert(all.end(), phase.begin(), phase.end());
     }
     return all;
@@ -125,6 +127,7 @@ int main() {
           "phase 1: 32 sites (AF1-AF8, AV1, AV4-AV7, AV16, AC1-AC14, AD1-AD4)");
     check(std::span<const Site>(activity_sites::kPhase2).size() == kPhase2Sites,
           "phase 2: 51 sites (AV2, AV3, AV8-AV15, AC15-AC53, AD5, AD6)");
+    check(std::span<const Site>(activity_sites::kPhase3).size() == kPhase3Sites, "phase 3: 6 sites (AD7-AD11, AF9)");
     check(idsAndAddressesAreUnique(sites), "ids and addresses are unique");
     check(sitesDoNotOverlap(sites), "no two sites overlap");
     check(shapesFit(sites), "a retargeted call is a 5 byte call, a hook covers 5 bytes, a block has room for its tail");

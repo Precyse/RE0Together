@@ -37,7 +37,8 @@ int main() {
     std::set<void**> slots;
     bool slotsAreDistinct = true;
     for (const auto phase : {std::span<const partner_sites::Site>(activity_sites::kPhase1),
-                             std::span<const partner_sites::Site>(activity_sites::kPhase2)}) {
+                             std::span<const partner_sites::Site>(activity_sites::kPhase2),
+                             std::span<const partner_sites::Site>(activity_sites::kPhase3)}) {
         for (const partner_sites::Site& site : phase) {
             const partner_thunks::Binding binding = bindingOf(site.thunk);
             if (!binding.entry) {

@@ -7,6 +7,7 @@
 #include "activity_thunks.h"
 #include "log.h"
 #include "partner_thunks.h"
+#include "script_override.h"
 #include "site_installer.h"
 
 namespace {
@@ -19,6 +20,7 @@ struct Phase {
 const Phase kPhases[] = {
     {"1", activity_sites::kPhase1},
     {"2", activity_sites::kPhase2},
+    {"3", activity_sites::kPhase3},
 };
 
 // The identity and nearest thunks of milestone 4 serve the same call patterns as the new ones.
@@ -48,6 +50,8 @@ bool sitesMatch() {
 
 bool install(bool experimental, bool trace) {
     activity_state::setTracing(trace);
+    const size_t overrides = script_override::scan(trace);
+    logger::write("activities: %zu script overrides in coop\\scripts", overrides);
     bool all = true;
     for (const Phase& phase : kPhases) {
         const site_installer::Result result = site_installer::install(phase.sites, experimental, &bindingOf);

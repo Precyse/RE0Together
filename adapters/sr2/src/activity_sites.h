@@ -104,4 +104,14 @@ inline constexpr Site kPhase2[] = {
     {"AD6", Kind::RetargetCall, Gate::ProbeH, 0x5FE96F, "E8 CC 5D 21 00", Thunk::SendToRemotesInVehicleEsp538, ""},
 };
 
+// Phase 3: the Hitman and Chop Shop polish, and the Lua script override loader.
+inline constexpr Site kPhase3[] = {
+    {"AF9", Kind::RetargetCall, Gate::Now, 0xCDDF72, "E8 79 F3 FF FF", Thunk::ScriptOverridePath, ""},
+    {"AD7", Kind::RetargetCall, Gate::Now, 0x63D632, "E8 99 A5 39 00", Thunk::NearestRemoteEdi, ""},
+    {"AD8", Kind::RetargetCall, Gate::Now, 0x63D663, "E8 68 A5 39 00", Thunk::NearestRemoteEdi, ""},
+    {"AD9", Kind::RetargetCall, Gate::Now, 0x63B3EA, "E8 E1 C7 39 00", Thunk::NearestRemoteEsi, ""},
+    {"AD10", Kind::RetargetCall, Gate::Now, 0x63B93F, "E8 8C C2 39 00", Thunk::NearestRemoteEdi, ""},
+    {"AD11", Kind::RetargetCall, Gate::Now, 0x5FDF27, "E8 A4 9C 3D 00", Thunk::NearestRemoteEdi14, ""},
+};
+
 }  // namespace activity_sites
