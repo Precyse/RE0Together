@@ -3,10 +3,24 @@
 #include <cstdint>
 #include <vector>
 
-// The pure rules of the ambient spawner's group sweep (milestone 5i, section 9; unit tested).
+// The pure rules of the spawn group lock (milestone 5i, sections 9 and 10; unit tested).
 namespace spawner_rules {
 
-// A spawn group as the sweep reads it: its address and the first `slot count` of its element slots.
+// The four entries of the game that create or free spawn groups and now run under the tick lock.
+enum class Site : size_t { GroupCreate, ChunkParse, ChunkUnload, CrewFree };
+constexpr size_t kSiteCount = 4;
+
+inline const char* siteName(Site site) {
+    switch (site) {
+        case Site::GroupCreate: return "group create";
+        case Site::ChunkParse: return "chunk parse";
+        case Site::ChunkUnload: return "chunk unload";
+        case Site::CrewFree: return "crew free";
+    }
+    return "?";
+}
+
+// A spawn group as the trace reads it: its address and the first `slot count` of its element slots.
 struct Group {
     uintptr_t address;
     std::vector<uint32_t> slots;
@@ -21,7 +35,7 @@ inline bool isPartial(const Group& group) {
     return false;
 }
 
-// The groups the sweep frees.
+// The partial groups of a list.
 inline std::vector<uintptr_t> partialGroups(const std::vector<Group>& groups) {
     std::vector<uintptr_t> partial;
     for (const Group& group : groups) {
@@ -30,9 +44,13 @@ inline std::vector<uintptr_t> partialGroups(const std::vector<Group>& groups) {
     return partial;
 }
 
-// Only a thread that took the tick lock just now, and did not hold it already, may sweep: a thread that holds it already is
-// inside the tick, which may be walking the groups it would free. Every creator takes the lock, so at that point no other
-// thread is filling a group.
-inline bool mayFree(long recursionCountAfterEnter) { return recursionCountAfterEnter == 1; }
+// A thread that took the lock just now and did not hold it already is outside the tick; only then is the list at rest (every
+// writer takes the lock), so only then is a look at it meaningful.
+inline bool outermost(long recursionCountAfterEnter) { return recursionCountAfterEnter == 1; }
+
+// A wait for the lock that is worth a line in the trace: someone held the lock for longer than a frame's share.
+constexpr uint64_t kLongWaitMs = 20;
+
+inline bool isLongWait(uint64_t waitMicros) { return waitMicros > kLongWaitMs * 1000; }
 
 }  // namespace spawner_rules

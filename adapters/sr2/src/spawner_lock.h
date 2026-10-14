@@ -1,19 +1,20 @@
 #pragma once
 
-// Milestone 5i, section 9: the host crashed at 0x910E42 and a guest at 0x90D44E, reading a spawn group that was still
-// being built. The group create (0x910370) links a new group into the active list first and fills its element slots after,
-// and its callers (vehicle crew, the tick) are not all on the thread that walks the list under the tick lock 0x2ACDA08. The
-// create now runs under that lock (recursive, so the tick's own path is unaffected), and a create that took the lock just now
-// frees any group left with a null slot (a failed create) before it lets go.
+// Milestone 5i, sections 9 and 10: the host crashed at 0x910E42 and a guest at 0x90D44E, reading a spawn group that was still
+// being built or had been freed. The tick walks the active group list under the critical section 0x2ACDA08, but four game
+// entries that create or free groups run on other threads without it: the group create 0x910370, the chunk parser 0x9140C0,
+// the chunk unload 0x914900 and the vehicle crew free 0x912FD0. Each now runs under that lock (recursive, so the tick's own
+// calls are unaffected).
 namespace spawner_lock {
 
-// Under trace=1 the creates are logged, at most one line per second.
+// Under trace=1 each entry is logged (one line per second per entry), the partial groups found after a group create, and
+// any wait for the lock over 20 ms.
 void setTrace(bool trace);
 
-// Hooks the entry of the group create (inside a hooks batch). True when the hook is queued.
+// Hooks the four entries (inside a hooks batch), all or none. True when the hooks are queued.
 bool installHook();
 
-// Takes the hook out again.
+// Takes the hooks out again.
 void removeHook();
 
 }  // namespace spawner_lock

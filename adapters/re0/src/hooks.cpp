@@ -83,6 +83,14 @@ void applyBatch() {
     g_queued.clear();
 }
 
-void remove(uintptr_t address) { MH_DisableHook(reinterpret_cast<void*>(address)); }
+void remove(uintptr_t address) {
+    void* target = reinterpret_cast<void*>(address);
+    // Inside a batch the hook is not enabled yet: take back the queued enable instead.
+    if (t_batching) {
+        MH_QueueDisableHook(target);
+    } else {
+        MH_DisableHook(target);
+    }
+}
 
 }  // namespace hooks

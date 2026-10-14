@@ -175,11 +175,14 @@ constexpr uintptr_t kCharInstanceCreate = 0x9E3BA0;      // cdecl(render object,
 constexpr uintptr_t kTintSendCall = 0x82A17C;            // call kTintListBuild
 constexpr uintptr_t kTintListBuild = 0x7D84C0;           // eax = local human, ecx = length out, buffer on the stack
 
-// Ambient population (milestone 5i, section 9). A spawn group is linked into the active list (circular, next at +0x64) before
-// its element slots (+8, one dword each, as many as its template's byte +0x48) are filled; the tick walks the list under the
-// critical section kGroupTickLock.
-constexpr uintptr_t kGroupCreate = 0x910370;          // cdecl, 7 stack arguments, returns the group or 0
-constexpr uintptr_t kGroupTeardown = 0x913040;        // ESI = group; cdecl(0, 0); skips null slots
+// Ambient population (milestone 5i, sections 9 and 10). A spawn group is linked into the active list (circular, next at +0x64)
+// before its element slots (+8, one dword each, as many as its template's byte +0x48) are filled; the tick walks the list under
+// the critical section kGroupTickLock. Four entries create or free groups; none has register inputs, all return in EAX and are
+// cdecl (their callers pop the arguments).
+constexpr uintptr_t kGroupCreate = 0x910370;          // 7 stack arguments, returns the group or 0
+constexpr uintptr_t kChunkParse = 0x9140C0;           // 2 stack arguments: the chunk spawn node parser
+constexpr uintptr_t kChunkUnload = 0x914900;          // 1 stack argument: frees the groups of the unloading chunk
+constexpr uintptr_t kCrewFree = 0x912FD0;             // 2 stack arguments: frees a vehicle's crew groups
 constexpr uintptr_t kGroupTickLock = 0x2ACDA08;       // CRITICAL_SECTION, recursive
 constexpr uintptr_t kGroupListHead = 0x213F874;
 constexpr uintptr_t kGroupTemplateOffset = 4;
