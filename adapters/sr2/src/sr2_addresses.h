@@ -175,19 +175,22 @@ constexpr uintptr_t kCharInstanceCreate = 0x9E3BA0;      // cdecl(render object,
 constexpr uintptr_t kTintSendCall = 0x82A17C;            // call kTintListBuild
 constexpr uintptr_t kTintListBuild = 0x7D84C0;           // eax = local human, ecx = length out, buffer on the stack
 
-// Ambient population (milestone 5i, sections 9 and 10). A spawn group is linked into the active list (circular, next at +0x64)
-// before its element slots (+8, one dword each, as many as its template's byte +0x48) are filled; the tick walks the list under
-// the critical section kGroupTickLock. Four entries create or free groups; none has register inputs, all return in EAX and are
-// cdecl (their callers pop the arguments).
-constexpr uintptr_t kGroupCreate = 0x910370;          // 7 stack arguments, returns the group or 0
-constexpr uintptr_t kChunkParse = 0x9140C0;           // 2 stack arguments: the chunk spawn node parser
-constexpr uintptr_t kChunkUnload = 0x914900;          // 1 stack argument: frees the groups of the unloading chunk
-constexpr uintptr_t kCrewFree = 0x912FD0;             // 2 stack arguments: frees a vehicle's crew groups
-constexpr uintptr_t kGroupTickLock = 0x2ACDA08;       // CRITICAL_SECTION, recursive
+// Ambient population (milestone 5i, section 12). The group create links each group into the active list (circular through
+// kPoolLinkOffset) before it fills the group's element slots (+8, one dword each, as many as its template's byte +0x48), and
+// takes the groups and elements from two static pools of 2400 whose free lists (circular through kPoolLinkOffset) start at
+// kGroupFreeHead and kElementFreeHead.
+constexpr uintptr_t kGroupCreate = 0x910370;          // cdecl, 7 stack arguments (the first: the group set), returns the first group or 0
+constexpr uintptr_t kGroupSetCountOffset = 0;         // the group set: entry count
+constexpr uintptr_t kGroupSetEntriesOffset = 4;       //   and the entry array
+constexpr uintptr_t kGroupSetEntryStride = 0x54;
+constexpr uintptr_t kEntryElementsOffset = 0;         // an entry: its element count (0 = no group)
+constexpr uintptr_t kEntryExtraOffset = 0x28;         //   nonzero = one more element
+constexpr uintptr_t kGroupFreeHead = 0x21417B8;
+constexpr uintptr_t kElementFreeHead = 0x21417BC;
 constexpr uintptr_t kGroupListHead = 0x213F874;
+constexpr uintptr_t kPoolLinkOffset = 0x64;
 constexpr uintptr_t kGroupTemplateOffset = 4;
 constexpr uintptr_t kGroupSlotsOffset = 8;
-constexpr uintptr_t kGroupNextOffset = 0x64;
 constexpr uintptr_t kTemplateSlotCountOffset = 0x48;  // byte
 constexpr size_t kMaxSpawnGroups = 2400;              // the static group pool
 

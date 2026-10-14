@@ -13,8 +13,7 @@
 //   the character instance create that clears the look tables of its pool index ("Looks"),
 //   the member leave path: a guest drops the leaver's records, only the owner renames, and the entry is checked for the
 //   hook that reissues ("Member leave"),
-//   the entries of the four spawn group writers (create, chunk parse, chunk unload, crew free), checked for the hooks that
-//   run them under the tick lock ("Spawner lock").
+//   the entry of the spawn group create, checked for the hook that refuses a create the pools cannot fill ("Spawn budget").
 namespace player_cap_patches {
 
 constexpr uint8_t kNop = 0x90;
@@ -62,10 +61,7 @@ inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thun
         jumpOut("leave_keep_rename", sr2::kLeaveRenameCheck,
                 {0x66, 0x8B, 0x4E, 0x02, 0x66, 0xC1, 0xE9, 0x0C, 0x66, 0x3B, 0xCB, 0x75, 0x31}, thunks.keepRename),
         {"leave_entry", sr2::kLeaveFunction, {0x83, 0xEC, 0x10, 0xA1, 0x14, 0x8C, 0x52, 0x02}, {}},
-        {"spawner_group_create", sr2::kGroupCreate, {0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8}, {}},
-        {"spawner_chunk_parse", sr2::kChunkParse, {0x81, 0xEC, 0x4C, 0x02, 0x00, 0x00}, {}},
-        {"spawner_chunk_unload", sr2::kChunkUnload, {0xA0, 0x48, 0x8B, 0x52, 0x02}, {}},
-        {"spawner_crew_free", sr2::kCrewFree, {0x51, 0x53, 0x55, 0x8B, 0x6C, 0x24, 0x10}, {}},
+        {"spawn_budget_group_create", sr2::kGroupCreate, {0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8}, {}},
     };
     if (trace) patches.push_back(retargetedCall("trace_tint_send", sr2::kTintSendCall, sr2::kTintListBuild, thunks.traceTintSend));
     return patches;

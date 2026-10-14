@@ -9,7 +9,7 @@
 #include "log.h"
 #include "player_cap_patches.h"
 #include "remote_players.h"
-#include "spawner_lock.h"
+#include "spawn_budget.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
 
@@ -27,7 +27,7 @@ PARTNER_REG_STUB(coopMemberReadyStub, ecx, someMemberReady)
 // The hooks of the M5 set: the leave function and the spawn group create.
 bool installHooks() {
     if (!leave_path::installHook()) return false;
-    if (spawner_lock::installHook()) return true;
+    if (spawn_budget::installHook()) return true;
     leave_path::removeHook();
     return false;
 }
@@ -40,7 +40,7 @@ bool install(uint32_t maxPlayers, bool trace) {
     home_network::setTrace(trace);
     guest_welcome::setTrace(trace);
     look_reset::setTrace(trace);
-    spawner_lock::setTrace(trace);
+    spawn_budget::setTrace(trace);
     leave_path::setTrace(trace);
     const leave_path::Thunks leave = leave_path::thunks();
     const player_cap_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&coopMemberReadyStub),
@@ -56,12 +56,12 @@ bool install(uint32_t maxPlayers, bool trace) {
     }
     if (!applyCodePatches(patches)) {
         leave_path::removeHook();
-        spawner_lock::removeHook();
+        spawn_budget::removeHook();
         logger::write("player cap: the edits could not be written, the maximum stays 2");
         return false;
     }
     logger::write("player cap: session maximum %u, isCoop counts ready members, join_req duplicate search retargeted, "
-                  "guests welcome late joiners, player looks start empty, member leave reissues objects, spawn groups are created under the tick lock",
+                  "guests welcome late joiners, player looks start empty, member leave reissues objects, group creates fit the spawn pools",
                   maxPlayers);
     return true;
 }
