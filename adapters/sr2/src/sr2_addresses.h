@@ -152,12 +152,9 @@ constexpr uint8_t kMessageJoinNewSession = 5;
 
 // Players behind one NAT (milestone 5d). The host drops a join_req as a resend when a member reports the same public
 // and private IP; two machines on one home network both report the first address of their host name. The fix compares
-// the real source address instead, and makes the reported private IP the default route interface's.
+// the real source address instead.
 constexpr uintptr_t kDuplicateSenderCall = 0x815EAE;     // call kFindDuplicateMember; eax = session, esi = sender block
 constexpr uintptr_t kFindDuplicateMember = 0x80FEB0;     // returns the matching member or 0
-constexpr uintptr_t kHostByNameCallSession = 0x810C94;   // call gethostbyname in the session's local address setup
-constexpr uintptr_t kHostByNameCallLocalIp = 0x7F79D0;   // call gethostbyname in the second local IP getter
-constexpr uintptr_t kHostByNameStub = 0xC23544;          // jmp [gethostbyname]; stdcall(name) returns hostent*
 constexpr uintptr_t kMemberSourceIpOffset = 0x28;        // the real UDP source of a remote member
 constexpr uintptr_t kMemberSourcePortOffset = 0x2C;      // word
 constexpr uintptr_t kSenderPortOffset = 4;               // word, in the sender block (the IP is at 0)

@@ -6,7 +6,8 @@
 #include "sr2_addresses.h"
 
 // The code edits of milestones 5 and 5d as data (pure, unit tested): the session info maximum, isCoop's member count
-// test (docs/SR2_NOTES.md, "Player cap") and the three calls that make players behind one NAT work ("Home network").
+// test (docs/SR2_NOTES.md, "Player cap") and the duplicate member search call that lets players behind one NAT join
+// ("Home network").
 namespace player_cap_patches {
 
 constexpr uint8_t kNop = 0x90;
@@ -20,7 +21,6 @@ inline uint8_t sessionInfoMask(uint32_t maxPlayers) {
 struct Thunks {
     uintptr_t coopMemberReady;      // isCoop's member count test jumps here
     uintptr_t duplicateJoinSender;  // replaces the duplicate member search call of the join_req handler
-    uintptr_t hostByName;           // replaces both gethostbyname calls that read the local address
 };
 
 // A `call rel32` that goes to `thunk` instead of `original`.
@@ -45,9 +45,7 @@ inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thun
     return {{"session_info_max", sr2::kSessionInfoMaxBlock, maxBlock, widenedBlock},
             {"coop_member_count_test", sr2::kCoopMemberCountTest, countTest, jumpOut},
             retargetedCall("duplicate_sender_call", sr2::kDuplicateSenderCall, sr2::kFindDuplicateMember,
-                           thunks.duplicateJoinSender),
-            retargetedCall("host_by_name_session", sr2::kHostByNameCallSession, sr2::kHostByNameStub, thunks.hostByName),
-            retargetedCall("host_by_name_local_ip", sr2::kHostByNameCallLocalIp, sr2::kHostByNameStub, thunks.hostByName)};
+                           thunks.duplicateJoinSender)};
 }
 
 }  // namespace player_cap_patches

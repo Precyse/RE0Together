@@ -57,12 +57,13 @@ add_library(sr2_adapter SHARED
     src/script_override.cpp
     src/player_cap.cpp
     src/home_network.cpp
+    src/game_port.cpp
     ${RE0_DIR}/dinput8.def)
 target_include_directories(sr2_adapter PRIVATE src ${SHARED_DIR})
 # The shared logger writes <game>\coop\<this name>.
 target_compile_definitions(sr2_adapter PRIVATE COOP_LOG_FILE=L"sr2_adapter.log")
 set_target_properties(sr2_adapter PROPERTIES OUTPUT_NAME dinput8 PREFIX "")
-target_link_libraries(sr2_adapter PRIVATE minhook ws2_32 iphlpapi)
+target_link_libraries(sr2_adapter PRIVATE minhook ws2_32)
 target_compile_options(sr2_adapter PRIVATE /W4 /WX /utf-8)
 # The launcher and the release package take the DLL from here (git-ignored).
 add_custom_command(TARGET sr2_adapter POST_BUILD
@@ -74,7 +75,7 @@ add_custom_command(TARGET sr2_adapter POST_BUILD
 set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
-    src/join_net_trace.cpp src/home_network.cpp
+    src/join_net_trace.cpp src/home_network.cpp src/game_port.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
@@ -97,6 +98,7 @@ add_unit_test(player_cap_test)
 add_unit_test(join_net_trace_sites_test)
 add_unit_test(trace_stub_test)
 add_unit_test(home_network_rules_test)
+add_unit_test(game_port_test)
 add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)
 add_unit_test(script_override_rules_test)

@@ -87,9 +87,18 @@ The third player's join stalled at "please wait" with no new member on the host.
 - The trace is read-only. The two drop branches become a `jmp` to a thunk that takes the branch itself; the entries are MinHook detours that run the original after logging. B1 to B3 of the research (skip a refusal) are not applied. B3's site (0x815EB5) is T4b's: applying B3 means giving up that trace line.
 
 ## Home network (milestone 5d)
-Players 2 and 3 on one home network share the public IP, and the host dropped the second one's join_req without a reply. Research: `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, section M5d. Three calls are retargeted with the player cap edits (same all-or-nothing apply, `max_players` > 2):
+Players 2 and 3 on one home network share the public IP, and the host dropped the second one's join_req without a reply. Research: `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, section M5d. One call is retargeted with the player cap edits (same all-or-nothing apply, `max_players` > 2):
 - D1 (0x815EAE, the call to the duplicate member search 0x80FEB0 in the join_req handler): the search matches on the reported public IP, reported private IP and sub-index. Both machines report the first address Windows lists for the host name, often the same virtual adapter. The thunk keeps the search's member only when the member's real source (+0x28 IP, word +0x2C port) equals the sender block's (+0 IP, word +4 port); a resend from the same source is still dropped (and the handler's own mapped-sender check at 0x815BEB drops it too). `trace=1` logs each decision.
-- D2, D2b (0x810C94 and 0x7F79D0, the gethostbyname calls behind the advertised private IP): the thunk calls gethostbyname, then puts the default route interface's IPv4 (GetBestInterface toward 8.8.8.8, no packet sent, then GetAdaptersAddresses) first in the address list. Players on the same public IP reach each other by that private IP (0x8CDA00), so a wrong one fails quietly. `trace=1` logs the address chosen.
+- D2, D2b (the gethostbyname calls 0x810C94 and 0x7F79D0, default route interface first) were removed: the host's own address record and the address its QR2 reports then disagreed, and player 2 added a ghost host member (research M5f). They can only come back together with the QR2 local IP list call at 0x8E1B3E.
+
+## Game port (milestone 5e)
+Guests behind one NAT all bind local UDP 4200; the router can keep that external port for one of them only, so the NAT negotiation of the next ones ends with result 3 (ping timeout). Research: `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, section M5e.
+- Ini key `game_port` (default 4200, valid 1024..65535, anything else is ignored and logged). Hosts stay on 4200: joiners assume host:4200.
+- E1 (0xC1BBAF, `mov eax, 4200` in the socket bind): the immediate becomes `game_port`, only when it is not 4200.
+- E2 (six `mov word ptr [reg+4], 4200` at 0x811AC0, 0x811B11, 0x811BA4, 0x811C0D, 0x811C7A, 0x811CB7): our advertised record port, same rule.
+- E3 (0x8CDA3B, the quick check for a peer behind our public IP): a thunk keeps 4200 for the session host and the port the host relayed for anyone else.
+- E2 and E3 follow the `max_players` > 2 gate. All eight sites are checked together before anything is written. `trace=1` logs the port, whether E1 was applied and each quick check.
+- Live test: player 3 with `game_port=4201`; expect "nat negotiation complete, result 0" and a `join_req` from the router's address with port 4201.
 
 ## Activities (milestone 7)
 Research: `C:\Users\ahmal\coop-scratch\sr2\M7_ACTIVITIES.md` and `m7_patch_sites.tsv` (89 rows). Applied only with `max_players` > 2 and the milestone 4 logic, in phases of one table each (`activity_sites.h`), every site byte-checked and each phase all or nothing. Rows that wait for a live probe (AV16 probe E, AD6 probe H) are patched only with `partner_experimental=1`.
