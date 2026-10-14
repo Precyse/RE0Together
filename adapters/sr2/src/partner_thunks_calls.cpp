@@ -1,6 +1,7 @@
 // Replacements of single calls: identity tests, nearest remote, and the calls that must reach every remote.
 #include "fpu_guard.h"
 #include "guest_call.h"
+#include "partner_identity.h"
 #include "partner_scope.h"
 #include "partner_thunks.h"
 #include "remote_players.h"
@@ -12,18 +13,6 @@ namespace {
 using partner_sites::Thunk;
 
 static_assert(sr2::kObjectPositionOffset == 0x14, "nearestRemoteEdi14Stub assembles this offset");
-
-partner_rules::Vec3 pointAt(uint32_t address) { return *reinterpret_cast<const partner_rules::Vec3*>(address); }
-
-// Identity tests: the compared register holding any remote player counts as "the partner".
-uintptr_t __cdecl matchRemote(uintptr_t compared) {
-    return remote_players::isRemotePlayerHuman(compared) ? compared : partner_scope::partnerHuman();
-}
-
-uintptr_t __cdecl nearestToPoint(uint32_t point) {
-    FpuGuard guard;
-    return remote_players::nearestRemoteTo(pointAt(point));
-}
 
 uintptr_t __cdecl nearestToLocal() {
     FpuGuard guard;
@@ -46,10 +35,11 @@ void __cdecl holdAssetsEach(uint32_t list) {
     partner_scope::eachRemoteHuman([&](uintptr_t human) { guest_call::call(sr2::kHoldAssets, {}, {human, list}); });
 }
 
-PARTNER_REG_STUB(matchRemoteEsiStub, esi, matchRemote)
-PARTNER_REG_STUB(matchRemoteEdiStub, edi, matchRemote)
-PARTNER_REG_STUB(nearestRemoteEdiStub, edi, nearestToPoint)
-PARTNER_REG_STUB(nearestRemoteEsiStub, esi, nearestToPoint)
+// Identity tests: the compared register holding any remote player counts as "the partner".
+PARTNER_REG_STUB(matchRemoteEsiStub, esi, partner_identity::match)
+PARTNER_REG_STUB(matchRemoteEdiStub, edi, partner_identity::match)
+PARTNER_REG_STUB(nearestRemoteEdiStub, edi, partner_identity::nearest)
+PARTNER_REG_STUB(nearestRemoteEsiStub, esi, partner_identity::nearest)
 PARTNER_REG_STUB(lookSyncAStub, eax, lookSyncA)
 PARTNER_REG_STUB(lookSyncBStub, eax, lookSyncB)
 
@@ -58,7 +48,7 @@ void __declspec(naked) nearestRemoteEdi14Stub() {
     __asm {
         lea eax, [edi + 0x14]
         push eax
-        call nearestToPoint
+        call partner_identity::nearest
         add esp, 4
         ret
     }
