@@ -7,6 +7,7 @@
 #include "join_trace.h"
 #include "log.h"
 #include "partner_patches.h"
+#include "player_cap.h"
 #include "replication_switch.h"
 #include "sr2_addresses.h"
 
@@ -30,6 +31,7 @@ DWORD WINAPI initThread(LPVOID) {
             logger::write("replication: off, max_players %u is the shipped co-op, limits and pools are not patched",
                           config.maxPlayers);
         }
+        player_cap::install(config.maxPlayers);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (config.trace) join_trace::install(config.maxPlayers);
         hooks::applyBatch();

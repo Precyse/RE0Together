@@ -377,7 +377,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 | file | owns | key members |
 |---|---|---|
 | src/proxy.cpp | `DirectInput8Create` forwarded to the system DLL; DllMain pins the module and starts the init thread | `DirectInput8Create`, `DllMain` |
-| src/init.cpp | start-up order: log, ini, build check (exe and replication sites), partner site check (a difference only drops the partner logic), hooks; `max_players` 2 patches no limits, pools, replication or partner code | `initThread` |
+| src/init.cpp | start-up order: log, ini, build check (exe and replication sites), partner site check (a difference only drops the partner logic), hooks, player cap edits; `max_players` 2 patches no limits, pools, replication or partner code | `initThread` |
 | src/config.cpp | `sr2_adapter.ini` (`max_players` clamped 2..8, `trace`, `partner_experimental`); pure parser | `parseConfig`, `loadConfig` |
 | src/sr2_addresses.h | every SR2_pc.exe address, offset and limit constant | `sr2::k*` |
 | src/byte_pattern.h | pure byte compare | `firstMismatch` |
@@ -394,8 +394,10 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 | src/member_slots.cpp | logs the session members and the remote humans (owner slot, member, join flags, downed timer, default partner) when they change, guards member session slots against `max_players` | `check` |
 | src/join_trace.cpp | read-only trace of pool sizing, join queue and slot allocator (log on change); runs `member_slots::check` at those events (the partner getter is traced by `partner_scope`) | `install` |
 | src/partner_rules.h | pure partner rules (unit tested): remote humans joined to remote members by owner slot (`pair`, untrusted fallback to the game's first of each list), the default partner (guest: the host's player, host: lowest slot), ready, joining, last-in-game, nearest, others-down | `partner_rules::pair`, `pickDefault`, `allReady`, `firstJoining`, `isLastInGame`, `nearestIndex`, `othersAllDown` |
-| src/remote_players.cpp | direct reads of the player list and session members (every walk capped at 12): `Snapshot` (members, remote humans, pairing), the default partner of the two getters, remote checks, nearest remote, trace lines | `take`, `takeMembers`, `defaultPartner`, `isRemotePlayerHuman`, `nearestRemote`, `describeRemotes` |
+| src/remote_players.cpp | direct reads of the player list and session members (every walk capped at 12): `Snapshot` (members, remote humans, pairing), the default partner of the two getters, remote checks, nearest remote, `anyRemoteMemberAtLeast` (the player cap thunk), trace lines | `take`, `takeMembers`, `defaultPartner`, `anyRemoteMemberAtLeast`, `isRemotePlayerHuman`, `nearestRemote`, `describeRemotes` |
 | src/partner_scope.cpp | owns the two getters (`get_remote_player` 0x9D7BD0, partner member 0x8CA380): per-thread `Override`, else the stable default partner; `eachRemoteHuman`, `anyRemoteHuman`, `eachRemoteMember` loops the wrap thunks use; trace of default-partner and remote changes | `Override`, `humanHook`, `memberHook`, `partnerHuman`, `eachRemoteHuman`, `enableTrace` |
+| src/player_cap_patches.h | pure: the two milestone 5 code edits as data (session info maximum imm8 at 0x82FD83, isCoop's member count test at 0x7F7AFD as a jmp to the thunk); none when `max_players` is 2 | `player_cap_patches::forPlayers`, `sessionInfoMask` |
+| src/player_cap.cpp | checks and writes both edits together at init; owns the isCoop thunk (some member other than the local one has state >= 0xB) | `player_cap::install` |
 | src/guest_call.cpp | naked call into a game function with registers and stack arguments loaded and read back | `guest_call::callWithRegs`, `call` |
 | src/thunk_frame.h, src/fpu_guard.h | naked stub macros (`PARTNER_WRAP_STUB`: pushad frame to C++, `PARTNER_REG_STUB`: one register to C++) and `GuestFrame`; `FpuGuard` saves the x87/SSE state around float math | |
 | src/partner_sites.h | the 55 milestone 4 sites as data (id, kind, gate, address, expected bytes, thunk, tail) and the `Thunk` list; `parseHex` | `partner_sites::kSites`, `Kind`, `Gate`, `Thunk` |
@@ -406,6 +408,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 | src/partner_thunks_session.cpp | getters (C1, C2), chunk loaded (O1), object hand-over target (O3), join ready and dialog (J1, J2), member left (L1), Disconnect (L2), known handles (K1-K3), script packet (K4), invite (K5), mover rider (V1) | `bindSession` |
 | src/partner_thunks_gameplay.cpp | go down (D1), vehicles (A1-A7), mission start vehicle exit loop (B1, B2), Lua party natives (S1-S4), and the probe-gated team wipe, downed message and customisation exit (D2, D3, B3, B4) | `bindGameplay` |
 | tests/config_test.cpp, tests/byte_pattern_test.cpp, tests/pool_size_test.cpp, tests/replication_sites_test.cpp, tests/partner_rules_test.cpp | ctest unit tests, no game | |
+| tests/player_cap_test.cpp | the milestone 5 edits: bytes written for 3, 4 and 8 players, checked bytes, none at 2, no overlap with milestone 3 or 4 sites, clear of Juiced | |
 | tests/partner_sites_test.cpp, tests/juiced_targets.h | the site table: 55 rows, 4 gated, no overlap, shapes, the written bytes, no site within 16 bytes of a Juiced target (`juiced_targets.h` = the exe addresses Juiced touches) or a milestone 3 site | |
 | tests/guest_call_test.cpp, tests/remote_players_test.cpp | `callWithRegs` against stand-in functions; the player and member reads, default partner, getters and loops against a made-up game state mapped at the game's own addresses | |
 
@@ -435,7 +438,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 - Adapter network behaviour: `adapters/re0/src/net_client.cpp`
 - Control rule (who drives a character): `control_rule.h` (pure) applied in `character_owner::controlOf`; party commands: `command_input.cpp`, `party_mode.cpp`, `camera_parity.cpp` (trace a press or decision in `adapter.log`, lines starting `command:`); pickup crash guard: `pickup_guard.cpp`
 - Overlay contents: `adapters/re0/src/debug_lines.cpp` (add a stat: counter/gauge in `debug_stats.h`, update it where the event happens, add a line)
-- SR2 co-op limits, addresses, the 8-peer replication switch (site tables in `replication_sites.h`) and the live trace lines: `docs/SR2_NOTES.md`, code in `adapters/sr2/src` (`coop_limits.cpp`, `limit_thunk.cpp`, `coop_pools.cpp`, `replication_switch.cpp`, `join_trace.cpp`)
+- SR2 co-op limits, addresses, the 8-peer replication switch (site tables in `replication_sites.h`) and the live trace lines: `docs/SR2_NOTES.md`, code in `adapters/sr2/src` (`coop_limits.cpp`, `limit_thunk.cpp`, `coop_pools.cpp`, `replication_switch.cpp`, `join_trace.cpp`); the player cap ("1/2", a refused third player): `player_cap.cpp`, notes "Player cap"
 - SR2 partner logic for 3 or more players (what "the partner" means, a site's thunk, the owner-slot mapping, the live-test order): `docs/SR2_NOTES.md` "Partner logic", sites in `partner_sites.h`, thunks in `partner_thunks_*.cpp`, getters in `partner_scope.cpp`
 - Reverse-engineering patterns shared across games: `docs/re/PATTERNS.md` (grown by the `coop-re` skill)
 - Enemy combat (guest hits on puppets, enemy hits on the partner, deaths): `enemy_combat.cpp` (net), `ds2/combat_hook.cpp` (engine), wire in `combat_wire.h`; notes `docs/DS2_NOTES.md` "Enemy combat"

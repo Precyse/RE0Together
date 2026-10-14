@@ -103,6 +103,7 @@ constexpr uintptr_t kSessionHostMemberOffset = 0x404;
 constexpr uintptr_t kMemberSendEnabledOffset = 0x1B8;
 constexpr uintptr_t kMemberKnownHandlesOffset = 0x1DF0;
 constexpr uintptr_t kMemberKnownCountOffset = 0x21F0;
+constexpr uint32_t kMemberStateReady = 0xB;   // isCoop counts a member from this state on
 constexpr uint32_t kMemberStateInGame = 0xD;
 constexpr uintptr_t kMaxWalkedPlayers = 12;  // the session is built for 12; every list walk stops here
 
@@ -123,6 +124,14 @@ constexpr uintptr_t kLeaveDone = 0x8CB42D;
 constexpr uintptr_t kVehicleExitAfterGetter = 0x6A28B9;  // past the getter call that the first patch replaces
 constexpr uintptr_t kVehicleExitDone = 0x6A293B;
 constexpr uintptr_t kTeamWipeResume = 0x9612DB;
+
+// Player cap (milestone 5). The session info builder stores the advertised and enforced maximum: `and ebx, imm8` then
+// `add ebx, 12`, with the imm8 -10 (F6) for co-op (2 players) and 0 otherwise (12). isCoop (0x7F7AD0) refuses to run
+// unless the member count is exactly 2; its test is replaced by "some other member is ready".
+constexpr uintptr_t kSessionInfoMaxBlock = 0x82FD81;            // 83 E3 F6 83 C3 0C
+constexpr uintptr_t kSessionInfoMaxMaskOffset = 2;              // the imm8 inside the block
+constexpr uint32_t kSessionInfoBaseMax = 12;                    // what the block adds back (the non-co-op maximum)
+constexpr uintptr_t kCoopMemberCountTest = 0x7F7AFD;            // cmp dword ptr [ecx+0x30], 2 ; jne false
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;

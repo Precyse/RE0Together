@@ -42,6 +42,9 @@ struct Partner {
 
 Partner defaultPartner(const Snapshot& snapshot);
 
+// True when a member of `session` other than its local one has a state of at least `minState`.
+bool anyRemoteMemberAtLeast(uintptr_t session, int32_t minState);
+
 // The game's local player human, 0 outside a session.
 uintptr_t localHuman();
 

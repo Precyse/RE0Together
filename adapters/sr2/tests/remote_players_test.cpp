@@ -244,6 +244,28 @@ void nearestAndIdentity() {
           "downed timer and join flag");
 }
 
+void anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    const uintptr_t session = addr(world.session.data());
+    constexpr int32_t kReady = static_cast<int32_t>(sr2::kMemberStateReady);
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "two remotes in the game: ready");
+    at(world.members[1].data(), sr2::kMemberStateOffset) = kReady - 1;
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "one remote still joining, the other ready: ready");
+    at(world.members[2].data(), sr2::kMemberStateOffset) = kReady - 1;
+    check(!remote_players::anyRemoteMemberAtLeast(session, kReady), "both remotes joining: not ready");
+    at(world.members[2].data(), sr2::kMemberStateOffset) = kReady;
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "a remote at exactly the ready state counts");
+    world.place(order, order, 2);
+    at(world.members[1].data(), sr2::kMemberStateOffset) = kReady - 1;
+    at(world.members[0].data(), sr2::kMemberStateOffset) = kReady - 1;
+    at(world.members[2].data(), sr2::kMemberStateOffset) = sr2::kMemberStateInGame;
+    check(!remote_players::anyRemoteMemberAtLeast(session, kReady), "only the local member is in the game: not ready");
+    at(world.members[0].data(), sr2::kMemberStateOffset) = sr2::kMemberStateInGame;
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "a guest sees the host in the game: ready");
+}
+
 }  // namespace
 
 int main() {
@@ -260,5 +282,6 @@ int main() {
     overridesAnswerTheirTurn();
     withoutRemotesALoopRunsOnceWithoutAnOverride();
     nearestAndIdentity();
+    anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes();
     return g_failures == 0 ? 0 : 1;
 }
