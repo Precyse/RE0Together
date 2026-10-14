@@ -73,7 +73,7 @@ int main() {
           "3 players F7, 8 players FC");
 
     const auto patches = player_cap_patches::forPlayers(kFourPlayers, kThunks);
-    check(patches.size() == 6, "six edits: the maximum, isCoop, the retargeted duplicate search call, the guest welcome jump, the look reset and the ambient guard");
+    check(patches.size() == 9, "nine sites: the maximum, isCoop, the retargeted duplicate search call, the guest welcome jump, the look reset, the ambient guard, the two leave edits and the leave entry");
     const CodePatch& max = patches[0];
     check(max.address == 0x82FD81 && max.expected == std::vector<uint8_t>{0x83, 0xE3, 0xF6, 0x83, 0xC3, 0x0C},
           "session info maximum: 83 E3 F6 83 C3 0C at 0x82FD81 is checked");

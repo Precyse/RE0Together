@@ -3,6 +3,7 @@
 #include <mutex>
 #include <vector>
 
+#include "creation_queue.h"
 #include "guest_call.h"
 #include "guest_welcome_rules.h"
 #include "log.h"
@@ -62,7 +63,7 @@ void __cdecl welcomeMember(uintptr_t member) {
     syncLook(session, member);
     if (g_trace) {
         logger::write("trace: welcomed member 0x%X slot %u, queued %u objects", static_cast<unsigned>(member), key.slot,
-                      readDword(member + sr2::kMemberKnownCountOffset));
+                      creation_queue::queued(member));
     }
 }
 

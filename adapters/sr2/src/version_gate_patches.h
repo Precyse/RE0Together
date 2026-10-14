@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "code_patch.h"
+#include "sr2_addresses.h"
 
 // The code and data edits of milestone 8 as data (pure, unit tested): the transport's message table rows of join_req and
 // join_acc point at the gates, and the two sends of those messages go through the thunk that appends the trailer.
@@ -14,7 +15,7 @@ constexpr uintptr_t kJoinReqHandler = 0x815BC0;      // cdecl(payload, ctx)
 constexpr uintptr_t kJoinAccHandler = 0x8162E0;      // cdecl(payload, ctx)
 constexpr uintptr_t kJoinDenyHandler = 0x8163F0;     // cdecl(payload, ctx), reads the reason at payload + 4
 constexpr uintptr_t kJoinDenySender = 0x816F60;      // ECX = address block, push reason (the caller pops)
-constexpr uintptr_t kSend = 0x814670;                // cdecl(buffer, length, 0, 0), ESI = member
+constexpr uintptr_t kSend = sr2::kSendMessage;       // cdecl(buffer, length, 0, 0), ESI = member
 constexpr uintptr_t kJoinReqSend = 0x815B9D;         // the call of kSend in the join_req sender
 constexpr uintptr_t kJoinAccSend = 0x8162BB;         // the call of kSend in the join_acc sender
 

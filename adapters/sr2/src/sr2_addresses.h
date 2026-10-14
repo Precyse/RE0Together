@@ -181,6 +181,32 @@ constexpr uintptr_t kAmbientElementLoad = 0x90D44B;   // mov esi, [ebp]; mov ecx
 constexpr uintptr_t kAmbientTemplateUse = 0x90D451;   // the first use of the template
 constexpr uintptr_t kAmbientNextElement = 0x90D507;   // reloads the group, counts the element, loops
 
+// Member leave (milestone 5i, section 8). The leave function runs on every machine; its loops over the net records are
+// patched at the sites below. Net records (list head kRecordListHead, circular through kRecordNextOffset) and the objects
+// they stand for (table kObjectTable, indexed by the low 12 bits of the handle).
+constexpr uintptr_t kLeaveFunction = 0x8072E0;       // cdecl(leaver slot)
+constexpr uintptr_t kLeaveLeaverBranch = 0x807413;   // cmp byte [esi], cl; jne kLeaveOtherOwner
+constexpr uintptr_t kLeaveLeaverOwned = 0x80741B;    // the leaver's record: the class decides, destroy or take over
+constexpr uintptr_t kLeaveOtherOwner = 0x8074AC;     // another owner's record
+constexpr uintptr_t kLeaveNextRecord = 0x8074B8;     // on to the next record
+constexpr uintptr_t kLeaveRenameCheck = 0x8074E5;    // the rename loop: the id's slot against the leaver's
+constexpr uintptr_t kLeaveRenameBody = 0x8074F2;     // rename the record
+constexpr uintptr_t kLeaveRenameSkip = 0x807523;     // on to the next record of the rename loop
+constexpr uintptr_t kRecordListHead = 0x212E2AC;
+constexpr uintptr_t kRecordOwnerOffset = 0;          // byte: the owner's session slot
+constexpr uintptr_t kRecordIdOffset = 2;             // word: the id, its top 4 bits are the creator's slot
+constexpr uint32_t kRecordIdSlotShift = 12;
+constexpr uintptr_t kRecordHandleOffset = 4;
+constexpr uintptr_t kRecordNextOffset = 0x66C;
+constexpr uintptr_t kRecordCreatedMaskOffset = 0x67E;  // word: a bit per member slot that has the object
+constexpr uintptr_t kObjectTable = 0x2149C64;
+constexpr uintptr_t kWideHeaderFlag = 0xE8C30C;      // byte: the transport header is 4 bytes
+constexpr uintptr_t kSendMessage = 0x814670;         // cdecl(buffer, length, 0, 0), ESI = member
+constexpr uintptr_t kIsHumanHandle = 0x9D7DD0;       // ECX = handle: the object when it is a human, else 0
+constexpr uintptr_t kVehicleOfHandle = 0xA009C0;     // ECX = handle: the object when it is a vehicle, else 0
+constexpr uintptr_t kExitVehicle = 0x9CAF90;         // cdecl(0, 0): the local player leaves its vehicle
+constexpr uintptr_t kUnlinkRecord = 0x804140;        // ESI = record
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
