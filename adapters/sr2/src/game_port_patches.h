@@ -44,13 +44,6 @@ inline constexpr AdvertisedPortSite kAdvertisedPortSites[] = {
 inline uint8_t low(uint32_t port) { return static_cast<uint8_t>(port); }
 inline uint8_t high(uint32_t port) { return static_cast<uint8_t>(port >> 8); }
 
-// A `call rel32` that goes to `thunk` instead of `original`.
-inline CodePatch retargetedCall(const char* name, uintptr_t address, uintptr_t original, uintptr_t thunk) {
-    const auto before = relativeBranch(kCallRel32, address, original);
-    const auto after = relativeBranch(kCallRel32, address, thunk);
-    return {name, address, {before.begin(), before.end()}, {after.begin(), after.end()}};
-}
-
 // Every site is checked together; E1 and E2 are written only for a port other than 4200, E2, E3, H1 and H2 only with 3 or
 // more players, T11 only with `trace`. Nothing at all when none would be written.
 inline std::vector<CodePatch> forPort(uint32_t port, uint32_t maxPlayers, bool trace, const Thunks& thunks) {

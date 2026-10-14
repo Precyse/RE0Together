@@ -21,6 +21,13 @@ inline std::array<uint8_t, 5> relativeBranch(uint8_t opcode, uintptr_t from, uin
             static_cast<uint8_t>(displacement >> 16), static_cast<uint8_t>(displacement >> 24)};
 }
 
+// The `call rel32` at `address` (it goes to `original` in the exe) as a patch that makes it go to `thunk`.
+inline CodePatch retargetedCall(const char* name, uintptr_t address, uintptr_t original, uintptr_t thunk) {
+    const auto before = relativeBranch(kCallRel32, address, original);
+    const auto after = relativeBranch(kCallRel32, address, thunk);
+    return {name, address, {before.begin(), before.end()}, {after.begin(), after.end()}};
+}
+
 // Compares every patch's `expected` with the running exe and logs each difference. True when all match.
 bool codeMatches(const std::vector<CodePatch>& patches);
 

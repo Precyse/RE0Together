@@ -23,13 +23,6 @@ struct Thunks {
     uintptr_t duplicateJoinSender;  // replaces the duplicate member search call of the join_req handler
 };
 
-// A `call rel32` that goes to `thunk` instead of `original`.
-inline CodePatch retargetedCall(const char* name, uintptr_t address, uintptr_t original, uintptr_t thunk) {
-    const auto before = relativeBranch(kCallRel32, address, original);
-    const auto after = relativeBranch(kCallRel32, address, thunk);
-    return {name, address, {before.begin(), before.end()}, {after.begin(), after.end()}};
-}
-
 // All edits together, or none when `maxPlayers` is the shipped co-op's.
 inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thunks) {
     if (maxPlayers <= sr2::kCoopDefaultPlayers) return {};

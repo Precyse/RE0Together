@@ -8,6 +8,7 @@
 #include "hooks.h"
 #include "join_net_trace.h"
 #include "join_trace.h"
+#include "lan_address.h"
 #include "log.h"
 #include "partner_patches.h"
 #include "player_cap.h"
@@ -40,6 +41,7 @@ DWORD WINAPI initThread(LPVOID) {
         }
         player_cap::install(config.maxPlayers, config.trace);
         game_port::install(config.gamePort, config.maxPlayers, config.trace);
+        lan_address::install(config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (config.trace) {
             join_trace::install(config.maxPlayers);
