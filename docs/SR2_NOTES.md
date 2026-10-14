@@ -98,6 +98,7 @@ Guests behind one NAT all bind local UDP 4200; the router can keep that external
 - E2 (six `mov word ptr [reg+4], 4200` at 0x811AC0, 0x811B11, 0x811BA4, 0x811C0D, 0x811C7A, 0x811CB7): our advertised record port, same rule.
 - E3 (0x8CDA3B, the quick check for a peer behind our public IP): a thunk keeps 4200 for the session host and the port the host relayed for anyone else.
 - E2 and E3 follow the `max_players` > 2 gate. All eight sites are checked together before anything is written. `trace=1` logs the port, whether E1 was applied and each quick check.
+- H1, H2 (milestone 5g, with `max_players` > 2): guests behind one home network reach each other by the peer's local port, but the host only knows each guest's external source port. H1 (0x815D8C, join_req handler) remembers the local port a guest reports before 0x815D97 overwrites it with the real source, keyed by the real source IP and port; H2 (0x815666, the new_conn record builder) writes that port into the record (buffer + offset + 13) that the other guests get. The host's own member records keep the external source. E3 then uses the guest's local port. T11 (0x813BF2, `trace=1` only) logs the first unmapped sender from each private range address.
 - Live test: player 3 with `game_port=4201`; expect "nat negotiation complete, result 0" and a `join_req` from the router's address with port 4201.
 
 ## Open questions for the live run

@@ -3,6 +3,7 @@
 #include "code_patch.h"
 #include "game_port_patches.h"
 #include "game_port_rules.h"
+#include "local_port_relay.h"
 #include "log.h"
 #include "memory.h"
 #include "sr2_addresses.h"
@@ -48,19 +49,22 @@ namespace game_port {
 
 bool install(uint32_t port, uint32_t maxPlayers, bool trace) {
     g_trace = trace;
-    const auto patches = game_port_patches::forPort(port, maxPlayers, reinterpret_cast<uintptr_t>(&quickCheckStub));
-    if (patches.empty()) {
-        if (trace) logger::write("game port: %u, the shipped port, nothing is changed", port);
-        return false;
-    }
+    local_port_relay::setTrace(trace);
+    const local_port_relay::Thunks relay = local_port_relay::thunks();
+    const game_port_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&quickCheckStub), relay.reportedPort,
+                                           relay.relayedRecordPort, relay.unmappedSender};
+    const auto patches = game_port_patches::forPort(port, maxPlayers, trace, thunks);
+    if (patches.empty()) return false;
     if (!applyCodePatches(patches)) {
         logger::write("game port: sites differ, the game keeps port %u", game_port_rules::kShippedGamePort);
         return false;
     }
     if (trace) {
-        logger::write("game port: %u in use, bind port edit (E1) %s, advertised ports and quick check (E2, E3) %s", port,
-                      port != game_port_rules::kShippedGamePort ? "applied" : "not needed",
-                      maxPlayers > sr2::kCoopDefaultPlayers ? "applied" : "off at 2 players");
+        const bool replicating = maxPlayers > sr2::kCoopDefaultPlayers;
+        logger::write("game port: %u in use, bind port edit (E1) %s, advertised ports, quick check and local port relay "
+                      "(E2, E3, H1, H2) %s, unmapped sender trace (T11) on",
+                      port, port != game_port_rules::kShippedGamePort ? "applied" : "not needed",
+                      replicating ? "applied" : "off at 2 players");
     }
     return true;
 }
