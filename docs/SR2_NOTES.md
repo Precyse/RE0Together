@@ -118,6 +118,13 @@ Only peers running the same mod build play together. Research: `C:\Users\ahmal\c
 - `trace=1` logs each accept and refusal: `version gate: join_req from ... refused, no mod` or `..., version V players P flags F, ours ...`.
 - Not built yet: the browser name tag `cfv<VVV>[-<token>]` with the M6 filter, the M6 password check in the host gate, and `noteJoinDeny` (V9). They come with the M6 merge.
 
+## Looks (milestone 5i)
+After P2 left and rejoined, P2 showed P3's head and skin on the host and on P3. The body part tints a player sends with its outfit (components message, 0x82A0C0 -> 0x7D84C0) come from a table indexed by the human's pool index; the only reset is at boot, so a human created at an index another player's copy used before sent that player's tints as its own. Clothes (slots above 4) never enter the table, which is why they stayed right. Research: `C:\Users\ahmal\coop-scratch\sr2\M5i_APPEARANCE.md`.
+- A1 (0x9D4379, `E8 22 F8 00 00`, with the other M5 edits, all peers, `max_players` > 2): the call to the character instance create 0x9E3BA0 (its only caller) goes to a thunk that zeroes, for the pool index in `[esp+8]` (below 12), the applied tints (count 0x1FC8C90 + i*4, row 0x1FC8CC0 + i*0x80), the pending tints (0x1FC8660, 0x1FC8690) and the pending body morph (0x1FC85A0, three dwords at 0x1FC85D0 + i*0xC), then jumps to 0x9E3BA0. Clearing when a human is created covers leave, rejoin and any index reuse. `trace=1` logs the index.
+- T1 (0x82A17C, `trace=1` only): the call to 0x7D84C0 runs as before and then logs `looks: send N body tints from index K: slot s a/b ...`; with A1 the rejoiner's first send lists only its own slots.
+- A save or look store of an affected player (0x6921D0, 0x81A9C0 read the same table) may already hold the other player's tints: restore the session backup or pick the tints again at a clothing store.
+- Not built: C1 (0x90D44B, a guard for a null group element), a later row of the same research.
+
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).

@@ -168,6 +168,13 @@ constexpr uintptr_t kInGameResetSecond = 0xEB4494;
 constexpr uintptr_t kQueueOwnedObjects = 0x8051F0;       // EDX = member: queue every object we own for creation on it
 constexpr uintptr_t kMemberSessionOffset = 0x1AC;        // pointer to the session the member belongs to
 
+// Looks (milestone 5i). The player human setup calls the character instance create at kCharInstanceCreateCall; the components
+// message packs the local human's tints with kTintListBuild at kTintSendCall.
+constexpr uintptr_t kCharInstanceCreateCall = 0x9D4379;  // call kCharInstanceCreate (its only caller)
+constexpr uintptr_t kCharInstanceCreate = 0x9E3BA0;      // cdecl(render object, pool index, is local)
+constexpr uintptr_t kTintSendCall = 0x82A17C;            // call kTintListBuild
+constexpr uintptr_t kTintListBuild = 0x7D84C0;           // eax = local human, ecx = length out, buffer on the stack
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

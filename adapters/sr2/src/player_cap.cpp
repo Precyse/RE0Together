@@ -3,6 +3,7 @@
 #include "code_patch.h"
 #include "guest_welcome.h"
 #include "home_network.h"
+#include "look_reset.h"
 #include "log.h"
 #include "player_cap_patches.h"
 #include "remote_players.h"
@@ -27,15 +28,17 @@ namespace player_cap {
 bool install(uint32_t maxPlayers, bool trace) {
     home_network::setTrace(trace);
     guest_welcome::setTrace(trace);
+    look_reset::setTrace(trace);
     const player_cap_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&coopMemberReadyStub),
-                                            home_network::duplicateJoinSenderThunk(), guest_welcome::thunk()};
-    const auto patches = player_cap_patches::forPlayers(maxPlayers, thunks);
+                                            home_network::duplicateJoinSenderThunk(), guest_welcome::thunk(),
+                                            look_reset::resetIndexLooksThunk(), look_reset::traceTintSendThunk()};
+    const auto patches = player_cap_patches::forPlayers(maxPlayers, thunks, trace);
     if (patches.empty()) return false;
     if (!applyCodePatches(patches)) {
         logger::write("player cap: sites differ, the maximum stays 2");
         return false;
     }
-    logger::write("player cap: session maximum %u, isCoop counts ready members, join_req duplicate search retargeted, guests welcome late joiners", maxPlayers);
+    logger::write("player cap: session maximum %u, isCoop counts ready members, join_req duplicate search retargeted, guests welcome late joiners, player looks start empty", maxPlayers);
     return true;
 }
 

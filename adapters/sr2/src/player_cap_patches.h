@@ -7,7 +7,7 @@
 
 // The code edits of milestones 5 and 5d as data (pure, unit tested): the session info maximum, isCoop's member count
 // test (docs/SR2_NOTES.md, "Player cap"), the duplicate member search call that lets players behind one NAT join
-// ("Home network") and the guest branch of the member state callback that welcomes a late joiner ("Late joiners").
+// ("Home network") the guest branch of the member state callback that welcomes a late joiner ("Late joiners") and the character instance create that clears the look tables of its pool index ("Looks").
 namespace player_cap_patches {
 
 constexpr uint8_t kNop = 0x90;
@@ -22,10 +22,12 @@ struct Thunks {
     uintptr_t coopMemberReady;      // isCoop's member count test jumps here
     uintptr_t duplicateJoinSender;  // replaces the duplicate member search call of the join_req handler
     uintptr_t guestWelcome;         // the guest branch of the member state change callback jumps here
+    uintptr_t resetIndexLooks;      // the character instance create of a player human goes here
+    uintptr_t traceTintSend;        // trace only: the tint list of a components message goes here
 };
 
-// All edits together, or none when `maxPlayers` is the shipped co-op's.
-inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thunks) {
+// All edits together (the look send trace only with `trace`), or none when `maxPlayers` is the shipped co-op's.
+inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thunks, bool trace = false) {
     if (maxPlayers <= sr2::kCoopDefaultPlayers) return {};
     const std::vector<uint8_t> maxBlock = {0x83, 0xE3, 0xF6, 0x83, 0xC3, 0x0C};
     std::vector<uint8_t> widenedBlock = maxBlock;
@@ -41,11 +43,14 @@ inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thun
     std::vector<uint8_t> welcomeJump(welcome.begin(), welcome.end());
     welcomeJump.resize(guestBranch.size(), kNop);
 
-    return {{"session_info_max", sr2::kSessionInfoMaxBlock, maxBlock, widenedBlock},
+    std::vector<CodePatch> patches = {{"session_info_max", sr2::kSessionInfoMaxBlock, maxBlock, widenedBlock},
             {"coop_member_count_test", sr2::kCoopMemberCountTest, countTest, jumpOut},
             retargetedCall("duplicate_sender_call", sr2::kDuplicateSenderCall, sr2::kFindDuplicateMember,
                            thunks.duplicateJoinSender),
-            {"guest_welcome_member", sr2::kGuestMemberBranch, guestBranch, welcomeJump}};
+            {"guest_welcome_member", sr2::kGuestMemberBranch, guestBranch, welcomeJump},
+            retargetedCall("reset_index_looks", sr2::kCharInstanceCreateCall, sr2::kCharInstanceCreate, thunks.resetIndexLooks)};
+    if (trace) patches.push_back(retargetedCall("trace_tint_send", sr2::kTintSendCall, sr2::kTintListBuild, thunks.traceTintSend));
+    return patches;
 }
 
 }  // namespace player_cap_patches
