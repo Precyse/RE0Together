@@ -66,7 +66,7 @@ bool sitesDoNotOverlap(const std::vector<Site>& sites) {
 }
 
 bool clearOfEarlierMilestones(const std::vector<Site>& sites) {
-    const auto playerCap = player_cap_patches::forPlayers(4, {kThunk, kThunk, kThunk});
+    const auto playerCap = player_cap_patches::forPlayers(4, {kThunk, kThunk});
     for (const Site& site : sites) {
         const size_t size = sizeOf(site);
         for (const partner_sites::Site& other : partner_sites::kSites) {

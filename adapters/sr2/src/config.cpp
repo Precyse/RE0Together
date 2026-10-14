@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "game_port_rules.h"
 #include "paths.h"
 #include "sr2_addresses.h"
 
@@ -46,6 +47,12 @@ Config parseConfig(const std::string& text) {
             config.trace = number != 0;
         } else if (key == "partner_experimental") {
             config.partnerExperimental = number != 0;
+        } else if (key == "game_port") {
+            if (game_port_rules::valid(number)) {
+                config.gamePort = static_cast<uint32_t>(number);
+            } else {
+                config.rejectedGamePort = static_cast<uint32_t>(number);
+            }
         }
     }
     return config;

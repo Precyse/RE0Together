@@ -12,8 +12,7 @@ namespace {
 
 constexpr uintptr_t kThunk = 0x10002000;
 constexpr uintptr_t kSenderThunk = 0x10002100;
-constexpr uintptr_t kHostByNameThunk = 0x10002200;
-constexpr player_cap_patches::Thunks kThunks{kThunk, kSenderThunk, kHostByNameThunk};
+constexpr player_cap_patches::Thunks kThunks{kThunk, kSenderThunk};
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kEightPlayers = 8;
@@ -73,7 +72,7 @@ int main() {
           "3 players F7, 8 players FC");
 
     const auto patches = player_cap_patches::forPlayers(kFourPlayers, kThunks);
-    check(patches.size() == 5, "five edits: the maximum, isCoop and the three retargeted calls");
+    check(patches.size() == 3, "three edits: the maximum, isCoop and the retargeted duplicate search call");
     const CodePatch& max = patches[0];
     check(max.address == 0x82FD81 && max.expected == std::vector<uint8_t>{0x83, 0xE3, 0xF6, 0x83, 0xC3, 0x0C},
           "session info maximum: 83 E3 F6 83 C3 0C at 0x82FD81 is checked");
@@ -102,10 +101,6 @@ int main() {
     };
     check(call(2, 0x815EAE, {0xE8, 0xFD, 0x9F, 0xFF, 0xFF}, kSenderThunk),
           "duplicate search call 0x815EAE (call 0x80FEB0) goes to the sender thunk");
-    check(call(3, 0x810C94, {0xE8, 0xAB, 0x28, 0x41, 0x00}, kHostByNameThunk),
-          "gethostbyname call 0x810C94 goes to the host name thunk");
-    check(call(4, 0x7F79D0, {0xE8, 0x6F, 0xBB, 0x42, 0x00}, kHostByNameThunk),
-          "gethostbyname call 0x7F79D0 goes to the host name thunk");
     check(clearOfJuiced(patches), "no edit within 16 bytes of an address Juiced touches");
     check(clearOfEarlierMilestones(patches), "no edit overlaps a milestone 3 or 4 site");
     return g_failures == 0 ? 0 : 1;
