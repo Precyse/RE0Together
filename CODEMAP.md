@@ -439,11 +439,11 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 | src/thunk_frame.h, src/fpu_guard.h | naked stub macros (`PARTNER_WRAP_STUB`: pushad frame to C++, `PARTNER_REG_STUB`: one register to C++, `TRACE_ENTRY_STUB`: log then run the original, `TRACE_RETURN_STUBS`: also log the result) and `GuestFrame`; `FpuGuard` saves the x87/SSE state around float math | |
 | src/partner_sites.h | the 55 milestone 4 sites as data (id, kind, gate, address, expected bytes, thunk, tail) and the `Thunk` list; `parseHex` | `partner_sites::kSites`, `Kind`, `Gate`, `Thunk` |
 | src/partner_replacement.h | pure: the bytes written at a site (branch to the thunk, tail, nops) | `replacementFor` |
-| src/partner_patches.cpp | start-up check of all sites, then all-or-nothing code edits and the hooks; the 4 probe-gated sites only with `partner_experimental` | `sitesMatch`, `install` |
+| src/partner_patches.cpp | start-up check of all sites, then all-or-nothing code edits and the hooks; the 2 probe-gated sites (B3, B4) only with `partner_experimental` | `sitesMatch`, `install` |
 | src/partner_thunks.h | thunk binding: entry address and the slot for a hook's trampoline | `partner_thunks::bindCalls`, `bindSession`, `bindGameplay` |
 | src/partner_thunks_calls.cpp | call replacements: identity tests (M1-M6), nearest remote (O2, N1-N3), per-remote look sync, re-sync and asset hold (E1-E10, J3-J5) | `bindCalls` |
 | src/partner_thunks_session.cpp | getters (C1, C2), chunk loaded (O1), object hand-over target (O3), join ready and dialog (J1, J2), member left (L1), Disconnect (L2), known handles (K1-K3), script packet (K4), invite (K5), mover rider (V1) | `bindSession` |
-| src/partner_thunks_gameplay.cpp | go down (D1), vehicles (A1-A7), mission start vehicle exit loop (B1, B2), Lua party natives (S1-S4), and the probe-gated team wipe, downed message and customisation exit (D2, D3, B3, B4) | `bindGameplay` |
+| src/partner_thunks_gameplay.cpp | go down (D1), vehicles (A1-A7), mission start vehicle exit loop (B1, B2), Lua party natives (S1-S4), the team wipe and downed message (D2, D3, on since probe B passed) and the probe-gated customisation exit (B3, B4) | `bindGameplay` |
 | tests/config_test.cpp, tests/byte_pattern_test.cpp, tests/pool_size_test.cpp, tests/replication_sites_test.cpp, tests/partner_rules_test.cpp | ctest unit tests, no game | |
 | tests/player_cap_test.cpp | the milestone 5 edits: bytes written for 3, 4 and 8 players, checked bytes, none at 2, no overlap with milestone 3 or 4 sites, clear of Juiced | |
 | tests/join_net_trace_sites_test.cpp | the trace sites: 11 sites, 9 entries, checked bytes, drop branch targets 0x81611E and the bytes written, no overlap with milestone 3, 4 or 5 sites, clear of Juiced | |
@@ -474,7 +474,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
  the milestone 9 tables (`multiplayer_sites::kPhases`): unique ids and addresses, no overlap with each other or with milestones 3 to 8, clear of Juiced, shapes, per-phase row counts; every row has a thunk and every hook its own trampoline slot | |
 
 | tests/trace_stub_test.cpp | the entry and return trace stubs against a stand-in stdcall function: arguments seen, result, stack balance, swapped return address, caller registers kept | |
-| tests/partner_sites_test.cpp, tests/juiced_targets.h | the site table: 55 rows, 4 gated, no overlap, shapes, the written bytes, no site within 16 bytes of a Juiced target (`juiced_targets.h` = the exe addresses Juiced touches) or a milestone 3 site | |
+| tests/partner_sites_test.cpp, tests/juiced_targets.h | the site table: 55 rows, 2 gated, no overlap, shapes, the written bytes, no site within 16 bytes of a Juiced target (`juiced_targets.h` = the exe addresses Juiced touches) or a milestone 3 site | |
 | tests/guest_call_test.cpp, tests/remote_players_test.cpp | `callWithRegs` against stand-in functions; the player and member reads, default partner, getters and loops against a made-up game state mapped at the game's own addresses | |
 
 ## release/ (repo root)

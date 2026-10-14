@@ -33,7 +33,7 @@ bool install(bool experimental, bool trace, uint32_t maxPlayers) {
     if (experimental) {
         logger::write("partner: %zu sites patched, the experimental ones included", partner_sites::kSiteCount);
     } else {
-        logger::write("partner: %zu sites patched, %zu gated (probe B, probe G)", result.patched, result.gated);
+        logger::write("partner: %zu sites patched, %zu gated (probe G)", result.patched, result.gated);
     }
     return true;
 }

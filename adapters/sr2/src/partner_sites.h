@@ -19,9 +19,9 @@ enum class Kind : uint8_t {
     PointerSwap,   // the checked bytes are a function pointer in a table; it points to the thunk, which gets the old one
 };
 
-// When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). B and G are
-// milestone 4 probes, E and H milestone 7's.
-enum class Gate : uint8_t { Now, ProbeB, ProbeG, ProbeE, ProbeH };
+// When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). G is a
+// milestone 4 probe (B passed in the logs and D2 and D3 are on), E and H are milestone 7's.
+enum class Gate : uint8_t { Now, ProbeG, ProbeE, ProbeH };
 
 // The code behind a site (partner_thunks_*.cpp). Several sites share a thunk.
 enum class Thunk : uint8_t {
@@ -175,8 +175,8 @@ constexpr Site kSites[] = {
     {"K5", Kind::RetargetCall, Gate::Now, 0x6822F9, "E8 42 24 19 00", Thunk::SendToPartnerMember, ""},
     {"V1", Kind::RetargetCall, Gate::Now, 0x84DA07, "E8 C4 A1 18 00", Thunk::RemoteOnObject, ""},
     {"D1", Kind::HookEntry, Gate::Now, 0x9AFDD0, "83 EC 0C 53 56 8B F0 A1", Thunk::WrapAnyGoDown, ""},
-    {"D2", Kind::JumpOut, Gate::ProbeB, 0x96127A, "C6 44 24 13 00", Thunk::TeamWipe, ""},
-    {"D3", Kind::RetargetCall, Gate::ProbeB, 0x9AFD01, "E8 CA 7E 02 00", Thunk::RemoteIfTeamDown, ""},
+    {"D2", Kind::JumpOut, Gate::Now, 0x96127A, "C6 44 24 13 00", Thunk::TeamWipe, ""},
+    {"D3", Kind::RetargetCall, Gate::Now, 0x9AFD01, "E8 CA 7E 02 00", Thunk::RemoteIfTeamDown, ""},
     {"A1", Kind::RetargetCall, Gate::Now, 0xAAD786, "E8 45 A4 F2 FF", Thunk::RemoteDrivingVehicle, ""},
     {"A2", Kind::RetargetCall, Gate::Now, 0xB42AFB, "E8 D0 50 E9 FF", Thunk::RemoteEnteringVehicle, ""},
     {"A3", Kind::RetargetCall, Gate::Now, 0xB42B04, "E8 C7 50 E9 FF", Thunk::RemoteEnteringVehicle, ""},

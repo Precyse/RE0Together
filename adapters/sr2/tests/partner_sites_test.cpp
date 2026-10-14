@@ -16,7 +16,7 @@ using partner_sites::Kind;
 using partner_sites::Site;
 
 constexpr size_t kExpectedSites = 55;
-constexpr size_t kGatedSites = 4;
+constexpr size_t kGatedSites = 2;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr uint8_t kCallOpcode = 0xE8;
@@ -122,7 +122,7 @@ bool gatedAreExactlyTheProbeSites() {
     for (const Site& site : partner_sites::kSites) {
         if (site.gate != Gate::Now) gated.insert(site.id);
     }
-    return gated == std::set<std::string_view>{"D2", "D3", "B3", "B4"};
+    return gated == std::set<std::string_view>{"B3", "B4"};
 }
 
 const Site* siteNamed(std::string_view id) {
@@ -161,7 +161,7 @@ int main() {
     check(partner_sites::kSiteCount == kExpectedSites, "55 sites");
     check(std::count_if(std::begin(partner_sites::kSites), std::end(partner_sites::kSites),
                         [](const Site& s) { return s.gate != Gate::Now; }) == kGatedSites,
-          "4 of them wait for a probe");
+          "2 of them wait for a probe");
     check(hexParses(), "hex text parses");
     check(idsAreUnique(), "ids are unique");
     check(addressesAreUnique(), "addresses are unique");
@@ -172,7 +172,7 @@ int main() {
     check(replacementsFitTheirSites(), "every replacement fits its site, a hook writes nothing itself");
     check(replacementsHaveTheDocumentedShape(), "O3 call + jmp short + nop, E5 stays a jmp, L1 jmp + 5 nops");
     check(hooksCoverFiveBytes(), "a hook covers the 5 bytes MinHook overwrites");
-    check(gatedAreExactlyTheProbeSites(), "the gated sites are D2, D3, B3 and B4");
+    check(gatedAreExactlyTheProbeSites(), "the gated sites are B3 and B4 (D2 and D3 are on since probe B passed)");
     check(clearOfJuiced(), "no site within 16 bytes of an address Juiced touches");
     check(clearOfReplicationSites(), "no site overlaps a milestone 3 site");
     return g_failures == 0 ? 0 : 1;

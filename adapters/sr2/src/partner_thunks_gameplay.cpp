@@ -1,7 +1,5 @@
-// Thunks of gameplay: going down, vehicles, the mission start block, the Lua party natives and the experimental
-// thunks that wait for a live probe (team wipe and downed message: probe B; customisation exit passengers: probe G).
-#include <cstdio>
-#include <string>
+// Thunks of gameplay: going down, the team wipe and downed message, vehicles, the mission start block, the Lua party natives
+// and the experimental thunks that wait for a live probe (customisation exit passengers: probe G).
 
 #include "fpu_guard.h"
 #include "guest_call.h"
@@ -39,18 +37,6 @@ bool isDownOrWaiting(uintptr_t human) {
     return isDown(human) || (guest_call::call(sr2::kWaitingToRespawn, {.esi = human}) & 0xFF) != 0;
 }
 
-// The remote humans with their downed timers, for the probe B lines.
-std::string downedTimers(const remote_players::Snapshot& snapshot) {
-    std::string text;
-    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
-        const uintptr_t human = snapshot.pairing.items[i].human;
-        if (!human) continue;
-        char entry[48];
-        snprintf(entry, sizeof(entry), " 0x%X downed %d", static_cast<unsigned>(human), remote_players::downedTimerOf(human));
-        text += entry;
-    }
-    return text;
-}
 
 // D1: a human goes down (revivable) when any remote is within revive range, not only the first.
 void __cdecl wrapGoDown(GuestFrame* frame) {
@@ -144,7 +130,7 @@ void __cdecl wrapMaxFollowers(GuestFrame* frame) { wrapEachNative(frame, kLuaMax
 void __cdecl wrapDismissAll(GuestFrame* frame) { wrapEachNative(frame, kLuaDismissAll); }
 void __cdecl wrapMeleeOnly(GuestFrame* frame) { wrapEachNative(frame, kLuaMeleeOnly); }
 
-// D2 (probe B): the team wipe check at a human's death. A remote's death kills a downed local when every other
+// D2: the team wipe check at a human's death. A remote's death kills a downed local when every other
 // remote is down or waiting too; the local's death wipes when every remote is down or waiting. Returns the flag the
 // game keeps in its frame.
 uint32_t __cdecl teamWipe(uintptr_t dead) {
@@ -152,8 +138,7 @@ uint32_t __cdecl teamWipe(uintptr_t dead) {
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
     const uintptr_t local = remote_players::localHuman();
-    logger::write("trace: probe B: team wipe check, dead 0x%X, local downed %d,%s", static_cast<unsigned>(dead),
-                  remote_players::downedTimerOf(local), downedTimers(snapshot).c_str());
+
     uint32_t wipe = 0;
     if (dead == local) {
         wipe = snapshot.pairing.count && partner_rules::othersAllDown(snapshot.pairing, 0, isDownOrWaiting);
@@ -169,13 +154,12 @@ uint32_t __cdecl teamWipe(uintptr_t dead) {
     return wipe;
 }
 
-// D3 (probe B): the downed message of a remote counts as a team wipe only when every other remote is down.
+// D3: the downed message of a remote counts as a team wipe only when every other remote is down.
 uintptr_t __cdecl remoteIfTeamDown(uintptr_t human) {
     FpuGuard guard;
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
-    logger::write("trace: probe B: downed message of 0x%X, local downed %d,%s", static_cast<unsigned>(human),
-                  remote_players::downedTimerOf(remote_players::localHuman()), downedTimers(snapshot).c_str());
+
     return remote_players::isRemotePlayerHuman(human) && partner_rules::othersAllDown(snapshot.pairing, human, isDown) ? human : 0;
 }
 
