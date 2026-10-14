@@ -151,6 +151,12 @@ The game's own co-op reacts to the one partner of 2-player play; milestone 9 mak
 - `trace=1`: the join messages (milestone 5b T3, same address) and `scope: sender member ... has no human yet`.
 - Live test: P3 commits a crime or goes down while P2 is alive: the host reacts to P3, not to P2.
 
+### Looks (LK1, LK2)
+- The look handlers player_morph (0x45, 0x82BAA0) and player_components (0x46, 0x82BD00) queue the look for the human the payload's net id (the first word) resolves to (0x7F8020); nothing compares it with the sender, though a look can only describe the sender's own player (0x82B9F0 / 0x82BC50 refuse any other). A stale, early or reissued id (the leave rename, the re-register on join) therefore painted another player. Both are hooked: the payload's id is rewritten to the net id of the sender's human (its net record +2) when it names another, then the handler runs. The queued look is applied later outside the sender scope, which is why the target is bound at queue time. A sender with no human yet keeps the payload as it is.
+- `trace=1`: `player_morph from member ... named net id ..., the sender's human ... has ...` on each rewrite.
+- Look tints that were saved while contaminated stay in the save or look store: restore the backup or pick the looks again (no code change).
+
+
 ## Open questions for the live run
 
 - Where "session full" is decided; what a third `join_req` gets.

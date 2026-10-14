@@ -4,6 +4,8 @@
 #include "log.h"
 #include "memory.h"
 #include "partner_scope.h"
+#include "remote_players.h"
+#include "sender_scope_rules.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
 
@@ -16,6 +18,8 @@ constexpr size_t kContextArg = 1;
 
 void* g_dispatchOriginal = nullptr;
 void* g_inOrderOriginal = nullptr;
+void* g_lookMorphOriginal = nullptr;
+void* g_lookComponentsOriginal = nullptr;
 bool g_trace = false;
 
 uint8_t byteAt(uintptr_t address) {
@@ -78,8 +82,40 @@ void __cdecl scopeInOrder(GuestFrame* frame) {
     frame->regs.eax = runScoped(frame, g_inOrderOriginal, frame->regs.edx);
 }
 
+// The net id of a human, kNoNetId while it has no net record.
+uint16_t netIdOf(uintptr_t human) {
+    const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
+    uint16_t id = sender_scope_rules::kNoNetId;
+    if (record) readMemory(record + sr2::kRecordIdOffset, &id, sizeof(id));
+    return id;
+}
+
+// LK1, LK2: the look handlers (cdecl(payload, context)) resolve the human by the net id in the payload. The payload is
+// made to name the sender's own human before the handler queues the look, which is applied later outside the sender scope.
+void bindLookToSender(const GuestFrame* frame, const char* handler) {
+    const uint32_t* args = frame->args;
+    const uintptr_t member = senderOf(args[kContextArg]);
+    const uintptr_t human = member ? remote_players::humanOfMember(member) : 0;
+    if (!human) return;
+    uint16_t payloadId = 0;
+    if (!readMemory(args[kBufferArg], &payloadId, sizeof(payloadId))) return;
+    const uint16_t wanted = sender_scope_rules::lookNetId(payloadId, netIdOf(human));
+    if (wanted == payloadId) return;
+    if (g_trace) {
+        logger::write("trace: %s from member 0x%X named net id 0x%04X, the sender's human 0x%X has 0x%04X", handler,
+                      static_cast<unsigned>(member), payloadId, static_cast<unsigned>(human), wanted);
+    }
+    *reinterpret_cast<uint16_t*>(args[kBufferArg]) = wanted;
+}
+
+void __cdecl bindMorphToSender(GuestFrame* frame) { bindLookToSender(frame, "player_morph"); }
+
+void __cdecl bindComponentsToSender(GuestFrame* frame) { bindLookToSender(frame, "player_components"); }
+
 PARTNER_WRAP_STUB(scopeDispatchStub, scopeDispatch, 0)
 PARTNER_WRAP_STUB(scopeInOrderStub, scopeInOrder, 0)
+TRACE_ENTRY_STUB(lookMorphStub, bindMorphToSender, g_lookMorphOriginal)
+TRACE_ENTRY_STUB(lookComponentsStub, bindComponentsToSender, g_lookComponentsOriginal)
 
 }  // namespace
 
@@ -91,6 +127,8 @@ partner_thunks::Binding bind(Thunk thunk) {
     switch (thunk) {
         case Thunk::ScopeDispatch: return {reinterpret_cast<void*>(&scopeDispatchStub), &g_dispatchOriginal};
         case Thunk::ScopeInOrder: return {reinterpret_cast<void*>(&scopeInOrderStub), &g_inOrderOriginal};
+        case Thunk::LookMorphFromSender: return {reinterpret_cast<void*>(&lookMorphStub), &g_lookMorphOriginal};
+        case Thunk::LookComponentsFromSender: return {reinterpret_cast<void*>(&lookComponentsStub), &g_lookComponentsOriginal};
         default: return {nullptr, nullptr};
     }
 }

@@ -15,6 +15,7 @@ struct Phase {
 
 inline constexpr Phase kPhases[] = {
     {"sender scope", session_sites::kScope, false},
+    {"looks", session_sites::kLooks, false},
 };
 
 }  // namespace multiplayer_sites

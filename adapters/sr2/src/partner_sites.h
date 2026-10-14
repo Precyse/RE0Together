@@ -96,6 +96,8 @@ enum class Thunk : uint8_t {
     // Milestone 9 (session_sites.h, world_sites.h, mission_sites.h, trace_sites.h).
     ScopeDispatch,
     ScopeInOrder,
+    LookMorphFromSender,
+    LookComponentsFromSender,
 };
 
 struct Site {

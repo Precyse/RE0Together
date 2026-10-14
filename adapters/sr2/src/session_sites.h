@@ -19,4 +19,10 @@ inline constexpr Site kScope[] = {
     {"SS2", Kind::HookEntry, Gate::Now, 0x813390, "83 EC 10 53 56 8B 74 24", Thunk::ScopeInOrder, ""},
 };
 
+// A look is applied to the sender's own human.
+inline constexpr Site kLooks[] = {
+    {"LK1", Kind::HookEntry, Gate::Now, 0x82BAA0, "8B 0D F4 64 A4 02 83 EC", Thunk::LookMorphFromSender, ""},
+    {"LK2", Kind::HookEntry, Gate::Now, 0x82BD00, "8B 0D 44 65 A4 02 83 EC", Thunk::LookComponentsFromSender, ""},
+};
+
 }  // namespace session_sites

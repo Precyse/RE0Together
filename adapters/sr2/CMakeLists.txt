@@ -126,6 +126,7 @@ add_unit_test(activity_bindings_test src/activity_framework.cpp src/activity_cre
     src/partner_identity.cpp src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
     src/memory.cpp src/guest_call.cpp src/script_override.cpp ${SHARED_DIR}/paths.cpp)
+add_unit_test(sender_scope_rules_test)
 add_unit_test(multiplayer_sites_test)
 add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/sender_scope.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp)

@@ -110,6 +110,7 @@ bool shapesFit(const std::vector<Site>& sites) {
 int main() {
     const std::vector<Site> sites = allSites();
     check(phaseSize("sender scope") == 2, "sender scope: 2 sites (SS1, SS2)");
+    check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
     check(idsAndAddressesAreUnique(sites), "ids and addresses are unique");
     check(sitesDoNotOverlap(sites), "no two sites overlap");
     check(shapesFit(sites), "a retargeted call is a 5 byte call, a hook or a jump covers 5 bytes, a block has room for its tail");
