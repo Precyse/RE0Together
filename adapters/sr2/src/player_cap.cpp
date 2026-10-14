@@ -1,6 +1,5 @@
 #include "player_cap.h"
 
-#include "ambient_guard.h"
 #include "code_patch.h"
 #include "guest_welcome.h"
 #include "hooks.h"
@@ -10,6 +9,7 @@
 #include "log.h"
 #include "player_cap_patches.h"
 #include "remote_players.h"
+#include "spawner_lock.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
 
@@ -24,6 +24,14 @@ uint32_t __cdecl someMemberReady(uintptr_t session) {
 // Jumped to from inside isCoop, which has no stack frame there: the return goes to isCoop's caller.
 PARTNER_REG_STUB(coopMemberReadyStub, ecx, someMemberReady)
 
+// The hooks of the M5 set: the leave function and the spawn group create.
+bool installHooks() {
+    if (!leave_path::installHook()) return false;
+    if (spawner_lock::installHook()) return true;
+    leave_path::removeHook();
+    return false;
+}
+
 }  // namespace
 
 namespace player_cap {
@@ -32,28 +40,28 @@ bool install(uint32_t maxPlayers, bool trace) {
     home_network::setTrace(trace);
     guest_welcome::setTrace(trace);
     look_reset::setTrace(trace);
-    ambient_guard::setTrace(trace);
+    spawner_lock::setTrace(trace);
     leave_path::setTrace(trace);
     const leave_path::Thunks leave = leave_path::thunks();
     const player_cap_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&coopMemberReadyStub),
                                             home_network::duplicateJoinSenderThunk(), guest_welcome::thunk(),
                                             look_reset::resetIndexLooksThunk(), look_reset::traceTintSendThunk(),
-                                            ambient_guard::skipNullElementThunk(), leave.dropLeaverRecord, leave.keepRename};
+                                            leave.dropLeaverRecord, leave.keepRename};
     const auto patches = player_cap_patches::forPlayers(maxPlayers, thunks, trace);
     if (patches.empty()) return false;
-    // The leave hook is queued only once every site is known to match, and taken out if the edits still fail.
-    if (!codeMatches(patches) || !leave_path::installHook()) {
+    // The hooks are queued only once every site is known to match, and taken out if the edits still fail.
+    if (!codeMatches(patches) || !installHooks()) {
         logger::write("player cap: sites differ, the maximum stays 2");
         return false;
     }
     if (!applyCodePatches(patches)) {
         leave_path::removeHook();
+        spawner_lock::removeHook();
         logger::write("player cap: the edits could not be written, the maximum stays 2");
         return false;
     }
     logger::write("player cap: session maximum %u, isCoop counts ready members, join_req duplicate search retargeted, "
-                  "guests welcome late joiners, player looks start empty, ambient spawner skips null elements, "
-                  "member leave reissues objects",
+                  "guests welcome late joiners, player looks start empty, member leave reissues objects, spawn groups are created under the tick lock",
                   maxPlayers);
     return true;
 }

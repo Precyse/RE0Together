@@ -82,7 +82,7 @@ int main() {
     check(maskAfterQueue(0xFFFF, 2) == 0xFFFB && maskAfterQueue(0x0004, 2) == 0 && maskAfterQueue(0x0001, 2) == 0x0001,
           "queuing a creation clears the member's bit of the created mask only");
 
-    const player_cap_patches::Thunks thunks{kThunk, kThunk, kThunk, kThunk, kThunk, kThunk, kDropThunk, kRenameThunk};
+    const player_cap_patches::Thunks thunks{kThunk, kThunk, kThunk, kThunk, kThunk, kDropThunk, kRenameThunk};
     const auto patches = player_cap_patches::forPlayers(kFourPlayers, thunks);
     const CodePatch* drop = patchAt(patches, 0x807413);
     check(drop && drop->expected == std::vector<uint8_t>{0x38, 0x0E, 0x0F, 0x85, 0x91, 0x00, 0x00, 0x00} &&

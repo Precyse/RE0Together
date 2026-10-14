@@ -175,11 +175,18 @@ constexpr uintptr_t kCharInstanceCreate = 0x9E3BA0;      // cdecl(render object,
 constexpr uintptr_t kTintSendCall = 0x82A17C;            // call kTintListBuild
 constexpr uintptr_t kTintListBuild = 0x7D84C0;           // eax = local human, ecx = length out, buffer on the stack
 
-// Ambient population (milestone 5i, C1). The spawner 0x90D430 loops over a spawn group's elements: it loads an element and
-// its template at kAmbientElementLoad, and goes on to the next element at kAmbientNextElement.
-constexpr uintptr_t kAmbientElementLoad = 0x90D44B;   // mov esi, [ebp]; mov ecx, [esi+0x34]
-constexpr uintptr_t kAmbientTemplateUse = 0x90D451;   // the first use of the template
-constexpr uintptr_t kAmbientNextElement = 0x90D507;   // reloads the group, counts the element, loops
+// Ambient population (milestone 5i, section 9). A spawn group is linked into the active list (circular, next at +0x64) before
+// its element slots (+8, one dword each, as many as its template's byte +0x48) are filled; the tick walks the list under the
+// critical section kGroupTickLock.
+constexpr uintptr_t kGroupCreate = 0x910370;          // cdecl, 7 stack arguments, returns the group or 0
+constexpr uintptr_t kGroupTeardown = 0x913040;        // ESI = group; cdecl(0, 0); skips null slots
+constexpr uintptr_t kGroupTickLock = 0x2ACDA08;       // CRITICAL_SECTION, recursive
+constexpr uintptr_t kGroupListHead = 0x213F874;
+constexpr uintptr_t kGroupTemplateOffset = 4;
+constexpr uintptr_t kGroupSlotsOffset = 8;
+constexpr uintptr_t kGroupNextOffset = 0x64;
+constexpr uintptr_t kTemplateSlotCountOffset = 0x48;  // byte
+constexpr size_t kMaxSpawnGroups = 2400;              // the static group pool
 
 // Member leave (milestone 5i, section 8). The leave function runs on every machine; its loops over the net records are
 // patched at the sites below. Net records (list head kRecordListHead, circular through kRecordNextOffset) and the objects
