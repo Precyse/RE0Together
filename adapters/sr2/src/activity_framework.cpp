@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "partner_scope.h"
 #include "remote_players.h"
+#include "script_override.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
 
@@ -149,6 +150,14 @@ void __cdecl sendDenial(GuestFrame* frame) {
     }
 }
 
+// AF9: the game builds the path of a Lua script it loads by name in a 0x400 byte buffer (eax); when a file of that name is
+// in coop\scripts the buffer is changed to open that one.
+void __cdecl overrideScriptPath(GuestFrame* frame) {
+    char* path = reinterpret_cast<char*>(frame->regs.eax);
+    guest_call::callWithRegs(sr2::kScriptNameCopy, &frame->regs, frame->args, 1);
+    if ((frame->regs.eax & 0xFF) == 1) script_override::redirect(path, sr2::kScriptPathBytes);
+}
+
 PARTNER_WRAP_STUB(scopeActPacketStub, scopeActPacket, 0)
 PARTNER_WRAP_STUB(scopeMiscPacketStub, scopeMiscPacket, 0)
 PARTNER_WRAP_STUB(scopeMissionRequestStub, scopeMissionRequest, 0)
@@ -157,6 +166,7 @@ PARTNER_WRAP_STUB(scopeRaceRequestStub, scopeRaceRequest, 0)
 PARTNER_WRAP_STUB(sendToEachRemoteStub, sendToEachRemote, 0)
 PARTNER_WRAP_STUB(teleportForActivityStub, teleportForActivity, 0)
 PARTNER_WRAP_STUB(sendDenialStub, sendDenial, 0)
+PARTNER_WRAP_STUB(overrideScriptPathStub, overrideScriptPath, 0)
 
 }  // namespace
 
@@ -174,6 +184,7 @@ partner_thunks::Binding bindFramework(Thunk thunk) {
         case Thunk::DeclineUnlessAllDeclined: return {reinterpret_cast<void*>(&declineStub), nullptr};
         case Thunk::SendToEachRemoteMember: return {reinterpret_cast<void*>(&sendToEachRemoteStub), nullptr};
         case Thunk::TeleportRemotesForActivity: return {reinterpret_cast<void*>(&teleportForActivityStub), nullptr};
+        case Thunk::ScriptOverridePath: return {reinterpret_cast<void*>(&overrideScriptPathStub), nullptr};
         case Thunk::SendToScopedMember: return {reinterpret_cast<void*>(&sendDenialStub), nullptr};
         default: return {nullptr, nullptr};
     }

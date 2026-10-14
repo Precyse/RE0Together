@@ -185,6 +185,8 @@ constexpr uint8_t kRaceSubInvite = 0;
 
 constexpr uintptr_t kDeliveryVehicleOffset = 0x1C;   // Chop Shop delivery: pointer to the delivered car
 constexpr uintptr_t kChopCreditCarArg = 0x538;       // the car argument of the act 0x2B sender, from its return address
+constexpr uintptr_t kScriptNameCopy = 0xCDD2F0;      // eax = 0x400 byte buffer, cdecl(name): AL = 1 when the path was built
+constexpr size_t kScriptPathBytes = 0x400;
 constexpr uintptr_t kSendBroadcast = 0x814740;       // EDI = session; cdecl(buffer, length): every member but the local one
 constexpr uintptr_t kFreezeHuman = 0x965F40;         // stdcall(human, flag); sends to the human's owner itself
 constexpr uintptr_t kHumanFlagA = 0x968010;          // stdcall(human, flag)

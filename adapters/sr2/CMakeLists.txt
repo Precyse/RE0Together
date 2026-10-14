@@ -54,6 +54,7 @@ add_library(sr2_adapter SHARED
     src/activity_credit.cpp
     src/activity_games.cpp
     src/activity_patches.cpp
+    src/script_override.cpp
     src/player_cap.cpp
     src/home_network.cpp
     ${RE0_DIR}/dinput8.def)
@@ -95,10 +96,11 @@ add_unit_test(trace_stub_test)
 add_unit_test(home_network_rules_test)
 add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)
+add_unit_test(script_override_rules_test)
 add_unit_test(guest_call_test src/guest_call.cpp)
 add_unit_test(remote_players_test src/remote_players.cpp src/partner_scope.cpp src/member_slots.cpp src/replication_switch.cpp
     src/code_patch.cpp src/memory.cpp src/activity_state.cpp src/guest_call.cpp)
 add_unit_test(activity_bindings_test src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp src/activity_state.cpp
     src/partner_identity.cpp src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
-    src/memory.cpp src/guest_call.cpp)
+    src/memory.cpp src/guest_call.cpp src/script_override.cpp ${SHARED_DIR}/paths.cpp)
