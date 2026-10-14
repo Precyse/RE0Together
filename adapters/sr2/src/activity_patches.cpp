@@ -18,6 +18,7 @@ struct Phase {
 
 const Phase kPhases[] = {
     {"1", activity_sites::kPhase1},
+    {"2", activity_sites::kPhase2},
 };
 
 // The identity and nearest thunks of milestone 4 serve the same call patterns as the new ones.
