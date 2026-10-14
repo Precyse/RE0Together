@@ -10,14 +10,12 @@
 
 namespace {
 
-constexpr uintptr_t kMemberSessionOffset = 0x1AC;  // pointer to the session the member belongs to
-
 bool g_trace = false;
 
 // E3: the quick check for a peer behind our own public IP (esi = the peer's member). Its address is already its private
 // IP; the port word is the one the host relayed, 4200 for the host.
 void __cdecl choosePeerPort(uintptr_t member) {
-    const uintptr_t session = readDword(member + kMemberSessionOffset);
+    const uintptr_t session = readDword(member + sr2::kMemberSessionOffset);
     const bool peerIsHost = session == 0 || readDword(session + sr2::kSessionHostMemberOffset) == member;
     uint16_t relayed = 0;
     readMemory(member + sr2::kMemberSourcePortOffset, &relayed, sizeof(relayed));

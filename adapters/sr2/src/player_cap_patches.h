@@ -6,8 +6,8 @@
 #include "sr2_addresses.h"
 
 // The code edits of milestones 5 and 5d as data (pure, unit tested): the session info maximum, isCoop's member count
-// test (docs/SR2_NOTES.md, "Player cap") and the duplicate member search call that lets players behind one NAT join
-// ("Home network").
+// test (docs/SR2_NOTES.md, "Player cap"), the duplicate member search call that lets players behind one NAT join
+// ("Home network") and the guest branch of the member state callback that welcomes a late joiner ("Late joiners").
 namespace player_cap_patches {
 
 constexpr uint8_t kNop = 0x90;
@@ -21,6 +21,7 @@ inline uint8_t sessionInfoMask(uint32_t maxPlayers) {
 struct Thunks {
     uintptr_t coopMemberReady;      // isCoop's member count test jumps here
     uintptr_t duplicateJoinSender;  // replaces the duplicate member search call of the join_req handler
+    uintptr_t guestWelcome;         // the guest branch of the member state change callback jumps here
 };
 
 // All edits together, or none when `maxPlayers` is the shipped co-op's.
@@ -35,10 +36,16 @@ inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, const Thunks& thun
     std::vector<uint8_t> jumpOut(jump.begin(), jump.end());
     jumpOut.resize(countTest.size(), kNop);
 
+    const std::vector<uint8_t> guestBranch = {0x83, 0x7F, 0x3C, 0x0D, 0x75, 0x0D};
+    const auto welcome = relativeBranch(kJmpRel32, sr2::kGuestMemberBranch, thunks.guestWelcome);
+    std::vector<uint8_t> welcomeJump(welcome.begin(), welcome.end());
+    welcomeJump.resize(guestBranch.size(), kNop);
+
     return {{"session_info_max", sr2::kSessionInfoMaxBlock, maxBlock, widenedBlock},
             {"coop_member_count_test", sr2::kCoopMemberCountTest, countTest, jumpOut},
             retargetedCall("duplicate_sender_call", sr2::kDuplicateSenderCall, sr2::kFindDuplicateMember,
-                           thunks.duplicateJoinSender)};
+                           thunks.duplicateJoinSender),
+            {"guest_welcome_member", sr2::kGuestMemberBranch, guestBranch, welcomeJump}};
 }
 
 }  // namespace player_cap_patches

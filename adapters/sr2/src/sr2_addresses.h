@@ -159,6 +159,15 @@ constexpr uintptr_t kMemberSourceIpOffset = 0x28;        // the real UDP source 
 constexpr uintptr_t kMemberSourcePortOffset = 0x2C;      // word
 constexpr uintptr_t kSenderPortOffset = 4;               // word, in the sender block (the IP is at 0)
 
+// Late joiners (milestone 5h). The member state change callback (0x8CB840) queues the host's objects for a member that
+// becomes ready only on the host; a guest takes the branch at kGuestMemberBranch.
+constexpr uintptr_t kGuestMemberBranch = 0x8CBA34;       // cmp [edi+0x3C], 0xD; jne kMemberCallbackEpilogue
+constexpr uintptr_t kMemberCallbackEpilogue = 0x8CBA47;  // pops ebx, esi, edi and returns
+constexpr uintptr_t kInGameResetFirst = 0xEB4490;        // set to -1 when a member reaches 0xD
+constexpr uintptr_t kInGameResetSecond = 0xEB4494;
+constexpr uintptr_t kQueueOwnedObjects = 0x8051F0;       // EDX = member: queue every object we own for creation on it
+constexpr uintptr_t kMemberSessionOffset = 0x1AC;        // pointer to the session the member belongs to
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

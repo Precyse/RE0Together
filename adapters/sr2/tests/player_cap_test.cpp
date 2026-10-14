@@ -12,7 +12,8 @@ namespace {
 
 constexpr uintptr_t kThunk = 0x10002000;
 constexpr uintptr_t kSenderThunk = 0x10002100;
-constexpr player_cap_patches::Thunks kThunks{kThunk, kSenderThunk};
+constexpr uintptr_t kWelcomeThunk = 0x10002300;
+constexpr player_cap_patches::Thunks kThunks{kThunk, kSenderThunk, kWelcomeThunk};
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kEightPlayers = 8;
@@ -72,7 +73,7 @@ int main() {
           "3 players F7, 8 players FC");
 
     const auto patches = player_cap_patches::forPlayers(kFourPlayers, kThunks);
-    check(patches.size() == 3, "three edits: the maximum, isCoop and the retargeted duplicate search call");
+    check(patches.size() == 4, "four edits: the maximum, isCoop, the retargeted duplicate search call and the guest welcome jump");
     const CodePatch& max = patches[0];
     check(max.address == 0x82FD81 && max.expected == std::vector<uint8_t>{0x83, 0xE3, 0xF6, 0x83, 0xC3, 0x0C},
           "session info maximum: 83 E3 F6 83 C3 0C at 0x82FD81 is checked");
