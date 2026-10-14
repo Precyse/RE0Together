@@ -268,6 +268,11 @@ constexpr uintptr_t kHumanCameraOffset = 0x12A0;       // three floats: a human'
 constexpr uintptr_t kClusterRadius = 0xE5C660;         // float: how near a partner must be for one spawner to do for both
 constexpr uintptr_t kClusterRadiusWide = 0xDD078C;     // float: the same for the callers that ask for the wide test
 
+// The pause flag (milestone 9 N4): a byte the pausing message sets, read as zero or not.
+constexpr uintptr_t kPartnerPaused = 0x252932F;
+constexpr uintptr_t kPauseLeaveResume = 0x8CB2A3;  // the member left callback after the clear of the flag and the resume
+constexpr uintptr_t kUnpauseWorld = 0x8CA190;
+
 // Guest member left (milestone 9 N2a): the cutscene cleanup the guest branch of the callback 0x8CB260 calls.
 constexpr uintptr_t kCutsceneCleanup = 0x6C6B90;
 

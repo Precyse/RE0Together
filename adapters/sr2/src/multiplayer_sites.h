@@ -19,6 +19,8 @@ inline constexpr Phase kPhases[] = {
     {"sender scope", session_sites::kScope, false},
     {"looks", session_sites::kLooks, false},
     {"guest leave", session_sites::kGuestLeave, false, true},
+    {"pause flag", session_sites::kPause, false},
+
 
     {"join admission", session_sites::kAdmission, false},
 

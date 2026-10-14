@@ -26,6 +26,12 @@ inline constexpr Site kLooks[] = {
     {"LK2", Kind::HookEntry, Gate::Now, 0x82BD00, "8B 0D 44 65 A4 02 83 EC", Thunk::LookComponentsFromSender, ""},
 };
 
+// "The partner paused" is a bit per slot (N4).
+inline constexpr Site kPause[] = {
+    {"N4a", Kind::CallBlock, Gate::Now, 0x8CB12A, "88 0D 2F 93 52 02", Thunk::PauseSenderBit, "90"},
+    {"N4b", Kind::JumpOut, Gate::Now, 0x8CB28E, "80 3D 2F 93 52 02 00 74 0C C6 05 2F 93 52 02 00 E8 ED EE FF FF", Thunk::PauseClearLeaver, ""},
+};
+
 // A guest runs the leave pass for another guest that leaves, and ends a cutscene only for the host leaving (N2a, N3).
 inline constexpr Site kGuestLeave[] = {
     {"N2a", Kind::RetargetCall, Gate::Now, 0x8CB428, "E8 63 B7 DF FF", Thunk::GuestMemberLeft, ""},
