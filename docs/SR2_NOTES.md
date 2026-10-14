@@ -91,6 +91,15 @@ Players 2 and 3 on one home network share the public IP, and the host dropped th
 - D1 (0x815EAE, the call to the duplicate member search 0x80FEB0 in the join_req handler): the search matches on the reported public IP, reported private IP and sub-index. Both machines report the first address Windows lists for the host name, often the same virtual adapter. The thunk keeps the search's member only when the member's real source (+0x28 IP, word +0x2C port) equals the sender block's (+0 IP, word +4 port); a resend from the same source is still dropped (and the handler's own mapped-sender check at 0x815BEB drops it too). `trace=1` logs each decision.
 - D2, D2b (0x810C94 and 0x7F79D0, the gethostbyname calls behind the advertised private IP): the thunk calls gethostbyname, then puts the default route interface's IPv4 (GetBestInterface toward 8.8.8.8, no packet sent, then GetAdaptersAddresses) first in the address list. Players on the same public IP reach each other by that private IP (0x8CDA00), so a wrong one fails quietly. `trace=1` logs the address chosen.
 
+## Game port (milestone 5e)
+Guests behind one NAT all bind local UDP 4200; the router can keep that external port for one of them only, so the NAT negotiation of the next ones ends with result 3 (ping timeout). Research: `C:\Users\ahmal\coop-scratch\sr2\M5_PLAYER_CAP.md`, section M5e.
+- Ini key `game_port` (default 4200, valid 1024..65535, anything else is ignored and logged). Hosts stay on 4200: joiners assume host:4200.
+- E1 (0xC1BBAF, `mov eax, 4200` in the socket bind): the immediate becomes `game_port`, only when it is not 4200.
+- E2 (six `mov word ptr [reg+4], 4200` at 0x811AC0, 0x811B11, 0x811BA4, 0x811C0D, 0x811C7A, 0x811CB7): our advertised record port, same rule.
+- E3 (0x8CDA3B, the quick check for a peer behind our public IP): a thunk keeps 4200 for the session host and the port the host relayed for anyone else.
+- E2 and E3 follow the `max_players` > 2 gate. All eight sites are checked together before anything is written. `trace=1` logs the port, whether E1 was applied and each quick check.
+- Live test: player 3 with `game_port=4201`; expect "nat negotiation complete, result 0" and a `join_req` from the router's address with port 4201.
+
 ## Open questions for the live run
 - Where "session full" is decided; what a third `join_req` gets.
 - Member session slots in a real join (the milestone 3 gate), the coop_allocators high-water, the owner-slot mapping of milestone 4 (Probe A) and Lua (milestone 5).

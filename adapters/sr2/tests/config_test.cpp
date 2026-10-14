@@ -27,5 +27,14 @@ int main() {
     check(parseConfig("partner_experimental=1\n").partnerExperimental, "partner_experimental on");
     check(!parseConfig("partner_experimental=0\nmax_players=3\n").partnerExperimental, "partner_experimental off");
     check(parseConfig("partner_experimental=1\nmax_players=3\ntrace=0\n").maxPlayers == 3, "partner_experimental leaves the other keys alone");
+    check(parseConfig("").gamePort == 4200 && parseConfig("").rejectedGamePort == 0, "game_port defaults to 4200");
+    check(parseConfig("game_port=4201\n").gamePort == 4201, "game_port read");
+    check(parseConfig("game_port=1024\n").gamePort == 1024 && parseConfig("game_port=65535\n").gamePort == 65535,
+          "game_port accepts 1024 and 65535");
+    const Config low = parseConfig("game_port=1023\n");
+    check(low.gamePort == 4200 && low.rejectedGamePort == 1023, "game_port below 1024 is rejected and the default kept");
+    const Config high = parseConfig("game_port=65536\nmax_players=3\n");
+    check(high.gamePort == 4200 && high.rejectedGamePort == 65536 && high.maxPlayers == 3, "game_port above 65535 is rejected");
+    check(parseConfig("game_port=abc\n").gamePort == 4200, "a game_port that is not a number keeps the default");
     return g_failures == 0 ? 0 : 1;
 }

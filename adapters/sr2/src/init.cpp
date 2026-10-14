@@ -3,6 +3,8 @@
 #include "code_check.h"
 #include "config.h"
 #include "coop_limits.h"
+#include "game_port.h"
+#include "game_port_rules.h"
 #include "hooks.h"
 #include "join_net_trace.h"
 #include "join_trace.h"
@@ -16,8 +18,12 @@ DWORD WINAPI initThread(LPVOID) {
     try {
         logger::write("sr2 adapter starting");
         const Config config = loadConfig();
-        logger::write("config: max_players=%u trace=%d partner_experimental=%d", config.maxPlayers, config.trace ? 1 : 0,
-                      config.partnerExperimental ? 1 : 0);
+        logger::write("config: max_players=%u trace=%d partner_experimental=%d game_port=%u", config.maxPlayers,
+                      config.trace ? 1 : 0, config.partnerExperimental ? 1 : 0, config.gamePort);
+        if (config.rejectedGamePort != 0) {
+            logger::write("config: game_port %u is outside %u..%u, ignored", config.rejectedGamePort,
+                          game_port_rules::kMinGamePort, game_port_rules::kMaxGamePort);
+        }
         const bool replicating = config.maxPlayers > sr2::kCoopDefaultPlayers;
         bool supported = gameMatchesBuild();
         if (replicating) supported = replication_switch::sitesMatch() && supported;
@@ -33,6 +39,7 @@ DWORD WINAPI initThread(LPVOID) {
                           config.maxPlayers);
         }
         player_cap::install(config.maxPlayers, config.trace);
+        game_port::install(config.gamePort, config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (config.trace) {
             join_trace::install(config.maxPlayers);
