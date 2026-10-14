@@ -268,6 +268,14 @@ constexpr uintptr_t kHumanCameraOffset = 0x12A0;       // three floats: a human'
 constexpr uintptr_t kClusterRadius = 0xE5C660;         // float: how near a partner must be for one spawner to do for both
 constexpr uintptr_t kClusterRadiusWide = 0xDD078C;     // float: the same for the callers that ask for the wide test
 
+// The cutscene handshake (milestone 9 MC1): the running cutscene and the bytes cutscn_pkt sets for "a remote did it".
+constexpr uintptr_t kCutscene = 0x2527D10;               // pointer to the running cutscene, 0 when none
+constexpr uintptr_t kCutsceneSharedSkipOffset = 0xB04;   // byte: one press skips it for everyone
+constexpr uintptr_t kCutsceneLocalSkipped = 0x2527D1E;   // byte
+constexpr uintptr_t kCutsceneRemoteReady = 0x2527D1D;    // byte
+constexpr uintptr_t kCutsceneRemoteSkipped = 0x2527D1F;  // byte
+constexpr uintptr_t kCutsceneRemoteDone = 0x2527D20;     // byte
+
 // The pause flag (milestone 9 N4): a byte the pausing message sets, read as zero or not.
 constexpr uintptr_t kPartnerPaused = 0x252932F;
 constexpr uintptr_t kPauseLeaveResume = 0x8CB2A3;  // the member left callback after the clear of the flag and the resume

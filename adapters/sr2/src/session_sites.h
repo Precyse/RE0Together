@@ -26,6 +26,12 @@ inline constexpr Site kLooks[] = {
     {"LK2", Kind::HookEntry, Gate::Now, 0x82BD00, "8B 0D 44 65 A4 02 83 EC", Thunk::LookComponentsFromSender, ""},
 };
 
+// The cutscene handshake waits for every remote (MC1, MC2).
+inline constexpr Site kCutscene[] = {
+    {"MC1", Kind::HookEntry, Gate::Now, 0x6BECA0, "83 EC 3C 57 8B 7C 24 44", Thunk::CutsceneAllRemotes, ""},
+    {"MC2", Kind::CallBlock, Gate::Now, 0x6C3E9D, "C6 05 1E 7D 52 02 00", Thunk::CutsceneSetsReset, "90 90"},
+};
+
 // "The partner paused" is a bit per slot (N4).
 inline constexpr Site kPause[] = {
     {"N4a", Kind::CallBlock, Gate::Now, 0x8CB12A, "88 0D 2F 93 52 02", Thunk::PauseSenderBit, "90"},

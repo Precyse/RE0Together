@@ -20,6 +20,7 @@ inline constexpr Phase kPhases[] = {
     {"looks", session_sites::kLooks, false},
     {"guest leave", session_sites::kGuestLeave, false, true},
     {"pause flag", session_sites::kPause, false},
+    {"cutscene handshake", session_sites::kCutscene, false},
 
 
     {"join admission", session_sites::kAdmission, false},

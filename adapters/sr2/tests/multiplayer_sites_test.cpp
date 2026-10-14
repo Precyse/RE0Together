@@ -123,6 +123,7 @@ int main() {
     check(phaseSize("sender scope") == 2, "sender scope: 2 sites (SS1, SS2)");
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
+    check(phaseSize("cutscene handshake") == 2, "cutscene handshake: 2 sites (MC1, MC2)");
     check(phaseSize("guest leave") == 1,
  "guest leave: 1 site (N2a)");
     check(phaseSize("join admission") == 3,

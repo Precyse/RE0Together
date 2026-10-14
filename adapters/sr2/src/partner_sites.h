@@ -112,6 +112,8 @@ enum class Thunk : uint8_t {
     GuestMemberLeft,
     PauseSenderBit,
     PauseClearLeaver,
+    CutsceneAllRemotes,
+    CutsceneSetsReset,
 
 
 
