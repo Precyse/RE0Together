@@ -27,5 +27,14 @@ inline constexpr Site kCluster[] = {
     {"W2a", Kind::HookEntry, Gate::Now, 0x957A40, "A0 48 8B 52 02 83 EC 08", Thunk::ClusterLeaderFar, ""},
 };
 
+// A member's creation queue never overflows (W8): the three appends and the drain.
+inline constexpr Site kQueue[] = {
+    {"W8a", Kind::JumpOut, Gate::Now, 0x80517F, "8B 88 F0 21 00 00 89 BC 88 F0 1D 00 00 8A 88 B0 01 00 00 83 80 F0 21 00 00 01", Thunk::QueueAppendCreate, ""},
+    {"W8b", Kind::JumpOut, Gate::Now, 0x805248, "8B 8A F0 21 00 00 8B 58 04 89 9C 8A F0 1D 00 00 01 AA F0 21 00 00", Thunk::QueueAppendBatch, ""},
+    {"W8c", Kind::HookEntry, Gate::Now, 0x804940, "8B 88 F0 21 00", Thunk::QueueAppendFunction, ""},
+    {"W8d", Kind::HookEntry, Gate::Now, 0x807840, "81 EC 24 05 00 00", Thunk::QueueDrain, ""},
+};
+
 }  // namespace world_sites
+
 

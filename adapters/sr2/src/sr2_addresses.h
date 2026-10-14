@@ -263,6 +263,10 @@ constexpr uintptr_t kHumanCameraOffset = 0x12A0;       // three floats: a human'
 constexpr uintptr_t kClusterRadius = 0xE5C660;         // float: how near a partner must be for one spawner to do for both
 constexpr uintptr_t kClusterRadiusWide = 0xDD078C;     // float: the same for the callers that ask for the wide test
 
+// Creation queue writers (milestone 9): where the patched appends continue.
+constexpr uintptr_t kQueueAppendResumeCreate = 0x805199;  // 0x805000, after the append and `mov cl, [eax+0x1B0]`
+constexpr uintptr_t kQueueAppendResumeBatch = 0x80525E;   // 0x8051F0, after the append
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

@@ -102,6 +102,11 @@ enum class Thunk : uint8_t {
     LookComponentsFromSender,
     AreaBudget,
     ClusterLeaderFar,
+    QueueAppendCreate,
+    QueueAppendBatch,
+    QueueAppendFunction,
+    QueueDrain,
+
 
 
 };

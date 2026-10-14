@@ -19,6 +19,8 @@ inline constexpr Phase kPhases[] = {
     {"looks", session_sites::kLooks, false},
     {"population budgets", world_sites::kBudget, false},
     {"population cluster", world_sites::kCluster, false},
+    {"creation queue", world_sites::kQueue, false},
+
 
 
 };

@@ -165,7 +165,12 @@ The game's own co-op reacts to the one partner of 2-player play; milestone 9 mak
 - The spawn budget hook of milestone 5i stays as the safety net for the 2400 element pool.
 - Live test: three players together for 10 minutes: no `spawn budget` refusal in the trace, the human count near 75; three apart: about 75 per area.
 
+### Creation queue (W8)
+- A member's creation queue (member +0x1DF0, count +0x21F0) holds 0x100 handles, and the entry after the last is the count itself. Three writers append without a check: 0x805000 (every networked create, to each member above state 7), 0x8051F0 (the join batch: every object this machine owns, from the member state change callback, 0x825450 and 0x828F50) and 0x804940. The drain 0x807840 (from the send tick 0x814BB0) sends every entry and zeroes the count. With 3 or 4 players the host's set grows through takeovers (LV3), hand-backs and late joins.
+- W8a, W8b (jumps over the appends of 0x805000 and 0x8051F0) and W8c (0x804940, replaced whole) call `creation_queue::append`: into the queue while it has room, else onto that member's overflow list. W8d hooks 0x807840: after the game's drain the oldest overflow handles (at most 0x100) move into the queue and go out on the next tick. LV3's reissue uses the same `append`. Nothing is dropped except past 0x4000 handles waiting for one member; with 2 players the queue never fills and nothing changes. `trace=1`: `creation queue of slot N is full, K handles wait`.
+
 ## Open questions for the live run
+
 
 
 - Where "session full" is decided; what a third `join_req` gets.

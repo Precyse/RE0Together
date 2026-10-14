@@ -160,7 +160,8 @@ void reissue(const leave_rules::ReissueSet& set, const std::vector<remote_player
             const bool queued = creation_queue::enqueue(member.address, item.record);
             if (g_trace) {
                 logger::write("trace: leave: reissued id 0x%04X to slot %u%s", item.oldId, member.slot,
-                              queued ? "" : " (its creation queue is full)");
+                              queued ? "" : " (behind the full creation queue)");
+
             }
         }
     }

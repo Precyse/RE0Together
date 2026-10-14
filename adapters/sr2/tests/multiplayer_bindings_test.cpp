@@ -37,8 +37,10 @@ int main() {
                 continue;
             }
             if (site.kind != partner_sites::Kind::HookEntry) continue;
+            if (site.thunk == partner_sites::Thunk::QueueAppendFunction) continue;  // replaces a leaf function whole
             hooksHaveSlots = hooksHaveSlots && binding.original;
             slotsAreDistinct = slotsAreDistinct && slots.insert(binding.original).second;
+
         }
     }
     check(allBound, "every site has a thunk");

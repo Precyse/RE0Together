@@ -1,5 +1,6 @@
 #include "multiplayer_patches.h"
 
+#include "creation_queue.h"
 #include "log.h"
 #include "multiplayer_sites.h"
 #include "multiplayer_thunks.h"
@@ -21,6 +22,8 @@ bool sitesMatch() {
 
 bool install(bool trace) {
     sender_scope::setTrace(trace);
+    creation_queue::setTrace(trace);
+
     bool all = true;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {
         if (phase.traceOnly && !trace) continue;
