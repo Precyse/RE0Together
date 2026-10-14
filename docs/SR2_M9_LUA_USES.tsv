@@ -1,0 +1,892 @@
+file	line	class	callee	rule	cover	decision
+bh01.lua	239	action	party_add	keep	UG	keeps the default partner
+bh01.lua	545	action	vehicle_chase	target	UG?	default: target
+bh01.lua	600	action	vehicle_enter_teleport	seats	UG?	default: seats
+bh01.lua	717	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+bh01.lua	756	query	get_dist	nearest	UG?	default: nearest
+bh01.lua	757	query	get_dist	nearest	UG?	default: nearest
+bh01.lua	758	query	character_is_in_vehicle	all	UG?	default: all
+bh01.lua	759	action	player_controls_disable	fanout	UG	wrapper
+bh01.lua	760	action	vehicle_stop_do	fanout	UG	wrapper
+bh01.lua	829	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+bh01.lua	830	action	teleport	fanout	UG	wrapper
+bh02.lua	241	action	vehicle_enter_teleport	seats	UG?	default: seats
+bh02.lua	1020	query	get_dist	nearest	UG?	default: nearest
+bh02.lua	1042	query	get_dist	nearest	UG?	default: nearest
+bh02.lua	1053	other			FILE	patched
+bh02.lua	1071	query	get_dist	nearest	UG?	default: nearest
+bh03.lua	154	table			FILE	rewritten by a generic rule
+bh03.lua	156	table			FILE	rewritten by a generic rule
+bh03.lua	336	table			FILE	rewritten by a generic rule
+bh03.lua	337	table			FILE	rewritten by a generic rule
+bh03.lua	338	table			FILE	rewritten by a generic rule
+bh03.lua	449	table			FILE	kept: one value for the whole remote side
+bh03.lua	462	action	inv_weapon_add_temporary	fanout	UG	wrapper
+bh03.lua	463	action	inv_item_equip	fanout	UG	wrapper
+bh03.lua	472	action	inv_item_equip	fanout	UG	wrapper
+bh03.lua	476	query	inv_item_is_equipped	all	UG?	default: all
+bh03.lua	546	callback	on_vehicle_enter		UG	wrapper
+bh03.lua	552	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh03.lua	553	local	bh03_player_entered_vehicle		FILE	patched
+bh03.lua	624	local	bh03_player_in_water_travel_vehicle		FILE	patched
+bh03.lua	635	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+bh03.lua	782	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh03.lua	783	action	player_controls_disable	fanout	UG	wrapper
+bh03.lua	784	action	vehicle_stop_do	fanout	UG	wrapper
+bh03.lua	815	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+bh03.lua	1099	table			FILE	patched
+bh03.lua	1268	action	player_controls_disable	fanout	UG	wrapper
+bh03.lua	1287	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+bh03.lua	1316	table			FILE	patched
+bh03.lua	1317	table			FILE	patched
+bh03.lua	1318	table			FILE	patched
+bh03.lua	1351	table			FILE	kept: one value for the whole remote side
+bh03.lua	1378	action	vehicle_enter_teleport	seats	UG?	default: seats
+bh03.lua	1452	action	player_controls_enable	fanout	UG	wrapper
+bh03.lua	1607	action	turn_invulnerable	fanout	UG	wrapper
+bh03.lua	1608	action	vehicle_exit_dive	fanout	UG	wrapper
+bh03.lua	1616	action	character_ragdoll	fanout	UG	wrapper
+bh03.lua	1637	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+bh03.lua	1656	thread	thread_new		FILE	wrapper (thread_new fans out)
+bh03.lua	1720	query	get_dist	nearest	UG?	default: nearest
+bh03.lua	1769	callback	on_vehicle_enter		UG	wrapper
+bh03.lua	2109	action	player_force_vehicle_seat	seats	UG?	default: seats
+bh03.lua	2118	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+bh03.lua	2134	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh03.lua	2138	action	teleport	fanout	UG	wrapper
+bh03.lua	2138	table			FILE	kept: one value for the whole remote side
+bh03.lua	2147	action	player_controls_enable	fanout	UG	wrapper
+bh03.lua	2153	action	turn_vulnerable	fanout	UG	wrapper
+bh04.lua	169	table			FILE	rewritten by a generic rule
+bh04.lua	297	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh04.lua	301	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh04.lua	326	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh04.lua	333	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh04.lua	387	query	get_dist	nearest	UG?	default: nearest
+bh04.lua	399	other			FILE	patched
+bh04.lua	476	query	character_has_specific_human_shield	all	UG?	patched (default was wrong)
+bh04.lua	477	action	character_release_human_shield	fanout	UG	wrapper
+bh04.lua	623	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh04.lua	623	query	character_is_in_vehicle	all	UG?	default: all
+bh04.lua	634	table			FILE	rewritten by a generic rule
+bh04.lua	635	table			FILE	rewritten by a generic rule
+bh04.lua	686	local	update_message		FILE	patched
+bh04.lua	727	action	attack	target	UG?	default: target
+bh04.lua	757	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh04.lua	766	action	turn_invulnerable	fanout	UG	wrapper
+bh04.lua	932	action	turn_vulnerable	fanout	UG	wrapper
+bh05.lua	138	other			FILE	kept: stays the default partner
+bh05.lua	140	other			FILE	kept: stays the default partner
+bh05.lua	183	table			FILE	rewritten by a generic rule
+bh05.lua	184	table			FILE	rewritten by a generic rule
+bh05.lua	288	other			FILE	kept: stays the default partner
+bh05.lua	329	callback	on_weapon_fired		UG	wrapper
+bh05.lua	342	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+bh05.lua	375	callback	on_take_damage		UG	wrapper
+bh05.lua	405	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh05.lua	417	query	get_dist_char_to_char	nearest	UG?	default: nearest
+bh05.lua	464	table			FILE	patched
+bh05.lua	478	table			FILE	patched
+bh05.lua	491	table			FILE	patched
+bh05.lua	503	callback	on_weapon_fired		UG	wrapper
+bh05.lua	731	table			FILE	patched
+bh05.lua	732	other			FILE	patched
+bh05.lua	900	callback	on_take_damage		UG	wrapper
+bh05.lua	911	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh05.lua	916	table			FILE	patched
+bh05.lua	954	identity			FILE	rewritten by a generic rule
+bh05.lua	1037	action	attack	target	UG?	default: target
+bh05.lua	1090	callback	on_weapon_fired		UG	wrapper
+bh05.lua	1101	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh05.lua	1106	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh05.lua	1119	query	character_has_specific_human_shield	all	UG?	patched (default was wrong)
+bh05.lua	1145	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh05.lua	1146	action	player_controls_disable	fanout	UG	wrapper
+bh05.lua	1147	action	vehicle_stop_do	fanout	UG	wrapper
+bh05.lua	1175	callback	on_take_damage		UG	wrapper
+bh05.lua	1195	callback	on_weapon_fired		UG	wrapper
+bh06.lua	330	action	turn_invulnerable	fanout	UG	wrapper
+bh06.lua	331	action	player_controls_disable	fanout	UG	wrapper
+bh06.lua	353	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+bh06.lua	377	action	vehicle_enter_teleport	seats	UG?	default: seats
+bh06.lua	379	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+bh06.lua	398	query	character_is_in_vehicle	all	UG?	default: all
+bh06.lua	414	action	player_controls_enable	fanout	UG	wrapper
+bh06.lua	415	action	turn_vulnerable	fanout	UG	wrapper
+bh06.lua	500	action	player_controls_disable	fanout	UG	wrapper
+bh06.lua	501	action	vehicle_stop_do	fanout	UG	wrapper
+bh06.lua	723	action	turn_vulnerable	fanout	UG	wrapper
+bh06.lua	731	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+bh06.lua	753	action	player_controls_enable	fanout	UG	wrapper
+bh07.lua	177	table			FILE	rewritten by a generic rule
+bh07.lua	178	table			FILE	rewritten by a generic rule
+bh07.lua	178	table			FILE	rewritten by a generic rule
+bh07.lua	590	query	character_has_specific_human_shield	all	UG?	patched (default was wrong)
+bh07.lua	839	query	character_has_specific_human_shield	all	UG?	patched (default was wrong)
+bh07.lua	850	query	character_has_specific_human_shield	all	UG?	patched (default was wrong)
+bh08.lua	132	table			FILE	rewritten by a generic rule
+bh08.lua	135	table			FILE	rewritten by a generic rule
+bh08.lua	136	table			FILE	rewritten by a generic rule
+bh08.lua	449	table			FILE	rewritten by a generic rule
+bh08.lua	494	local	update_bus_gps		FILE	patched
+bh08.lua	644	thread	thread_new		FILE	wrapper (thread_new fans out)
+bh09.lua	233	table			FILE	rewritten by a generic rule
+bh09.lua	244	table			FILE	patched
+bh09.lua	275	action	player_warp_to_shore_disable	fanout	UG	wrapper
+bh09.lua	312	action	teleport	fanout	UG	wrapper
+bh09.lua	349	query	get_dist_char_to_nav	nearest	UG?	patched (default was wrong)
+bh09.lua	350	table			FILE	patched
+bh09.lua	440	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+bh09.lua	446	table			FILE	patched
+bh09.lua	484	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+bh09.lua	717	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+bh09.lua	1078	query	get_dist_char_to_nav	nearest	UG?	patched (default was wrong)
+bh09.lua	1084	table			FILE	patched
+bh09.lua	1086	query	get_dist_char_to_nav	nearest	UG?	patched (default was wrong)
+bh09.lua	1090	table			FILE	patched
+bh09.lua	1157	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+bh09.lua	1240	action	player_warp_to_shore_enable	fanout	UG	wrapper
+bh09.lua	1246	action	teleport	fanout	UG	wrapper
+bh10.lua	271	table			FILE	rewritten by a generic rule
+bh10.lua	271	table			FILE	rewritten by a generic rule
+bh10.lua	374	action	party_add	keep	UG	keeps the default partner
+bh10.lua	700	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+bh10.lua	752	table			FILE	rewritten by a generic rule
+bh10.lua	753	table			FILE	rewritten by a generic rule
+bh10.lua	754	table			FILE	rewritten by a generic rule
+bh10.lua	802	callback	on_take_damage		UG	wrapper
+bh10.lua	803	action	turn_invulnerable	fanout	UG	wrapper
+bh10.lua	813	action	player_controls_disable	fanout	UG	wrapper
+bh10.lua	851	action	player_controls_enable	fanout	UG	wrapper
+bh10.lua	918	action	turn_invulnerable	fanout	UG	wrapper
+bh10.lua	923	table			FILE	rewritten by a generic rule
+bh10.lua	924	table			FILE	rewritten by a generic rule
+bh10.lua	925	table			FILE	rewritten by a generic rule
+bh10.lua	946	table			FILE	patched
+bh10.lua	957	table			FILE	patched
+bh10.lua	995	table			FILE	patched
+bh10.lua	1007	table			FILE	patched
+bh10.lua	1589	action	turn_vulnerable	fanout	UG	wrapper
+bh10.lua	1590	callback	on_take_damage		UG	wrapper
+bh10.lua	1595	action	turn_vulnerable	fanout	UG	wrapper
+bh11.lua	182	action	turn_invulnerable	fanout	UG	wrapper
+bh11.lua	183	callback	on_take_damage		UG	wrapper
+bh11.lua	443	thread	thread_new		FILE	patched
+bh11.lua	505	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh11.lua	524	thread	thread_new		FILE	patched
+bh11.lua	528	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+bh11.lua	614	other			FILE	kept: stays the default partner
+bh11.lua	679	query	character_is_dead	all	UG?	default: all
+bh11.lua	680	action	teleport	fanout	UG	wrapper
+bh11.lua	703	action	turn_vulnerable	fanout	UG	wrapper
+bh11.lua	704	callback	on_take_damage		UG	wrapper
+coop_test.lua	23	action	teleport	fanout	UG	wrapper
+coop_test.lua	59	action	cash_add	fanout	UG	wrapper
+coop_test.lua	63	action	cash_remove	fanout	UG	wrapper
+coop_test.lua	142	action	vehicle_enter_group_teleport	seats	UG?	default: seats
+coop_test.lua	175	action	inv_item_add	fanout	UG	wrapper
+coop_test.lua	187	action	party_add	keep	UG	keeps the default partner
+coop_test.lua	218	action	vehicle_mark_as_players	fanout	UG	wrapper
+em01.lua	4	table			FILE	rewritten by a generic rule
+em01.lua	5	table			FILE	rewritten by a generic rule
+em01.lua	6	table			FILE	rewritten by a generic rule
+em01.lua	363	action	inv_weapon_add_temporary	fanout	UG	wrapper
+em01.lua	364	action	inv_weapon_add_temporary	fanout	UG	wrapper
+em01.lua	365	action	inv_weapon_add_temporary	fanout	UG	wrapper
+em01.lua	473	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+em01.lua	481	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+em01.lua	482	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+em01.lua	483	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+em01.lua	558	action	player_controls_enable	fanout	UG	wrapper
+em01.lua	564	action	turn_vulnerable	fanout	UG	wrapper
+em01.lua	685	table			FILE	rewritten by a generic rule
+em01.lua	713	table			FILE	rewritten by a generic rule
+em01.lua	749	local	update_prompts		FILE	patched
+em01.lua	754	table			FILE	patched
+em01.lua	754	table			FILE	patched
+em01.lua	894	query	npc_in_player_fov	all	UG?	patched (default was wrong)
+em01.lua	960	query	get_dist_char_to_nav	nearest	UG?	patched (default was wrong)
+em01.lua	1467	table			FILE	patched
+em01.lua	1660	query	get_dist_char_to_vehicle	nearest	UG?	patched (default was wrong)
+em01.lua	1666	query	character_is_dead	all	UG?	patched (default was wrong)
+em01.lua	1678	action	player_controls_disable	fanout	UG	wrapper
+em01.lua	1692	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+em01.lua	1702	action	player_controls_enable	fanout	UG	wrapper
+em01.lua	1719	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+em01.lua	1728	action	turn_invulnerable	fanout	UG	wrapper
+em01.lua	1742	action	vehicle_enter_teleport	seats	UG?	default: seats
+em01.lua	1749	local	em01_wait_for_vehicle_entry		FILE	patched
+em01.lua	1759	action	turn_vulnerable	fanout	UG	wrapper
+em01.lua	1768	identity			FILE	rewritten by a generic rule
+em01.lua	1786	identity			FILE	rewritten by a generic rule
+em01.lua	1798	identity			FILE	rewritten by a generic rule
+em01.lua	1993	action	inv_weapon_add_temporary	fanout	UG	wrapper
+em01.lua	1994	action	inv_weapon_add_temporary	fanout	UG	wrapper
+em01.lua	1995	action	inv_weapon_add_temporary	fanout	UG	wrapper
+em01.lua	1996	action	inv_item_equip	fanout	UG	wrapper
+em01.lua	2047	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+em01.lua	2500	table			FILE	patched
+em01.lua	2557	table			FILE	patched
+ep01.lua	188	table			FILE	rewritten by a generic rule
+ep01.lua	210	table			FILE	rewritten by a generic rule
+ep01.lua	211	table			FILE	rewritten by a generic rule
+ep01.lua	215	table			FILE	rewritten by a generic rule
+ep01.lua	243	table			FILE	rewritten by a generic rule
+ep01.lua	405	action	crouch_start	fanout	UG	wrapper
+ep01.lua	526	table			FILE	rewritten by a generic rule
+ep01.lua	549	table			FILE	kept: stays the default partner
+ep01.lua	552	table			FILE	rewritten by a generic rule
+ep01.lua	589	table			FILE	patched
+ep01.lua	685	table			FILE	rewritten by a generic rule
+ep01.lua	696	table			FILE	patched
+ep01.lua	741	local	get_new_player_waypoint		FILE	patched
+ep01.lua	780	query	character_is_in_a_driver_seat	all	UG?	patched (default was wrong)
+ep01.lua	809	table			FILE	patched
+ep01.lua	848	table			FILE	patched
+ep01.lua	1204	table			FILE	kept: one value for the whole remote side
+ep01.lua	1353	query	get_dist	nearest	UG?	default: nearest
+ep01.lua	1355	local	escort_attack	target	FILE	patched
+ep01.lua	1411	table			FILE	kept: one value for the whole remote side
+ep01.lua	1477	table			FILE	kept: one value for the whole remote side
+ep01.lua	1704	table			FILE	kept: one value for the whole remote side
+ep01.lua	1781	table			FILE	kept: one value for the whole remote side
+ep01.lua	1792	table			FILE	kept: one value for the whole remote side
+ep01.lua	1813	table			FILE	kept: one value for the whole remote side
+ep01.lua	1881	table			FILE	kept: one value for the whole remote side
+ep01.lua	1904	action	turn_vulnerable	fanout	UG	wrapper
+ep01.lua	1954	table			FILE	patched
+ep02.lua	134	table			FILE	rewritten by a generic rule
+ep02.lua	135	table			FILE	rewritten by a generic rule
+ep02.lua	141	table			FILE	rewritten by a generic rule
+ep02.lua	144	table			FILE	rewritten by a generic rule
+ep02.lua	147	table			FILE	rewritten by a generic rule
+ep02.lua	148	table			FILE	rewritten by a generic rule
+ep02.lua	313	callback	on_district_changed		UG	wrapper
+ep02.lua	321	table			FILE	rewritten by a generic rule
+ep02.lua	344	callback	on_district_changed		UG	wrapper
+ep02.lua	356	table			FILE	kept: one value for the whole remote side
+ep02.lua	587	query	character_is_in_vehicle	all	UG?	default: all
+ep02.lua	597	query	character_is_in_vehicle	all	UG?	default: all
+ep02.lua	615	table			FILE	rewritten by a generic rule
+ep02.lua	649	local	update_confessional_gps		FILE	patched
+ep02.lua	657	table			FILE	rewritten by a generic rule
+ep02.lua	686	local	ep02_update_waypoint		FILE	patched
+ep02.lua	719	local	ep02_update_waypoint		FILE	patched
+ep02.lua	746	local	ep02_update_waypoint		FILE	patched
+ep02.lua	755	local	ep02_update_waypoint		FILE	patched
+ep02.lua	793	local	ep02_update_waypoint		FILE	patched
+ep02.lua	945	action	turn_vulnerable	fanout	UG	wrapper
+ep02.lua	946	action	clear_animation_state	fanout	UG	wrapper
+ep02.lua	960	table			FILE	kept: one value for the whole remote side
+ep02.lua	986	callback	on_district_changed		UG	wrapper
+ep03.lua	41	other			FILE	kept: name constant or list entry
+ep03.lua	170	local	ep03_character_in_vehicle_of_correct_type		FILE	patched
+ep03.lua	321	action	player_controls_disable	fanout	UG	wrapper
+ep03.lua	344	action	vehicle_enter_teleport	seats	UG?	default: seats
+ep03.lua	368	action	player_controls_enable	fanout	UG	wrapper
+ep03.lua	516	query	get_dist	nearest	UG?	default: nearest
+ep03.lua	517	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+ep03.lua	520	action	teleport	fanout	UG	wrapper
+ep03.lua	520	action	teleport	fanout	UG	wrapper
+ep04.lua	218	table			FILE	rewritten by a generic rule
+ep04.lua	219	table			FILE	rewritten by a generic rule
+ep04.lua	328	callback	on_vehicle_enter		UG	wrapper
+ep04.lua	389	table			FILE	patched
+ep04.lua	482	callback	on_vehicle_enter		UG	wrapper
+ep04.lua	574	action	vehicle_exit_teleport	fanout	UG	wrapper
+ep04.lua	602	query	inv_has_item	all	UG?	patched (default was wrong)
+ep04.lua	833	query	get_dist	nearest	UG?	patched (default was wrong)
+ep04.lua	834	table			FILE	patched
+ep04.lua	877	identity			FILE	rewritten by a generic rule
+ep04.lua	983	table			FILE	patched
+ep04.lua	1039	callback	on_vehicle_enter		UG	wrapper
+ep04.lua	1062	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+ep04.lua	1072	action	teleport	fanout	UG	wrapper
+mission_globals.lua	43	table			FILE	rewritten by a generic rule
+rn01.lua	227	table			FILE	rewritten by a generic rule
+rn01.lua	262	table			FILE	rewritten by a generic rule
+rn01.lua	353	action	player_controls_disable	fanout	UG	wrapper
+rn01.lua	354	action	vehicle_stop_do	fanout	UG	wrapper
+rn01.lua	680	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+rn01.lua	1085	identity			FILE	rewritten by a generic rule
+rn01.lua	1239	local	rn01_update_waypoint		FILE	patched
+rn01.lua	1283	table			FILE	rewritten by a generic rule
+rn01.lua	1307	table			FILE	rewritten by a generic rule
+rn01.lua	1310	table			FILE	rewritten by a generic rule
+rn01.lua	1325	local	rn01_update_waypoint		FILE	patched
+rn01.lua	1414	local	check_player_prereqs		FILE	patched
+rn01.lua	1438	local	rn01_update_waypoint		FILE	patched
+rn01.lua	1567	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn01.lua	1589	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn01.lua	1616	local	rn01_wait_for_vehicle_entry		FILE	patched
+rn01.lua	1636	identity			FILE	rewritten by a generic rule
+rn01.lua	1707	local	update_confessional_gps		FILE	patched
+rn02.lua	211	table			FILE	rewritten by a generic rule
+rn02.lua	215	other			FILE	rewritten by a generic rule
+rn02.lua	216	table			FILE	rewritten by a generic rule
+rn02.lua	227	table			FILE	rewritten by a generic rule
+rn02.lua	300	table			FILE	rewritten by a generic rule
+rn02.lua	356	query	character_is_dead	all	UG?	patched (default was wrong)
+rn02.lua	366	action	player_controls_disable	fanout	UG	wrapper
+rn02.lua	392	action	player_controls_enable	fanout	UG	wrapper
+rn02.lua	402	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn02.lua	403	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+rn02.lua	500	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+rn02.lua	501	table			FILE	patched
+rn02.lua	525	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn02.lua	526	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn02.lua	589	table			FILE	rewritten by a generic rule
+rn02.lua	590	table			FILE	rewritten by a generic rule
+rn02.lua	597	table			FILE	rewritten by a generic rule
+rn02.lua	647	table			FILE	rewritten by a generic rule
+rn02.lua	651	table			FILE	patched
+rn02.lua	651	thread	thread_new		FILE	patched
+rn02.lua	823	local	rn02_update_player_prompts		FILE	patched
+rn02.lua	932	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn02.lua	933	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn02.lua	934	query	character_is_in_a_driver_seat	all	UG?	default: all
+rn02.lua	935	action	inv_item_equip	fanout	UG	wrapper
+rn02.lua	1017	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn02.lua	1024	local	rn02_wait_for_vehicle_entry		FILE	patched
+rn02.lua	1039	identity			FILE	rewritten by a generic rule
+rn02.lua	1076	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn02.lua	1081	action	inv_item_equip	fanout	UG	wrapper
+rn02.lua	1191	table			FILE	patched
+rn02.lua	1192	table			FILE	patched
+rn02.lua	1223	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+rn02.lua	1224	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+rn02.lua	1237	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn02.lua	1287	identity			FILE	rewritten by a generic rule
+rn02.lua	1303	local	player_triggered_dealer		FILE	patched
+rn02.lua	1791	local	should_give_infinite_mass		FILE	patched
+rn03.lua	219	table			FILE	rewritten by a generic rule
+rn03.lua	245	table			FILE	rewritten by a generic rule
+rn03.lua	326	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn03.lua	349	callback	on_vehicle_enter		UG	wrapper
+rn03.lua	350	callback	on_vehicle_exit		UG	wrapper
+rn03.lua	356	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn03.lua	447	other			FILE	kept: stays the default partner
+rn03.lua	570	table			FILE	rewritten by a generic rule
+rn03.lua	616	local	update_bike_gps		FILE	patched
+rn03.lua	984	callback	on_vehicle_enter		UG	wrapper
+rn03.lua	985	callback	on_vehicle_exit		UG	wrapper
+rn03.lua	1002	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+rn04.lua	457	action	turn_vulnerable	fanout	UG	wrapper
+rn04.lua	479	action	player_controls_disable	fanout	UG	wrapper
+rn04.lua	498	action	player_controls_enable	fanout	UG	wrapper
+rn04.lua	568	action	turn_invulnerable	fanout	UG	wrapper
+rn04.lua	816	action	party_add	keep	UG	keeps the default partner
+rn04.lua	827	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn04.lua	849	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn04.lua	863	query	character_is_in_vehicle	all	UG?	default: all
+rn04.lua	865	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn04.lua	894	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn04.lua	895	action	inv_item_equip	fanout	UG	wrapper
+rn04.lua	919	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn04.lua	1419	identity			FILE	rewritten by a generic rule
+rn04.lua	1420	action	attack	target	UG?	patched (default was wrong)
+rn04.lua	1545	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+rn04.lua	2102	action	turn_vulnerable	fanout	UG	wrapper
+rn04.lua	2133	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn04.lua	2176	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+rn05.lua	441	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn05.lua	576	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn05.lua	655	other			FILE	kept: stays the default partner
+rn05.lua	684	identity			FILE	rewritten by a generic rule
+rn06.lua	283	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn06.lua	316	action	player_controls_disable	fanout	UG	wrapper
+rn06.lua	333	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn06.lua	334	action	inv_item_equip	fanout	UG	wrapper
+rn06.lua	382	action	player_controls_enable	fanout	UG	wrapper
+rn06.lua	400	callback	on_take_damage		UG	wrapper
+rn06.lua	405	action	character_set_cannot_wield_havok_weapon	fanout	UG	wrapper
+rn06.lua	423	local	combat_ready	fanout	FILE	patched
+rn06.lua	636	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+rn06.lua	644	callback	on_vehicle_enter		UG	wrapper
+rn06.lua	645	callback	on_vehicle_exit		UG	wrapper
+rn06.lua	654	action	teleport	fanout	UG	wrapper
+rn06.lua	655	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn07.lua	404	table			FILE	rewritten by a generic rule
+rn07.lua	472	table			FILE	rewritten by a generic rule
+rn07.lua	660	thread	thread_new		FILE	wrapper (thread_new fans out)
+rn07.lua	905	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn07.lua	1089	identity			FILE	rewritten by a generic rule
+rn07.lua	1195	action	teleport	fanout	UG	wrapper
+rn07.lua	1206	thread	thread_new		FILE	patched
+rn07.lua	1211	table			FILE	patched
+rn07.lua	1305	other			FILE	kept: stays the default partner
+rn07.lua	1310	other			FILE	kept: stays the default partner
+rn07.lua	1442	identity			FILE	rewritten by a generic rule
+rn07.lua	1451	other			FILE	kept: stays the default partner
+rn07.lua	1465	identity			FILE	rewritten by a generic rule
+rn07.lua	1486	identity			FILE	rewritten by a generic rule
+rn07.lua	1597	table			FILE	patched
+rn07.lua	1743	table			FILE	rewritten by a generic rule
+rn07.lua	1788	identity			FILE	rewritten by a generic rule
+rn07.lua	1815	identity			FILE	rewritten by a generic rule
+rn07.lua	1866	table			FILE	rewritten by a generic rule
+rn07.lua	2077	identity			FILE	rewritten by a generic rule
+rn07.lua	2130	identity			FILE	rewritten by a generic rule
+rn07.lua	2250	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+rn07.lua	2260	query	get_dist	nearest	UG?	default: nearest
+rn07.lua	2266	action	teleport	fanout	UG	wrapper
+rn08.lua	595	table			FILE	rewritten by a generic rule
+rn08.lua	1202	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+rn08.lua	1380	identity			FILE	rewritten by a generic rule
+rn08.lua	1413	action	player_controls_disable	fanout	UG	wrapper
+rn08.lua	1444	action	player_controls_enable	fanout	UG	wrapper
+rn08.lua	1477	action	turn_vulnerable	fanout	UG	wrapper
+rn09.lua	226	action	player_controls_disable	fanout	UG	wrapper
+rn09.lua	255	action	player_controls_enable	fanout	UG	wrapper
+rn09.lua	328	action	turn_invulnerable	fanout	UG	wrapper
+rn09.lua	388	action	turn_vulnerable	fanout	UG	wrapper
+rn09.lua	415	action	turn_invulnerable	fanout	UG	wrapper
+rn09.lua	435	action	turn_vulnerable	fanout	UG	wrapper
+rn09.lua	510	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn09.lua	517	action	vehicle_enter_teleport	seats	UG?	default: seats
+rn09.lua	534	local	rn09_character_in_vehicle		FILE	patched
+rn09.lua	677	action	turn_vulnerable	fanout	UG	wrapper
+rn10.lua	151	table			FILE	rewritten by a generic rule
+rn10.lua	152	table			FILE	rewritten by a generic rule
+rn10.lua	156	table			FILE	rewritten by a generic rule
+rn10.lua	355	table			FILE	rewritten by a generic rule
+rn10.lua	362	table			FILE	rewritten by a generic rule
+rn10.lua	373	table			FILE	rewritten by a generic rule
+rn10.lua	427	table			FILE	patched
+rn10.lua	428	table			FILE	patched
+rn10.lua	506	table			FILE	rewritten by a generic rule
+rn10.lua	511	table			FILE	rewritten by a generic rule
+rn10.lua	529	table			FILE	patched
+rn10.lua	530	table			FILE	patched
+rn10.lua	598	table			FILE	patched
+rn10.lua	608	local	rn10_begin_defense_objective		FILE	patched
+rn10.lua	725	table			FILE	patched
+rn10.lua	726	table			FILE	patched
+rn10.lua	796	table			FILE	patched
+rn10.lua	1284	other			FILE	patched
+rn10.lua	1749	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+rn11.lua	395	action	player_controls_disable	fanout	UG	wrapper
+rn11.lua	402	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+rn11.lua	403	action	vehicle_exit_teleport	fanout	UG	wrapper
+rn11.lua	427	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn11.lua	428	action	inv_item_equip	fanout	UG	wrapper
+rn11.lua	438	action	player_controls_enable	fanout	UG	wrapper
+rn11.lua	584	action	player_controls_enable	fanout	UG	wrapper
+rn11.lua	813	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+rn11.lua	814	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+rn11.lua	848	action	teleport	fanout	UG	wrapper
+rn11.lua	856	action	inv_weapon_add_temporary	fanout	UG	wrapper
+rn11.lua	857	action	inv_item_equip	fanout	UG	wrapper
+rn11.lua	886	table			FILE	rewritten by a generic rule
+rn11.lua	887	table			FILE	rewritten by a generic rule
+rn11.lua	888	table			FILE	rewritten by a generic rule
+rn11.lua	920	local	update_indicators		FILE	patched
+rn11.lua	989	callback	on_take_damage		UG	wrapper
+rn11.lua	994	action	character_set_cannot_wield_havok_weapon	fanout	UG	wrapper
+rn11.lua	1000	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+rn11.lua	1019	local	combat_ready	fanout	FILE	patched
+rn11.lua	1106	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+rn11.lua	1116	query	get_dist	nearest	UG?	default: nearest
+rn11.lua	1117	action	teleport	fanout	UG	wrapper
+rn11.lua	1311	action	vehicle_chase	target	UG?	default: target
+rn11.lua	1659	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+sh_bh_airport.lua	213	identity			FILE	rewritten by a generic rule
+sh_bh_airport.lua	218	identity			FILE	rewritten by a generic rule
+sh_bh_airport.lua	260	identity			FILE	rewritten by a generic rule
+sh_bh_airport.lua	278	other			FILE	kept: stays the default partner
+sh_bh_airport.lua	311	identity			FILE	rewritten by a generic rule
+sh_bh_apartments.lua	146	identity			FILE	rewritten by a generic rule
+sh_bh_chinatown.lua	129	identity			FILE	rewritten by a generic rule
+sh_bh_chinatown.lua	251	identity			FILE	rewritten by a generic rule
+sh_bh_chinatown.lua	278	identity			FILE	rewritten by a generic rule
+sh_bh_docks.lua	250	query	get_dist_char_to_vehicle	nearest	UG?	default: nearest
+sh_bh_docks.lua	497	identity			FILE	rewritten by a generic rule
+sh_bh_docks.lua	568	identity			FILE	rewritten by a generic rule
+sh_ss_crackhouse.lua	105	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+sh_ss_crackhouse.lua	223	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+sh_ss_fishingdock.lua	165	identity			FILE	rewritten by a generic rule
+sh_ss_fishingdock.lua	174	identity			FILE	rewritten by a generic rule
+sh_ss_fishingdock.lua	174	query	character_is_dead	all	UG?	default: all
+sh_ss_fishingdock.lua	287	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+sh_ss_fishingdock.lua	384	identity			FILE	rewritten by a generic rule
+sh_ss_fishingdock.lua	412	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+sh_ss_fishingdock.lua	460	action	character_kill	fanout	UG	wrapper
+sh_ss_fishingdock.lua	461	action	character_ragdoll	fanout	UG	wrapper
+sh_ss_fishingdock.lua	470	action	character_kill	fanout	UG	wrapper
+sh_ss_fishingdock.lua	471	action	character_ragdoll	fanout	UG	wrapper
+sh_ss_trailerpark.lua	273	action	vehicle_enter_teleport	seats	UG?	default: seats
+sh_tss_caverns.lua	143	identity			FILE	rewritten by a generic rule
+sh_tss_ugmall.lua	54	action	teleport	fanout	UG	wrapper
+ss01.lua	164	table			FILE	rewritten by a generic rule
+ss01.lua	166	table			FILE	rewritten by a generic rule
+ss01.lua	181	table			FILE	kept: stays the default partner
+ss01.lua	186	table			FILE	rewritten by a generic rule
+ss01.lua	241	callback	on_district_changed		UG	wrapper
+ss01.lua	641	table			FILE	patched
+ss01.lua	643	other			FILE	patched
+ss01.lua	673	table			FILE	kept: stays the default partner
+ss01.lua	707	identity			FILE	rewritten by a generic rule
+ss01.lua	778	other			FILE	kept: stays the default partner
+ss01.lua	856	table			FILE	patched
+ss01.lua	857	table			FILE	patched
+ss01.lua	858	action	mission_debug	keep	UG	keeps the default partner
+ss01.lua	859	table			FILE	patched
+ss01.lua	860	table			FILE	patched
+ss01.lua	862	table			FILE	patched
+ss01.lua	903	table			FILE	patched
+ss01.lua	987	identity			FILE	rewritten by a generic rule
+ss01.lua	1050	query	character_is_in_vehicle	all	UG?	default: all
+ss01.lua	1052	action	player_controls_disable	fanout	UG	wrapper
+ss01.lua	1053	action	turn_invulnerable	fanout	UG	wrapper
+ss01.lua	1054	action	vehicle_stop_do	fanout	UG	wrapper
+ss01.lua	1147	callback	on_district_changed		UG	wrapper
+ss01.lua	1298	table			FILE	kept: stays the default partner
+ss01.lua	1312	local	ss01_get_closest_nav_to_char		FILE	kept: stays the default partner
+ss01.lua	1315	table			FILE	kept: stays the default partner
+ss01.lua	1318	table			FILE	kept: stays the default partner
+ss01.lua	1329	callback	on_district_changed		UG	wrapper
+ss01.lua	1332	action	turn_vulnerable	fanout	UG	wrapper
+ss02.lua	265	table			FILE	rewritten by a generic rule
+ss02.lua	266	table			FILE	rewritten by a generic rule
+ss02.lua	267	table			FILE	rewritten by a generic rule
+ss02.lua	269	table			FILE	rewritten by a generic rule
+ss02.lua	270	table			FILE	rewritten by a generic rule
+ss02.lua	271	table			FILE	rewritten by a generic rule
+ss02.lua	278	table			FILE	rewritten by a generic rule
+ss02.lua	332	table			FILE	patched
+ss02.lua	381	callback	on_district_changed		UG	wrapper
+ss02.lua	484	table			FILE	patched
+ss02.lua	492	table			FILE	rewritten by a generic rule
+ss02.lua	553	callback	on_vehicle_enter		UG	wrapper
+ss02.lua	694	other			FILE	kept: stays the default partner
+ss02.lua	828	callback	on_vehicle_enter		UG	wrapper
+ss02.lua	865	identity			FILE	rewritten by a generic rule
+ss02.lua	866	table			FILE	patched
+ss02.lua	880	identity			FILE	patched
+ss02.lua	880	table			FILE	patched
+ss02.lua	881	table			FILE	patched
+ss02.lua	882	table			FILE	patched
+ss02.lua	1219	identity			FILE	rewritten by a generic rule
+ss02.lua	1230	identity			FILE	rewritten by a generic rule
+ss02.lua	1317	table			FILE	patched
+ss02.lua	1318	action	character_kill	fanout	UG	wrapper
+ss02.lua	1319	action	character_ragdoll	fanout	UG	wrapper
+ss02.lua	1494	callback	on_vehicle_enter		UG	wrapper
+ss02.lua	1510	callback	on_vehicle_enter		UG	wrapper
+ss02.lua	1515	callback	on_district_changed		UG	wrapper
+ss02.lua	1537	action	teleport	fanout	UG	wrapper
+ss03.lua	90	other			FILE	kept: name constant or list entry
+ss03.lua	316	action	cutscene_play	keep	UG	keeps the default partner
+ss03.lua	321	helper	teleport_coop		UG	wrapper
+ss03.lua	333	action	inv_weapon_add_temporary	fanout	UG	wrapper
+ss03.lua	337	action	inv_item_equip	fanout	UG	wrapper
+ss03.lua	435	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+ss03.lua	438	action	inv_item_equip	fanout	UG	wrapper
+ss03.lua	521	identity			FILE	rewritten by a generic rule
+ss03.lua	569	query	inv_item_is_equipped	all	UG?	default: all
+ss03.lua	577	action	vehicle_enter_teleport	seats	UG?	default: seats
+ss03.lua	583	query	character_is_in_vehicle	all	UG?	default: all
+ss03.lua	644	callback	on_weapon_fired		UG	wrapper
+ss03.lua	760	callback	on_weapon_fired		UG	wrapper
+ss03.lua	1489	callback	on_weapon_fired		UG	wrapper
+ss03.lua	1496	action	teleport	fanout	UG	wrapper
+ss03.lua	1502	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+ss03.lua	1509	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+ss04.lua	100	other			FILE	kept: name constant or list entry
+ss04.lua	357	helper	teleport_coop		UG	wrapper
+ss04.lua	575	action	player_controls_disable	fanout	UG	wrapper
+ss04.lua	581	action	teleport	fanout	UG	wrapper
+ss04.lua	582	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+ss04.lua	589	action	player_controls_enable	fanout	UG	wrapper
+ss04.lua	1280	action	player_controls_enable	fanout	UG	wrapper
+ss05.lua	150	table			FILE	rewritten by a generic rule
+ss05.lua	331	table			FILE	rewritten by a generic rule
+ss05.lua	332	table			FILE	rewritten by a generic rule
+ss05.lua	334	table			FILE	rewritten by a generic rule
+ss05.lua	337	table			FILE	rewritten by a generic rule
+ss05.lua	409	table			FILE	patched
+ss05.lua	495	local	ss05_player_in_lab4_first_half		FILE	patched
+ss05.lua	1277	callback	on_vehicle_enter		UG	wrapper
+ss05.lua	1283	identity			FILE	rewritten by a generic rule
+ss05.lua	1639	action	player_controls_disable	fanout	UG	wrapper
+ss05.lua	1646	table			FILE	kept: one value for the whole remote side
+ss05.lua	1650	action	player_controls_enable	fanout	UG	wrapper
+ss05.lua	1966	action	player_controls_enable	fanout	UG	wrapper
+ss06.lua	201	table			FILE	rewritten by a generic rule
+ss06.lua	428	table			FILE	rewritten by a generic rule
+ss06.lua	429	table			FILE	rewritten by a generic rule
+ss06.lua	454	table			FILE	rewritten by a generic rule
+ss06.lua	929	table			FILE	kept: one value for the whole remote side
+ss06.lua	1372	table			FILE	patched
+ss06.lua	1372	thread	thread_new		FILE	patched
+ss06.lua	1451	other			FILE	kept: stays the default partner
+ss06.lua	1546	action	party_add	keep	UG	keeps the default partner
+ss06.lua	1664	identity			FILE	rewritten by a generic rule
+ss06.lua	1675	identity			FILE	rewritten by a generic rule
+ss06.lua	1764	identity			FILE	rewritten by a generic rule
+ss06.lua	1770	identity			FILE	rewritten by a generic rule
+ss06.lua	1961	table			FILE	rewritten by a generic rule
+ss06.lua	2029	identity			FILE	rewritten by a generic rule
+ss06.lua	2037	identity			FILE	rewritten by a generic rule
+ss06.lua	2068	identity			FILE	rewritten by a generic rule
+ss06.lua	2085	identity			FILE	rewritten by a generic rule
+ss06.lua	2216	identity			FILE	rewritten by a generic rule
+ss06.lua	2286	identity			FILE	rewritten by a generic rule
+ss07.lua	90	other			FILE	kept: name constant or list entry
+ss07.lua	146	other			FILE	kept: name constant or list entry
+ss07.lua	271	table			FILE	rewritten by a generic rule
+ss07.lua	272	table			FILE	rewritten by a generic rule
+ss07.lua	279	table			FILE	patched
+ss07.lua	302	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+ss07.lua	316	action	cutscene_play	keep	UG	keeps the default partner
+ss07.lua	322	helper	teleport_coop		UG	wrapper
+ss07.lua	348	action	inv_weapon_add_temporary	fanout	UG	wrapper
+ss07.lua	362	action	vehicle_enter_teleport	seats	UG?	default: seats
+ss07.lua	395	helper	teleport_coop		UG	wrapper
+ss07.lua	402	query	get_dist	nearest	UG?	default: nearest
+ss07.lua	402	query	get_dist	nearest	UG?	default: nearest
+ss07.lua	407	action	vehicle_enter_teleport	seats	UG?	default: seats
+ss07.lua	442	query	get_dist	nearest	UG?	default: nearest
+ss07.lua	447	action	vehicle_enter_teleport	seats	UG?	default: seats
+ss07.lua	724	action	player_force_vehicle_seat	seats	UG?	default: seats
+ss07.lua	775	action	player_force_vehicle_seat	seats	UG?	default: seats
+ss07.lua	1089	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+ss07.lua	1110	action	player_force_vehicle_seat	seats	UG?	default: seats
+ss08.lua	149	table			FILE	rewritten by a generic rule
+ss08.lua	276	table			FILE	rewritten by a generic rule
+ss08.lua	277	table			FILE	rewritten by a generic rule
+ss08.lua	286	table			FILE	rewritten by a generic rule
+ss08.lua	298	table			FILE	rewritten by a generic rule
+ss08.lua	299	table			FILE	rewritten by a generic rule
+ss08.lua	338	table			FILE	patched
+ss08.lua	351	table			FILE	patched
+ss08.lua	602	table			FILE	kept: one value for the whole remote side
+ss08.lua	655	action	party_add	keep	UG	keeps the default partner
+ss08.lua	725	local	ss08_stop_failure_countdown		FILE	patched
+ss08.lua	727	table			FILE	kept: one value for the whole remote side
+ss08.lua	815	local	ss08_stop_failure_countdown		FILE	patched
+ss08.lua	868	table			FILE	kept: one value for the whole remote side
+ss08.lua	1058	callback	on_vehicle_enter		UG	wrapper
+ss08.lua	1059	callback	on_vehicle_exit		UG	wrapper
+ss08.lua	1085	identity			FILE	rewritten by a generic rule
+ss08.lua	1096	identity			FILE	rewritten by a generic rule
+ss08.lua	1110	identity			FILE	rewritten by a generic rule
+ss08.lua	1164	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+ss08.lua	1165	table			FILE	patched
+ss08.lua	1171	query	get_dist	nearest	UG?	patched (default was wrong)
+ss08.lua	1172	table			FILE	patched
+ss08.lua	1210	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+ss08.lua	1212	query	get_char_vehicle_type	keep	UG	keeps the default partner
+ss08.lua	1735	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+ss09.lua	92	table			FILE	rewritten by a generic rule
+ss09.lua	93	table			FILE	rewritten by a generic rule
+ss09.lua	105	table			FILE	rewritten by a generic rule
+ss09.lua	205	table			FILE	rewritten by a generic rule
+ss09.lua	233	table			FILE	rewritten by a generic rule
+ss09.lua	265	table			FILE	patched
+ss09.lua	316	table			FILE	kept: one value for the whole remote side
+ss09.lua	327	action	character_ragdoll	fanout	UG	wrapper
+ss09.lua	399	other			FILE	patched
+ss09.lua	524	action	player_controls_disable	fanout	UG	wrapper
+ss09.lua	528	table			FILE	kept: one value for the whole remote side
+ss09.lua	538	action	character_ragdoll	fanout	UG	wrapper
+ss09.lua	542	action	player_controls_enable	fanout	UG	wrapper
+ss09.lua	696	table			FILE	kept: one value for the whole remote side
+ss09.lua	954	action	character_ragdoll	fanout	UG	wrapper
+ss09.lua	985	local	ss09_do_voodoo_damage		FILE	patched
+ss09.lua	1070	action	player_controls_enable	fanout	UG	wrapper
+ss10.lua	380	table			FILE	rewritten by a generic rule
+ss10.lua	381	table			FILE	rewritten by a generic rule
+ss10.lua	382	table			FILE	rewritten by a generic rule
+ss10.lua	383	table			FILE	rewritten by a generic rule
+ss10.lua	384	table			FILE	rewritten by a generic rule
+ss10.lua	449	local	ss10_player_in_station		FILE	patched
+ss10.lua	910	action	player_controls_disable	fanout	UG	wrapper
+ss10.lua	941	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+ss10.lua	946	action	vehicle_enter_teleport	seats	UG?	default: seats
+ss10.lua	958	action	player_controls_enable	fanout	UG	wrapper
+ss10.lua	1005	callback	on_notoriety_event		UG	wrapper
+ss10.lua	1043	callback	on_weapon_fired		UG	wrapper
+ss10.lua	1076	callback	on_weapon_fired		UG	wrapper
+ss10.lua	1093	action	vehicle_exit_teleport	fanout	UG	wrapper
+ss10.lua	1298	local	ss10_notoriety_event		FILE	patched
+ss10.lua	1776	callback	on_notoriety_event		UG	wrapper
+ss10.lua	1857	table			FILE	patched
+ss10.lua	1894	local	ss10_player_has_weapon_equipped_in_station		FILE	patched
+ss10.lua	2104	identity			FILE	rewritten by a generic rule
+ss10.lua	2146	identity			FILE	rewritten by a generic rule
+ss10.lua	2152	identity			FILE	rewritten by a generic rule
+ss10.lua	2161	identity			FILE	rewritten by a generic rule
+ss10.lua	2191	identity			FILE	rewritten by a generic rule
+ss10.lua	2211	identity			FILE	rewritten by a generic rule
+ss10.lua	2271	action	inv_item_equip	fanout	UG	wrapper
+ss10.lua	2325	callback	on_notoriety_event		UG	wrapper
+ss11.lua	351	table			FILE	rewritten by a generic rule
+ss11.lua	352	table			FILE	rewritten by a generic rule
+ss11.lua	372	table			FILE	patched
+ss11.lua	419	action	player_controls_disable	fanout	UG	wrapper
+ss11.lua	486	action	player_controls_enable	fanout	UG	wrapper
+ss11.lua	529	identity			FILE	rewritten by a generic rule
+ss11.lua	558	action	player_controls_disable	fanout	UG	wrapper
+ss11.lua	602	action	player_controls_enable	fanout	UG	wrapper
+ss11.lua	657	callback	on_vehicle_enter		UG	wrapper
+ss11.lua	663	action	player_controls_enable	fanout	UG	wrapper
+ss11.lua	760	action	player_controls_disable	fanout	UG	wrapper
+ss11.lua	776	action	player_controls_enable	fanout	UG	wrapper
+ss11.lua	849	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+ss11.lua	989	action	player_controls_disable	fanout	UG	wrapper
+ss11.lua	1071	action	player_controls_enable	fanout	UG	wrapper
+ss11.lua	1217	callback	on_vehicle_enter		UG	wrapper
+ss11.lua	1383	other			FILE	patched
+ss11.lua	1568	table			FILE	patched
+tss01.lua	396	table			FILE	rewritten by a generic rule
+tss01.lua	396	table			FILE	rewritten by a generic rule
+tss01.lua	409	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss01.lua	470	action	set_player_can_be_busted	fanout	UG	wrapper
+tss01.lua	536	table			FILE	rewritten by a generic rule
+tss01.lua	544	identity			FILE	rewritten by a generic rule
+tss01.lua	575	local	update_player_vehicle_health		FILE	patched
+tss01.lua	639	action	inv_item_remove_all	fanout	UG	wrapper
+tss01.lua	939	action	turn_vulnerable	fanout	UG	wrapper
+tss01.lua	982	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss01.lua	988	action	set_player_can_be_busted	fanout	UG	wrapper
+tss01.lua	1004	callback	on_weapon_pickup		UG	wrapper
+tss01.lua	1009	callback	on_weapon_equip		UG	wrapper
+tss01.lua	1015	callback	on_weapon_fired		UG	wrapper
+tss01.lua	1040	callback	on_searchlight_track		UG	wrapper
+tss01.lua	1046	callback	on_damage		UG	wrapper
+tss01.lua	1062	action	inv_weapon_remove_temporary	fanout	UG	wrapper
+tss01.lua	1072	action	inv_item_remove_in_slot	fanout	UG	wrapper
+tss01.lua	1073	action	inv_item_remove_in_slot	fanout	UG	wrapper
+tss01.lua	1074	action	inv_item_remove_in_slot	fanout	UG	wrapper
+tss01.lua	1075	action	inv_item_remove_in_slot	fanout	UG	wrapper
+tss01.lua	1087	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+tss01.lua	1157	action	vehicle_exit_teleport	fanout	UG	wrapper
+tss01.lua	1162	action	teleport	fanout	UG	wrapper
+tss01.lua	1185	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+tss01.lua	1192	action	teleport	fanout	UG	wrapper
+tss01.lua	1210	query	get_dist	nearest	UG?	patched (default was wrong)
+tss01.lua	1274	query	character_is_ready	all	UG?	default: all
+tss01.lua	1278	action	turn_invulnerable	fanout	UG	wrapper
+tss01.lua	1285	action	turn_vulnerable	fanout	UG	wrapper
+tss01.lua	1333	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss01.lua	1334	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss01.lua	1350	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss01.lua	1456	identity			FILE	rewritten by a generic rule
+tss01.lua	1682	thread	thread_new		FILE	wrapper (thread_new fans out)
+tss01.lua	1695	table			FILE	rewritten by a generic rule
+tss01.lua	1753	callback	on_weapon_fired		UG	wrapper
+tss01.lua	1800	callback	on_weapon_fired		UG	wrapper
+tss01.lua	1987	callback	on_searchlight_track		UG	wrapper
+tss01.lua	2108	identity			FILE	rewritten by a generic rule
+tss01.lua	2120	identity			FILE	rewritten by a generic rule
+tss01.lua	2149	identity			FILE	rewritten by a generic rule
+tss01.lua	2150	callback	on_weapon_fired		UG	wrapper
+tss01.lua	2151	callback	on_searchlight_track		UG	wrapper
+tss01.lua	2174	identity			FILE	rewritten by a generic rule
+tss01.lua	2176	callback	on_weapon_fired		UG	wrapper
+tss01.lua	2177	callback	on_searchlight_track		UG	wrapper
+tss01.lua	2717	callback	on_weapon_fired		UG	wrapper
+tss01.lua	2736	callback	on_weapon_pickup		UG	wrapper
+tss01.lua	2751	callback	on_weapon_fired		UG	wrapper
+tss01.lua	2798	identity			FILE	rewritten by a generic rule
+tss01.lua	2966	callback	on_searchlight_track		UG	wrapper
+tss01.lua	2972	callback	on_damage		UG	wrapper
+tss01.lua	2980	callback	on_weapon_pickup		UG	wrapper
+tss01.lua	2993	query	inv_item_is_firearm_equipped	all	UG?	patched (default was wrong)
+tss01.lua	3010	callback	on_damage		UG	wrapper
+tss01.lua	3631	query	get_dist	nearest	UG?	patched (default was wrong)
+tss01.lua	3949	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+tss01.lua	3958	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+tss01.lua	4154	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+tss01.lua	4161	query	get_dist	nearest	UG?	patched (default was wrong)
+tss01.lua	4163	query	character_is_ready	all	UG?	default: all
+tss01.lua	4235	action	player_controls_disable	fanout	UG	wrapper
+tss01.lua	4244	query	get_char_vehicle_name	keep	UG	keeps the default partner
+tss01.lua	4281	action	player_controls_enable	fanout	UG	wrapper
+tss01.lua	4303	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+tss01.lua	4332	query	character_is_in_vehicle	all	UG?	default: all
+tss01.lua	4333	action	vehicle_enter_teleport	seats	UG?	default: seats
+tss01.lua	4377	action	vehicle_enter_teleport	seats	UG?	default: seats
+tss01.lua	4387	action	set_player_can_enter_exit_vehicles	fanout	UG	wrapper
+tss01.lua	4401	action	inv_weapon_add_temporary	fanout	UG	wrapper
+tss01.lua	4428	local	update_player		FILE	patched
+tss02.lua	33	table			FILE	rewritten by a generic rule
+tss02.lua	34	table			FILE	rewritten by a generic rule
+tss02.lua	35	table			FILE	rewritten by a generic rule
+tss02.lua	145	table			FILE	rewritten by a generic rule
+tss02.lua	145	table			FILE	rewritten by a generic rule
+tss02.lua	146	table			FILE	rewritten by a generic rule
+tss02.lua	192	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+tss02.lua	220	query	get_dist_char_to_char	nearest	UG?	default: nearest
+tss02.lua	223	other			FILE	patched
+tss02.lua	264	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss02.lua	406	table			FILE	patched
+tss02.lua	406	thread	thread_new		FILE	patched
+tss02.lua	555	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss02.lua	600	callback	on_vehicle_enter		UG	wrapper
+tss02.lua	732	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+tss02.lua	735	query	get_dist	nearest	UG?	patched (default was wrong)
+tss02.lua	752	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+tss02.lua	819	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss02.lua	890	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss02.lua	972	action	character_evacuate_from_all_vehicles	fanout	UG	wrapper
+tss02.lua	983	identity			FILE	rewritten by a generic rule
+tss02.lua	1055	action	party_add	keep	UG	keeps the default partner
+tss02.lua	1322	query	get_dist	nearest	UG?	patched (default was wrong)
+tss02.lua	1334	action	player_controls_disable	fanout	UG	wrapper
+tss02.lua	1335	action	vehicle_stop_do	fanout	UG	wrapper
+tss03.lua	137	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss03.lua	152	action	player_controls_disable	fanout	UG	wrapper
+tss03.lua	204	action	player_controls_enable	fanout	UG	wrapper
+tss03.lua	221	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss03.lua	591	query	get_dist_char_to_char	nearest	UG?	patched (default was wrong)
+tss03.lua	591	query	los_check	all	UG?	patched (default was wrong)
+tss03.lua	594	action	turn_to_char	target	UG?	default: target
+tss03.lua	596	action	force_throw_char	target	UG?	default: target
+tss03.lua	619	query	character_has_human_shield	all	UG?	patched (default was wrong)
+tss03.lua	672	query	get_dist	nearest	UG?	default: nearest
+tss03.lua	700	query	get_dist	nearest	UG?	default: nearest
+tss03.lua	752	identity			FILE	rewritten by a generic rule
+tss03.lua	983	query	npc_in_player_fov	all	UG?	patched (default was wrong)
+tss03_demo.lua	121	action	player_controls_disable	fanout	UG	wrapper
+tss03_demo.lua	219	action	player_controls_enable	fanout	UG	wrapper
+tss03_demo.lua	638	identity			FILE	rewritten by a generic rule
+tss03_demo.lua	706	action	attack	target	UG?	default: target
+tss03_demo.lua	915	action	attack	target	UG?	default: target
+tss03_demo.lua	916	action	attack	target	UG?	default: target
+tss04.lua	186	table			FILE	rewritten by a generic rule
+tss04.lua	199	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss04.lua	296	action	character_set_damage_multiplier	fanout	UG	wrapper
+tss04.lua	435	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss04.lua	482	query	get_dist_char_to_char	nearest	UG?	default: nearest
+tss04.lua	483	other			FILE	patched
+tss04.lua	505	query	get_dist_char_to_char	nearest	UG?	patched (default was wrong)
+tss04.lua	696	action	turn_invulnerable	fanout	UG	wrapper
+tss04.lua	754	query	get_dist_char_to_nav	nearest	UG?	default: nearest
+tss04.lua	865	identity			FILE	rewritten by a generic rule
+tss04.lua	927	other			FILE	kept: stays the default partner
+tss04.lua	951	identity			FILE	rewritten by a generic rule
+tss04.lua	961	identity			FILE	rewritten by a generic rule
+tss04.lua	1082	query	get_dist_char_to_vehicle	nearest	UG?	default: nearest
+tss04.lua	1097	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+tss04.lua	1106	other			FILE	kept: stays the default partner
+tss04.lua	1161	action	attack	target	UG?	default: target
+tss04.lua	1183	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
+tss04.lua	1192	other			FILE	kept: stays the default partner
+tss04.lua	1233	identity			FILE	rewritten by a generic rule
+tss04.lua	1259	identity			FILE	rewritten by a generic rule
+tss04.lua	1309	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
+tss04.lua	1337	identity			FILE	rewritten by a generic rule
+tss04.lua	1412	identity			FILE	rewritten by a generic rule
+tss04.lua	1447	local	tss04_unmark_tow_target		FILE	kept: stays the default partner
+ug_lib.lua	41	other			FILE	kept: name constant or list entry
+ug_lib.lua	1184	other			FILE	kept: stays the default partner
+ug_lib.lua	1185	identity			FILE	rewritten by a generic rule
+ug_lib.lua	1189	other			FILE	kept: stays the default partner
+ug_lib.lua	1810	action	player_controls_disable	fanout	UG	wrapper
+ug_lib.lua	1829	action	player_controls_enable	fanout	UG	wrapper
+ug_lib.lua	1843	action	player_controls_enable	fanout	UG	wrapper
+ug_lib.lua	2421	identity			FILE	kept: stays the default partner
+ug_lib.lua	2434	action	teleport	fanout	UG	wrapper
+ug_lib.lua	2442	action	teleport_check_done	all	UG?	default: all
