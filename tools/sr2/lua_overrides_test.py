@@ -1,10 +1,21 @@
-"""Checks tools/sr2/lua_overrides.py against made-up scripts (no game files): usage `python tools/sr2/lua_overrides_test.py`."""
+"""Checks tools/sr2/lua_overrides.py, its patch engine and the Lua checker against made-up scripts (no game files).
+
+usage: python tools/sr2/lua_overrides_test.py        (needs the `lupa` package for the parse checks)
+
+With SR2_LUA_SOURCE (the extracted scripts) and SR2_LUA_FIXES (Juiced's TU3 Mission Fixes) set, it also builds every real
+override into a temporary dir and runs the parse and style checks on them.
+"""
+import os
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+import lua_check  # noqa: E402
 import lua_overrides  # noqa: E402
+import lua_patch  # noqa: E402
+from lua_patch import Patch  # noqa: E402
+from lua_patches import GENERIC_RULES, PATCHES  # noqa: E402
 
 failures = 0
 
@@ -16,40 +27,117 @@ def check(ok, what):
         failures += 1
 
 
-def made_up_source(directory, line_ending):
-    """A script per edited file that holds every anchor the expected number of times."""
-    for name, edits in lua_overrides.EDITS.items():
-        text = "-- made up\n" + "".join(old * count for old, _, count in edits) + "\nend"
-        (directory / name).write_bytes(text.replace("\n", line_ending).encode("latin-1"))
-
-
-with tempfile.TemporaryDirectory() as temporary:
-    root = Path(temporary)
-    for label, ending in (("LF", "\n"), ("CRLF", "\r\n")):
-        source = root / ("source_" + label)
-        out = root / ("out_" + label)
-        source.mkdir()
-        made_up_source(source, ending)
-        written = lua_overrides.build(source, out)
-        check(written == sorted(lua_overrides.EDITS), f"{label}: every edited script is written")
-        ug_lib = (out / "ug_lib.lua").read_bytes().decode("latin-1")
-        check("function coop_remote_players()" in ug_lib and "function coop_is_remote_player(name)" in ug_lib,
-              f"{label}: ug_lib.lua gets the helpers")
-        check(("\r\n" in ug_lib) == (ending == "\r\n") and (ending == "\n" or "\n" not in ug_lib.replace("\r\n", "")),
-              f"{label}: line endings kept")
-        airport = (out / "sh_bh_airport.lua").read_bytes().decode("latin-1")
-        check("REMOTE_PLAYER" not in airport and "coop_is_remote_player(char)" in airport, f"{label}: the airport tests every remote")
-
-    broken = root / "broken"
-    broken.mkdir()
-    made_up_source(broken, "\n")
-    (broken / "sh_tss_caverns.lua").write_bytes(b"-- nothing to edit here\n")
-    out = root / "out_broken"
+def raises(function, *arguments):
     try:
-        lua_overrides.build(broken, out)
-        raised = False
+        function(*arguments)
     except ValueError:
-        raised = True
-    check(raised and not out.exists(), "a script whose text differs stops the build before anything is written")
+        return True
+    return False
 
-sys.exit(1 if failures else 0)
+
+def test_engine():
+    body = "a = 1\nif x == REMOTE_PLAYER then\n\tf(REMOTE_PLAYER, 2)\nend\nb = 1\n"
+    check(lua_patch.apply_line_edits("t", body, [(3, "REMOTE_PLAYER", "p")]).split("\n")[2] == "\tf(p, 2)", "line edit changes only its line")
+    check(raises(lua_patch.apply_line_edits, "t", body, [(1, "REMOTE_PLAYER", "p")]), "line edit whose text is not on the line is refused")
+    check(raises(lua_patch.apply_line_edits, "t", body, [(2, "x", "y"), (2, "=", "~")]), "line edit whose text is on the line twice is refused")
+    block = lua_patch.apply_block_edits("t", body, [(2, 4, "REMOTE_PLAYER", "g()\nh()")])
+    check(block == "a = 1\ng()\nh()\nb = 1\n", "block edit replaces the lines, indented like the first")
+    check(raises(lua_patch.apply_block_edits, "t", body, [(1, 2, "REMOTE_PLAYER", "g()")]), "block edit whose first line differs is refused")
+    check(lua_patch.apply_edits("t", body, [("b = 1", "b = 2", 1)]).endswith("b = 2\n"), "literal edit")
+    check(raises(lua_patch.apply_edits, "t", body, [("REMOTE_PLAYER", "p", 1)]), "an edit that changes a different count is refused")
+    each = lua_patch.apply_each("t", "f(a, REMOTE_PLAYER)\nf(a, LOCAL_PLAYER)\n", ["f"])
+    check(each == "coop_each_remote(f, a, REMOTE_PLAYER)\nf(a, LOCAL_PLAYER)\n", "each rewrites only the calls with REMOTE_PLAYER")
+    check(raises(lua_patch.apply_each, "t", "f(a)\n", ["f"]), "each of a function never called with REMOTE_PLAYER is refused")
+
+
+def test_generic_rules():
+    def rewrite(text):
+        return lua_patch.apply_rules(text, GENERIC_RULES)[0]
+
+    check(rewrite("if who == REMOTE_PLAYER then") == "if coop_is_remote_player(who) then", "== REMOTE_PLAYER")
+    check(rewrite("if who ~= REMOTE_PLAYER then") == "if not coop_is_remote_player(who) then", "~= REMOTE_PLAYER")
+    check(rewrite("a.b == LOCAL_PLAYER or a.b == REMOTE_PLAYER") == "a.b == LOCAL_PLAYER or coop_is_remote_player(a.b)", "a field name")
+    check(rewrite("T = { [LOCAL_PLAYER] = false, [REMOTE_PLAYER] = false }") == "T = coop_player_table(false, false)", "two-key table")
+    check(rewrite("T = {\n [LOCAL_PLAYER] = REMOTE_PLAYER,\n [REMOTE_PLAYER] = LOCAL_PLAYER,\n}") == "T = coop_player_table(REMOTE_PLAYER, LOCAL_PLAYER)", "multi-line table")
+    check(rewrite("T = {[LOCAL_PLAYER] = {}, [REMOTE_PLAYER] = {}}") == "T = coop_player_table({}, {})", "table of tables")
+    check(rewrite("S = { [LOCAL_PLAYER] = true; [REMOTE_PLAYER] = true; }") == "S = coop_player_table(true, true)", "semicolons")
+    check(rewrite("if A[LOCAL_PLAYER] and A[REMOTE_PLAYER] then") == "if coop_all_players_in(A) then", "both players")
+    check(rewrite("if A[LOCAL_PLAYER] or\n A[REMOTE_PLAYER] then") == "if coop_any_player_in(A) then", "either player")
+    check(rewrite("teleport(REMOTE_PLAYER, nav)") == "teleport(REMOTE_PLAYER, nav)", "a call is left to the wrappers")
+
+
+def test_lua_check():
+    check(lua_check.style_problems("local n = #list") != [], "the length operator is Lua 5.1 only")
+    check(lua_check.style_problems("x = select(2, a)") != [], "select is Lua 5.1 only")
+    check(lua_check.style_problems("function f(...) return arg end") == [], "... in a parameter list is Lua 5.0")
+    check(lua_check.style_problems("function f() return ... end") != [], "... in a body is Lua 5.1 only")
+    check(lua_check.style_problems('-- #list\nx = "#a" .. \'#b\'') == [], "comments and strings are ignored")
+    runtime = lua_check.lua_runtime()
+    check(lua_check.parse_error(runtime, "x = 1") is None and lua_check.parse_error(runtime, "x = = 1") is not None, "the parser tells good from bad")
+
+
+def made_up(directory, line_ending):
+    text = "-- made up\nfunction f(who)\n\tif who == REMOTE_PLAYER then\n\t\tg(REMOTE_PLAYER)\n\tend\nend\n"
+    (directory / "demo.lua").write_bytes(text.replace("\n", line_ending).encode("latin-1"))
+    (directory / "ug_lib.lua").write_bytes(("-- library\n".replace("\n", line_ending)).encode("latin-1"))
+    (directory / "fixed.lua").write_bytes(b"x = 1\n")
+
+
+def test_build():
+    saved_patches, saved_fixed = dict(lua_overrides.PATCHES), lua_overrides.FIXED_FILES
+    lua_overrides.PATCHES.clear()
+    lua_overrides.PATCHES.update({"demo.lua": Patch(each=("g",)), "ug_lib.lua": Patch(generic=False), "fixed.lua": Patch(edits=[("x = 1", "x = 2", 1)])})
+    lua_overrides.FIXED_FILES = ("fixed.lua",)
+    try:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixes = root / "fixes"
+            fixes.mkdir()
+            (fixes / "fixed.lua").write_bytes(b"x = 1\r\n")
+            for label, ending in (("LF", "\n"), ("CRLF", "\r\n")):
+                source, out = root / ("source_" + label), root / ("out_" + label)
+                source.mkdir()
+                made_up(source, ending)
+                written = lua_overrides.build(source, fixes, out)
+                check(written == ["demo.lua", "fixed.lua", "ug_lib.lua"], f"{label}: every patched script is written")
+                demo = (out / "demo.lua").read_bytes().decode("latin-1")
+                check("coop_is_remote_player(who)" in demo and "coop_each_remote(g, REMOTE_PLAYER)" in demo, f"{label}: the patch and the generic rules apply")
+                check(demo.count("\r\n") == (demo.count("\n") if ending == "\r\n" else 0), f"{label}: line endings kept")
+                library = (out / "ug_lib.lua").read_bytes().decode("latin-1")
+                check("function coop_wrap(" in library and "function coop_player_table(" in library and "COOP_RULES" in library, f"{label}: ug_lib.lua gets the library")
+                check(lua_check.check_dir(out) == [], f"{label}: the generated scripts parse and are Lua 5.0 style")
+            check((root / "out_LF" / "fixed.lua").read_bytes() == b"x = 2\r\n", "a script in FIXED_FILES starts from the fixed copy")
+
+            broken = root / "broken"
+            broken.mkdir()
+            made_up(broken, "\n")
+            lua_overrides.PATCHES["demo.lua"] = Patch(edits=[("never in the script", "x", 1)])
+            out = root / "out_broken"
+            check(raises(lua_overrides.build, broken, fixes, out) and not out.exists(), "a patch that does not fit stops the build before anything is written")
+    finally:
+        lua_overrides.PATCHES.clear()
+        lua_overrides.PATCHES.update(saved_patches)
+        lua_overrides.FIXED_FILES = saved_fixed
+
+
+def test_real_scripts():
+    source, fixes = os.environ.get("SR2_LUA_SOURCE"), os.environ.get("SR2_LUA_FIXES")
+    if not (source and fixes):
+        print("skip real scripts (set SR2_LUA_SOURCE and SR2_LUA_FIXES)")
+        return
+    with tempfile.TemporaryDirectory() as temporary:
+        out = Path(temporary)
+        written = lua_overrides.build(Path(source), Path(fixes), out)
+        check(sorted(written) == sorted(PATCHES), f"all {len(PATCHES)} real overrides are written")
+        problems = lua_check.check_dir(out, Path(source))
+        check(problems == [], "every real override parses and adds only Lua 5.0 code" + ("" if not problems else ": " + "; ".join(problems[:3])))
+
+
+def main():
+    for test in (test_engine, test_generic_rules, test_lua_check, test_build, test_real_scripts):
+        test()
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
