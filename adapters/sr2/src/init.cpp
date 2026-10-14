@@ -32,7 +32,7 @@ DWORD WINAPI initThread(LPVOID) {
             logger::write("replication: off, max_players %u is the shipped co-op, limits and pools are not patched",
                           config.maxPlayers);
         }
-        player_cap::install(config.maxPlayers);
+        player_cap::install(config.maxPlayers, config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (config.trace) {
             join_trace::install(config.maxPlayers);

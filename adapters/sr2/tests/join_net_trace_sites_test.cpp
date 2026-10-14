@@ -79,7 +79,7 @@ bool clearOfJuiced() {
 }
 
 bool clearOfOtherMilestones() {
-    const auto playerCap = player_cap_patches::forPlayers(kMaxPlayers, kThunk);
+    const auto playerCap = player_cap_patches::forPlayers(kMaxPlayers, {kThunk, kThunk, kThunk});
     for (const Site& site : join_net_trace_sites::kSites) {
         const size_t size = sizeOf(site);
         for (const partner_sites::Site& other : partner_sites::kSites) {
