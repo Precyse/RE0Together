@@ -1,12 +1,16 @@
 #include "version_gate.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "code_patch.h"
 #include "guest_call.h"
+#include "join_deny_rules.h"
 #include "log.h"
 #include "memory.h"
 #include "trailer_rules.h"
@@ -22,11 +26,13 @@ constexpr uintptr_t kContextMemberOffset = 4;   // ctx[1]: the member the sender
 constexpr uintptr_t kSenderPortOffset = 4;      // in the sender address block (the IP is at 0)
 constexpr size_t kAddressBlockWords = 5;        // {ip, port, 0, 0, 0}
 constexpr uint32_t kGameVersion = 0xC9;         // the first field of a join_deny
-constexpr uint8_t kReasonWrongVersion = 1;      // the game's own "wrong game version"
 constexpr size_t kDenyPayloadWords = 2;
 
 trailer_rules::Settings g_settings;
 bool g_trace = false;
+std::mutex g_passwordMutex;
+std::string g_joinPassword;  // what a join_req must carry, empty = nothing is checked
+std::atomic<uint8_t> g_lastDenyReason{join_deny_rules::kReasonNone};
 const uintptr_t g_send = version_gate_patches::kSend;
 
 using HandlerFn = void(__cdecl*)(uintptr_t payload, uintptr_t ctx);
@@ -67,7 +73,26 @@ void logRefusal(const char* who, uint32_t ip, uint16_t port, const Inspection& i
     logger::write("version gate: %s %u.%u.%u.%u:%u refused, %s", who, octets[0], octets[1], octets[2], octets[3], port, why);
 }
 
-// G: host. A join_req without our trailer gets join_deny reason 1, to the real sender, and nothing else happens.
+bool passwordAccepted(uintptr_t payload) {
+    std::string secret;
+    {
+        std::lock_guard<std::mutex> lock(g_passwordMutex);
+        secret = g_joinPassword;
+    }
+    if (secret.empty()) return true;
+    uint8_t field[join_deny_rules::kMaxPasswordBytes] = {};
+    return readMemory(payload, field, sizeof(field)) && join_deny_rules::passwordMatches(field, sizeof(field), secret);
+}
+
+// join_deny with `reason` to the real sender; the sender's block is {ip, port, 0, 0, 0}.
+void denyJoin(uint32_t ip, uint32_t port, uint8_t reason) {
+    uint32_t block[kAddressBlockWords] = {ip, port, 0, 0, 0};
+    guest_call::call(version_gate_patches::kJoinDenySender, {.ecx = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(block))},
+                     {reason});
+}
+
+// G: host. A join_req without our trailer gets join_deny reason 1, one with the wrong password reason 7, both to the real
+// sender, and nothing else happens.
 void __cdecl gateJoinReq(uintptr_t payload, uintptr_t ctx) {
     if (readDword(ctx + kContextMemberOffset) != 0) {  // the sender has a member: the handler drops it itself
         callHandler(version_gate_patches::kJoinReqHandler, payload, ctx);
@@ -78,14 +103,26 @@ void __cdecl gateJoinReq(uintptr_t payload, uintptr_t ctx) {
     const uint32_t ip = readDword(sender);
     const uint32_t port = readDword(sender + kSenderPortOffset);
     if (inspection.verdict == Verdict::Match) {
+        if (!passwordAccepted(payload)) {
+            logger::write("version gate: join_req from 0x%08X:%u refused, wrong password", ip, port);
+            denyJoin(ip, port, join_deny_rules::kReasonBadPassword);
+            return;
+        }
         if (g_trace) logger::write("version gate: join_req from 0x%08X:%u accepted", ip, port);
         callHandler(version_gate_patches::kJoinReqHandler, payload, ctx);
         return;
     }
     logRefusal("join_req from", ip, static_cast<uint16_t>(port), inspection);
-    uint32_t block[kAddressBlockWords] = {ip, port, 0, 0, 0};
-    guest_call::call(version_gate_patches::kJoinDenySender, {.ecx = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(block))},
-                     {kReasonWrongVersion});
+    denyJoin(ip, port, join_deny_rules::kReasonWrongVersion);
+}
+
+// G: guest. Every join_deny is noted (the force join guest gives up on a refusal that no retry changes), then the game
+// handles it as it always did.
+void __cdecl noteJoinDeny(uintptr_t payload, uintptr_t ctx) {
+    uint8_t reason = join_deny_rules::kReasonNone;
+    readMemory(payload + join_deny_rules::kReasonOffset, &reason, sizeof(reason));
+    g_lastDenyReason = reason;
+    callHandler(version_gate_patches::kJoinDenyHandler, payload, ctx);
 }
 
 // G: guest. A join_acc without our trailer is refused through the game's own join_deny handler.
@@ -98,8 +135,8 @@ void __cdecl gateJoinAcc(uintptr_t payload, uintptr_t ctx) {
     }
     const uintptr_t sender = readDword(ctx);
     logRefusal("join_acc from host", readDword(sender), readWord(sender + kSenderPortOffset), inspection);
-    uint32_t deny[kDenyPayloadWords] = {kGameVersion, kReasonWrongVersion};
-    callHandler(version_gate_patches::kJoinDenyHandler, reinterpret_cast<uintptr_t>(deny), ctx);
+    uint32_t deny[kDenyPayloadWords] = {kGameVersion, join_deny_rules::kReasonWrongVersion};
+    noteJoinDeny(reinterpret_cast<uintptr_t>(deny), ctx);
 }
 
 // V3, V4: `args` are the stack arguments of the game's send, (buffer, length, 0, 0). The trailer goes behind the message
@@ -141,7 +178,8 @@ bool install(uint32_t maxPlayers, bool partnerExperimental, bool trace) {
     g_settings = {static_cast<uint8_t>(maxPlayers), partnerExperimental};
     const version_gate_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&gateJoinReq),
                                               reinterpret_cast<uintptr_t>(&gateJoinAcc),
-                                              reinterpret_cast<uintptr_t>(&sendWithTrailerStub)};
+                                              reinterpret_cast<uintptr_t>(&sendWithTrailerStub),
+                                              reinterpret_cast<uintptr_t>(&noteJoinDeny)};
     if (!applyCodePatches(version_gate_patches::patches(thunks))) {
         logger::write("version gate: sites differ, nothing installed; players are not told apart by version");
         return false;
@@ -150,5 +188,14 @@ bool install(uint32_t maxPlayers, bool partnerExperimental, bool trace) {
                   maxPlayers, partnerExperimental ? 1 : 0);
     return true;
 }
+
+void setJoinPassword(const std::string& password) {
+    std::lock_guard<std::mutex> lock(g_passwordMutex);
+    g_joinPassword = password;
+}
+
+uint8_t lastJoinDeny() { return g_lastDenyReason; }
+
+void clearJoinDeny() { g_lastDenyReason = join_deny_rules::kReasonNone; }
 
 }  // namespace version_gate

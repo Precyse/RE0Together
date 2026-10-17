@@ -16,6 +16,7 @@ PORTS = (27985, 27986)
 BRIDGE_PORTS = (27994, 27995)
 RE0_APP_ID = 339340
 COPY_NAMES = ("CheckOld", "CheckNew", "CheckNew2", "CheckNew3")
+COOP_ON = "coop=1 in "  # the end of the launcher's "Set ..., coop=1 in <ini>" line (the game would start)
 
 
 def copy_with_build(name, build):
@@ -48,7 +49,7 @@ def run(host_exe, guest_exe, work, host_game_build, guest_game_build):
     guest = launcher(["join", "0", "--game", "re0", *common, "--local-port", str(PORTS[1]), "--peer-port", str(PORTS[0]),
                       "--bridge-port", str(BRIDGE_PORTS[1]), "--game-dir", str(guest_game)], work / "guest.log", guest_exe)
     guest_log = work / "guest.log"
-    wait_for(lambda: "mismatch" in guest_log.read_text() or "Set coop=1" in guest_log.read_text(), TRANSFER_TIMEOUT_S)
+    wait_for(lambda: "mismatch" in guest_log.read_text() or COOP_ON in guest_log.read_text(), TRANSFER_TIMEOUT_S)
     for proc in (guest, host):
         if proc.poll() is None:
             proc.send_signal(signal.CTRL_BREAK_EVENT)
@@ -66,15 +67,15 @@ def main():
     mismatch = run(old, new, Path(tempfile.mkdtemp(prefix="cf_build_mismatch_")), 100, 100)
     if "Build mismatch: host is on build 5, you are on build 6" not in mismatch:
         failures.append("launcher build mismatch not reported")
-    if "Set coop=1" in mismatch:
+    if COOP_ON in mismatch:
         failures.append("game would have started on a launcher build mismatch")
     same = run(new, copy_with_build("CheckNew2", 6), Path(tempfile.mkdtemp(prefix="cf_build_match_")), 100, 100)
-    if "mismatch" in same or "Set coop=1" not in same:
+    if "mismatch" in same or COOP_ON not in same:
         failures.append("matching builds did not carry on")
     game = run(new, copy_with_build("CheckNew3", 6), Path(tempfile.mkdtemp(prefix="cf_game_build_")), 100, 200)
     if "Game build mismatch: host has Resident Evil 0 HD build 100, you have build 200" not in game:
         failures.append("game build mismatch not reported")
-    if "Set coop=1" in game:
+    if COOP_ON in game:
         failures.append("game would have started on a game build mismatch")
     for name in COPY_NAMES:
         shutil.rmtree(ROOT / "launcher" / "bin" / name, ignore_errors=True)

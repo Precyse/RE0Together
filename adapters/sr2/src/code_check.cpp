@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "code_patch.h"
+#include "force_join_sites.h"
 #include "log.h"
 #include "memory.h"
 #include "sr2_addresses.h"
@@ -60,6 +61,7 @@ bool timeStampMatches() {
 bool gameMatchesBuild() {
     bool ok = timeStampMatches();
     ok = codeMatches(expectedCode()) && ok;
+    ok = codeMatches(force_join_sites::checks()) && ok;
     logger::write(ok ? "code check: exe matches the supported build" : "code check: exe differs, nothing will be patched");
     return ok;
 }

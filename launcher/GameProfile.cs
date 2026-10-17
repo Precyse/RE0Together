@@ -13,9 +13,11 @@ public sealed record SaveSyncProfile(
     string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
 
 /// <summary>Where a game's co-op session lives. A Lobby game uses the launcher's Steam lobby, transport and save sync; a
-/// Native game matches players itself, so the launcher only installs the mod, writes the options and starts the game.</summary>
+/// Native game matches players itself, so the launcher only installs the mod, writes the options and starts the game; a
+/// Rendezvous game is Native with a Steam lobby that says who hosts: the mod connects itself, so there is no bridge, no
+/// frames between launchers and no save sync.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum SessionKind { Lobby, Native }
+public enum SessionKind { Lobby, Native, Rendezvous }
 
 /// <summary>A file the game folder must hold for co-op to work, and the name the status line gives it when it is missing.</summary>
 public sealed record RequiredFile(string File, string Name);
@@ -39,11 +41,15 @@ public sealed record GameProfile(
     string Id, string Name, int SteamAppId, string Exe, int MaxPlayers, int Port,
     List<AdapterFile> AdapterFiles, string AdapterIni, SaveSyncProfile? SaveSync = null, string? AdapterLog = null,
     List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
-    SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null)
+    SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
+    string? JoinFile = null, string? StatusFile = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public bool NativeSession => SessionKind == SessionKind.Native;
+
+    /// <summary>A Steam lobby carries who hosts (JoinFile, written by NativeJoin) and the mod reports back (StatusFile).</summary>
+    public bool RendezvousSession => SessionKind == SessionKind.Rendezvous;
 
     /// <summary>The name of the first required file missing from the game folder, or null when all are there.</summary>
     public string? MissingRequirement(string gameDir) =>

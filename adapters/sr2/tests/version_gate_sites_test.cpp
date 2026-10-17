@@ -17,11 +17,12 @@ namespace {
 constexpr uintptr_t kGateReq = 0x10007000;
 constexpr uintptr_t kGateAcc = 0x10007100;
 constexpr uintptr_t kSend = 0x10007200;
+constexpr uintptr_t kNoteDeny = 0x10007300;
 constexpr uintptr_t kOtherThunk = 0x10002000;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kMovedPort = 4201;
-constexpr size_t kSites = 8;
+constexpr size_t kSites = 9;
 
 int g_failures = 0;
 
@@ -86,8 +87,8 @@ bool clearOfOtherSites(const std::vector<CodePatch>& patches) {
 }  // namespace
 
 int main() {
-    const auto patches = version_gate_patches::patches({kGateReq, kGateAcc, kSend});
-    check(patches.size() == kSites, "eight sites: two table pointers, two sends and four function entries");
+    const auto patches = version_gate_patches::patches({kGateReq, kGateAcc, kSend, kNoteDeny});
+    check(patches.size() == kSites, "nine sites: three table pointers, two sends and four function entries");
 
     const CodePatch* req = patchAt(patches, 0xE8BF3C);
     check(req && req->expected == std::vector<uint8_t>{0xC0, 0x5B, 0x81, 0x00} &&
@@ -97,6 +98,11 @@ int main() {
     check(acc && acc->expected == std::vector<uint8_t>{0xE0, 0x62, 0x81, 0x00} &&
               acc->replacement == std::vector<uint8_t>{0x00, 0x71, 0x00, 0x10},
           "V2: the join_acc handler pointer 0x8162E0 becomes the gate");
+
+    const CodePatch* deny = patchAt(patches, 0xE8BF6C);
+    check(deny && deny->expected == std::vector<uint8_t>{0xF0, 0x63, 0x81, 0x00} &&
+              deny->replacement == std::vector<uint8_t>{0x00, 0x73, 0x00, 0x10},
+          "V9: the join_deny handler pointer 0x8163F0 becomes the deny note");
 
     const auto callTo = [](uintptr_t address, uintptr_t thunk) {
         const uint32_t to = static_cast<uint32_t>(thunk - (address + 5));

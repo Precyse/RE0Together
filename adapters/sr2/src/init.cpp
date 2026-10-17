@@ -4,6 +4,7 @@
 #include "code_check.h"
 #include "config.h"
 #include "coop_limits.h"
+#include "force_join.h"
 #include "game_port.h"
 #include "game_port_rules.h"
 #include "hooks.h"
@@ -51,6 +52,7 @@ DWORD WINAPI initThread(LPVOID) {
         const bool playerCap = player_cap::install(config.maxPlayers, config.trace);
         game_port::install(config.gamePort, config.maxPlayers, config.trace);
         lan_address::install(config.maxPlayers, config.trace);
+        force_join::install(config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);

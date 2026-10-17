@@ -3,8 +3,8 @@ namespace CoopLauncher;
 /// <summary>Offline: the main loop could not start (Steam not running) and is retrying.</summary>
 public enum AppState { Idle, Connecting, Hosting, Joined, GameRunning, PeerConnected, Offline }
 
-/// <summary>One lobby member as the window shows it.</summary>
-public sealed record PlayerSlot(string Name, bool IsHost, bool IsLocal);
+/// <summary>One lobby member as the window shows it; Status is what its game reports (rendezvous games), else empty.</summary>
+public sealed record PlayerSlot(string Name, bool IsHost, bool IsLocal, string Status = "");
 
 /// <summary>What the main loop is doing right now, for display.</summary>
 public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = null)

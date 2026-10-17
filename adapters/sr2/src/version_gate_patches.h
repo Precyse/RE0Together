@@ -5,12 +5,13 @@
 #include "code_patch.h"
 #include "sr2_addresses.h"
 
-// The code and data edits of milestone 8 as data (pure, unit tested): the transport's message table rows of join_req and
-// join_acc point at the gates, and the two sends of those messages go through the thunk that appends the trailer.
+// The code and data edits of milestone 8 as data (pure, unit tested): the transport's message table rows of join_req,
+// join_acc and join_deny point at the gates and the deny note, and the two sends of those messages go through the thunk that appends the trailer.
 namespace version_gate_patches {
 
 constexpr uintptr_t kJoinReqHandlerSlot = 0xE8BF3C;  // join_req row (id 2), handler pointer
 constexpr uintptr_t kJoinAccHandlerSlot = 0xE8BF54;  // join_acc row (id 3), handler pointer
+constexpr uintptr_t kJoinDenyHandlerSlot = 0xE8BF6C; // join_deny row, handler pointer
 constexpr uintptr_t kJoinReqHandler = 0x815BC0;      // cdecl(payload, ctx)
 constexpr uintptr_t kJoinAccHandler = 0x8162E0;      // cdecl(payload, ctx)
 constexpr uintptr_t kJoinDenyHandler = 0x8163F0;     // cdecl(payload, ctx), reads the reason at payload + 4
@@ -24,6 +25,7 @@ struct Thunks {
     uintptr_t gateJoinReq;
     uintptr_t gateJoinAcc;
     uintptr_t sendWithTrailer;
+    uintptr_t noteJoinDeny;
 };
 
 inline std::vector<uint8_t> pointerBytes(uintptr_t pointer) {
@@ -31,12 +33,13 @@ inline std::vector<uint8_t> pointerBytes(uintptr_t pointer) {
             static_cast<uint8_t>(pointer >> 24)};
 }
 
-// All sites, checked together: two table pointers and two send calls are written, the entries of the functions the gates
+// All sites, checked together: three table pointers and two send calls are written, the entries of the functions the gates
 // call are only checked (the trace hooks may take them over later; they are installed after this check).
 inline std::vector<CodePatch> patches(const Thunks& thunks) {
     return {
         {"gate_join_req_pointer", kJoinReqHandlerSlot, pointerBytes(kJoinReqHandler), pointerBytes(thunks.gateJoinReq)},
         {"gate_join_acc_pointer", kJoinAccHandlerSlot, pointerBytes(kJoinAccHandler), pointerBytes(thunks.gateJoinAcc)},
+        {"note_join_deny_pointer", kJoinDenyHandlerSlot, pointerBytes(kJoinDenyHandler), pointerBytes(thunks.noteJoinDeny)},
         retargetedCall("send_join_req_trailer", kJoinReqSend, kSend, thunks.sendWithTrailer),
         retargetedCall("send_join_acc_trailer", kJoinAccSend, kSend, thunks.sendWithTrailer),
         {"join_deny_sender", kJoinDenySender, {0x81, 0xEC, 0x24, 0x05, 0x00, 0x00, 0xA1, 0x50}, {}},

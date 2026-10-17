@@ -2,10 +2,12 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <utility>
 #include <vector>
 
 #include "../src/activity_sites.h"
+#include "../src/force_join_sites.h"
 #include "../src/game_port_patches.h"
 #include "../src/join_net_trace_sites.h"
 #include "../src/lan_address_patches.h"
@@ -24,8 +26,17 @@ constexpr uint32_t kMovedPort = 4201;
 
 inline bool overlaps(uintptr_t a, size_t aSize, uintptr_t b, size_t bSize) { return a < b + bSize && b < a + aSize; }
 
-// What the table of a milestone writes, with every optional (trace, moved port) site included.
-inline std::vector<Range> milestones3to8() {
+// What milestone 6 touches.
+inline std::vector<Range> forceJoin() {
+    std::vector<Range> ranges;
+    for (const force_join_sites::Site& site : force_join_sites::kSites) {
+        ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
+    }
+    return ranges;
+}
+
+// What the tables of milestones 3, 4, 5, 5b and 8 write, with every optional (trace, moved port) site included.
+inline std::vector<Range> withoutForceJoin() {
     std::vector<Range> ranges;
     for (const partner_sites::Site& site : partner_sites::kSites) {
         ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
@@ -37,7 +48,7 @@ inline std::vector<Range> milestones3to8() {
     }
     const player_cap_patches::Thunks capThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
     const game_port_patches::Thunks portThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
-    const version_gate_patches::Thunks gateThunks{kAnyThunk, kAnyThunk, kAnyThunk};
+    const version_gate_patches::Thunks gateThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
     for (const auto& list : {player_cap_patches::forPlayers(kManyPlayers, capThunks, true),
                              game_port_patches::forPort(kMovedPort, kManyPlayers, true, portThunks),
                              lan_address_patches::forPlayers(kManyPlayers, kAnyThunk), version_gate_patches::patches(gateThunks)}) {
@@ -45,6 +56,14 @@ inline std::vector<Range> milestones3to8() {
             if (!patch.replacement.empty()) ranges.push_back({patch.address, patch.expected.size()});
         }
     }
+    return ranges;
+}
+
+// What the tables of milestones 3 to 8 write.
+inline std::vector<Range> milestones3to8() {
+    std::vector<Range> ranges = withoutForceJoin();
+    const std::vector<Range> forceJoinRanges = forceJoin();
+    ranges.insert(ranges.end(), forceJoinRanges.begin(), forceJoinRanges.end());
     return ranges;
 }
 
