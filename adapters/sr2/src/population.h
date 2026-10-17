@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+
 #include "partner_sites.h"
 #include "partner_thunks.h"
 
@@ -9,6 +11,10 @@
 //   W2a  the cluster rule 0x957A40: the lowest slot of a cluster spawns for it,
 //   W10b the vehicle headroom 0x93C1D0 takes 4 off per remote.
 namespace population {
+
+// The player areas (the local one plus the soft count of the others, in hundredths) of the last W1a budget; 0 until one was
+// evaluated, which needs two remote humans. The pool census (trace=1) reports it.
+uint32_t lastAreasHundredths();
 
 
 // The code behind those rows; {nullptr, nullptr} for a thunk of another file.

@@ -119,12 +119,18 @@ enum class Thunk : uint8_t {
     AdmissionPump,
     GuestMemberLeft,
     PauseSenderBit,
-    PauseClearLeaver,
+    MemberLeft,
     CutsceneAllRemotes,
     CutsceneSetsReset,
+    CutsceneReadyConsumed,
     TraceShot,
     TracePlayerPlayback,
     TraceCoopBuffers,
+    // Milestone 11 (player_sites.h).
+    NetClockMessage,
+    NetClockTick,
+    TraceBundleSender,
+    TraceNpcSetup,
 
 
 

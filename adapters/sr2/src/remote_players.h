@@ -57,8 +57,14 @@ bool isRemoteMember(uintptr_t member);
 // How many remote player humans there are.
 size_t remoteHumanCount();
 
+// How many members of the session are not the local one.
+size_t remoteMemberCount();
+
 // The net id every machine knows a human by (its net record +2), sr2::kNoNetId while it has no net record.
 uint16_t netIdOf(uintptr_t human);
+
+// The object a handle names (looked up in the object table), 0 when the handle is stale or empty.
+uintptr_t objectOfHandle(uint32_t handle);
 
 // The game's local player human, 0 outside a session.
 uintptr_t localHuman();

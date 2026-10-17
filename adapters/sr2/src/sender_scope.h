@@ -13,6 +13,9 @@ namespace sender_scope {
 // With trace=1 the join messages the dispatcher sees are logged (milestone 5b T3), and a sender that has no human yet.
 void setTrace(bool trace);
 
+// The member whose message the calling thread is handling, 0 for a message of this machine or outside any handler.
+uintptr_t currentSender();
+
 // The code behind SS1, SS2, LK1 and LK2; {nullptr, nullptr} for a thunk of another file.
 partner_thunks::Binding bind(partner_sites::Thunk thunk);
 

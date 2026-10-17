@@ -113,6 +113,12 @@ void theLowestSlotOfAClusterAnswersFar() {
 
 }
 
+void areaCountForTheCensus() {
+    check(population_rules::areasHundredths(0.0f) == 100, "the local area alone is 1.00");
+    check(population_rules::areasHundredths(1.5f) == 250, "the local area and one and a half more is 2.50");
+    check(population_rules::areasHundredths(0.994f) == 199, "hundredths are rounded");
+}
+
 }  // namespace
 
 int main() {
@@ -121,5 +127,6 @@ int main() {
     theHumansBudgetFitsThePool();
     theLowestSlotOfAClusterAnswersFar();
     vehicleHeadroomTakesFourPerRemote();
+    areaCountForTheCensus();
     return g_failures == 0 ? 0 : 1;
 }

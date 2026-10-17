@@ -71,7 +71,9 @@ add_library(sr2_adapter SHARED
     src/sender_scope.cpp
     src/join_admission.cpp
     src/pause_mask.cpp
+    src/member_left.cpp
     src/cutscene_sync.cpp
+    src/net_clock.cpp
     src/player_trace.cpp
     src/remote_frustum.cpp
     src/mission_players.cpp
@@ -101,7 +103,7 @@ set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
     src/join_net_trace.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/leave_path.cpp
-    src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/cutscene_sync.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
+    src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
@@ -166,9 +168,10 @@ add_unit_test(frustum_rules_test)
 add_unit_test(handoff_rules_test)
 add_unit_test(cutscene_sync_rules_test)
 add_unit_test(pause_mask_rules_test)
+add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)
 add_unit_test(multiplayer_sites_test)
-add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/cutscene_sync.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
-    src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp)
+add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
+    src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)

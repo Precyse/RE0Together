@@ -311,6 +311,35 @@ constexpr uintptr_t kGameSocket = 0xE824C0;
 constexpr uintptr_t kGameSocketReady = 0x252A608;
 constexpr uint32_t kGamePort = 4200;
 
+// Fast fire (milestone 11 B1). Every replicated object plays its input history back against the session's net clock T
+// (`[session+8]`). The `clock` message handler sets T from any sender; the tick adds the frame time to it.
+constexpr uintptr_t kSessionNetTimeOffset = 8;           // dword: T, in milliseconds
+constexpr uintptr_t kMemberHalfRttOffset = 0x223C;       // dword: half the member's round trip time in milliseconds
+constexpr uintptr_t kPlayerPool = 0x2CD0590;             // the static pool of player humans
+constexpr uintptr_t kPlayerPoolStride = 0x18F0;
+constexpr size_t kPlayerPoolCount = kMaxWalkedPlayers;
+constexpr uint32_t kHandleIndexMask = 0xFFF;             // the low 12 bits of an object handle index kObjectTable
+constexpr uintptr_t kObjectTableStride = 0x10;
+
+// Pool census (milestone 11 B6). The group create 0x910370 has three callers and the NPC human setup 0x9D0DE0 four (return
+// addresses below); the static pools they draw from have these sizes. The NPC humans are a static pool of 150 whose free
+// list head is at kNpcHumanFreeHead (circular through kNpcHumanLinkOffset, the layout of the builder at 0x9CF40F).
+constexpr size_t kSpawnElementPool = 2400;               // the element pool; the group pool is kMaxSpawnGroups
+constexpr uintptr_t kNpcHumanFreeHead = 0x215FFB4;
+constexpr uintptr_t kNpcHumanLinkOffset = 0x1160;
+constexpr size_t kNpcHumanPool = 150;
+constexpr uintptr_t kGroupCreateReturnA = 0x910B58;      // in 0x910AA0, from 0x914A60
+constexpr uintptr_t kGroupCreateReturnB = 0x912E4C;      // in 0x912D40, from 0x4505C0
+constexpr uintptr_t kGroupCreateReturnC = 0x9163C5;      // in 0x916390, from 0x9F2BF0
+constexpr uintptr_t kNpcCreateRegister = 0x9D0DE0;       // esi = the human a vtable +0x34 create returned (0 = it failed)
+constexpr uintptr_t kNpcCreateReturnA = 0x6D036C;
+constexpr uintptr_t kNpcCreateReturnB = 0x9CDF5E;
+constexpr uintptr_t kNpcCreateReturnC = 0x9D117D;
+constexpr uintptr_t kNpcCreateReturnD = 0x9D1253;
+constexpr uintptr_t kNpcCreationDataAllocator = 0x2A476F0;  // npc_creation_data, sized from [0xE8C43C]
+constexpr uintptr_t kNpcStateDataAllocator = 0x2A47BA0;     // npc_state_data, N=8
+constexpr uintptr_t kNpcSimStateAllocator = 0x2A47C90;      // npc_sim_state
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

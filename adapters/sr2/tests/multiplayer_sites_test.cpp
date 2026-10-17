@@ -137,7 +137,13 @@ int main() {
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
     check(phaseSize("player traces") == 3, "player traces: 3 sites (TF1, TF2, TL2), written with trace=1 only");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
-    check(phaseSize("cutscene handshake") == 2, "cutscene handshake: 2 sites (MC1, MC2)");
+    check(phaseSize("census trace") == 1, "census trace: 1 site (NC1), written with trace=1 only");
+    const Site* npcSetup = siteNamed(sites, "NC1");
+    check(npcSetup && npcSetup->kind == Kind::HookEntry && npcSetup->address == 0x9D0DE0 && sizeOf(*npcSetup) == 8,
+          "NC1 hooks the NPC human setup 0x9D0DE0, 8 checked bytes");
+    check(phaseSize("net clock") == 2, "net clock: 2 sites (CK1, CK2)");
+    check(phaseSize("bundle sender trace") == 1, "bundle sender trace: 1 site (BUT), written with trace=1 only");
+    check(phaseSize("cutscene handshake") == 4, "cutscene handshake: 4 sites (MC1, MC2, CS1, CS2)");
     check(phaseSize("guest leave") == 1,
  "guest leave: 1 site (N2a)");
     check(phaseSize("join admission") == 3,
@@ -189,6 +195,26 @@ int main() {
     check(playback && partner_replacement::replacementFor(*playback, 0x10004000) == std::vector<uint8_t>{0x00, 0x40, 0x00, 0x10} &&
               partner_sites::parseHex(playback->expected) == std::vector<uint8_t>{0xD0, 0x33, 0x86, 0x00},
           "TF2: the player bundle's vtable slot (0x8633D0) becomes the thunk, its address little endian");
+    bool readyStores = true;
+    for (const char* id : {"CS1", "CS2"}) {
+        const Site* store = siteNamed(sites, id);
+        readyStores = readyStores && store && store->kind == Kind::CallBlock && store->thunk == partner_sites::Thunk::CutsceneReadyConsumed &&
+                      partner_sites::parseHex(store->expected) == std::vector<uint8_t>{0xC6, 0x05, 0x1D, 0x7D, 0x52, 0x02, 0x00} &&
+                      partner_sites::parseHex(store->tail).size() == sizeOf(*store) - kBranchBytes;
+    }
+    check(readyStores, "CS1 and CS2: the store of 0 into the remote ready byte 0x2527D1D (7 bytes) becomes a call to the thunk and two nops");
+    const Site* leave = siteNamed(sites, "N4b");
+    check(leave && leave->kind == Kind::JumpOut && leave->thunk == partner_sites::Thunk::MemberLeft && sizeOf(*leave) == 21,
+          "N4b: the member left prologue (21 bytes) jumps to the dispatcher");
+    const Site* clockMessage = siteNamed(sites, "CK1");
+    const Site* clockTick = siteNamed(sites, "CK2");
+    check(clockMessage && clockMessage->kind == Kind::HookEntry && clockMessage->address == 0x7FCBF0 && sizeOf(*clockMessage) == 8 &&
+              clockTick && clockTick->kind == Kind::HookEntry && clockTick->address == 0x7FC930 && sizeOf(*clockTick) == 10,
+          "CK1 and CK2 hook the clock message handler and the net tick, 8 and 10 checked bytes");
+    const Site* bundle = siteNamed(sites, "BUT");
+    check(bundle && partner_replacement::replacementFor(*bundle, 0x10004000) == std::vector<uint8_t>{0x00, 0x40, 0x00, 0x10} &&
+              partner_sites::parseHex(bundle->expected) == std::vector<uint8_t>{0xD0, 0x69, 0x86, 0x00},
+          "BUT: the player bundle's unpack slot (0x8669D0) becomes the thunk, its address little endian");
     check(flipsOnlyTheBranch(siteNamed(sites, "W1b")) && flipsOnlyTheBranch(siteNamed(sites, "W1c")),
           "W1b and W1c: the same bytes with the last one, jne (75), turned into jl (7C)");
     return g_failures == 0 ? 0 : 1;

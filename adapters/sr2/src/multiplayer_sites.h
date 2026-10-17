@@ -3,6 +3,7 @@
 
 #include "mission_sites.h"
 #include "partner_sites.h"
+#include "player_sites.h"
 #include "session_sites.h"
 #include "trace_sites.h"
 #include "world_sites.h"
@@ -27,6 +28,9 @@ inline constexpr Phase kPhases[] = {
 
     {"join admission", session_sites::kAdmission, false},
     {"player traces", trace_sites::kPlayers, true},
+    {"net clock", player_sites::kNetClock, false},
+    {"bundle sender trace", player_sites::kBundleSender, true},
+    {"census trace", trace_sites::kCensus, true},
 
     {"population budgets", world_sites::kBudget, false},
 

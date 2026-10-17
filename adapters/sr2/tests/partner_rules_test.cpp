@@ -147,6 +147,16 @@ void othersAllDown() {
           "nobody else: nothing is up");
 }
 
+void playerPool() {
+    constexpr uintptr_t kFirst = sr2::kPlayerPool;
+    constexpr uintptr_t kPast = sr2::kPlayerPool + sr2::kPlayerPoolCount * sr2::kPlayerPoolStride;
+    check(partner_rules::isPlayerPoolMember(kFirst) && partner_rules::isPlayerPoolMember(kFirst + sr2::kPlayerPoolStride),
+          "a human in the player pool is a player");
+    check(partner_rules::isPlayerPoolMember(kPast - 1), "the last byte of the pool is still in it");
+    check(!partner_rules::isPlayerPoolMember(kFirst - 1) && !partner_rules::isPlayerPoolMember(kPast) && !partner_rules::isPlayerPoolMember(0),
+          "an address outside the pool, and none, is an NPC");
+}
+
 }  // namespace
 
 int main() {
@@ -160,5 +170,6 @@ int main() {
     lastInGameEndsTheSession();
     nearestRemote();
     othersAllDown();
+    playerPool();
     return g_failures == 0 ? 0 : 1;
 }

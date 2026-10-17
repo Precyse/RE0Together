@@ -1,5 +1,6 @@
 #include "guest_welcome.h"
 
+#include <algorithm>
 #include <mutex>
 #include <vector>
 
@@ -37,19 +38,23 @@ std::vector<guest_welcome_rules::Key> presentMembers(uintptr_t session) {
     return keys;
 }
 
-// The look sync to `member`, when our own member is in the game.
-void syncLook(uintptr_t session, uintptr_t member) {
-    const uintptr_t own = readDword(session + sr2::kSessionLocalMemberOffset);
-    const uint32_t human = readDword(sr2::kLocalPlayer);
-    if (!human || !guest_welcome_rules::looksSyncable(readDword(own + sr2::kMemberStateOffset))) return;
+// The look sync to `member`: our local player's look, as the game's J4 / J5 send it to a member.
+void syncLook(uintptr_t member, uint32_t human) {
     guest_call::call(sr2::kLookSyncA, {.ecx = static_cast<uint32_t>(member), .eax = human});
     guest_call::call(sr2::kLookSyncB, {.ecx = static_cast<uint32_t>(member), .eax = human});
 }
 
-// G1: the state of `member` just changed on a guest.
+// G1: the state of `member` just changed on a guest. A member that is ready gets our objects once; our look goes to every
+// welcomed member that is owed it as soon as our own member is in the game, which may be this very callback (the joiner
+// arrived while we were still joining, or our own member just reached 0xD).
 void __cdecl welcomeMember(uintptr_t member) {
     const uintptr_t session = readDword(member + sr2::kMemberSessionOffset);
+    const uintptr_t own = readDword(session + sr2::kSessionLocalMemberOffset);
+    const uint32_t human = readDword(sr2::kLocalPlayer);
+    const bool ownInGame = human && own && guest_welcome_rules::looksSyncable(readDword(own + sr2::kMemberStateOffset));
     const guest_welcome_rules::Key key{session, member, slotOf(member)};
+    bool queueObjects = false;
+    std::vector<guest_welcome_rules::Key> owed;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_welcomed.keepOnly(session, presentMembers(session));
@@ -57,13 +62,20 @@ void __cdecl welcomeMember(uintptr_t member) {
             g_welcomed.forget(key);
             return;
         }
-        if (!g_welcomed.add(key)) return;
+        queueObjects = g_welcomed.add(key);
+        owed = g_welcomed.takeOwedLooks(own, ownInGame);
     }
-    guest_call::call(sr2::kQueueOwnedObjects, {.edx = static_cast<uint32_t>(member)});
-    syncLook(session, member);
-    if (g_trace) {
-        logger::write("trace: welcomed member 0x%X slot %u, queued %u objects", static_cast<unsigned>(member), key.slot,
-                      creation_queue::queued(member));
+    if (queueObjects) guest_call::call(sr2::kQueueOwnedObjects, {.edx = static_cast<uint32_t>(member)});
+    for (const guest_welcome_rules::Key& target : owed) syncLook(target.member, human);
+    if (!g_trace) return;
+    const bool lookSent = std::find(owed.begin(), owed.end(), key) != owed.end();
+    if (queueObjects) {
+        logger::write("trace: welcomed member 0x%X slot %u, queued %u objects, look %s", static_cast<unsigned>(member), key.slot,
+                      creation_queue::queued(member), lookSent ? "sent" : "owed");
+    }
+    for (const guest_welcome_rules::Key& target : owed) {
+        if (target == key && queueObjects) continue;
+        logger::write("trace: look sent to welcomed member 0x%X slot %u, which was owed it", static_cast<unsigned>(target.member), target.slot);
     }
 }
 

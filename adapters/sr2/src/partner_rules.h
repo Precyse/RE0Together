@@ -43,6 +43,11 @@ struct Vec3 {
     float x, y, z;
 };
 
+// True when `human` is an object of the static player pool; any other human is an NPC.
+inline bool isPlayerPoolMember(uintptr_t human) {
+    return human >= sr2::kPlayerPool && human < sr2::kPlayerPool + sr2::kPlayerPoolCount * sr2::kPlayerPoolStride;
+}
+
 // Joins the remote humans to the remote members (both in list order) by slot, in ascending slot order.
 inline void pair(const HumanEntry* humans, size_t humanCount, const MemberEntry* members, size_t memberCount,
                  Pairing& out) {

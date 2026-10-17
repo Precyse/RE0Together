@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "sr2_addresses.h"
+
 // The pure rules of the ambient population for 3 or more players (milestone 9, unit tested; docs/SR2_NOTES.md,
 // "Population"). 2-player co-op keeps the world at single-player density in two ways: the per-machine budgets are halved
 // while the partner is near and grow to the full single-player value as it walks away, and only the host spawns for a pair
@@ -16,7 +18,7 @@ struct Point {
 };
 
 constexpr uint32_t kNpcBudgetBase = 0x96;    // the total humans budget (single player and multiplayer use 0x4B)
-constexpr uint32_t kNpcPoolCapacity = 150;   // humans the static NPC pool holds
+constexpr uint32_t kNpcPoolCapacity = sr2::kNpcHumanPool;  // humans the static NPC pool holds
 constexpr int32_t kVehicleHeadroomPerRemote = 4;
 constexpr size_t kBudgetRemotesAtLeast
  = 2;  // below this the game's own function answers
@@ -43,6 +45,12 @@ inline float extraAreas(const Point& local, const Point* remotes, size_t count, 
         extra += newness;
     }
     return extra;
+}
+
+// The player areas the census reports: the local one plus the extra ones, in hundredths.
+constexpr uint32_t kAreaHundredths = 100;
+inline uint32_t areasHundredths(float extra) {
+    return static_cast<uint32_t>((1.0f + extra) * static_cast<float>(kAreaHundredths) + 0.5f);
 }
 
 // The budget of `base` for the given number of extra areas: half the base for the local area, half more for each (the
