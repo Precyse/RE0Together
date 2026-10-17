@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include "log.h"
+#include "memory.h"
 #include "sr2_addresses.h"
 
 namespace {
@@ -161,9 +162,25 @@ size_t remoteHumanCount() {
     return snapshot.humanCount;
 }
 
+size_t remoteMemberCount() {
+    Snapshot snapshot;
+    takeMembers(snapshot);
+    size_t count = 0;
+    for (size_t i = 0; i < snapshot.memberCount; ++i) {
+        if (!snapshot.members[i].local) ++count;
+    }
+    return count;
+}
+
 uint16_t netIdOf(uintptr_t human) {
     const uintptr_t record = human ? read32(human + sr2::kObjectNetRecordOffset) : 0;
     return record ? *reinterpret_cast<const uint16_t*>(record + sr2::kRecordIdOffset) : sr2::kNoNetId;
+}
+
+uintptr_t objectOfHandle(uint32_t handle) {
+    if (!handle) return 0;
+    const uintptr_t object = readDword(sr2::kObjectTable + (handle & sr2::kHandleIndexMask) * sr2::kObjectTableStride);
+    return object && readDword(object + sr2::kObjectHandleOffset) == handle ? object : 0;
 }
 
 uintptr_t localHuman() { return read32(sr2::kLocalPlayer); }

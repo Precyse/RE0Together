@@ -54,6 +54,11 @@ int main() {
     check(limit.allow(5000, triggers) && triggers == 1, "the first trigger is logged, standing for one");
     check(!limit.allow(5999, triggers) && limit.allow(6000, triggers) && triggers == 2, "then once per second, counting the rest");
 
+    rate_limit::OncePerKey once;
+    check(once.firstTime(7) && !once.firstTime(7) && once.firstTime(8), "a line per key is written once");
+    for (uint64_t key = 100; key < 100 + rate_limit::kMaxOnceKeys; ++key) once.firstTime(key);
+    check(once.firstTime(7), "a full set forgets its oldest key");
+
     const player_cap_patches::Thunks thunks{kThunk, kThunk, kThunk, kThunk, kThunk, kThunk, kThunk};
     const auto patches = player_cap_patches::forPlayers(kFourPlayers, thunks);
     const CodePatch* create = patchAt(patches, 0x910370);

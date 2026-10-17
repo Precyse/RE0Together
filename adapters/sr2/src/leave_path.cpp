@@ -21,8 +21,6 @@ constexpr uintptr_t kPlayerFlagsOffset = 0xC0;
 constexpr uint32_t kPlayerInVehicleFlag = 0x40000;
 constexpr uintptr_t kPlayerVehicleOffset = 0x374;
 constexpr uintptr_t kObjectDestroySlot = 0x10;  // vtable slot: destroy(0)
-constexpr uintptr_t kObjectTableStride = 16;
-constexpr uint32_t kHandleIndexMask = 0xFFF;
 
 using LeaveFn = void(__cdecl*)(uint32_t slot);
 
@@ -87,13 +85,6 @@ bool contains(const std::vector<uintptr_t>& records, uintptr_t record) {
     return std::find(records.begin(), records.end(), record) != records.end();
 }
 
-// The object a handle names, or 0.
-uintptr_t objectOf(uint32_t handle) {
-    if (!handle) return 0;
-    const uintptr_t object = readDword(sr2::kObjectTable + (handle & kHandleIndexMask) * kObjectTableStride);
-    return object && readDword(object + sr2::kObjectHandleOffset) == handle ? object : 0;
-}
-
 // The local player gets out of the vehicle that is about to disappear, as the game's single player leave does.
 void leaveVehicleOf(uintptr_t object) {
     const uint32_t vehicle = guest_call::call(sr2::kVehicleOfHandle, {.ecx = readDword(object + sr2::kObjectHandleOffset)});
@@ -111,7 +102,7 @@ uint32_t __cdecl dropLeaverRecord(uintptr_t record) {
     if (!view.session || !leave_rules::guestDrops(view.localIsHost, leaver, view.hostSlot)) return 0;
     const uint32_t handle = readDword(record + sr2::kRecordHandleOffset);
     if (handle && guest_call::call(sr2::kIsHumanHandle, {.ecx = handle})) return 1;  // the host's destroy removes players
-    const uintptr_t object = objectOf(handle);
+    const uintptr_t object = remote_players::objectOfHandle(handle);
     if (object) leaveVehicleOf(object);
     guest_call::call(sr2::kUnlinkRecord, {.esi = static_cast<uint32_t>(record)});
     if (object) guest_call::call(readDword(readDword(object) + kObjectDestroySlot), {.ecx = static_cast<uint32_t>(object)}, {0});

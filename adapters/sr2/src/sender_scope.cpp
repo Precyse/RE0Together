@@ -21,6 +21,19 @@ void* g_inOrderOriginal = nullptr;
 void* g_lookMorphOriginal = nullptr;
 void* g_lookComponentsOriginal = nullptr;
 bool g_trace = false;
+thread_local uintptr_t t_sender = 0;
+
+// Names `member` as the current sender for the calling thread while a handler runs.
+class SenderMark {
+public:
+    explicit SenderMark(uintptr_t member) : previous_(t_sender) { t_sender = member; }
+    ~SenderMark() { t_sender = previous_; }
+    SenderMark(const SenderMark&) = delete;
+    SenderMark& operator=(const SenderMark&) = delete;
+
+private:
+    uintptr_t previous_;
+};
 
 uint8_t byteAt(uintptr_t address) {
     uint8_t value = 0;
@@ -56,6 +69,7 @@ uint32_t runScoped(const GuestFrame* frame, void* original, uintptr_t member) {
         logger::writeUnlessRepeated("trace: scope: sender member 0x%X has no human yet", static_cast<unsigned>(member));
     }
     partner_scope::Override scoped(scope);
+    const SenderMark mark(member);
     return guest_call::call(target, frame->regs, {args[kBufferArg], args[kContextArg]});
 }
 
@@ -115,6 +129,8 @@ TRACE_ENTRY_STUB(lookComponentsStub, bindComponentsToSender, g_lookComponentsOri
 namespace sender_scope {
 
 void setTrace(bool trace) { g_trace = trace; }
+
+uintptr_t currentSender() { return t_sender; }
 
 partner_thunks::Binding bind(Thunk thunk) {
     switch (thunk) {

@@ -5,6 +5,7 @@
 #include "log.h"
 #include "multiplayer_sites.h"
 #include "multiplayer_thunks.h"
+#include "net_clock.h"
 #include "sender_scope.h"
 #include "site_installer.h"
 
@@ -25,6 +26,7 @@ bool install(bool trace, bool leavePathInstalled, bool experimental) {
     sender_scope::setTrace(trace);
     creation_queue::setTrace(trace);
     join_admission::setTrace(trace);
+    net_clock::setTrace(trace);
 
 
     bool all = true;

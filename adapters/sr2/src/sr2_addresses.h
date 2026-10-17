@@ -305,6 +305,16 @@ constexpr uint8_t kSetupResponseWait = 2;                 // code: wait, the ans
 constexpr uintptr_t kQueueAppendResumeCreate = 0x805199;  // 0x805000, after the append and `mov cl, [eax+0x1B0]`
 constexpr uintptr_t kQueueAppendResumeBatch = 0x80525E;   // 0x8051F0, after the append
 
+// Fast fire (milestone 11 B1). Every replicated object plays its input history back against the session's net clock T
+// (`[session+8]`). The `clock` message handler sets T from any sender; the tick adds the frame time to it.
+constexpr uintptr_t kSessionNetTimeOffset = 8;           // dword: T, in milliseconds
+constexpr uintptr_t kMemberHalfRttOffset = 0x223C;       // dword: half the member's round trip time in milliseconds
+constexpr uintptr_t kPlayerPool = 0x2CD0590;             // the static pool of player humans
+constexpr uintptr_t kPlayerPoolStride = 0x18F0;
+constexpr size_t kPlayerPoolCount = kMaxWalkedPlayers;
+constexpr uint32_t kHandleIndexMask = 0xFFF;             // the low 12 bits of an object handle index kObjectTable
+constexpr uintptr_t kObjectTableStride = 0x10;
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

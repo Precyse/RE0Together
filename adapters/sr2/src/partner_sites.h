@@ -125,6 +125,10 @@ enum class Thunk : uint8_t {
     TraceShot,
     TracePlayerPlayback,
     TraceCoopBuffers,
+    // Milestone 11 (player_sites.h).
+    NetClockMessage,
+    NetClockTick,
+    TraceBundleSender,
 
 
 
