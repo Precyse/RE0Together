@@ -1,5 +1,7 @@
 #include "sender_scope.h"
 
+#include <mutex>
+
 #include "guest_call.h"
 #include "log.h"
 #include "memory.h"
@@ -15,12 +17,15 @@ using partner_sites::Thunk;
 
 constexpr size_t kBufferArg = 0;
 constexpr size_t kContextArg = 1;
+constexpr uintptr_t kPayloadLengthBack = 2;  // the u16 payload length sits just before the payload (3 byte header)
 
 void* g_dispatchOriginal = nullptr;
 void* g_inOrderOriginal = nullptr;
 void* g_lookMorphOriginal = nullptr;
 void* g_lookComponentsOriginal = nullptr;
 bool g_trace = false;
+std::mutex g_lookMutex;
+sender_scope_rules::LookCache g_looks;
 thread_local uintptr_t t_sender = 0;
 
 // Names `member` as the current sender for the calling thread while a handler runs.
@@ -99,11 +104,7 @@ void __cdecl scopeInOrder(GuestFrame* frame) {
 
 // LK1, LK2: the look handlers (cdecl(payload, context)) resolve the human by the net id in the payload. The payload is
 // made to name the sender's own human before the handler queues the look, which is applied later outside the sender scope.
-void bindLookToSender(const GuestFrame* frame, const char* handler) {
-    const uint32_t* args = frame->args;
-    const uintptr_t member = senderOf(args[kContextArg]);
-    const uintptr_t human = member ? remote_players::humanOfMember(member) : 0;
-    if (!human) return;
+void bindLookToHuman(const uint32_t* args, uintptr_t member, uintptr_t human, const char* handler) {
     uint16_t payloadId = 0;
     if (!readMemory(args[kBufferArg], &payloadId, sizeof(payloadId))) return;
     const uint16_t wanted = sender_scope_rules::lookNetId(payloadId, remote_players::netIdOf(human));
@@ -115,14 +116,49 @@ void bindLookToSender(const GuestFrame* frame, const char* handler) {
     *reinterpret_cast<uint16_t*>(args[kBufferArg]) = wanted;
 }
 
-void __cdecl bindMorphToSender(GuestFrame* frame) { bindLookToSender(frame, "player_morph"); }
+// True when the sender's slot already has this look applied for this human, so the handler is not called again.
+bool lookUnchanged(const uint32_t* args, uintptr_t member, uintptr_t human, sender_scope_rules::LookKind kind, const char* handler) {
+    uint16_t length = 0;
+    uint8_t payload[sender_scope_rules::kMaxLookPayload];
+    if (!readMemory(args[kBufferArg] - kPayloadLengthBack, &length, sizeof(length)) || !sender_scope_rules::lookCacheable(length) ||
+        !readMemory(args[kBufferArg], payload, length)) {
+        return false;
+    }
+    const uint8_t slot = byteAt(member + sr2::kMemberSlotOffset);
+    const sender_scope_rules::LookKey key{readDword(member + sr2::kMemberSessionOffset), slot, kind};
+    const sender_scope_rules::Look look{readDword(human + sr2::kObjectHandleOffset), sender_scope_rules::lookDigest(payload, length)};
+    {
+        std::lock_guard<std::mutex> lock(g_lookMutex);
+        if (!g_looks.unchanged(key, look, remote_players::remoteHumanCount())) return false;
+    }
+    if (g_trace) logger::write("trace: looks: %s from slot %u unchanged, not applied again", handler, slot);
+    return true;
+}
 
-void __cdecl bindComponentsToSender(GuestFrame* frame) { bindLookToSender(frame, "player_components"); }
+// The look handler at `original` for the message in `frame`, unless it carries the look already applied.
+void runLookHandler(GuestFrame* frame, void* original, sender_scope_rules::LookKind kind, const char* handler) {
+    const uint32_t* args = frame->args;
+    const uintptr_t member = senderOf(args[kContextArg]);
+    const uintptr_t human = member ? remote_players::humanOfMember(member) : 0;
+    if (human) {
+        bindLookToHuman(args, member, human, handler);
+        if (lookUnchanged(args, member, human, kind, handler)) return;
+    }
+    frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(original), frame->regs, {args[kBufferArg], args[kContextArg]});
+}
+
+void __cdecl lookMorph(GuestFrame* frame) {
+    runLookHandler(frame, g_lookMorphOriginal, sender_scope_rules::LookKind::Morph, "player_morph");
+}
+
+void __cdecl lookComponents(GuestFrame* frame) {
+    runLookHandler(frame, g_lookComponentsOriginal, sender_scope_rules::LookKind::Components, "player_components");
+}
 
 PARTNER_WRAP_STUB(scopeDispatchStub, scopeDispatch, 0)
 PARTNER_WRAP_STUB(scopeInOrderStub, scopeInOrder, 0)
-TRACE_ENTRY_STUB(lookMorphStub, bindMorphToSender, g_lookMorphOriginal)
-TRACE_ENTRY_STUB(lookComponentsStub, bindComponentsToSender, g_lookComponentsOriginal)
+PARTNER_WRAP_STUB(lookMorphStub, lookMorph, 0)
+PARTNER_WRAP_STUB(lookComponentsStub, lookComponents, 0)
 
 }  // namespace
 

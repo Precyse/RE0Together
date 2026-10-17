@@ -1,4 +1,5 @@
-// Milestone 5h (no game): when a member is welcomed, the set of welcomed members, and the G1 site's clearance.
+// Milestones 5h and 11 B2 (no game): when a member is welcomed, the set of welcomed members, which of them are owed our look,
+// and the G1 site's clearance.
 #include <cstdio>
 
 #include "../src/guest_welcome_rules.h"
@@ -14,6 +15,7 @@ constexpr uintptr_t kSession = 0x20000000;
 constexpr uintptr_t kOtherSession = 0x20100000;
 constexpr uintptr_t kFirstMember = 0x30000000;
 constexpr uintptr_t kSecondMember = 0x30100000;
+constexpr uintptr_t kOwnMember = 0x30200000;
 constexpr uintptr_t kNearby = 0x2E0;  // no milestone 4 site closer to the guest branch (J5 at 0x8CB747 is 0x2ED away)
 constexpr uintptr_t kThunk = 0x10006000;
 
@@ -48,6 +50,33 @@ int main() {
     check(set.add({kSession, kFirstMember, 3}), "the same member object with another slot is another member");
     set.keepOnly(kOtherSession, {first, second});
     check(set.size() == 0, "a new session forgets everybody");
+
+    // The look is a second step: owed from the welcome until our own member is in the game, then sent once.
+    WelcomedSet looks;
+    const Key joiner{kSession, kSecondMember, 2};
+    looks.add(first);
+    looks.add(joiner);
+    check(looks.takeOwedLooks(kOwnMember, false).empty(), "the look is owed while our own member is not yet in the game (0xD)");
+    check(looks.takeOwedLooks(kOwnMember, false).empty() && looks.size() == 2, "and stays owed, the members stay welcomed");
+    const std::vector<Key> owed = looks.takeOwedLooks(kOwnMember, true);
+    check(owed.size() == 2 && owed[0] == first && owed[1] == joiner, "once our own member is in the game every welcomed member is owed it");
+    check(looks.takeOwedLooks(kOwnMember, true).empty(), "and gets it once");
+    check(!looks.add(first) && looks.takeOwedLooks(kOwnMember, true).empty(), "a member welcomed again is not owed it again");
+
+    WelcomedSet late;
+    late.add(first);
+    check(late.takeOwedLooks(kOwnMember, true).size() == 1, "a member that is welcomed while we are in the game is owed it at once");
+    const Key third{kSession, kFirstMember + 1, 3};
+    late.add(third);
+    const std::vector<Key> next = late.takeOwedLooks(kOwnMember, true);
+    check(next.size() == 1 && next[0] == third, "only the newcomer is owed it then");
+    late.forget(third);
+    late.add(third);
+    check(late.takeOwedLooks(kOwnMember, true).size() == 1, "a member that was forgotten and returns is owed it again");
+
+    WelcomedSet self;
+    self.add({kSession, kOwnMember, 0});
+    check(self.takeOwedLooks(kOwnMember, true).empty(), "our own member is never owed our look");
 
     const player_cap_patches::Thunks thunks{kThunk, kThunk, kThunk};
     bool found = false;
