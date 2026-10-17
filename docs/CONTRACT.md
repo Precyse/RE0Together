@@ -30,7 +30,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 | type | name | dir | payload |
 |---|---|---|---|
 | 0x0001 | HELLO | adapter->launcher | u16 proto, u8 len + ascii game id |
-| 0x0002 | WELCOME | launcher->adapter | u8 local slot, u8 host slot, u8 max players, u32 epoch |
+| 0x0002 | WELCOME | launcher->adapter | u8 local slot, u8 host slot, u8 max players, u32 epoch, u64 local SteamID (15 bytes; an adapter that reads 7 bytes ignores it; the local test transport reports its UDP port) |
 | 0x0003 | PEER_UP | launcher->adapter | u8 slot, u64 steam id, u8 len + utf8 name |
 | 0x0004 | PEER_DOWN | launcher->adapter | u8 slot |
 | 0x0005 | REJECT | launcher->adapter | u8 len + ascii reason (e.g. game or proto mismatch), then close |
@@ -68,7 +68,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
   "adapterIni": "coop/adapter.ini" }
 ```
 
-`sessionKind` is `lobby` (default: the launcher's Steam lobby, transport and save sync) or `native` (the game matches players itself, as Saints Row 2 does through OpenSpy: the launcher installs the mod, writes the options into `adapterIni` and starts the game; no lobby, seats, save sync or adapter link). `requires` lists `{ "file", "name" }` entries the game folder must hold; a missing one is shown in the rail line as `<name> not found`.
+`sessionKind` is `lobby` (default: the launcher's Steam lobby, transport and save sync) or `native` (the game matches players itself, as Saints Row 2 does through OpenSpy: the launcher installs the mod, writes the options into `adapterIni` and starts the game; no lobby, seats, save sync or adapter link). `rendezvous` is `native` plus a Steam lobby that says who hosts (`joinFile`, `statusFile`); with `"bridgeWhen": { "key", "value" }` the launcher also runs the bridge, build check and log forwarding when the host's value of option `key` equals `value`. A game option with `"host": true` is the host's alone: guests write the host's value to the adapter ini. `requires` lists `{ "file", "name" }` entries the game folder must hold; a missing one is shown in the rail line as `<name> not found`.
 
 ## Save sync (launcher-owned, game-agnostic)
 
@@ -86,6 +86,14 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 3. Keep an engine-neutral gameplay core and implement the per-engine primitives:
    `enumerate_actors`, `local_player`, `bind_remote(slot) -> body`, `suppress_ai(body)`, `warp(body, pos, rot)`, `play_action(body, id)`, `set_locomotion(body, speed, dir)`, `read_anim(body)`, `force_anim(body, anim)`, `apply_hit(descriptor)`.
 4. Authority: the host (slot 0) owns enemies, world flags and pickups. Guests send their own player state plus hit descriptors.
+
+## Game messages of the SR2 adapter (0x0100 and up, adapter-owned)
+
+Used only when the host's `transport` option is `steam`: the game's UDP datagrams travel through the launchers (`bridgeWhen` in `games/sr2.json`, port 27962). The launcher relays them as opaque bytes and overwrites the source slot, as for every game message. Integers little-endian.
+
+| type | name | dir | reliable | payload |
+|---|---|---|---|---|
+| 0x0100 | GAME_DATAGRAM | adapter to adapter | no | u32 dst (IPv4 in host order; 0xFFFFFFFF = broadcast), then the game's UDP payload (1..1300 bytes). The sender's frame slot is the peer's current slot, or 0xFF for a broadcast; the receiver reads the source slot the launcher wrote. |
 
 ## Game messages of the DS2 adapter (0x0100 and up, adapter-owned)
 

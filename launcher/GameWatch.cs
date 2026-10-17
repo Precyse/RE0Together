@@ -41,7 +41,7 @@ public sealed class GameWatch
         _wasRunning = running;
         _seenRunning |= running;
         if (!running) return _seenRunning ? GameCondition.Exited : GameCondition.Fine;
-        var linked = game.RendezvousSession || status.State is AppState.GameRunning or AppState.PeerConnected;
+        var linked = (game.RendezvousSession && !status.Bridged) || status.State is AppState.GameRunning or AppState.PeerConnected;
         return !linked && nowMs - _runningSinceMs > UnlinkedAfterMs ? GameCondition.Unlinked : GameCondition.Fine;
     }
 }

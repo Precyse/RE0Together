@@ -133,7 +133,7 @@ public sealed class Session : IDisposable
 
     private void SendSnapshot()
     {
-        _bridge.Send(ControlMessages.Welcome(_localSlot, SlotAssigner.HostSlot, (byte)_profile.MaxPlayers, _epoch));
+        _bridge.Send(ControlMessages.Welcome(_localSlot, SlotAssigner.HostSlot, (byte)_profile.MaxPlayers, _epoch, _transport.LocalId));
         foreach (var (id, slot) in _slots)
             if (id != _transport.LocalId) SendPeerUp(id, slot);
     }

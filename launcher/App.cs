@@ -103,7 +103,7 @@ public sealed class App
             case (Command.Join, TransportKind.Steam):
                 return SteamLobby.Join(ulong.Parse(argument!));
             case (Command.Join, _):
-                return new LocalLobby((LocalTransport)_transport!, _options.Game ?? SoleProfileId(), isHost: false);
+                return new LocalLobby((LocalTransport)_transport!, _options.Game ?? SoleProfileId(), isHost: false, GameOptions.Decode(_options.HostOptions));
             default:
                 Log.Info("Waiting for a Steam invite");
                 return null;
@@ -229,19 +229,14 @@ public sealed class App
         _profile = GameProfile.Load(_lobby!.GameId!);
         _gameDir = ResolveGameDir(_profile);
         _sessionStarted = true;
-        if (_profile.RendezvousSession)
-        {
-            if (_gameDir != null) _nativeJoin = NativeJoin.Create(_profile, _gameDir, _lobby, _transport!.LocalId);
-        }
-        else
-        {
-            StartBridgedSession();
-        }
+        if (_profile.RendezvousSession && _gameDir != null) _nativeJoin = NativeJoin.Create(_profile, _gameDir, _lobby, _transport!.LocalId);
+        if (_profile.Bridged(_lobby.HostOptions)) StartBridgedSession();
         _follow = _steam != null && _lobby.OwnerId != _transport!.LocalId ? new HostFollow(_lobby.OwnerId, _profile.Id) : null;
         _launchPending = true;
     }
 
-    /// <summary>The bridge, frames between launchers, build check, save sync and log forwarding of a lobby game.</summary>
+    /// <summary>The bridge, frames between launchers, build check, save sync and log forwarding of a lobby game (or of a
+    /// rendezvous game whose host chose the bridged transport).</summary>
     private void StartBridgedSession()
     {
         _bridge = new LoopbackBridge(_profile!, _options.BridgePort != 0 ? _options.BridgePort : _profile!.Port);
@@ -264,10 +259,10 @@ public sealed class App
         }
         if (_saveSync?.Ready == false) return true;
         _launchPending = false;
-        _saveSync?.EnableAdapter(GameOptions.Current(_profile!, _gameDir));
+        _saveSync?.EnableAdapter(GameOptions.Current(_profile!, _gameDir, _lobby!.HostOptions));
         if (_options.NoLaunch) return true;
         return _profile!.RendezvousSession
-            ? _gameDir != null && GameLauncher.LaunchWithOptions(_profile, _gameDir)
+            ? _gameDir != null && GameLauncher.LaunchWithOptions(_profile, _gameDir, _lobby!.HostOptions)
             : GameLauncher.Launch(_profile, _gameDir);
     }
 
@@ -312,7 +307,7 @@ public sealed class App
             : AppState.Joined;
         return new AppStatus(state, _lobby.Id, _session?.RttMs)
         {
-            Players = PlayerSlots(_lobby), GameId = _lobby.GameId, SeatCharacters = SeatCharacters(_lobby),
+            Players = PlayerSlots(_lobby), GameId = _lobby.GameId, SeatCharacters = SeatCharacters(_lobby), Bridged = _bridge != null,
         };
     }
 

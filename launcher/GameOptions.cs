@@ -8,15 +8,19 @@ public static class GameOptions
     private const char PairSeparator = ';';
     private const char KeyValueSeparator = '=';
 
-    /// <summary>Every option's current value (the player's choice if it is still offered, else the default).</summary>
-    public static Dictionary<string, string> Current(GameProfile profile, string? gameDir) =>
-        (profile.Options ?? []).ToDictionary(option => option.Key, option => ValueOf(profile.Id, option, gameDir));
+    /// <summary>Every option's value for a session: the player's choice if it is still offered, else the default; a host
+    /// option takes the host's value from the lobby's <paramref name="hostValues"/> (empty for the player's own choices).</summary>
+    public static Dictionary<string, string> Current(GameProfile profile, string? gameDir, IReadOnlyDictionary<string, string> hostValues) =>
+        (profile.Options ?? []).ToDictionary(
+            option => option.Key,
+            option => option.Host && hostValues.TryGetValue(option.Key, out var host) ? host : ValueOf(profile.Id, option, gameDir));
 
     /// <summary>The host options' current values, which the lobby carries to the guests.</summary>
     public static Dictionary<string, string> HostValues(GameProfile profile, string? gameDir)
     {
         var host = (profile.Options ?? []).Where(option => option.Host).Select(option => option.Key).ToHashSet();
-        return Current(profile, gameDir).Where(pair => host.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
+        return Current(profile, gameDir, new Dictionary<string, string>())
+            .Where(pair => host.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     public static string Encode(IReadOnlyDictionary<string, string> values) =>

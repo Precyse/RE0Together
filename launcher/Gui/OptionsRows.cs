@@ -79,7 +79,7 @@ internal sealed class OptionsRows : Panel
         var select = new FlatSelect();
         var values = option.AvailableIn(gameDir).ToList();
         foreach (var value in values) select.Items.Add(value.Label);
-        var current = GameOptions.Current(game, gameDir)[option.Key];
+        var current = GameOptions.Current(game, gameDir, new Dictionary<string, string>())[option.Key];
         select.SelectedIndex = Math.Max(0, values.FindIndex(v => v.Value == current));
         select.SelectedIndexChanged += (_, _) =>
         {

@@ -8,12 +8,12 @@ public static class GameLauncher
     public static bool IsRunning(GameProfile profile) =>
         Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe)).Length > 0;
 
-    /// <summary>Starts a game that matches its players itself: the player's options go into the adapter ini first.</summary>
-    public static bool LaunchWithOptions(GameProfile profile, string gameDir)
+    /// <summary>Starts a game that matches its players itself: the options (the host's for host options) go into the adapter ini first.</summary>
+    public static bool LaunchWithOptions(GameProfile profile, string gameDir, IReadOnlyDictionary<string, string> hostValues)
     {
         try
         {
-            AdapterSettings.WriteOptions(gameDir, profile, GameOptions.Current(profile, gameDir));
+            AdapterSettings.WriteOptions(gameDir, profile, GameOptions.Current(profile, gameDir, hostValues));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

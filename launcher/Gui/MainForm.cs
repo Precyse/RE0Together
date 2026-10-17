@@ -265,7 +265,7 @@ public sealed class MainForm : ChromelessForm
     {
         if (_rail.Selected is not { } game) return;
         if (!game.NativeSession) _app.Host(game.Id);
-        else if (GameFolders.Find(game) is { } gameDir) GameLauncher.LaunchWithOptions(game, gameDir);
+        else if (GameFolders.Find(game) is { } gameDir) GameLauncher.LaunchWithOptions(game, gameDir, new Dictionary<string, string>());
     }
 
     /// <summary>The session row's mod button: Install, or Update (re-copy), for the selected game.</summary>
