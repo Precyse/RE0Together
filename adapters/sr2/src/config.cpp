@@ -14,6 +14,7 @@
 namespace {
 
 constexpr int kDecimalBase = 10;
+constexpr const char* kTransportKey = "transport";
 const char* const kDefaultIni = "max_players=4\ntrace=1\npartner_experimental=0\n";
 
 std::string trim(const std::string& s) {
@@ -38,8 +39,17 @@ Config parseConfig(const std::string& text) {
         const auto eq = line.find('=');
         if (eq == std::string::npos) continue;
         const std::string key = trim(line.substr(0, eq));
+        const std::string value = trim(line.substr(eq + 1));
+        if (key == kTransportKey) {
+            if (const auto transport = parseTransport(value)) {
+                config.transport = *transport;
+            } else if (!value.empty()) {
+                config.rejectedTransport = value;
+            }
+            continue;
+        }
         unsigned long number = 0;
-        if (!parseNumber(trim(line.substr(eq + 1)), number)) continue;
+        if (!parseNumber(value, number)) continue;
         if (key == "max_players") {
             config.maxPlayers = static_cast<uint32_t>(
                 std::clamp<unsigned long>(number, sr2::kCoopDefaultPlayers, sr2::kMaxReplicatedPlayers));

@@ -11,6 +11,7 @@
 #include "../src/game_port_patches.h"
 #include "../src/join_net_trace_sites.h"
 #include "../src/lan_address_patches.h"
+#include "../src/multiplayer_sites.h"
 #include "../src/partner_sites.h"
 #include "../src/player_cap_patches.h"
 #include "../src/replication_sites.h"
@@ -50,7 +51,7 @@ inline std::vector<Range> withoutForceJoin() {
     const game_port_patches::Thunks portThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
     const version_gate_patches::Thunks gateThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
     for (const auto& list : {player_cap_patches::forPlayers(kManyPlayers, capThunks, true),
-                             game_port_patches::forPort(kMovedPort, kManyPlayers, true, portThunks),
+                             game_port_patches::forPort(kMovedPort, kManyPlayers, true, Transport::Native, portThunks),
                              lan_address_patches::forPlayers(kManyPlayers, kAnyThunk), version_gate_patches::patches(gateThunks)}) {
         for (const CodePatch& patch : list) {
             if (!patch.replacement.empty()) ranges.push_back({patch.address, patch.expected.size()});
@@ -74,6 +75,15 @@ inline std::vector<Range> activities() {
                              std::span<const partner_sites::Site>(activity_sites::kPhase2),
                              std::span<const partner_sites::Site>(activity_sites::kPhase3)}) {
         for (const partner_sites::Site& site : table) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
+    }
+    return ranges;
+}
+
+// What milestone 9 writes.
+inline std::vector<Range> players3and4() {
+    std::vector<Range> ranges;
+    for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {
+        for (const partner_sites::Site& site : phase.sites) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
     }
     return ranges;
 }

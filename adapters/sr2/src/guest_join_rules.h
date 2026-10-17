@@ -9,7 +9,8 @@
 
 // What the guest does on each front end tick (pure, unit tested): wait for the game to be ready, log in, search the
 // browser, join the host that was found, and count a join that ended back at the idle front end as a failed attempt.
-// docs/SR2_NOTES.md "Force join", guest.
+// With the steam transport the search is the game's LAN browser instead: no login, the host's pong must come from its
+// virtual address, and the search is stopped once the load dialog is gone. docs/SR2_NOTES.md "Force join", guest.
 namespace guest_join_rules {
 
 constexpr uint64_t kLoginRetryMs = 30000;     // between the login calls
@@ -22,6 +23,15 @@ constexpr unsigned kMaxFailures = 3;          // failed attempts before giving u
 // The browser module's state (its +0x10).
 enum class Browser : uint8_t { Idle, Querying, Done, Error };
 
+// The first game of the LAN browser's list: the server id to join, and the address it was announced from (host order).
+struct LanEntry {
+    uint32_t serverId = 0;
+    uint32_t address = 0;
+};
+
+// Browser: the online browser (native transport). Lan: the LAN browser over the tunnel (steam transport).
+enum class Mode : uint8_t { Browser, Lan };
+
 struct Inputs {
     uint64_t nowMs = 0;
     bool loggedIn = false;
@@ -32,34 +42,46 @@ struct Inputs {
     std::optional<size_t> match;  // the host's index among the listed entries
     size_t listed = 0;
     uint8_t denyReason = join_deny_rules::kReasonNone;  // the last join_deny received since the join call
+    // Lan only.
+    std::optional<uint32_t> hostAddress;  // the host's virtual address: none until the link is up and the host is a member
+    bool searchRunning = false;           // the game's LAN search flag
+    std::optional<LanEntry> lanEntry;     // the first game of the LAN list
+    size_t lanListed = 0;
 };
 
 // What the executor does now.
-enum class Step : uint8_t { None, Login, Search, Join, GiveUp };
+enum class Step : uint8_t { None, Login, Search, Join, StopSearch, GiveUp };
 
 struct Decision {
     Step step = Step::None;
-    size_t index = 0;  // Join
+    size_t index = 0;  // Join: the browser index, or the LAN server id
     join_status::Status status;
 };
 
 class Machine {
 public:
+    explicit Machine(Mode mode = Mode::Browser) : mode_(mode) {}
+
     Decision update(const Inputs& in);
 
     // Back to the start, for a new request (a new token, or the launcher's Join pressed again).
-    void reset() { *this = Machine(); }
+    void reset() { *this = Machine(mode_); }
 
 private:
     enum class Phase : uint8_t { Searching, Attempt, Joined, Failed };
 
     Decision searching(const Inputs& in);
+    Decision searchingLan(const Inputs& in);
+    std::optional<Decision> stopLanSearch(const Inputs& in, const char* state);
     Decision login(const Inputs& in);
     Decision attempt(const Inputs& in);
     Decision failedAttempt(const Inputs& in);
 
+    Mode mode_;
     Phase phase_ = Phase::Searching;
     bool queryRunning_ = false;
+    bool sawDialog_ = false;
+    bool searchStopped_ = false;
     uint64_t queryStartMs_ = 0;
     uint64_t nextQueryMs_ = 0;
     unsigned loginCalls_ = 0;
@@ -73,7 +95,9 @@ private:
 inline Decision Machine::update(const Inputs& in) {
     switch (phase_) {
         case Phase::Failed: return {Step::None, 0, {"failed", failDetail_}};
-        case Phase::Joined: return {Step::None, 0, {in.sessionActive ? "joined" : "stopped", ""}};
+        case Phase::Joined:
+            if (const auto stop = stopLanSearch(in, "joined")) return *stop;
+            return {Step::None, 0, {in.sessionActive ? "joined" : "stopped", ""}};
         case Phase::Attempt: return attempt(in);
         case Phase::Searching: break;
     }
@@ -81,7 +105,37 @@ inline Decision Machine::update(const Inputs& in) {
         phase_ = Phase::Joined;
         return {Step::None, 0, {"joined", ""}};
     }
-    return searching(in);
+    return mode_ == Mode::Lan ? searchingLan(in) : searching(in);
+}
+
+// The LAN search is stopped once, when the load dialog is gone or the session is joined.
+inline std::optional<Decision> Machine::stopLanSearch(const Inputs& in, const char* state) {
+    if (mode_ != Mode::Lan || searchStopped_ || !in.searchRunning) return std::nullopt;
+    searchStopped_ = true;
+    return Decision{Step::StopSearch, 0, {state, ""}};
+}
+
+// The LAN search starts at once and keeps running; the first listed game must be the host's (its pong carries the
+// virtual address), anything else is a leak of a real address and ends the join.
+inline Decision Machine::searchingLan(const Inputs& in) {
+    if (!in.hostAddress) return {Step::None, 0, {"waiting", "link"}};
+    if (!in.frontEndFree) return {Step::None, 0, {"waiting", "front end"}};
+    const Decision listed{Step::None, 0, {"searching", std::to_string(in.lanListed)}};
+    if (in.nowMs < nextQueryMs_) return listed;
+    if (!in.searchRunning) {
+        searchStopped_ = false;
+        return {Step::Search, 0, {"searching", "0"}};
+    }
+    if (!in.lanEntry) return listed;
+    if (in.lanEntry->address != *in.hostAddress) {
+        phase_ = Phase::Failed;
+        failDetail_ = "host_address";
+        return {Step::GiveUp, 0, {"failed", failDetail_}};
+    }
+    phase_ = Phase::Attempt;
+    idle_ = false;
+    sawDialog_ = false;
+    return {Step::Join, in.lanEntry->serverId, {"found", ""}};
 }
 
 inline Decision Machine::searching(const Inputs& in) {
@@ -131,7 +185,11 @@ inline Decision Machine::attempt(const Inputs& in) {
     }
     if (in.dialogOpen) {
         idle_ = false;
+        sawDialog_ = true;
         return {Step::None, 0, {"dialog", ""}};
+    }
+    if (sawDialog_) {
+        if (const auto stop = stopLanSearch(in, "joining")) return *stop;
     }
     if (!in.frontEndFree) {
         idle_ = false;

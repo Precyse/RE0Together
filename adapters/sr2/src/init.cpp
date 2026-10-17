@@ -7,6 +7,7 @@
 #include "force_join.h"
 #include "game_port.h"
 #include "game_port_rules.h"
+#include "game_socket.h"
 #include "hooks.h"
 #include "join_net_trace.h"
 #include "join_trace.h"
@@ -17,14 +18,20 @@
 #include "player_cap.h"
 #include "replication_switch.h"
 #include "sr2_addresses.h"
+#include "tunnel.h"
 #include "version_gate.h"
 
 DWORD WINAPI initThread(LPVOID) {
     try {
         logger::write("sr2 adapter starting");
         const Config config = loadConfig();
-        logger::write("config: max_players=%u trace=%d partner_experimental=%d game_port=%u", config.maxPlayers,
-                      config.trace ? 1 : 0, config.partnerExperimental ? 1 : 0, config.gamePort);
+        logger::write("config: max_players=%u trace=%d partner_experimental=%d game_port=%u transport=%s", config.maxPlayers,
+                      config.trace ? 1 : 0, config.partnerExperimental ? 1 : 0, config.gamePort,
+                      transportName(config.transport));
+        if (!config.rejectedTransport.empty()) {
+            logger::write("config: transport \"%s\" is neither %s nor %s, ignored", config.rejectedTransport.c_str(),
+                          kTransportNative, kTransportSteam);
+        }
         if (config.rejectedGamePort != 0) {
             logger::write("config: game_port %u is outside %u..%u, ignored", config.rejectedGamePort,
                           game_port_rules::kMinGamePort, game_port_rules::kMaxGamePort);
@@ -40,7 +47,15 @@ DWORD WINAPI initThread(LPVOID) {
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
 
-        version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, config.trace);
+        const bool tunnelled = tunnel::install(config.transport, config.trace);
+        const Transport transport = tunnelled ? Transport::Steam : Transport::Native;
+        if (tunnelled && config.gamePort != sr2::kGamePort) {
+            logger::write("config: game_port %u is ignored with the steam transport, every member is at %u", config.gamePort,
+                          sr2::kGamePort);
+        }
+        game_socket::start();
+
+        version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, tunnelled, config.trace);
 
         hooks::beginBatch();
         if (replicating) {
@@ -50,9 +65,9 @@ DWORD WINAPI initThread(LPVOID) {
                           config.maxPlayers);
         }
         const bool playerCap = player_cap::install(config.maxPlayers, config.trace);
-        game_port::install(config.gamePort, config.maxPlayers, config.trace);
-        lan_address::install(config.maxPlayers, config.trace);
-        force_join::install(config.trace);
+        game_port::install(config.gamePort, config.maxPlayers, config.trace, transport);
+        if (!tunnelled) lan_address::install(config.maxPlayers, config.trace);
+        force_join::install(config.trace, transport);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);

@@ -10,9 +10,9 @@
 namespace version_gate {
 
 // Checks all sites, then writes them together (nothing when any differs). `maxPlayers` and `partnerExperimental` (the
-// partner sites that are really patched) go into the trailer; `trace` logs each accept and refusal with its reason.
-// Run before the trace hooks are enabled. True when installed.
-bool install(uint32_t maxPlayers, bool partnerExperimental, bool trace);
+// partner sites that are really patched) and `steamTransport` (the tunnel is installed) go into the trailer; `trace` logs
+// each accept and refusal with its reason. Run before the trace hooks are enabled. True when installed.
+bool install(uint32_t maxPlayers, bool partnerExperimental, bool steamTransport, bool trace);
 
 // The password a join_req must carry to be admitted (force join, native transport); empty checks nothing.
 void setJoinPassword(const std::string& password);

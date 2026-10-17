@@ -26,14 +26,6 @@ bool g_queryStarted = false;
 uintptr_t g_matchedEntry = 0;
 bool g_trace = false;
 
-uint8_t& byteAt(uintptr_t address) { return *reinterpret_cast<uint8_t*>(address); }
-
-uint8_t readByte(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 // The browser module: the ring entry of type 4, or 0.
 uintptr_t browserModule() {
     const uintptr_t head = readDword(kModuleRing);
@@ -107,8 +99,8 @@ void startQuery(const join_file::JoinRequest& request) {
 
 void joinHost(const join_file::JoinRequest& request, size_t index) {
     game_text::write(kJoinPassword, kTextBytes, request.password);
-    byteAt(g_matchedEntry + kEntryPasswordFlagOffset) = 0;
-    byteAt(kRankedJoinByte) = 0;
+    byteField(g_matchedEntry, kEntryPasswordFlagOffset) = 0;
+    byteField(kRankedJoinByte, 0) = 0;
     version_gate::clearJoinDeny();
     if (g_trace) logger::write("force join: guest joins entry 0x%X at index %zu", static_cast<unsigned>(g_matchedEntry), index);
     guest_call::call(kJoinByIndex, {.eax = static_cast<uint32_t>(index)});

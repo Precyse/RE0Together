@@ -305,6 +305,12 @@ constexpr uint8_t kSetupResponseWait = 2;                 // code: wait, the ans
 constexpr uintptr_t kQueueAppendResumeCreate = 0x805199;  // 0x805000, after the append and `mov cl, [eax+0x1B0]`
 constexpr uintptr_t kQueueAppendResumeBatch = 0x80525E;   // 0x8051F0, after the append
 
+// The game's one UDP socket (psnet) and the flag that it exists (set at the end of its creation, cleared when it closes),
+// and the port every LAN game assumes.
+constexpr uintptr_t kGameSocket = 0xE824C0;
+constexpr uintptr_t kGameSocketReady = 0x252A608;
+constexpr uint32_t kGamePort = 4200;
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

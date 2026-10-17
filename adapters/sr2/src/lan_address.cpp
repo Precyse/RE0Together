@@ -27,7 +27,9 @@ constexpr size_t kHostNameBytes = 256;
 constexpr unsigned kAsciiLimit = 0x80;
 
 bool g_trace = false;
+lan_address::OwnAddress g_virtualOwn = nullptr;
 std::once_flag g_chosenOnce;
+std::once_flag g_unknownOnce;
 std::optional<uint32_t> g_chosen;
 
 // Wide text as ASCII; anything else becomes '?'.
@@ -103,11 +105,20 @@ bool isOwnHostName(const char* name) {
     return name && gethostname(own, sizeof(own)) == 0 && _stricmp(name, own) == 0;
 }
 
-// All five calls: the real gethostbyname, then for the machine's own name the chosen LAN address first.
+// All five calls: the real gethostbyname, then for the machine's own name the virtual address (tunnel) or the chosen LAN
+// address (adapter rule) first.
 hostent* __stdcall lanHostByName(const char* name) {
     hostent* host = gethostbyname(name);
-    if (!host || host->h_addrtype != AF_INET || host->h_length != sizeof(uint32_t) || !isOwnHostName(name)) return host;
-    if (const auto address = chosenAddress()) lan_address_rules::putFirst(host->h_addr_list, *address);
+    if (!host || host->h_addrtype != AF_INET || host->h_length != sizeof(uint32_t)) return host;
+    const bool ownName = isOwnHostName(name);
+    if (g_virtualOwn) {
+        const auto rule = lan_address_rules::putVirtual(ownName, ownName ? g_virtualOwn() : std::nullopt, host->h_addr_list);
+        if (rule == lan_address_rules::VirtualRule::AddressUnknown) {
+            std::call_once(g_unknownOnce, [] { logger::write("tunnel: own address asked before the launcher link"); });
+        }
+    } else if (ownName) {
+        if (const auto address = chosenAddress()) lan_address_rules::putFirst(host->h_addr_list, *address);
+    }
     return host;
 }
 
@@ -117,7 +128,7 @@ namespace lan_address {
 
 bool install(uint32_t maxPlayers, bool trace) {
     g_trace = trace;
-    const auto patches = lan_address_patches::forPlayers(maxPlayers, reinterpret_cast<uintptr_t>(&lanHostByName));
+    const auto patches = lan_address_patches::forPlayers(maxPlayers, thunk());
     if (patches.empty()) return false;
     if (!applyCodePatches(patches)) {
         logger::write("lan address: sites differ, the host name's address list is not changed");
@@ -126,5 +137,9 @@ bool install(uint32_t maxPlayers, bool trace) {
     if (trace) logger::write("lan address: %zu gethostbyname calls retargeted", patches.size());
     return true;
 }
+
+uintptr_t thunk() { return reinterpret_cast<uintptr_t>(&lanHostByName); }
+
+void useVirtualRule(OwnAddress own) { g_virtualOwn = own; }
 
 }  // namespace lan_address

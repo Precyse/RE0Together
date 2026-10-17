@@ -35,10 +35,31 @@ inline constexpr Site kSites[] = {
 };
 inline constexpr size_t kSiteCount = std::size(kSites);
 
+// The Steam transport's LAN path (docs/SR2_NOTES.md "Steam tunnel"): game functions the guest calls, and one it only
+// reads. Checked with the tunnel's sites, in steam mode only.
+constexpr uintptr_t kFindSyslinkServers = 0x7EE710;  // cdecl(unused Lua argument): starts the LAN search
+constexpr uintptr_t kStopSyslinkServers = 0x7EE730;  // cdecl(unused Lua argument): stops it
+constexpr uintptr_t kJoinSyslinkServer = 0x813160;   // cdecl(server id): 1 when the id is listed
+constexpr uintptr_t kLanSearchTick = 0x812F80;       // pings every second while the search runs
+constexpr uintptr_t kIsSyslinkSession = 0x7EE12B;    // the read of the session info's LAN flag
+inline constexpr Site kLanSites[] = {
+    {"N1", kFindSyslinkServers, "80 3D BC 7E 52 02 00 75 05 E8 82 47 02 00"},
+    {"N2", kStopSyslinkServers, "80 3D BC 7E 52 02 01 75 05 E8 02 49 02 00"},
+    {"N3", kJoinSyslinkServer, "8B 0D F4 8B 52 02 53 33 DB 3B CB 56"},
+    {"N4", kLanSearchTick, "A1 C0 1F EB 00 85 C0 56"},
+    {"N5", kIsSyslinkSession, "8B 40 0C 38 48 47 74 0A"},
+};
+
 // The sites as read-only checks.
 inline std::vector<CodePatch> checks() {
     std::vector<CodePatch> list;
     for (const Site& site : kSites) list.push_back({site.id, site.address, partner_sites::parseHex(site.expected), {}});
+    return list;
+}
+
+inline std::vector<CodePatch> lanChecks() {
+    std::vector<CodePatch> list;
+    for (const Site& site : kLanSites) list.push_back({site.id, site.address, partner_sites::parseHex(site.expected), {}});
     return list;
 }
 
@@ -57,6 +78,19 @@ constexpr uintptr_t kRankedJoinByte = 0x2528D91;   // G11: byte
 constexpr uint32_t kJoinTypePublic = 0;
 constexpr uint32_t kCustomGameAny = 0;
 constexpr uint32_t kNameToUseOnline = 1;
+
+// The LAN browser's state: the search flag (byte), the list of found games (circular) and its entries.
+constexpr uintptr_t kLanSearchActive = 0x2527EBC;
+constexpr uintptr_t kLanList = 0x2528BF4;
+constexpr uintptr_t kLanEntryNextOffset = 0x4B8;
+constexpr uintptr_t kLanEntryIdOffset = 0x4B4;       // u32, the server id is its low byte
+constexpr uintptr_t kLanEntryAddressOffset = 0x45C;  // u32, network order
+constexpr size_t kMaxLanEntriesWalked = 0x40;        // the list cap at 0x812624
+constexpr uint32_t kLanServerIdMask = 0xFF;
+
+// A session's info (session +0xC) and its LAN flag (byte): an online session has it 0, so LAN guests cannot find it.
+constexpr uintptr_t kSessionInfoOffset = 0xC;
+constexpr uintptr_t kInfoLanFlagOffset = 0x47;
 
 // What the guest reads before it acts.
 constexpr uintptr_t kOnlineState = 0x2529334;      // S1

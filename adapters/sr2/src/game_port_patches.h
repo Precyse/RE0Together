@@ -4,6 +4,7 @@
 
 #include "code_patch.h"
 #include "game_port_rules.h"
+#include "transport.h"
 
 // The code edits of milestones 5e and 5g as data (pure, unit tested): a per-machine game port, so that guests behind one
 // NAT keep distinct external ports, and the host passing each guest's local port on to the other guests
@@ -45,8 +46,13 @@ inline uint8_t low(uint32_t port) { return static_cast<uint8_t>(port); }
 inline uint8_t high(uint32_t port) { return static_cast<uint8_t>(port >> 8); }
 
 // Every site is checked together; E1 and E2 are written only for a port other than 4200, E2, E3, H1 and H2 only with 3 or
-// more players, T11 only with `trace`. Nothing at all when none would be written.
-inline std::vector<CodePatch> forPort(uint32_t port, uint32_t maxPlayers, bool trace, const Thunks& thunks) {
+// more players, T11 only with `trace`. Nothing at all when none would be written. With the steam transport every member
+// is `virtual address:4200` and the real bind port is unused, so only T11 (with `trace`) remains.
+inline std::vector<CodePatch> forPort(uint32_t port, uint32_t maxPlayers, bool trace, Transport transport, const Thunks& thunks) {
+    if (transport == Transport::Steam) {
+        if (!trace) return {};
+        return {retargetedCall("game_port_unmapped_sender", kSenderLookupCall, kMapSender, thunks.unmappedSender)};
+    }
     const bool moved = port != game_port_rules::kShippedGamePort;
     const bool replicating = maxPlayers > 2;
     if (!moved && !replicating && !trace) return {};

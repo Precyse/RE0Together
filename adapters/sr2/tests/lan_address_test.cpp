@@ -1,6 +1,7 @@
 // Milestone 5g, L1 (no game): the adapter choice, the address list swap, and the five call sites as data.
 #include <algorithm>
 #include <cstdio>
+#include <optional>
 
 #include "../src/lan_address_patches.h"
 #include "../src/lan_address_rules.h"
@@ -157,6 +158,30 @@ int main() {
     }
     check(bytesMatch, "each call: the exe's bytes (all to the gethostbyname stub) are checked, the target becomes the thunk");
     check(lan_address_patches::forPlayers(2, kThunk).empty(), "max_players 2 (the shipped co-op) patches nothing");
+    // The Steam tunnel's rule: the own name gets the virtual address, written over the first entry (network order).
+    constexpr uint32_t kVirtual = 0x0A0B0C0D;
+    uint8_t own[4] = {192, 168, 1, 20};
+    uint8_t listed[4] = {192, 168, 56, 1};
+    char* ownList[] = {reinterpret_cast<char*>(own), reinterpret_cast<char*>(listed), nullptr};
+    check(putVirtual(true, kVirtual, ownList) == VirtualRule::Replaced && own[0] == 10 && own[1] == 11 && own[2] == 12 && own[3] == 13 &&
+              listed[0] == 192 && ownList[0] == reinterpret_cast<char*>(own),
+          "the own name: the first address becomes 10.11.12.13, the rest of the list stays");
+    uint8_t other_name[4] = {93, 184, 216, 34};
+    char* otherList[] = {reinterpret_cast<char*>(other_name), nullptr};
+    check(putVirtual(false, kVirtual, otherList) == VirtualRule::OtherName && other_name[0] == 93,
+          "any other name is left alone");
+    uint8_t before[4] = {192, 168, 1, 20};
+    char* waiting[] = {reinterpret_cast<char*>(before), nullptr};
+    check(putVirtual(true, std::nullopt, waiting) == VirtualRule::AddressUnknown && before[0] == 192 && before[3] == 20,
+          "before the own address is known nothing is changed");
+    char* nothing[] = {nullptr};
+    check(putVirtual(true, kVirtual, nothing) == VirtualRule::OtherName && putVirtual(true, kVirtual, nullptr) == VirtualRule::OtherName,
+          "an empty or missing list stays as it is");
+
+    const auto tunnelPatches = lan_address_patches::forTunnel(kThunk);
+    check(tunnelPatches.size() == 5 && tunnelPatches[0].address == patches[0].address &&
+              tunnelPatches[4].replacement == patches[4].replacement,
+          "the tunnel writes the same five calls at any player count");
     check(clearOfJuiced(patches), "no call within 16 bytes of an address Juiced touches");
     check(clearOfOtherMilestones(patches), "no call overlaps a milestone 3, 4, 5 or 5b site");
     return g_failures == 0 ? 0 : 1;

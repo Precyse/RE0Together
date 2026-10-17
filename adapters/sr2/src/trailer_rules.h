@@ -12,18 +12,21 @@
 //   +0  4  magic 'C' 'F' 'V' 'G'
 //   +4  2  version::kProtocolVersion
 //   +6  1  max_players
-//   +7  1  flags: bit 0 = the partner_experimental sites are patched
+//   +7  1  flags: bit 0 = the partner_experimental sites are patched, bit 1 = the steam transport (the game's UDP goes
+//           through the launcher), so two machines on different transports refuse each other
 //
 // Two builds with another max_players or other patched sites run different code, which is a wire difference at the same
 // version, so all three fields must be equal.
 namespace trailer_rules {
 
 constexpr uint8_t kFlagPartnerExperimental = 1;
+constexpr uint8_t kFlagSteamTransport = 2;
 
 // What this build puts into the trailer.
 struct Settings {
     uint8_t maxPlayers = 0;
     bool partnerExperimental = false;
+    bool steamTransport = false;
 };
 
 struct Trailer {
@@ -36,7 +39,8 @@ struct Trailer {
 
 inline Trailer ours(const Settings& settings) {
     return {version::kProtocolVersion, settings.maxPlayers,
-            static_cast<uint8_t>(settings.partnerExperimental ? kFlagPartnerExperimental : 0)};
+            static_cast<uint8_t>((settings.partnerExperimental ? kFlagPartnerExperimental : 0) |
+                                 (settings.steamTransport ? kFlagSteamTransport : 0))};
 }
 
 inline std::array<uint8_t, version::kTrailerBytes> make(const Settings& settings) {

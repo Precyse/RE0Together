@@ -66,7 +66,7 @@ std::vector<std::pair<uintptr_t, size_t>> otherSites() {
     const player_cap_patches::Thunks capThunks{kOtherThunk, kOtherThunk, kOtherThunk};
     const game_port_patches::Thunks portThunks{kOtherThunk, kOtherThunk, kOtherThunk, kOtherThunk};
     for (const auto& list : {player_cap_patches::forPlayers(kFourPlayers, capThunks),
-                             game_port_patches::forPort(kMovedPort, kFourPlayers, true, portThunks),
+                             game_port_patches::forPort(kMovedPort, kFourPlayers, true, Transport::Native, portThunks),
                              lan_address_patches::forPlayers(kFourPlayers, kOtherThunk)}) {
         for (const CodePatch& patch : list) sites.push_back({patch.address, patch.expected.size()});
     }

@@ -76,4 +76,17 @@ inline bool putFirst(char** list, uint32_t address) {
     return false;
 }
 
+// The Steam tunnel's rule (docs/SR2_NOTES.md "Steam tunnel"): the machine's own name gets the virtual address (host order)
+// as its first address, and any other name is left alone.
+enum class VirtualRule { OtherName, AddressUnknown, Replaced };
+
+inline VirtualRule putVirtual(bool ownName, std::optional<uint32_t> address, char** list) {
+    if (!ownName || !list || !list[0]) return VirtualRule::OtherName;
+    if (!address) return VirtualRule::AddressUnknown;
+    const uint8_t octets[sizeof(uint32_t)] = {static_cast<uint8_t>(*address >> 24), static_cast<uint8_t>(*address >> 16),
+                                              static_cast<uint8_t>(*address >> 8), static_cast<uint8_t>(*address)};
+    memcpy(list[0], octets, sizeof(octets));
+    return VirtualRule::Replaced;
+}
+
 }  // namespace lan_address_rules

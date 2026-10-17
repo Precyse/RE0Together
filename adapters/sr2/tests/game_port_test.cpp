@@ -98,7 +98,7 @@ int main() {
     check(peerPort(false, 4201) == 4201 && peerPort(false, 50001) == 50001, "another guest is reached at the relayed port");
     check(peerPort(false, 0) == 4200, "without a relayed port the shipped one stays");
 
-    const auto moved = game_port_patches::forPort(kMovedPort, kFourPlayers, false, kThunks);
+    const auto moved = game_port_patches::forPort(kMovedPort, kFourPlayers, false, Transport::Native, kThunks);
     check(moved.size() == kAllSites, "4 players and a moved port: ten sites");
     const CodePatch* bind = patchAt(moved, 0xC1BBAF);
     check(bind && bind->expected == std::vector<uint8_t>{0xB8, 0x68, 0x10, 0x00, 0x00} &&
@@ -136,26 +136,32 @@ int main() {
     check(std::all_of(moved.begin(), moved.end(), [](const CodePatch& p) { return p.replacement.size() <= p.expected.size(); }),
           "no replacement is longer than the bytes checked");
 
-    const auto shipped = game_port_patches::forPort(4200, kFourPlayers, false, kThunks);
+    const auto shipped = game_port_patches::forPort(4200, kFourPlayers, false, Transport::Native, kThunks);
     check(shipped.size() == kAllSites && patchAt(shipped, 0xC1BBAF)->replacement.empty() &&
               patchAt(shipped, 0x811B11)->replacement.empty() && !patchAt(shipped, 0x8CDA3B)->replacement.empty(),
           "port 4200 with 4 players: every site checked, E1 and E2 not written");
     check(!patchAt(shipped, 0x815D8C)->replacement.empty() && !patchAt(shipped, 0x815666)->replacement.empty(),
           "port 4200 with 4 players: H1 and H2 are still written (the local port is relayed whatever it is)");
 
-    const auto traced = game_port_patches::forPort(kMovedPort, kFourPlayers, true, kThunks);
+    const auto traced = game_port_patches::forPort(kMovedPort, kFourPlayers, true, Transport::Native, kThunks);
     const CodePatch* unmapped = patchAt(traced, 0x813BF2);
     check(traced.size() == kTracedSites && unmapped && unmapped->expected == std::vector<uint8_t>{0xE8, 0x79, 0x64, 0xFE, 0xFF} &&
               unmapped->replacement == callTo(0x813BF2, kTraceThunk),
           "trace=1: T11, call 0x7FA070 (E8 79 64 FE FF) goes to the unmapped sender trace");
-    const auto traceOnly = game_port_patches::forPort(4200, 2, true, kThunks);
+    const auto traceOnly = game_port_patches::forPort(4200, 2, true, Transport::Native, kThunks);
     check(traceOnly.size() == 2 && traceOnly[0].replacement.empty() && !traceOnly[1].replacement.empty(),
           "trace=1 at 2 players and port 4200: E1 checked, T11 written");
 
-    const auto twoPlayers = game_port_patches::forPort(kMovedPort, 2, false, kThunks);
+    const auto twoPlayers = game_port_patches::forPort(kMovedPort, 2, false, Transport::Native, kThunks);
     check(twoPlayers.size() == 1 && twoPlayers[0].address == 0xC1BBAF && !twoPlayers[0].replacement.empty(),
           "2 players and a moved port: only E1 (E2 and E3 follow the max_players gate)");
-    check(game_port_patches::forPort(4200, 2, false, kThunks).empty(), "port 4200 with 2 players and no trace: nothing at all");
+    check(game_port_patches::forPort(4200, 2, false, Transport::Native, kThunks).empty(), "port 4200 with 2 players and no trace: nothing at all");
+
+    const auto steamTraced = game_port_patches::forPort(kMovedPort, kFourPlayers, true, Transport::Steam, kThunks);
+    check(steamTraced.size() == 1 && steamTraced[0].address == 0x813BF2 && !steamTraced[0].replacement.empty(),
+          "steam transport with trace=1: only T11, the port edits (E1, E2, E3, H1, H2) are not installed");
+    check(game_port_patches::forPort(kMovedPort, kFourPlayers, false, Transport::Steam, kThunks).empty(),
+          "steam transport without trace: nothing, whatever the port");
 
     check(disjoint(traced), "no two sites overlap");
     check(clearOfJuiced(traced), "no site within 16 bytes of an address Juiced touches");

@@ -76,10 +76,13 @@ add_library(sr2_adapter SHARED
     src/remote_frustum.cpp
     src/mission_players.cpp
     src/population.cpp
+    src/game_socket.cpp
+    src/tunnel.cpp
     src/join_file.cpp
     src/join_status.cpp
     src/force_join.cpp
     src/force_join_guest.cpp
+    src/force_join_lan.cpp
     ${RE0_DIR}/dinput8.def)
 target_include_directories(sr2_adapter PRIVATE src ${SHARED_DIR})
 # The shared logger writes <game>\coop\<this name>.
@@ -97,13 +100,21 @@ add_custom_command(TARGET sr2_adapter POST_BUILD
 set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
-    src/join_net_trace.cpp src/force_join.cpp src/force_join_guest.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/leave_path.cpp
+    src/join_net_trace.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/leave_path.cpp
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/cutscene_sync.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
+# Stand-in for the game in the one-PC tests of the Steam tunnel (tools/sr2/tunnel_adapter_test.py); not run by ctest.
+add_executable(tunnel_standin tests/tunnel_standin.cpp src/tunnel.cpp src/lan_address.cpp src/code_patch.cpp src/memory.cpp
+    ${SHARED_DIR}/net_client.cpp ${SHARED_DIR}/debug_stats.cpp ${SHARED_DIR}/log.cpp ${SHARED_DIR}/paths.cpp)
+target_include_directories(tunnel_standin PRIVATE src ${SHARED_DIR})
+target_compile_definitions(tunnel_standin PRIVATE COOP_LOG_FILE=L"tunnel_standin.log")
+target_link_libraries(tunnel_standin PRIVATE ws2_32 iphlpapi)
+target_compile_options(tunnel_standin PRIVATE /W4 /WX /utf-8)
+
 function(add_unit_test name)
     add_executable(${name} tests/${name}.cpp ${ARGN})
     target_include_directories(${name} PRIVATE src ${SHARED_DIR})
@@ -136,6 +147,8 @@ add_unit_test(script_override_rules_test)
 add_unit_test(join_file_test src/join_file.cpp)
 add_unit_test(force_join_names_test)
 add_unit_test(join_deny_rules_test)
+add_unit_test(tunnel_rules_test)
+add_unit_test(tunnel_sites_test)
 add_unit_test(browser_match_test)
 add_unit_test(guest_join_rules_test)
 add_unit_test(force_join_sites_test)

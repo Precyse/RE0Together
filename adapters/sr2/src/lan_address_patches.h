@@ -15,14 +15,18 @@ constexpr uintptr_t kHostByNameStub = 0xC23544;  // jmp [gethostbyname]; stdcall
 
 inline constexpr uintptr_t kHostByNameCalls[] = {0x810C94, 0x7F79D0, 0x8E1B3E, 0x8D7C00, 0xC1C0FE};
 
-// All five calls going to `thunk`, or none when `maxPlayers` is the shipped co-op's.
-inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, uintptr_t thunk) {
-    if (maxPlayers <= 2) return {};
+// All five calls going to `thunk`: the Steam tunnel's virtual address rule needs them at any player count.
+inline std::vector<CodePatch> forTunnel(uintptr_t thunk) {
     std::vector<CodePatch> patches;
     for (const uintptr_t address : kHostByNameCalls) {
         patches.push_back(retargetedCall("host_by_name", address, kHostByNameStub, thunk));
     }
     return patches;
+}
+
+// The same for the adapter rule, or none when `maxPlayers` is the shipped co-op's.
+inline std::vector<CodePatch> forPlayers(uint32_t maxPlayers, uintptr_t thunk) {
+    return maxPlayers <= 2 ? std::vector<CodePatch>{} : forTunnel(thunk);
 }
 
 }  // namespace lan_address_patches

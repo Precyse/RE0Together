@@ -38,6 +38,10 @@ int main() {
     check(bytes[6] == kFourPlayers && bytes[7] == 0, "then max_players and the flags");
     check(trailer_rules::make({kFourPlayers, true})[7] == trailer_rules::kFlagPartnerExperimental,
           "partner_experimental is bit 0 of the flags");
+    check(trailer_rules::make({kFourPlayers, false, true})[7] == trailer_rules::kFlagSteamTransport &&
+              trailer_rules::make({kFourPlayers, true, true})[7] ==
+                  (trailer_rules::kFlagPartnerExperimental | trailer_rules::kFlagSteamTransport),
+          "the steam transport is bit 1 of the flags, beside bit 0");
 
     const auto payload = payloadWith(bytes);
     check(trailer_rules::check(payload.data(), payload.size(), settings) == Verdict::Match,
@@ -60,6 +64,8 @@ int main() {
           "another max_players is refused");
     check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, true}) == Verdict::FlagsDiffer,
           "other patched sites (flags) are refused");
+    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, false, true}) == Verdict::FlagsDiffer,
+          "a native peer and a steam peer refuse each other");
 
     const auto exact = payloadWith(bytes, version::kTrailerBytes);
     check(trailer_rules::check(exact.data(), exact.size(), settings) == Verdict::Match, "a payload that is only the trailer matches");

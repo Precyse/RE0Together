@@ -36,5 +36,17 @@ int main() {
     const Config high = parseConfig("game_port=65536\nmax_players=3\n");
     check(high.gamePort == 4200 && high.rejectedGamePort == 65536 && high.maxPlayers == 3, "game_port above 65535 is rejected");
     check(parseConfig("game_port=abc\n").gamePort == 4200, "a game_port that is not a number keeps the default");
+    check(parseConfig("").transport == Transport::Native && parseConfig("").rejectedTransport.empty(),
+          "transport defaults to native");
+    check(parseConfig("transport=steam\n").transport == Transport::Steam, "transport=steam read");
+    check(parseConfig("transport=native\n").transport == Transport::Native, "transport=native read");
+    check(parseConfig(" transport = steam \r\nmax_players=3\n").transport == Transport::Steam, "spaces and CRLF trimmed");
+    const Config odd = parseConfig("transport=tcp\nmax_players=3\n");
+    check(odd.transport == Transport::Native && odd.rejectedTransport == "tcp" && odd.maxPlayers == 3,
+          "an unknown transport keeps native and is reported");
+    check(parseConfig("transport=\n").transport == Transport::Native && parseConfig("transport=\n").rejectedTransport.empty(),
+          "an empty transport keeps native without a report");
+    check(parseConfig("transport=1\n").transport == Transport::Native, "a number is not a transport");
+    check(parseConfig("transport=steam\ntransport=bogus\n").transport == Transport::Steam, "a later bad value keeps the earlier good one");
     return g_failures == 0 ? 0 : 1;
 }

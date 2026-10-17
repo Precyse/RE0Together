@@ -8,6 +8,7 @@ namespace {
 using guest_join_rules::Browser;
 using guest_join_rules::Decision;
 using guest_join_rules::Inputs;
+using guest_join_rules::LanEntry;
 using guest_join_rules::Machine;
 using guest_join_rules::Step;
 
@@ -39,6 +40,77 @@ Decision startAndJoin(Machine& machine) {
     found.browser = Browser::Querying;
     found.match = 2;
     return machine.update(found);
+}
+
+
+// The LAN path (steam transport): no login, the host's address is checked, the search is stopped after the dialog.
+void lanPath() {
+    constexpr uint32_t kHostAddress = 0x0A0B0C0D;
+    constexpr uint32_t kRealAddress = 0xC0A80164;
+    constexpr uint32_t kServerId = 7;
+    const auto withHost = [](uint64_t seconds) {
+        Inputs in = ready(seconds);
+        in.hostAddress = kHostAddress;
+        return in;
+    };
+    const auto searchingFor = [&](uint64_t seconds) {
+        Inputs in = withHost(seconds);
+        in.searchRunning = true;
+        return in;
+    };
+    const auto listing = [&](uint64_t seconds, uint32_t address) {
+        Inputs in = searchingFor(seconds);
+        in.lanEntry = LanEntry{kServerId, address};
+        in.lanListed = 1;
+        return in;
+    };
+
+    Machine lan(guest_join_rules::Mode::Lan);
+    check(is(lan.update(ready(0)), Step::None, "waiting", "link"), "LAN: without the link or the host member it waits");
+    Inputs busy = withHost(0);
+    busy.frontEndFree = false;
+    check(is(lan.update(busy), Step::None, "waiting", "front end"), "LAN: a busy front end waits");
+    check(is(lan.update(withHost(0)), Step::Search, "searching", "0"), "LAN: a free front end starts the game's search (no login)");
+    check(is(lan.update(searchingFor(1)), Step::None, "searching", "0"), "LAN: while nothing is listed it searches");
+    const Decision found = lan.update(listing(1, kHostAddress));
+    check(is(found, Step::Join, "found") && found.index == kServerId,
+          "LAN: the first game, announced from the host's address, is joined by its id");
+    Inputs dialog = searchingFor(2);
+    dialog.frontEndFree = false;
+    dialog.dialogOpen = true;
+    check(is(lan.update(dialog), Step::None, "dialog"), "LAN: the load dialog is the player's");
+    dialog.nowMs = 90 * kSecond;
+    check(is(lan.update(dialog), Step::None, "dialog"), "LAN: for as long as they like, with the search running");
+    Inputs closed = searchingFor(91);
+    closed.frontEndFree = false;
+    check(is(lan.update(closed), Step::StopSearch, "joining"), "LAN: the search is stopped once the dialog is gone");
+    check(lan.update(closed).step == Step::None, "LAN: and only once");
+    Inputs inSession = withHost(92);
+    inSession.sessionActive = true;
+    check(is(lan.update(inSession), Step::None, "joined"), "LAN: a session is joined");
+
+    Machine leak(guest_join_rules::Mode::Lan);
+    leak.update(withHost(0));
+    check(is(leak.update(listing(1, kRealAddress)), Step::GiveUp, "failed", "host_address"),
+          "LAN: a game announced from a real address ends the join");
+    check(is(leak.update(listing(2, kRealAddress)), Step::None, "failed", "host_address"), "LAN: and the status keeps its reason");
+    leak.reset();
+    check(is(leak.update(withHost(100)), Step::Search, "searching", "0"), "LAN: a new request starts over, still in LAN mode");
+
+    Machine refused(guest_join_rules::Mode::Lan);
+    refused.update(withHost(0));
+    refused.update(listing(1, kHostAddress));
+    Inputs refusal = searchingFor(2);
+    refusal.denyReason = join_deny_rules::kReasonWrongVersion;
+    check(is(refused.update(refusal), Step::GiveUp, "failed", "version"), "LAN: a version refusal ends the join too");
+
+    Machine idle(guest_join_rules::Mode::Lan);
+    idle.update(withHost(0));
+    idle.update(listing(1, kHostAddress));
+    idle.update(searchingFor(2));
+    check(is(idle.update(searchingFor(12)), Step::None, "searching", "0"), "LAN: 10 idle seconds after the join fail the attempt");
+    check(idle.update(listing(14, kHostAddress)).step == Step::None, "LAN: the next pick waits 5 seconds");
+    check(idle.update(listing(17, kHostAddress)).step == Step::Join, "LAN: and then joins again");
 }
 
 }  // namespace
@@ -171,5 +243,7 @@ int main() {
     startAndJoin(otherReason);
     denied.denyReason = 3;
     check(is(otherReason.update(denied), Step::None, "joining"), "any other refusal is left to the idle count");
+
+    lanPath();
     return g_failures == 0 ? 0 : 1;
 }

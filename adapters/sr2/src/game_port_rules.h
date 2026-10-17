@@ -1,10 +1,12 @@
 #pragma once
 #include <cstdint>
 
+#include "sr2_addresses.h"
+
 // The pure rules of milestone 5e (unit tested): which game ports are valid, and which port a peer is reached at.
 namespace game_port_rules {
 
-constexpr uint32_t kShippedGamePort = 4200;  // what the game binds and every joiner assumes for the host
+constexpr uint32_t kShippedGamePort = sr2::kGamePort;  // what the game binds and every joiner assumes for the host
 constexpr uint32_t kMinGamePort = 1024;
 constexpr uint32_t kMaxGamePort = 65535;
 

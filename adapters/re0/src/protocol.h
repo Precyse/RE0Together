@@ -44,6 +44,7 @@ constexpr uint16_t kMsgEventStart = kFirstGameType + 0x30;  // 0x0130, firer to 
 constexpr uint16_t kMsgEventSteps = kFirstGameType + 0x31;  // 0x0131, firer to all, reliable: event_sync steps
 
 constexpr size_t kWelcomeSize = 7;
+constexpr size_t kWelcomeSteamIdSize = kWelcomeSize + sizeof(uint64_t);  // WELCOME may end with the local SteamID
 constexpr size_t kPeerUpFixedSize = 10;
 constexpr size_t kPeerStatsSize = 3;
 

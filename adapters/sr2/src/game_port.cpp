@@ -45,17 +45,21 @@ void __declspec(naked) quickCheckStub() {
 
 namespace game_port {
 
-bool install(uint32_t port, uint32_t maxPlayers, bool trace) {
+bool install(uint32_t port, uint32_t maxPlayers, bool trace, Transport transport) {
     g_trace = trace;
     local_port_relay::setTrace(trace);
     const local_port_relay::Thunks relay = local_port_relay::thunks();
     const game_port_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&quickCheckStub), relay.reportedPort,
                                            relay.relayedRecordPort, relay.unmappedSender};
-    const auto patches = game_port_patches::forPort(port, maxPlayers, trace, thunks);
+    const auto patches = game_port_patches::forPort(port, maxPlayers, trace, transport, thunks);
     if (patches.empty()) return false;
     if (!applyCodePatches(patches)) {
         logger::write("game port: sites differ, the game keeps port %u", game_port_rules::kShippedGamePort);
         return false;
+    }
+    if (transport == Transport::Steam) {
+        logger::write("game port: steam transport, only the unmapped sender trace is installed");
+        return true;
     }
     if (trace) {
         const bool replicating = maxPlayers > sr2::kCoopDefaultPlayers;
