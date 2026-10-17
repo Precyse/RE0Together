@@ -26,16 +26,18 @@ inline constexpr Site kLooks[] = {
     {"LK2", Kind::HookEntry, Gate::Now, 0x82BD00, "8B 0D 44 65 A4 02 83 EC", Thunk::LookComponentsFromSender, ""},
 };
 
-// The cutscene handshake waits for every remote (MC1, MC2).
+// The cutscene handshake waits for every remote (MC1, MC2), and the ready byte's set lives as long as the byte (CS1, CS2).
 inline constexpr Site kCutscene[] = {
     {"MC1", Kind::HookEntry, Gate::Now, 0x6BECA0, "83 EC 3C 57 8B 7C 24 44", Thunk::CutsceneAllRemotes, ""},
     {"MC2", Kind::CallBlock, Gate::Now, 0x6C3E9D, "C6 05 1E 7D 52 02 00", Thunk::CutsceneSetsReset, "90 90"},
+    {"CS1", Kind::CallBlock, Gate::Now, 0x6C5849, "C6 05 1D 7D 52 02 00", Thunk::CutsceneReadyConsumed, "90 90"},
+    {"CS2", Kind::CallBlock, Gate::Now, 0x6C6AB4, "C6 05 1D 7D 52 02 00", Thunk::CutsceneReadyConsumed, "90 90"},
 };
 
 // "The partner paused" is a bit per slot (N4).
 inline constexpr Site kPause[] = {
     {"N4a", Kind::CallBlock, Gate::Now, 0x8CB12A, "88 0D 2F 93 52 02", Thunk::PauseSenderBit, "90"},
-    {"N4b", Kind::JumpOut, Gate::Now, 0x8CB28E, "80 3D 2F 93 52 02 00 74 0C C6 05 2F 93 52 02 00 E8 ED EE FF FF", Thunk::PauseClearLeaver, ""},
+    {"N4b", Kind::JumpOut, Gate::Now, 0x8CB28E, "80 3D 2F 93 52 02 00 74 0C C6 05 2F 93 52 02 00 E8 ED EE FF FF", Thunk::MemberLeft, ""},
 };
 
 // A guest runs the leave pass for another guest that leaves, and ends a cutscene only for the host leaving (N2a, N3).

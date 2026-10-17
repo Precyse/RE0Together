@@ -139,7 +139,7 @@ int main() {
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
     check(phaseSize("net clock") == 2, "net clock: 2 sites (CK1, CK2)");
     check(phaseSize("bundle sender trace") == 1, "bundle sender trace: 1 site (BUT), written with trace=1 only");
-    check(phaseSize("cutscene handshake") == 2, "cutscene handshake: 2 sites (MC1, MC2)");
+    check(phaseSize("cutscene handshake") == 4, "cutscene handshake: 4 sites (MC1, MC2, CS1, CS2)");
     check(phaseSize("guest leave") == 1,
  "guest leave: 1 site (N2a)");
     check(phaseSize("join admission") == 3,
@@ -191,6 +191,17 @@ int main() {
     check(playback && partner_replacement::replacementFor(*playback, 0x10004000) == std::vector<uint8_t>{0x00, 0x40, 0x00, 0x10} &&
               partner_sites::parseHex(playback->expected) == std::vector<uint8_t>{0xD0, 0x33, 0x86, 0x00},
           "TF2: the player bundle's vtable slot (0x8633D0) becomes the thunk, its address little endian");
+    bool readyStores = true;
+    for (const char* id : {"CS1", "CS2"}) {
+        const Site* store = siteNamed(sites, id);
+        readyStores = readyStores && store && store->kind == Kind::CallBlock && store->thunk == partner_sites::Thunk::CutsceneReadyConsumed &&
+                      partner_sites::parseHex(store->expected) == std::vector<uint8_t>{0xC6, 0x05, 0x1D, 0x7D, 0x52, 0x02, 0x00} &&
+                      partner_sites::parseHex(store->tail).size() == sizeOf(*store) - kBranchBytes;
+    }
+    check(readyStores, "CS1 and CS2: the store of 0 into the remote ready byte 0x2527D1D (7 bytes) becomes a call to the thunk and two nops");
+    const Site* leave = siteNamed(sites, "N4b");
+    check(leave && leave->kind == Kind::JumpOut && leave->thunk == partner_sites::Thunk::MemberLeft && sizeOf(*leave) == 21,
+          "N4b: the member left prologue (21 bytes) jumps to the dispatcher");
     const Site* clockMessage = siteNamed(sites, "CK1");
     const Site* clockTick = siteNamed(sites, "CK2");
     check(clockMessage && clockMessage->kind == Kind::HookEntry && clockMessage->address == 0x7FCBF0 && sizeOf(*clockMessage) == 8 &&
