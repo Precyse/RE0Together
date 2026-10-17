@@ -283,18 +283,68 @@ constexpr std::array<uintptr_t, 14> kEnemyExecutorFunctions = {
     0x4a8940,  // uEnemy43
     0x4bad30,  // uEnemy46
 };
-// The target an enemy chases: the 15 classes sharing update 0x420f70 choose it in 0x421b20 (thiscall, no arguments;
-// the nearer of sPlayer's controlled and partner characters, the controlled one on a tie or when flags 6 / 2 are set).
-constexpr uintptr_t kEnemyBaseTargetSelectFunction = 0x421b20;
-// The class of vtable 0xcbf0d0 has its own selector (called from its update 0x4392a0, thiscall, no arguments): same
-// target field; +0x6b84 is the flat (x, z) distance to the target there, +0x6b88 a range it does not write.
-constexpr uintptr_t kEnemyOwnClassTargetSelectFunction = 0x439e90;
-constexpr uintptr_t kEnemyTargetOffset = 0x6b80;          // uPlayerBase* the enemy chases
-constexpr uintptr_t kEnemyTargetHeightOffset = 0x6b84;    // f32 target y minus own y
-constexpr uintptr_t kEnemyTargetFlatDistanceOffset = kEnemyTargetHeightOffset;  // same field in the own-class selector: flat (x, z) distance
-constexpr uintptr_t kEnemyTargetDistanceOffset = 0x6b88;  // f32 distance to the target
+// Which player an enemy chases. Each class picks the nearer of sPlayer's controlled and partner characters in its own
+// selector (thiscall, no arguments, plain ret, called once per frame from the class update); it writes the target and
+// the distance (and for some classes the height), and it fills +0x67cc / +0x67d0 (the distance to the controlled and
+// to the partner character, FLT_MAX when that character is not eligible) just before choosing.
 constexpr uintptr_t kEnemyDistanceControlledOffset = 0x67cc;  // f32 distance to sPlayer's controlled character
 constexpr uintptr_t kEnemyDistancePartnerOffset = 0x67d0;     // f32 distance to sPlayer's partner
+constexpr size_t kEnemyUpdateSlot = 41;  // vtable slot (+0xa4): the class's per-frame update
+constexpr uintptr_t kEnemyBaseUpdateFunction = 0x420f70;  // the update the 15 base family vtables share
+constexpr uintptr_t kEnemyTargetOffset = 0x6b80;          // base family and uEnemy2b: uPlayerBase* the enemy chases
+constexpr uintptr_t kEnemyTargetHeightOffset = 0x6b84;    // base family: f32 target y minus own y
+constexpr uintptr_t kEnemyTargetFlatDistanceOffset = kEnemyTargetHeightOffset;  // uEnemy2b: flat (x, z) distance to the target
+constexpr uintptr_t kEnemyTargetDistanceOffset = 0x6b88;  // base family: f32 distance to the target
+// uEnemy2b (kEnemyOwnClassVtable) has its own selector (called from its update 0x4392a0): same target field; +0x6b84 is the
+// flat (x, z) distance to the target there, +0x6b88 a range it does not write.
+constexpr uintptr_t kEnemyOwnClassVtable = 0xcbf0d0;
+constexpr uintptr_t kEnemyOwnClassTargetSelectFunction = 0x439e90;
+
+// How the owner treats a class's target: SyncOnly = sent to the follower, nothing else; the others add hysteresis
+// (target_hysteresis_rule) with that tier's tuning.
+enum class TargetPolicy : uint8_t { SyncOnly, LargeBoss, Stalker };
+
+// A class's own nearest-player selector and the fields it fills. preferenceMask: while [enemy + preferenceOffset] &
+// preferenceMask is set, the class targets a fixed character and is left alone. An unused offset is 0.
+struct TargetSelector {
+    std::array<uintptr_t, 2> vtables;  // 0 = unused
+    uintptr_t matchUpdate;             // 0 = unused; else every vtable whose update (slot 41) is this one
+    uintptr_t function;
+    uintptr_t targetOffset;            // uPlayerBase*
+    uintptr_t distanceOffset;          // filled from +0x67cc / +0x67d0
+    uintptr_t heightOffset;            // target y minus own y
+    uintptr_t preferenceOffset;
+    uint32_t preferenceMask;
+    uintptr_t rebeccaFlagOffset;       // a flag word whose rebeccaFlagMask is set while the target is Rebecca-type
+    uint32_t rebeccaFlagMask;
+    TargetPolicy policy;
+};
+constexpr uintptr_t kEnemyPreferenceOffset = 0x6848;  // 0x37, 0x38, 0x43: & 3 = a fixed character is targeted
+constexpr uint32_t kEnemyPreferenceMask = 3;
+constexpr uintptr_t kEnemy46FlagsOffset = 0x6ce8;  // uEnemy46
+constexpr uint32_t kEnemy46LockedMask = 2;         // the target is locked on +0x6d78 / +0x6d88
+constexpr uint32_t kEnemy46RebeccaMask = 4;        // set while the target is Rebecca-type
+constexpr std::array<TargetSelector, 5> kTargetSelectors = {{
+    // The base family (zombies and the like): synced, no hysteresis.
+    {.vtables = {}, .matchUpdate = kEnemyBaseUpdateFunction, .function = 0x421b20, .targetOffset = kEnemyTargetOffset,
+     .distanceOffset = kEnemyTargetDistanceOffset, .heightOffset = kEnemyTargetHeightOffset,
+     .policy = TargetPolicy::SyncOnly},
+    // uEnemy31.
+    {.vtables = {0xcbfe58}, .function = 0x45b9b0, .targetOffset = 0x6a30, .distanceOffset = 0x6a34,
+     .policy = TargetPolicy::LargeBoss},
+    // uEnemy37, uEnemy38.
+    {.vtables = {0xcc08c0, 0xcc5ae8}, .function = 0x475e20, .targetOffset = 0x6a9c, .distanceOffset = 0x6aa0,
+     .preferenceOffset = kEnemyPreferenceOffset, .preferenceMask = kEnemyPreferenceMask,
+     .policy = TargetPolicy::LargeBoss},
+    // uEnemy43.
+    {.vtables = {0xcc25d8}, .function = 0x4b15f0, .targetOffset = 0x73fc, .distanceOffset = 0x7400,
+     .preferenceOffset = kEnemyPreferenceOffset, .preferenceMask = kEnemyPreferenceMask,
+     .policy = TargetPolicy::Stalker},
+    // uEnemy46. It writes no distance of its own (the flat ones at +0x67cc / +0x67d0 are what it compares).
+    {.vtables = {0xcc3248}, .function = 0x4ba270, .targetOffset = 0x6d98, .preferenceOffset = kEnemy46FlagsOffset,
+     .preferenceMask = kEnemy46LockedMask, .rebeccaFlagOffset = kEnemy46FlagsOffset,
+     .rebeccaFlagMask = kEnemy46RebeccaMask, .policy = TargetPolicy::LargeBoss},
+}};
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 // The game's one random generator (xorshift128 0x684d90 on four words at 0xe2ccb0). An enemy's damage function rolls
 // it for the critical hit before applying (slot 76 0x4cbdb0 -> randRange 0x6600c0; class 0x438b00 via 0x660080), so

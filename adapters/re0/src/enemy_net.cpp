@@ -11,6 +11,7 @@
 #include "enemy_hit_wire.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
+#include "enemy_target.h"
 #include "enemy_decision.h"
 #include "game_tick.h"
 #include "log.h"
@@ -86,6 +87,9 @@ void runAsOwner(uintptr_t enemy, uintptr_t attackerObject, HitPayload& hit, game
     enemy_follow_rule::Action before;
     const bool readBefore = readAction(enemy, before);
     if (!enemy_damage_hook::runDamage(enemy, attackerObject, point, info)) return;
+    if (hit.attackerCharacterId != enemy_protocol::kNoAttacker) {
+        enemy_target::noteAttacker(enemy, hit.attackerCharacterId);
+    }
     hit.hpAfter = hpOf(enemy);
     enemy_follow_rule::Action after;
     if (readBefore && readAction(enemy, after)) {

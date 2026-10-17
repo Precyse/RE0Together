@@ -282,3 +282,20 @@ An outfit is one model byte `emXX`. **sPlayerCostume** 0xdcc00c: +0x54 / +0x60 c
 **Voice.** Bank 10 variants (table 0xced518): 0 voice_1, 1 voice_1_jp, 2 voice_2 (Wesker, `wdam*`), 3 voice_2_jp; selected in sSound (0xdcc070) +0xef0 by `0x64a560(variant)` (variant 4 = automatic: Wesker Mode adds 2, a language other than 1 adds 1). The game calls it with 4 from `0x59df90` at game start; the adapter calls the original, then `0x64a560(2 + (language != 1))` when Billy's outfit is a5. Not switched mid-game.
 
 **Adapter keys** (`adapter.ini`, written by the launcher): `character=rebecca|billy` (the host's character; the guest gets the other, decided in `character_owner::decide`), `outfit_rebecca=`, `outfit_billy=` (hex model, empty keeps the save's outfit; a value that is not offered for that character is ignored with one log line). The owner reports the current outfit of its character as APPEARANCE 0x0116 (`{character, model, 2 reserved}`, reliable, on a change and every 2 s); the peer puts it on that character (`appearance.cpp`). A suitcase change of the partner's character is answered as done and dropped.
+
+## Boss targets (static, 2026-10-16)
+All addresses read in `tools/re0/image.bin` (the disk exe's `.text` is encrypted); not yet run live. Each class below picks the player it chases in its own selector, called once per frame from the class update (thiscall, no arguments, plain ret). Before each choice the selector writes `+0x67cc` / `+0x67d0` (distance to the controlled / partner character; FLT_MAX = not eligible: another room, or past 0x43's 200.0 height gate). Kinds: `0x522af0` returns the low byte of a unit's DTI id, Rebecca-type 1-3, Billy-type 5/7; controlled getter 0x4ec780, partner getter 0x96cd30.
+
+| em kind | vtable(s) | selector | how it picks | target / distance | identity (confidence) |
+|---|---|---|---|---|---|
+| 0x31 | 0xcbfe58 | 0x45b9b0 | nearest, controlled on a tie | +0x6a30 / +0x6a34 | Proto-Tyrant (unverified) |
+| 0x37, 0x38 | 0xcc08c0, 0xcc5ae8 | 0x475e20 | `[+0x6848] & 3`: fixed character; else nearest | +0x6a9c / +0x6aa0 | Stinger (unverified) |
+| 0x43 | 0xcc25d8 | 0x4b15f0 | same flag rule; the partner only within a 200.0 height difference | +0x73fc / +0x7400 | Mimicry Marcus (unverified) |
+| 0x46 | 0xcc3248 | 0x4ba270 | `[+0x6ce8] & 2`: locked on +0x6d78 / +0x6d88; else nearest flat distance, +500.0 to a character in one state; sets `+0x6ce8` bit 4 when the target is Rebecca-type | +0x6d98 / none | Queen Leech (good) |
+| 0x3a, 0x3e | 0xcc13d8, 0xcc5c60 | 0x488d60 | fixed: the Billy-type character | +0x6ce0 / +0x6ce4 | Centurion (good) |
+| 0x3c | 0xcc18e8 | 0x490df0 | fixed: the Rebecca-type character in the room, else Billy | +0x14168 | Giant Bat (good) |
+| 0x47, 0x35 | 0xcc3710, 0xcc0458 | 0x4c1540, 0x46c9e0 | per character, each only if in the room | +0x6a10 / +0x6a14 | second Queen Leech form (unverified), bats (good) |
+
+Left alone: the base family 0x421b20 (synced, no hysteresis), uEnemy2b 0x439e90, 0x2a 0x4d9010, 0x2c 0x444470, 0x2f 0x44ca60, Cerberus 0x34 0x464be0, 0x39 0x47fda0, leeches 0x40-0x42 0x49fe90. Classes with a fixed target (3a/3e, 3c, 47, 35, and 37/38/43/46 while their preference flag is set) pick the same character on both machines, so nothing is done for them.
+
+Co-op: `enemy_target` hooks every row of `game::kTargetSelectors`. Before this the owner read `+0x6b80` for every class, which only the base family and uEnemy2b use, so a boss's target was never sent and each machine chose from its own copy of the two positions (different near the midpoint, flipping per frame). Now `read` uses each class's own target field, and the follower overwrites the selector's result with the owner's. For 31, 37/38, 46 (`kLargeBossTuning`: attacker bonus 3000 for 6 s, switch lock 3 s, margin 1500) and 43 (`kStalkerTuning`: 1500 / 4 s / 2 s / 1000) the owner runs `target_hysteresis_rule::choose` on the distances the engine wrote; the last attacker comes from `enemy_net` `runAsOwner` (`enemy_target::noteAttacker`). Switches are logged: `enemy_target: slot N switch A -> B (reason)`. The numbers are first guesses (RE0 units are about 1 mm) to tune live.
