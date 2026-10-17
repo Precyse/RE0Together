@@ -1,3 +1,4 @@
+#include "appearance.h"
 #include "auto_join.h"
 #include "init.h"
 
@@ -65,9 +66,10 @@ bool waitForDecryption() {
 }
 
 // Registration order is execution order within a frame: ownership first, then the think swap, then the remote pad advance.
-void enableCoop() {
+void enableCoop(const Config& config) {
     if (!input_record::captureOriginals()) logger::write("adapter: cannot read the pad vtable, input sync disabled");
-    character_owner::enable(g_net);
+    character_owner::enable(g_net, config.hostCharacter);
+    if (!appearance::enable(g_net, config)) logger::write("adapter: outfit sync unavailable");
     inventory_sync::enable(g_net);
     floor_items_sync::enable(g_net);
     pickup_guard::enable();
@@ -120,7 +122,7 @@ void startSubsystems() {
     if (config.netTrace) net_trace::enable();
     if (config.autoJoin) auto_join::enable();
     if (config.coop) save_redirect::install(reportCloudWrite);
-    if (config.coop) enableCoop();
+    if (config.coop) enableCoop(config);
     if (config.trace) vtable_tracer::install(config.traceVtables);
     game_tick::install();
     crash_dump::install();
@@ -148,6 +150,7 @@ void shutdownAdapter() {
     pad_commands::uninstall();
     player_damage::uninstall();
     menu_mirror::uninstall();
+    appearance::uninstall();
     floor_items_sync::uninstall();
     door_sync::uninstall();
     event_sync::uninstall();

@@ -7,8 +7,9 @@ public sealed class LocalLobby : ILobby
     private readonly bool _isHost;
     private bool _peerPresent;
 
-    public LocalLobby(LocalTransport transport, string gameId, bool isHost)
+    public LocalLobby(LocalTransport transport, string gameId, bool isHost, IReadOnlyDictionary<string, string>? hostOptions = null)
     {
+        HostOptions = hostOptions ?? new Dictionary<string, string>();
         _transport = transport;
         _isHost = isHost;
         GameId = gameId;
@@ -21,6 +22,8 @@ public sealed class LocalLobby : ILobby
     public string? GameId { get; }
 
     public ulong Id => 0;
+
+    public IReadOnlyDictionary<string, string> HostOptions { get; }
 
     public ulong OwnerId => _isHost ? _transport.LocalId : _transport.PeerId;
 

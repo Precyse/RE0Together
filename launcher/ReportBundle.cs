@@ -8,7 +8,7 @@ public static class ReportBundle
 {
     private const string FilePrefix = "report-";
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
-    private static readonly string[] GameFilePatterns = { "adapter.log", "adapter.ini", "peer_*", "crash-*.dmp" };
+    private static readonly string[] GameFilePatterns = { "*adapter.log", "*adapter.ini", "peer_*", "crash-*.dmp" };
 
     /// <summary>Writes the zip next to the launcher log and returns its path; null when it could not be written.</summary>
     public static string? Create(IEnumerable<GameProfile> games)

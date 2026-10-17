@@ -78,6 +78,30 @@ constexpr uintptr_t kReleaseSetFunction = 0x520850;     // thiscall(sGameChara, 
 constexpr uintptr_t kRequestSetFunction = 0x5203d0;     // thiscall(sGameChara, kind, type, record) ret 0xc
 constexpr uintptr_t kRequestsLoadedFunction = 0x520240; // thiscall(sGameChara) -> bool; each call drives the loads
 
+// Outfits (docs/RE0_NOTES.md "Outfits"). sPlayerCostume holds each family's outfit list and current outfit; the model
+// byte of an outfit is part of the player's resource key, so a change releases the old set and requests the new one
+// (the menu close 0x5d8040 does exactly that) before sPlayer rebinds the player's resource.
+constexpr uintptr_t kPlayerCostumeGlobal = 0xdcc00c;       // sPlayerCostume*
+constexpr uintptr_t kCurrentCostumeFunction = 0x546b70;    // thiscall(kind) ret 4 -> u8 current model
+constexpr uintptr_t kFindCostumeFunction = 0x546940;       // thiscall(kind, model) ret 8 -> entry* (first byte = model), the current entry when absent
+constexpr uintptr_t kSetCostumeFunction = 0x547130;        // thiscall(kind, model) ret 8 -> bool; family list only, also writes the save record
+constexpr uintptr_t kGameStartFunction = 0x405140;         // thiscall(game start), no stack arguments; stores the starting outfits
+constexpr uintptr_t kGameStartSoundFunction = 0x59df90;    // thiscall, no stack arguments; selects the voice bank variant (automatic)
+constexpr uintptr_t kPlayerRebuildFunction = 0x4ebcc0;     // thiscall(sPlayer, index) ret 4: binds the newly loaded resource to a player
+constexpr uintptr_t kResourceFailedFunction = 0x5200e0;    // thiscall(sGameChara, int* kind) -> bool: a requested resource failed to load
+constexpr uintptr_t kSoundGlobal = 0xdcc070;               // sSound*
+constexpr uintptr_t kVoiceVariantFunction = 0x64a560;      // thiscall(sSound, variant) ret 4: reloads voice bank 10
+constexpr uintptr_t kLanguageGlobal = 0xdcc06c;            // object whose 0x544f70 returns the language
+constexpr uintptr_t kLanguageFunction = 0x544f70;          // thiscall -> language
+constexpr int kFirstRebeccaCostumeKind = 1;                // kinds 1..3 are Rebecca's family, any other kind is Billy's
+constexpr int kLastRebeccaCostumeKind = 3;
+constexpr int kRebeccaCostumeKind = 2;
+constexpr int kBillyCostumeKind = 5;
+constexpr int kRebeccaPlayerIndex = 0;
+constexpr int kBillyPlayerIndex = 1;
+constexpr int kVoiceWeskerVariant = 2;                     // voice_2 (English); the next variant is voice_2_jp
+constexpr int kLanguageEnglish = 1;
+
 // sItemPut: the dropped floor items, 28 records; a live record points at its spawned uItem
 constexpr uintptr_t kItemPutGlobal = 0xdce0a8;  // sItemPut*
 constexpr uintptr_t kItemPutRecordsOffset = 0x20;

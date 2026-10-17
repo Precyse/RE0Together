@@ -17,9 +17,12 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
     /// <summary>The game of the open lobby, null when there is none.</summary>
     public string? GameId { get; init; }
 
+    /// <summary>The game's characters in seat order (host first) for the open lobby; empty when there is none.</summary>
+    public IReadOnlyList<string> SeatCharacters { get; init; } = Array.Empty<string>();
+
     public bool Equals(AppStatus? other) =>
         other is not null && State == other.State && LobbyId == other.LobbyId && RttMs == other.RttMs && GameId == other.GameId
-        && Players.SequenceEqual(other.Players);
+        && Players.SequenceEqual(other.Players) && SeatCharacters.SequenceEqual(other.SeatCharacters);
 
     public override int GetHashCode() => HashCode.Combine(State, LobbyId, RttMs, Players.Count);
 }

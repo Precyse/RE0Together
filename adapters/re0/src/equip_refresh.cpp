@@ -7,8 +7,8 @@
 
 #include "debug_stats.h"
 #include "equip_rule.h"
+#include "equip_steps.h"
 #include "game.h"
-#include "game_state.h"
 #include "log.h"
 #include "settled_copy.h"
 
@@ -16,6 +16,11 @@ namespace {
 
 using character_owner::Character;
 using equip_rule::kNoWeapon;
+using equip_steps::gameChara;
+using equip_steps::guarded;
+using equip_steps::heldType;
+using equip_steps::itemBlock;
+using equip_steps::requestsLoaded;
 
 struct Job {
     bool pending = false;  // the equipped slot changed and the character is not re-equipped yet
@@ -26,25 +31,6 @@ struct Job {
 
 std::array<Job, character_owner::kCharacterCount> g_jobs;                       // game thread
 std::array<std::optional<int32_t>, character_owner::kCharacterCount> g_seenType;  // game thread: last weapon type logged
-
-template <class Step>
-bool guarded(Step step) {
-    __try {
-        step();
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-void* gameChara() { return reinterpret_cast<void*>(game::readPointer(game::kGameCharaGlobal)); }
-
-// The character's item block (0x50dc70) and its equipped slot, or null.
-void* itemBlock(uintptr_t player, uint32_t& slot) {
-    void* block = game::callThiscall<void*>(game::kPlayerItemBlockFunction, reinterpret_cast<void*>(player));
-    if (!block || !game::readMemory(reinterpret_cast<uintptr_t>(block) + game::kBlockEquippedOffset, slot)) return nullptr;
-    return block;
-}
 
 // The weapon type the character holds and the one of its block's equipped slot (setEquipped, the call 0x5d7fa0 makes).
 bool readTypes(uintptr_t player, int32_t& held, int32_t& next) {
@@ -66,35 +52,11 @@ bool loadSets(uintptr_t player, Job& job) {
         return false;
     }
     const equip_rule::LoadPlan plan = equip_rule::planLoad(held, next, job.requested);
-    if (plan.releaseRequested) game::callThiscall<void>(game::kReleaseSetFunction, chara, game::kWeaponUnitKind, job.requested);
-    if (plan.releaseHeld) game::callThiscall<void>(game::kReleaseSetFunction, chara, game::kWeaponUnitKind, held);
-    if (plan.requestNext) game::callThiscall<void>(game::kRequestSetFunction, chara, game::kWeaponUnitKind, next, record);
+    if (plan.releaseRequested) equip_steps::releaseSet(chara, game::kWeaponUnitKind, job.requested);
+    if (plan.releaseHeld) equip_steps::releaseSet(chara, game::kWeaponUnitKind, held);
+    if (plan.requestNext) equip_steps::requestSet(chara, game::kWeaponUnitKind, next, record);
     job.requested = plan.requested;
     return true;
-}
-
-bool requestsLoaded() {
-    void* chara = gameChara();
-    return chara && game::callThiscall<bool>(game::kRequestsLoadedFunction, chara);
-}
-
-// The menu close's equip step for one player (0x5d7785..0x5d77ab).
-void equip(uintptr_t player) {
-    auto* self = reinterpret_cast<void*>(player);
-    uint32_t slot = equip_rule::kNoSlot;
-    void* block = itemBlock(player, slot);
-    if (!block) return;
-    const int32_t type = game::callThiscall<int32_t>(game::kBlockSetEquippedFunction, block, slot);
-    game::callThiscall<void>(game::kPlayerSetWeaponTypeFunction, self, type);
-    if (slot == equip_rule::kNoSlot) return;
-    game::callThiscall<void>(game::kPlayerWeaponAttachFunction, self);
-    game::callThiscall<void>(game::kPlayerWeaponAimFunction, self);
-}
-
-int32_t heldType(uintptr_t player) {
-    int32_t type = kNoWeapon;
-    game::readMemory(player + game::kPlayerWeaponTypeOffset, type);
-    return type;
 }
 
 const char* ownerLabel(Character character) { return character_owner::isLocalOwned(character) ? "local" : "remote"; }
@@ -102,11 +64,6 @@ const char* ownerLabel(Character character) { return character_owner::isLocalOwn
 void fail(Character character, Job& job, const char* step) {
     logger::write("equip: the %s faulted for %s", step, character_owner::name(character));
     job = Job{};
-}
-
-// Plain gameplay (no menu, no door) with the character in the loaded room; a change that arrives earlier waits.
-bool canEquip(uintptr_t player) {
-    return game_state::playing() && !game_state::menuOpen() && game_state::inCurrentRoom(player);
 }
 
 void advance(Character character, uintptr_t player, Job& job) {
@@ -121,7 +78,7 @@ void advance(Character character, uintptr_t player, Job& job) {
     if (!ready && !guarded([&] { ready = requestsLoaded(); })) return fail(character, job, "set load check");
     if (!ready) return;
     const int32_t before = heldType(player);
-    if (!guarded([&] { equip(player); })) return fail(character, job, "equip step");
+    if (!guarded([&] { equip_steps::equip(player); })) return fail(character, job, "equip step");
     const int32_t after = heldType(player);
     logger::write("equip: %s weapon %d -> %d (%s, synced) after %llu ms, weapon set %s", character_owner::name(character),
                   before, after, ownerLabel(character), monotonicMs() - job.startMs,
@@ -160,7 +117,7 @@ void tick(Character character) {
     if (job.pending && !character_owner::isRemoteOwned(character)) job = Job{};
     const uintptr_t player = character_owner::find(character);
     if (!player) return;
-    if (job.pending && canEquip(player)) advance(character, player, job);
+    if (job.pending && equip_steps::inPlainGameplay(player)) advance(character, player, job);
     logGameChange(character, player);
 }
 

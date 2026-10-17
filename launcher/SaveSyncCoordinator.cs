@@ -10,7 +10,7 @@ public sealed class SaveSyncCoordinator : IDisposable
     private const long TimeoutMs = 60_000;
     private const long GameCheckIntervalMs = 1000;
 
-    private readonly SaveSyncProfile _config;
+    private readonly GameProfile _profile;
     private readonly string _gameDir;
     private readonly SaveSender? _sender;
     private readonly SaveReceiver? _receiver;
@@ -21,12 +21,12 @@ public sealed class SaveSyncCoordinator : IDisposable
     private long _lastGameCheckMs;
 
     private SaveSyncCoordinator(
-        SaveSyncProfile config, string gameDir, string gameExe, SaveSender? sender, SaveReceiver? receiver, SaveWatcher? watcher,
+        GameProfile profile, string gameDir, SaveSender? sender, SaveReceiver? receiver, SaveWatcher? watcher,
         Func<IEnumerable<ulong>> peers)
     {
-        _config = config;
+        _profile = profile;
         _gameDir = gameDir;
-        _gameProcess = Path.GetFileNameWithoutExtension(gameExe);
+        _gameProcess = Path.GetFileNameWithoutExtension(profile.Exe);
         _sender = sender;
         _receiver = receiver;
         _watcher = watcher;
@@ -59,13 +59,13 @@ public sealed class SaveSyncCoordinator : IDisposable
             {
                 if (frame.Type == Msg.FileAck) sender.OnAck(peer, frame);
             };
-            return new SaveSyncCoordinator(config, gameDir, profile.Exe, sender, null, WatchSaves(config, source), () => session.PeerIds);
+            return new SaveSyncCoordinator(profile, gameDir, sender, null, WatchSaves(config, source), () => session.PeerIds);
         }
         var filesDir = Path.Combine(gameDir, config.GuestSaveDir is { } guestDir ? SavePaths.Expand(guestDir) : config.SessionDir);
         var stagingDir = Path.Combine(gameDir, config.SessionDir, SaveReceiver.StagingFolder);
         var receiver = new SaveReceiver(config, filesDir, stagingDir, transport, () => lobby.OwnerId);
         session.FileFrameReceived += receiver.OnFrame;
-        return new SaveSyncCoordinator(config, gameDir, profile.Exe, null, receiver, null, () => []);
+        return new SaveSyncCoordinator(profile, gameDir, null, receiver, null, () => []);
     }
 
     /// <summary>Watches the host's save folder for saves written after the join; only profiles that send by pattern (the
@@ -114,7 +114,7 @@ public sealed class SaveSyncCoordinator : IDisposable
         return processes.Length > 0;
     }
 
-    public void EnableAdapter() => AdapterSettings.EnableCoop(_gameDir, _config);
+    public void EnableAdapter(IReadOnlyDictionary<string, string> options) => AdapterSettings.EnableCoop(_gameDir, _profile, options);
 
     public void Dispose()
     {

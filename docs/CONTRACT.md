@@ -64,15 +64,18 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 ```json
 { "id": "re0", "name": "Resident Evil 0 HD", "steamAppId": 339340, "exe": "re0hd.exe",
   "maxPlayers": 2, "port": 27960,
-  "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ] }
+  "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
+  "adapterIni": "coop/adapter.ini" }
 ```
+
+`sessionKind` is `lobby` (default: the launcher's Steam lobby, transport and save sync) or `native` (the game matches players itself, as Saints Row 2 does through OpenSpy: the launcher installs the mod, writes the options into `adapterIni` and starts the game; no lobby, seats, save sync or adapter link). `requires` lists `{ "file", "name" }` entries the game folder must hold; a missing one is shown in the rail line as `<name> not found`.
 
 ## Save sync (launcher-owned, game-agnostic)
 
-- Profile key `saveSync`: `{ "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", "adapterIni": "coop/adapter.ini" }`. Files come from `Steam\userdata\<accountId>\<steamAppId>\remote\` on the host.
+- Profile key `saveSync`: `{ "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", }`. Files come from `Steam\userdata\<accountId>\<steamAppId>\remote\` on the host.
 - Host: on each new peer, send every file as FILE_BEGIN, FILE_CHUNKs and FILE_END, all reliable. The host never has a session dir (it plays its own save).
 - Guest: write chunks to a temp file, verify the sha256, move it into `<game>\<sessionDir>\`, and reply FILE_ACK. Launch the game only after every file has been ACKed ok (60 s timeout, then abort with a message).
-- Both sides set `coop=1` in `<game>\<adapterIni>` before launching. On launcher exit, and on launcher start to recover from a crash, delete the session dir and set `coop=0`, so a normal launch plays vanilla.
+- Both sides set `coop=1` in the profile's `adapterIni` (in the game folder) before launching. On launcher exit, and on launcher start to recover from a crash, delete the session dir and set `coop=0`, so a normal launch plays vanilla.
 - The adapter redirects the game's save I/O to the session dir whenever that dir holds the files and `coop=1`.
 - Games that keep their saves outside the Steam cloud folder add `hostSaveDir` (host source), `guestSaveDir` (guest destination, relative to the game folder) and `filePattern` (e.g. `*.dat`). The folders are templates: `{documents}` is the user's Documents folder, `{steamid64}` the signed-in Steam user (from Steam's registry key). The host sends every matching file after a FILE_MANIFEST. Example: `launcher/games/ds2.json`. Before the launcher deletes a session folder (exit, crash recovery) it copies the guest's files in it to `<sessionDir's parent>rchive\<yyyyMMdd-HHmmss>\` (staging and `.part` files excluded; the last 5 archives are kept), so the guest's own progress is never lost. With `filePattern` the host launcher also watches its save folder (the game writes saves after the join and sends no SAVE_CHANGED) and, 3 s after a matching file stops changing, sends it to every peer as FILE_MANIFEST (current list) plus FILE_BEGIN/CHUNK/END. The guest takes the first full set straight into the session folder; every later file goes to `<sessionDir>/staging` and is moved into the session folder only while the game exe is not running, so a running game's own saves are never replaced.
 

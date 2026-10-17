@@ -36,6 +36,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Dropped floor items | done | `floor_items_sync.cpp`, `floor_pending.cpp` | |
 | Floor items for a late joiner or rejoiner | done, unverified live | `floor_items_sync.cpp`, `join_sync.cpp` | FLOOR_SNAPSHOT journal (changes since the last save or load); lost when the host restarts |
 | Equipped weapon | done, unverified | `equip_refresh.cpp` | |
+| Character and outfit per player (host picks the character; each player picks an outfit per character) | done, unverified live | `appearance.cpp`, `appearance_rule.h`, `character_owner.cpp` | APPEARANCE 0x0116; opposite-sex outfits and Rebecca as Wesker are not offered; the unlock state is ignored |
 | Story flags, puzzle progress, doors unlocked once, events seen | done | `flag_sync.cpp` | the 0x47 flag words, which include the enemy-killed bits |
 | Partner health and HP changes (HUD shows both characters) | done | `state_sync.cpp`, `state_correction.cpp`, `player_damage.cpp` | only the owner changes a character's HP |
 | Cutscenes and scripted moves of the other character | done | `event_place.cpp` | the story cutscene itself seen by both is a separate row below |

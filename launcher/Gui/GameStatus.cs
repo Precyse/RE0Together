@@ -1,8 +1,11 @@
 namespace CoopLauncher.Gui;
 
 /// <summary>What the rail and the mod button say about a game's mod. Every game ships in one package, so an update's
-/// build is the package build. A game build the profile does not list is shown instead of the mod state.</summary>
-internal sealed record GameStatus(ModStatus Mod, bool GameFound, int PackageBuild, int GameBuild = GameBuilds.Unknown, bool BuildSupported = true)
+/// build is the package build. A game build the profile does not list, or a required file the game folder lacks (named by
+/// MissingRequirement), is shown instead of the mod state.</summary>
+internal sealed record GameStatus(
+    ModStatus Mod, bool GameFound, int PackageBuild, int GameBuild = GameBuilds.Unknown, bool BuildSupported = true,
+    string? MissingRequirement = null)
 {
     public static readonly GameStatus Unknown = new(new ModStatus(ModState.NotInstalled, 0), false, 0);
 
@@ -11,13 +14,14 @@ internal sealed record GameStatus(ModStatus Mod, bool GameFound, int PackageBuil
     public bool UpdateAvailable => Mod.State == ModState.UpdateAvailable;
 
     /// <summary>The row's line is drawn in the amber state colour.</summary>
-    public bool NeedsAttention => GameFound && (UpdateAvailable || !BuildSupported);
+    public bool NeedsAttention => GameFound && (UpdateAvailable || !BuildSupported || MissingRequirement != null);
 
     /// <summary>Hosting needs the mod installed and a supported game build.</summary>
     public bool CanHost => ModInstalled && BuildSupported;
 
     public string Line => !GameFound ? "Game not found"
         : !BuildSupported ? $"Game build {GameBuild} unsupported"
+        : MissingRequirement != null ? $"{MissingRequirement} not found"
         : Mod.State switch
         {
             ModState.NotInstalled => "Not installed",

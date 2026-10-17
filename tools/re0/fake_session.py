@@ -1,6 +1,7 @@
 """Stand-in launcher with a scripted guest, for testing the RE0 adapter on one PC without a second player.
 
-The adapter connects to it as to its launcher; it is the host (slot 0) and a fake guest (slot 1) owns Billy. Commands
+The adapter connects to it as to its launcher; it is the host (slot 0) and a fake guest (slot 1) owns Billy (or
+Rebecca with --fake-character rebecca, for a game whose adapter.ini says character=billy). Commands
 are read from a text file, one per line, as they are appended:
     door <scene> <entry>   the fake player's character goes through a door (DOOR_CHANGE), reports where the door leads
                            at once (a door both machines play) and that room when its door would have finished (8 s),
@@ -18,16 +19,19 @@ are read from a text file, one per line, as they are appended:
                            snapshot (FLOOR_SNAPSHOT)
     leave                  the fake player goes away (PEER_DOWN) and stops sending; as the host: "Host left"
     resync                 (--guest) the host asks the guest for a resync (RESYNC_REQUEST)
+    appearance <billy|rebecca> <hex>  the fake reports the outfit of a character it owns (APPEARANCE, model byte in hex:
+                           Rebecca 02 7d 81 91, Billy 05 95 a5); the game's own APPEARANCE messages are printed
 The host's door arguments are printed as they arrive, so real doors can be replayed for Billy, and so are the game's
 room script events (EVENT_START, and EVENT_STEPS per thread: the pcs of every op the game finished), to check what a
 peer would follow.
 
-With --guest the roles swap: the game is the guest (Billy) and the fake is the host (Rebecca); it announces ownership
+With --guest the roles swap: the game is the guest and the fake is the host (Rebecca unless --fake-character billy);
+it announces ownership
 and the party mode, and answers the game's SNAPSHOT_REQUEST with a join snapshot built from the game's own flags and
 inventories plus the places given by "snapshot <billy scene> <billy entry> <billy x y z> <rebecca scene> <rebecca entry>"
 (sent when the next request arrives). "party" then sets the host's mode directly.
 
-usage: python fake_session.py [--port 27960] [--commands fake_commands.txt] [--guest]
+usage: python fake_session.py [--port 27960] [--commands fake_commands.txt] [--guest] [--fake-character billy|rebecca]
 """
 import argparse
 import os
@@ -43,6 +47,9 @@ SNAPSHOT_REQUEST, JOIN_SNAPSHOT = 0x010D, 0x010E
 PLAYER_STATE, OWNERSHIP, PARTY_MODE = 0x0100, 0x0102, 0x010A
 MENU_STATE, SAVE_SLOT, RESYNC_REQUEST, FLOOR_SNAPSHOT = 0x0105, 0x010F, 0x0114, 0x0115
 PROTO_PEER_DOWN = 0x0004
+APPEARANCE = 0x0116
+APPEARANCE_FORMAT = "<BBxx"  # character (0 Billy, 1 Rebecca), model byte
+CHARACTER_NAMES = ("billy", "rebecca")
 EVENT_START, EVENT_STEPS = 0x0130, 0x0131
 EVENT_START_FORMAT = "<IHHHHBBBB"  # key, scene, serial, trigger index, pc, type, subject character, kind, flags
 EVENT_STEP_FORMAT = "<HHHBx"  # serial, from pc, to pc, result, flags
@@ -93,10 +100,10 @@ def place(scene, entry, character, pos):
 
 
 class Session:
-    def __init__(self, sock, guest):
+    def __init__(self, sock, guest, character):
         self.guest = guest
         self.peer_slot = HOST_SLOT if guest else GUEST_SLOT
-        self.character = REBECCA if guest else BILLY  # the fake player's own character
+        self.character = character  # the fake player's own character
         self.party = 0
         self.snapshot = None
         self.sock = sock
@@ -122,7 +129,8 @@ class Session:
             return
         self.room_state()
         if self.guest:
-            self.send(OWNERSHIP, bytes((GUEST_SLOT, HOST_SLOT)))
+            billy_owner, rebecca_owner = (HOST_SLOT, GUEST_SLOT) if self.character == BILLY else (GUEST_SLOT, HOST_SLOT)
+            self.send(OWNERSHIP, bytes((billy_owner, rebecca_owner)))
             self.send(PARTY_MODE, bytes((self.party,)))
         if self.phase is not None:
             self.send(SAVE_SLOT, struct.pack("<ii", SESSION_SLOT, self.phase))
@@ -169,6 +177,9 @@ class Session:
                 steps = [struct.unpack_from(EVENT_STEP_FORMAT, payload, 4 + i * 8) for i in range(count)]
                 print("event steps: " + ", ".join(f"{serial}:{start:#x}->{end:#x} {STEP_RESULTS[result]}"
                                                   for serial, start, end, result in steps), flush=True)
+            elif msg_type == APPEARANCE:
+                character, model = struct.unpack(APPEARANCE_FORMAT, payload)
+                print(f"APPEARANCE {CHARACTER_NAMES[character]} {model:02x}", flush=True)
             elif msg_type == PARTY_MODE:
                 print(f"party mode: {'team' if payload[0] == 0 else 'leave behind'}", flush=True)
             elif msg_type == SNAPSHOT_REQUEST:
@@ -229,6 +240,8 @@ class Session:
             self.send(PROTO_PEER_DOWN, bytes((self.peer_slot,)))
         elif words[0] == "resync":
             self.send(RESYNC_REQUEST, b"")
+        elif words[0] == "appearance":
+            self.send(APPEARANCE, struct.pack(APPEARANCE_FORMAT, CHARACTER_NAMES.index(words[1]), int(words[2], 16)))
         elif words[0] == "place":
             scene = int(words[1], 0)
             x, y, z = (float(v) for v in words[2:5])
@@ -241,7 +254,10 @@ def main():
     parser.add_argument("--port", type=int, default=27960)
     parser.add_argument("--commands", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_commands.txt"))
     parser.add_argument("--guest", action="store_true", help="the game is the guest, the fake the host")
+    parser.add_argument("--fake-character", choices=CHARACTER_NAMES, help="the fake player's character (default: Billy, "
+                        "Rebecca with --guest)")
     args = parser.parse_args()
+    character = CHARACTER_NAMES.index(args.fake_character) if args.fake_character else (REBECCA if args.guest else BILLY)
     local_slot, peer_slot = (GUEST_SLOT, HOST_SLOT) if args.guest else (HOST_SLOT, GUEST_SLOT)
     open(args.commands, "w").close()
 
@@ -255,9 +271,9 @@ def main():
     sock.sendall(encode(PROTO_WELCOME, HOST_SLOT, struct.pack("<BBBI", local_slot, HOST_SLOT, MAX_PLAYERS, EPOCH)))
     name = b"fake peer"
     sock.sendall(encode(PROTO_PEER_UP, HOST_SLOT, struct.pack("<BQB", peer_slot, GUEST_STEAM_ID, len(name)) + name))
-    session = Session(sock, args.guest)
+    session = Session(sock, args.guest, character)
     threading.Thread(target=session.receive_loop, daemon=True).start()
-    print(f"adapter linked as the {'guest (Billy)' if args.guest else 'host (Rebecca)'}", flush=True)
+    print(f"adapter linked as the {'guest' if args.guest else 'host'}, the fake plays {CHARACTER_NAMES[character]}", flush=True)
 
     done = 0
     last_tick = 0.0

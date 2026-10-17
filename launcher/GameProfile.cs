@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CoopLauncher;
 
@@ -8,15 +9,45 @@ public sealed record AdapterFile(string Src, string Dst);
 /// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host
 /// then sends whatever matches, announced first by a manifest.</summary>
 public sealed record SaveSyncProfile(
-    List<string> SteamRemoteFiles, string SessionDir, string AdapterIni,
+    List<string> SteamRemoteFiles, string SessionDir,
     string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
+
+/// <summary>Where a game's co-op session lives. A Lobby game uses the launcher's Steam lobby, transport and save sync; a
+/// Native game matches players itself, so the launcher only installs the mod, writes the options and starts the game.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum SessionKind { Lobby, Native }
+
+/// <summary>A file the game folder must hold for co-op to work, and the name the status line gives it when it is missing.</summary>
+public sealed record RequiredFile(string File, string Name);
+
+/// <summary>One value of a game option. A value with a DlcAppId is offered only when the game folder holds that DLC.</summary>
+public sealed record OptionValue(string Value, string Label, string? DlcAppId = null);
+
+/// <summary>A per-game choice shown as a dropdown and written to the adapter ini under Key; the first value is the
+/// default. A Host option is the host's alone (the guest takes what follows from it).</summary>
+public sealed record GameOption(string Key, string Label, List<OptionValue> Values, bool Host = false)
+{
+    private const string DlcFolder = "DLC";
+
+    public string Default => Values[0].Value;
+
+    public IEnumerable<OptionValue> AvailableIn(string? gameDir) =>
+        Values.Where(v => v.DlcAppId == null || (gameDir != null && Directory.Exists(Path.Combine(gameDir, DlcFolder, v.DlcAppId))));
+}
 
 public sealed record GameProfile(
     string Id, string Name, int SteamAppId, string Exe, int MaxPlayers, int Port,
-    List<AdapterFile> AdapterFiles, SaveSyncProfile? SaveSync = null, string? AdapterLog = null,
-    List<string>? Characters = null, List<int>? SupportedBuilds = null)
+    List<AdapterFile> AdapterFiles, string AdapterIni, SaveSyncProfile? SaveSync = null, string? AdapterLog = null,
+    List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
+    SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    public bool NativeSession => SessionKind == SessionKind.Native;
+
+    /// <summary>The name of the first required file missing from the game folder, or null when all are there.</summary>
+    public string? MissingRequirement(string gameDir) =>
+        Requires?.FirstOrDefault(required => !File.Exists(Path.Combine(gameDir, required.File)))?.Name;
 
     public static GameProfile Load(string id)
     {

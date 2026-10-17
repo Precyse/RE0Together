@@ -40,6 +40,8 @@ internal sealed class GameRail : Control
 
     public GameStatus SelectedStatus => _selected >= 0 ? _games[_selected].Status : GameStatus.Unknown;
 
+    public GameStatus StatusOf(string gameId) => _games.FirstOrDefault(g => g.Profile.Id == gameId)?.Status ?? GameStatus.Unknown;
+
     public IEnumerable<GameProfile> Games => _games.Select(g => g.Profile);
 
     public void Add(GameProfile profile, SteamArt art)

@@ -83,6 +83,9 @@ target_compile_definitions(sr2_adapter PRIVATE COOP_LOG_FILE=L"sr2_adapter.log")
 set_target_properties(sr2_adapter PROPERTIES OUTPUT_NAME dinput8 PREFIX "")
 target_link_libraries(sr2_adapter PRIVATE minhook ws2_32 iphlpapi)
 target_compile_options(sr2_adapter PRIVATE /W4 /WX /utf-8)
+# The launcher and the release package take the DLL from here (git-ignored).
+add_custom_command(TARGET sr2_adapter POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:sr2_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/dinput8.dll)
 
 # The partner thunks run inside game code that keeps floats on the x87 stack and may keep values in xmm registers across
 # the calls they replace. They are built without SSE so that they never touch xmm; the few that do float math save the
