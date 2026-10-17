@@ -30,6 +30,7 @@ inline constexpr Phase kPhases[] = {
     {"player traces", trace_sites::kPlayers, true},
     {"net clock", player_sites::kNetClock, false},
     {"bundle sender trace", player_sites::kBundleSender, true},
+    {"census trace", trace_sites::kCensus, true},
 
     {"population budgets", world_sites::kBudget, false},
 

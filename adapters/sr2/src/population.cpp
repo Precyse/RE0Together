@@ -1,5 +1,6 @@
 #include "population.h"
 
+#include <atomic>
 #include <cstring>
 
 #include "fpu_guard.h"
@@ -20,6 +21,7 @@ constexpr size_t kWideArg = 0;
 
 void* g_areaBudgetOriginal = nullptr;
 void* g_clusterOriginal = nullptr;
+std::atomic<uint32_t> g_lastAreasHundredths{0};
 
 Point readPoint(uintptr_t address) {
     Point point{};
@@ -63,6 +65,7 @@ void __cdecl areaBudget(GuestFrame* frame) {
     const uint32_t* args = frame->args;
     const Remotes remotes = remotesNow();
     if (remotes.count < population_rules::kBudgetRemotesAtLeast) {
+        g_lastAreasHundredths = 0;
         frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(g_areaBudgetOriginal), frame->regs, {args[kRadiusArg], args[kBaseArg]});
         return;
     }
@@ -72,6 +75,7 @@ void __cdecl areaBudget(GuestFrame* frame) {
     Point cameras[partner_rules::kMaxWalked];
     for (size_t i = 0; i < remotes.count; ++i) cameras[i] = readPoint(remotes.humans[i] + sr2::kHumanCameraOffset);
     const float extra = population_rules::extraAreas(readPoint(sr2::kCameraPosition), cameras, remotes.count, radius);
+    g_lastAreasHundredths = population_rules::areasHundredths(extra);
     frame->regs.eax = population_rules::budget(args[kBaseArg], extra);
 }
 
@@ -117,6 +121,8 @@ void __declspec(naked) vehicleHeadroomStub() {
 }  // namespace
 
 namespace population {
+
+uint32_t lastAreasHundredths() { return g_lastAreasHundredths; }
 
 partner_thunks::Binding bind(Thunk thunk) {
     switch (thunk) {

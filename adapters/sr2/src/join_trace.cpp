@@ -27,11 +27,15 @@ uint32_t __cdecl detourPoolSetup() {
     logger::write("trace: session pools sized, max session players %u, max players %u, connections per player %u, inside net_set_mode %d",
                   readDword(sr2::kMaxSessionPlayers), readDword(sr2::kMaxPlayers), readDword(sr2::kConnectionsPerPlayer),
                   coop_limits::insideNetSetMode() ? 1 : 0);
-    logger::write("trace: coop_allocators used %u of %u bytes, player N=8 allocator count %u block 0x%X",
+    logger::write("trace: coop_allocators used %u of %u bytes, player N=8 allocator count %u block 0x%X, npc allocator counts "
+                  "creation data %u state data N=8 %u sim state %u",
                   readDword(sr2::kCoopAllocatorsPool + sr2::kPoolUsedOffset),
                   readDword(sr2::kCoopAllocatorsPool + sr2::kPoolSizeOffset),
                   readDword(sr2::kPlayerN8Allocator + sr2::kAllocatorCountOffset),
-                  readDword(sr2::kPlayerN8Allocator + sr2::kAllocatorBlockOffset));
+                  readDword(sr2::kPlayerN8Allocator + sr2::kAllocatorBlockOffset),
+                  readDword(sr2::kNpcCreationDataAllocator + sr2::kAllocatorCountOffset),
+                  readDword(sr2::kNpcStateDataAllocator + sr2::kAllocatorCountOffset),
+                  readDword(sr2::kNpcSimStateAllocator + sr2::kAllocatorCountOffset));
     member_slots::check(g_maxPlayers);
     return g_poolSetup();
 }

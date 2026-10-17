@@ -137,6 +137,10 @@ int main() {
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
     check(phaseSize("player traces") == 3, "player traces: 3 sites (TF1, TF2, TL2), written with trace=1 only");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
+    check(phaseSize("census trace") == 1, "census trace: 1 site (NC1), written with trace=1 only");
+    const Site* npcSetup = siteNamed(sites, "NC1");
+    check(npcSetup && npcSetup->kind == Kind::HookEntry && npcSetup->address == 0x9D0DE0 && sizeOf(*npcSetup) == 8,
+          "NC1 hooks the NPC human setup 0x9D0DE0, 8 checked bytes");
     check(phaseSize("net clock") == 2, "net clock: 2 sites (CK1, CK2)");
     check(phaseSize("bundle sender trace") == 1, "bundle sender trace: 1 site (BUT), written with trace=1 only");
     check(phaseSize("cutscene handshake") == 4, "cutscene handshake: 4 sites (MC1, MC2, CS1, CS2)");

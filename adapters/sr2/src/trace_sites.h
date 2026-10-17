@@ -18,4 +18,10 @@ inline constexpr Site kPlayers[] = {
     {"TL2", Kind::HookEntry, Gate::Now, 0x9E9EB0, "51 A1 38 C4 E8 00", Thunk::TraceCoopBuffers, ""},
 };
 
+// The pool census (milestone 11 B6, docs/SR2_NOTES.md, "Pool census"): the NPC human setup, which counts a create that
+// returned nothing.
+inline constexpr Site kCensus[] = {
+    {"NC1", Kind::HookEntry, Gate::Now, 0x9D0DE0, "51 53 8A 5C 24 0C 84 DB", Thunk::TraceNpcSetup, ""},
+};
+
 }  // namespace trace_sites
