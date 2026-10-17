@@ -44,7 +44,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 | 0x0042 | FILE_END | launcher->launcher | u32 transfer id |
 | 0x0043 | FILE_ACK | launcher->launcher | u32 transfer id, u8 ok (sha256 matched) |
 | 0x0044 | FILE_MANIFEST | host launcher->guest launcher | u8 count, then per file u8 length + ascii name; sent before the files when the profile sends by `filePattern`; the guest then expects exactly these files |
-| 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 build number (version.txt; 0 = dev build), then i32 installed game build (Steam buildid; 0 = unknown; absent from older launchers); sent as a peer joins, before the save files; a guest on a different launcher build or game build refuses to start the game |
+| 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 build number (version.txt; 0 = dev build), then i32 installed game build (Steam buildid; 0 = unknown; absent from older launchers), then u8[32] mod hash (SHA-256 over the profile's adapterFiles as installed: per file the lowercase dst name, 0x00, u64 LE length, bytes; zero = not installed; absent from older launchers); sent as a peer joins, before the save files; a guest on a different launcher build or game build refuses to start the game, and so does one with another hash (Mod files differ) or none (Mod not installed) when the host's is not zero; the first difference found counts, in the order launcher build, game build, mod; a dev build (build 0) is guarded by the hash alone |
 | 0x0060 | SAVE_CHANGED | adapter->own launcher | ascii name of a save file the game just wrote to the Steam cloud; the host launcher re-sends the profile's save files to every peer (same FILE_* transfer as at join) |
 | 0x0051 | CRASH_DUMP | guest launcher->host launcher | u8 name length, ascii name (`crash-*.dmp`), u32 offset, bytes (≤ 32 KiB); a dump the adapter wrote during the session, sent in order; the host writes `peer_<steamid>_<name>` beside its adapter log |
 | 0x0050 | LOG_APPEND | guest launcher->host launcher | raw bytes newly appended to the guest's adapter log (≤ 32 KiB, every 2 s); the host appends them to `peer_<steamid>.log` beside its own adapter log |
@@ -55,9 +55,22 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 
 ## Session
 
-- Slots: lobby owner = 0 = host. The others are sorted ascending by SteamID into 1..max-1. Recompute on every membership change. If the host leaves, the session ends (epoch bump, PEER_DOWN for all).
+- Slots: lobby owner = 0 = host. The others are sorted ascending by SteamID into 1..max-1. Recompute on every membership change. A member missing from the lobby is held 10 s before PEER_DOWN; its slot and frames continue. Back within 10 s: PEER_UP again for the same slot (adapters resync: a guest asks for a snapshot, a host re-sends what it sends a joining peer). The host missing for 10 s, or any change of lobby owner, ends the session (epoch bump, PEER_DOWN for all). A guest whose lobby fails keeps its session and adapter link during the 10 s while it rejoins.
 - Lobby data: `cf_game=<id>`, `cf_proto=<n>`, `cf_ver=<launcher version>`. Members whose `cf_game`/`cf_proto` mismatch get no slot.
 - Protocol version `proto = 1`.
+
+### Peer frame budget
+
+Game frames (type 0x0100 and up) from a peer pass a token bucket per source slot before the launcher relays them to the adapter. A frame must fit both buckets of its kind, or it is dropped and counted per (slot, type, reliable); the peer is never disconnected. Launcher-owned frames (FILE_*, BUILD_INFO, LOG_APPEND, CRASH_DUMP, PING/PONG) are not budgeted. Every 5 s, while the totals change, the log gets `Peer budget: slot 1 dropped 0x0101 x12 (unreliable)`; a reliable drop adds "state may diverge; F9 resyncs".
+
+| bucket | rate | capacity |
+|---|---|---|
+| unreliable frames | 300 /s | 600 (2 s) |
+| unreliable bytes | 256 KiB/s | 512 KiB |
+| reliable frames | 300 /s | 3000 (10 s, a stall's backlog) |
+| reliable bytes | 512 KiB/s | 4 MiB (above the 1 MiB frame cap) |
+
+That is about 2x the RE0 peak (140 frames/s, up to about 80 KiB/s; DS2 about 125 frames/s, under 20 KiB/s).
 
 ## Game profile (`launcher/games/<id>.json`)
 
@@ -83,6 +96,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 3. Keep an engine-neutral gameplay core and implement the per-engine primitives:
    `enumerate_actors`, `local_player`, `bind_remote(slot) -> body`, `suppress_ai(body)`, `warp(body, pos, rot)`, `play_action(body, id)`, `set_locomotion(body, speed, dir)`, `read_anim(body)`, `force_anim(body, anim)`, `apply_hit(descriptor)`.
 4. Authority: the host (slot 0) owns enemies, world flags and pickups. Guests send their own player state plus hit descriptors.
+5. A PEER_UP for a slot that is already up means the peer was unreachable for a while: resync, do not reset.
 
 ## Game messages of the DS2 adapter (0x0100 and up, adapter-owned)
 

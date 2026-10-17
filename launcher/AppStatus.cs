@@ -20,9 +20,12 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
     /// <summary>The game's characters in seat order (host first) for the open lobby; empty when there is none.</summary>
     public IReadOnlyList<string> SeatCharacters { get; init; } = Array.Empty<string>();
 
+    /// <summary>Why the last start was refused (builds or mod files differ); shown while idle.</summary>
+    public BuildMismatch Problem { get; init; }
+
     public bool Equals(AppStatus? other) =>
         other is not null && State == other.State && LobbyId == other.LobbyId && RttMs == other.RttMs && GameId == other.GameId
-        && Players.SequenceEqual(other.Players) && SeatCharacters.SequenceEqual(other.SeatCharacters);
+        && Problem == other.Problem && Players.SequenceEqual(other.Players) && SeatCharacters.SequenceEqual(other.SeatCharacters);
 
     public override int GetHashCode() => HashCode.Combine(State, LobbyId, RttMs, Players.Count);
 }

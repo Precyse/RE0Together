@@ -12,3 +12,5 @@ adapters/ds2/build/
 adapters/ds2/version.dll
 adapters/ds2/build-live/
 tools/re0/out/
+tools/launcher_tests/bin/
+tools/launcher_tests/obj/

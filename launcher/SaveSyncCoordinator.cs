@@ -40,10 +40,10 @@ public sealed class SaveSyncCoordinator : IDisposable
 
     /// <summary>Null when the profile has no save sync.</summary>
     public static SaveSyncCoordinator? Create(
-        GameProfile profile, string gameDir, string? saveSource, uint? steamAccountId, Session session, ITransport transport, ILobby lobby)
+        GameProfile profile, string gameDir, string? saveSource, uint? steamAccountId, Session session, ITransport transport)
     {
         if (profile.SaveSync is not { } config) return null;
-        if (lobby.OwnerId == transport.LocalId)
+        if (session.IsHost)
         {
             var source = saveSource
                          ?? (config.HostSaveDir is { } hostDir ? SavePaths.Expand(hostDir) : null)
@@ -63,7 +63,7 @@ public sealed class SaveSyncCoordinator : IDisposable
         }
         var filesDir = Path.Combine(gameDir, config.GuestSaveDir is { } guestDir ? SavePaths.Expand(guestDir) : config.SessionDir);
         var stagingDir = Path.Combine(gameDir, config.SessionDir, SaveReceiver.StagingFolder);
-        var receiver = new SaveReceiver(config, filesDir, stagingDir, transport, () => lobby.OwnerId);
+        var receiver = new SaveReceiver(config, filesDir, stagingDir, transport, () => session.HostId);
         session.FileFrameReceived += receiver.OnFrame;
         return new SaveSyncCoordinator(config, gameDir, profile.Exe, null, receiver, null, () => []);
     }

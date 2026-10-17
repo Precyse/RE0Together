@@ -52,7 +52,12 @@ constexpr float kHostLeftToastSeconds = 10.0f;
 Clock::time_point g_lastSend;
 Clock::time_point g_lastLog;
 uint32_t g_seq = 0;
-std::map<uint8_t, std::string> g_knownPeers;  // slot -> name, as of the last tick
+
+struct KnownPeer {
+    std::string name;
+    uint32_t joinSerial;  // the PEER_UP this slot's peer was last announced by
+};
+std::map<uint8_t, KnownPeer> g_knownPeers;  // slot -> peer, as of the last tick
 SessionSnapshot g_lastSession;                // the previous tick's session without its peers
 
 // This guest's host went away: nothing played from here on reaches the host's save.
@@ -62,20 +67,27 @@ void announceHostLeft(const std::string& name) {
     logger::write("state_sync: host %s left, this game is not saved", name.c_str());
 }
 
-// Toasts peers that appeared or disappeared since the previous tick.
+// Toasts peers that appeared or disappeared since the previous tick. A PEER_UP for a slot that is already up (a new join
+// serial) means the peer was unreachable for a while and frames may be lost: a guest asks for a new snapshot, the host
+// waits for the guest's request.
 void announcePeerChanges(const SessionSnapshot& session) {
-    std::map<uint8_t, std::string> now;
-    for (const PeerInfo& peer : session.peers) now[peer.slot] = peer.name;
-    for (const auto& [slot, name] : now) {
-        if (g_knownPeers.contains(slot)) continue;
-        debug_overlay::toast(("Co-op player joined: " + name).c_str(), kPeerToastSeconds);
-        partner_hud::onPeerJoined();
+    const bool guest = session.linked && session.localSlot != session.hostSlot;
+    std::map<uint8_t, KnownPeer> now;
+    for (const PeerInfo& peer : session.peers) now[peer.slot] = {peer.name, peer.joinSerial};
+    for (const auto& [slot, peer] : now) {
+        const auto known = g_knownPeers.find(slot);
+        if (known == g_knownPeers.end()) {
+            debug_overlay::toast(("Co-op player joined: " + peer.name).c_str(), kPeerToastSeconds);
+            partner_hud::onPeerJoined();
+        } else if (guest && known->second.joinSerial != peer.joinSerial) {
+            resync::request("partner reconnected");
+        }
     }
-    for (const auto& [slot, name] : g_knownPeers) {
+    for (const auto& [slot, peer] : g_knownPeers) {
         if (now.contains(slot)) continue;
-        debug_overlay::toast(("Co-op player left: " + name).c_str(), kPeerToastSeconds);
+        debug_overlay::toast(("Co-op player left: " + peer.name).c_str(), kPeerToastSeconds);
         const bool wasGuest = g_lastSession.localSlot != g_lastSession.hostSlot;
-        if (g_lastSession.linked && wasGuest && slot == g_lastSession.hostSlot) announceHostLeft(name);
+        if (g_lastSession.linked && wasGuest && slot == g_lastSession.hostSlot) announceHostLeft(peer.name);
     }
     g_knownPeers = std::move(now);
     g_lastSession = session;

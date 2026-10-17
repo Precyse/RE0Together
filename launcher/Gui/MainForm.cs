@@ -325,7 +325,7 @@ public sealed class MainForm : ChromelessForm
         var running = status.State is AppState.GameRunning or AppState.PeerConnected;
 
         var exited = _watch.Condition == GameCondition.Exited;
-        _top.Show(BuildLabel(), StatusText.Format(status, _watch.Condition), StatusText.Lamp(status.State, _watch.Condition));
+        _top.Show(BuildLabel(), StatusText.Format(status, _watch.Condition), StatusText.Lamp(status, _watch.Condition));
         _relaunch.Visible = exited;
         _lobbyRow.ColumnStyles[RelaunchColumn].Width = exited ? Theme.ToolWidth : 0;
         _rail.Enabled = free;

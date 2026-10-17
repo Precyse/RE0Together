@@ -27,6 +27,7 @@ public sealed class App
     private BuildCheck? _buildCheck;
     private Rejoin? _rejoin;
     private HostFollow? _follow;
+    private BuildMismatch _problem;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -75,7 +76,7 @@ public sealed class App
         _steam = _options.Transport == TransportKind.Steam ? new SteamBootstrap() : null;
         using var steam = _steam;
         _transport = _steam != null
-            ? new SteamTransport(id => _lobby?.Members.Any(m => m.Id == id) == true)
+            ? new SteamTransport(id => _lobby?.Members.Any(m => m.Id == id) == true || _session?.HasPeer(id) == true)
             : new LocalTransport(_options.LocalPort, _options.PeerPort);
         using var transport = _transport;
         ResetAdapterSettings();
@@ -121,6 +122,7 @@ public sealed class App
             Log.Info("Already in a lobby");
             return;
         }
+        _problem = BuildMismatch.None;
         _lobby = OpenLobby(command, argument);
     }
 
@@ -140,7 +142,7 @@ public sealed class App
             _transport!.Pump();
             AcceptInvite();
             _lobby?.Pump();
-            if (_lobby?.Failure is { } failure)
+            if (_lobby?.Failure is { } failure && !HoldGuestSession(failure))
             {
                 Log.Info($"Lobby failure: {failure}");
                 var guestOf = _session != null && _lobby.OwnerId != _transport!.LocalId ? _lobby.Id : (ulong?)null;
@@ -148,7 +150,9 @@ public sealed class App
                 if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId);
                 else if (!_interactive) return 1;
             }
+            DropEndedHeldSession();
             FollowHost();
+            RejoinHeldSession();
             if (_session == null && _lobby is { IsReady: true }) StartSession();
             _bridge?.Pump();
             _session?.Pump();
@@ -166,11 +170,51 @@ public sealed class App
         return 0;
     }
 
+    /// <summary>A guest whose lobby object failed keeps its session, its game link and its services while the peers are held
+    /// (Session.Hold); only the lobby is dropped and rejoined. False when there is no such session to hold.</summary>
+    private bool HoldGuestSession(string failure)
+    {
+        if (_session is not { Ended: false, IsHost: false } session || !session.Hold()) return false;
+        Log.Info($"Lobby failure: {failure}, keeping the session while rejoining");
+        var lobbyId = session.LobbyId;
+        _follow = null;
+        _lobby!.Dispose();
+        _lobby = null;
+        _rejoin ??= new Rejoin(lobbyId);
+        return true;
+    }
+
+    /// <summary>A held session whose grace ran out is gone: it is dropped while the rejoin runs, so the rejoined lobby starts fresh.</summary>
+    private void DropEndedHeldSession()
+    {
+        if (_session is { Ended: true } && _rejoin != null) DropSession();
+    }
+
+    /// <summary>The rejoined lobby replaces the failed one in a held session when it is the same lobby with the same host;
+    /// otherwise the session starts over on it.</summary>
+    private void RejoinHeldSession()
+    {
+        if (_session is not { Held: true } session || _lobby is not { IsReady: true } lobby) return;
+        if (lobby.Id == session.LobbyId && lobby.OwnerId == session.HostId)
+        {
+            session.Rebind(lobby);
+            _rejoin = null;
+            _follow = NewHostFollow();
+        }
+        else
+        {
+            DropSession();
+        }
+    }
+
+    private HostFollow? NewHostFollow() =>
+        _steam != null && _session is { IsHost: false } session ? new HostFollow(session.HostId, _profile!.Id) : null;
+
     /// <summary>A guest whose host opened a new lobby (it crashed or relaunched) leaves the old one and joins the new one,
     /// through the same retrying path as a lost connection.</summary>
     private void FollowHost()
     {
-        if (_follow?.MovedTo(_lobby!) is not { } lobbyId) return;
+        if (_lobby == null || _follow?.MovedTo(_lobby) is not { } lobbyId) return;
         Log.Info($"The host opened lobby {lobbyId}, following");
         EndSession();
         _rejoin ??= new Rejoin(lobbyId);
@@ -216,6 +260,7 @@ public sealed class App
             Log.Info("Already in a lobby, ignoring invite");
             return;
         }
+        _problem = BuildMismatch.None;
         _lobby = SteamLobby.Join(lobbyId);
     }
 
@@ -227,20 +272,24 @@ public sealed class App
         _gameDir = ResolveGameDir(_profile);
         _bridge = new LoopbackBridge(_profile, _options.BridgePort != 0 ? _options.BridgePort : _profile.Port);
         _session = new Session(_profile, _lobby, _transport!, _bridge);
-        _buildCheck = BuildCheck.Create(_profile, _gameDir, _session, _transport!, _lobby);
+        _buildCheck = BuildCheck.Create(_profile, _gameDir, _session, _transport!);
         if (_gameDir != null)
         {
-            _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!, _lobby);
-            _logForwarder = LogForwarder.Create(_profile, _gameDir, _session, _transport!, _lobby);
+            _saveSync = SaveSyncCoordinator.Create(_profile, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!);
+            _logForwarder = LogForwarder.Create(_profile, _gameDir, _session, _transport!);
         }
-        _follow = _steam != null && _lobby.OwnerId != _transport!.LocalId ? new HostFollow(_lobby.OwnerId, _profile.Id) : null;
+        _follow = NewHostFollow();
         _launchPending = true;
     }
 
     /// <summary>Starts the game once save sync is ready. False when the save sync timed out.</summary>
     private bool TryLaunch()
     {
-        if (_buildCheck?.Mismatch != null) return false;
+        if (_buildCheck is { Mismatch: not null } refused)
+        {
+            _problem = refused.Reason;
+            return false;
+        }
         if (_buildCheck?.Ready == false) return true;
         if (_saveSync?.TimedOut == true)
         {
@@ -256,6 +305,15 @@ public sealed class App
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
     private void EndSession()
     {
+        DropSession();
+        _lobby?.Dispose();
+        _lobby = null;
+        ResetAdapterSettings();
+    }
+
+    /// <summary>Drops the session and its services (bridge, save sync, log forwarder) but not the lobby.</summary>
+    private void DropSession()
+    {
         _follow = null;
         _buildCheck = null;
         _logForwarder = null;
@@ -265,12 +323,9 @@ public sealed class App
         _session = null;
         _bridge?.Dispose();
         _bridge = null;
-        _lobby?.Dispose();
-        _lobby = null;
         _profile = null;
         _gameDir = null;
         _launchPending = false;
-        ResetAdapterSettings();
     }
 
     private void PublishStatus()
@@ -283,7 +338,7 @@ public sealed class App
 
     private AppStatus CurrentStatus()
     {
-        if (_lobby == null) return AppStatus.Idle;
+        if (_lobby == null) return _session is { Held: true } ? Status : AppStatus.Idle with { Problem = _problem };
         if (!_lobby.IsReady) return new AppStatus(AppState.Connecting);
         var state = _session is { PeerConnected: true } ? AppState.PeerConnected
             : _bridge?.IsReady == true ? AppState.GameRunning

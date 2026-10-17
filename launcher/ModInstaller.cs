@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace CoopLauncher;
 
@@ -17,6 +19,9 @@ public static class ModInstaller
     private const string BackupSuffix = ".cfbak";
     private const string OwnershipSuffix = ".cfown";
     private const string BuildSuffix = ".cfbuild";
+    private const byte NameEnd = 0;
+
+    private static bool s_hashFailureLogged;
 
     private readonly record struct ModFile(string Src, string Dst);
 
@@ -36,6 +41,36 @@ public static class ModInstaller
         {
             Log.Info($"Could not read the {profile.Name} mod: {e.Message}");
             return new ModStatus(ModState.NotInstalled, 0);
+        }
+    }
+
+    /// <summary>SHA-256 over the profile's adapter files as installed in the game folder (what runs), in profile order: per file the
+    /// lowercase destination name with '/' separators, a 0x00 byte, the u64 little-endian length and the bytes. Null when a file is
+    /// missing or unreadable (an unreadable one is logged once).</summary>
+    public static byte[]? ContentHash(GameProfile profile, string gameDir)
+    {
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            foreach (var (adapter, file) in profile.AdapterFiles.Zip(Files(profile, gameDir)))
+            {
+                if (!File.Exists(file.Dst)) return null;
+                var bytes = File.ReadAllBytes(file.Dst);
+                var length = new byte[sizeof(ulong)];
+                BinaryPrimitives.WriteUInt64LittleEndian(length, (ulong)bytes.Length);
+                hash.AppendData(Encoding.UTF8.GetBytes(adapter.Dst.Replace('\\', '/').ToLowerInvariant()));
+                hash.AppendData([NameEnd]);
+                hash.AppendData(length);
+                hash.AppendData(bytes);
+            }
+            return hash.GetHashAndReset();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (s_hashFailureLogged) return null;
+            s_hashFailureLogged = true;
+            Log.Info($"Could not read the {profile.Name} mod to compare it: {e.Message}");
+            return null;
         }
     }
 
