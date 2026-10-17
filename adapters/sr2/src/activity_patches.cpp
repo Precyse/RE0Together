@@ -50,8 +50,7 @@ bool sitesMatch() {
 
 bool install(bool experimental, bool trace) {
     activity_state::setTracing(trace);
-    const size_t overrides = script_override::scan(trace);
-    logger::write("activities: %zu script overrides in coop\\scripts", overrides);
+    logger::write("activities: %zu script overrides in coop\\scripts", script_override::names().size());
     bool all = true;
     for (const Phase& phase : kPhases) {
         const site_installer::Result result = site_installer::install(phase.sites, experimental, &bindingOf);

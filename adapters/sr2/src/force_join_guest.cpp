@@ -65,6 +65,11 @@ std::vector<browser_match::Entry> readEntries(uintptr_t module) {
     return entries;
 }
 
+// The tag the host's session name holds: the browser tag of this build and the launcher's token.
+std::string sessionTag(const join_file::JoinRequest& request) {
+    return force_join_names::sessionTag(version_gate::browserTag(), request.token);
+}
+
 guest_join_rules::Inputs readInputs(const join_file::JoinRequest& request, uint64_t nowMs) {
     guest_join_rules::Inputs in;
     in.nowMs = nowMs;
@@ -80,7 +85,7 @@ guest_join_rules::Inputs readInputs(const join_file::JoinRequest& request, uint6
     if (in.browser == Browser::Idle) return in;
     const std::vector<browser_match::Entry> entries = readEntries(module);
     in.listed = browser_match::listedCount(entries);
-    if (const auto match = browser_match::find(entries, request.token)) {
+    if (const auto match = browser_match::find(entries, sessionTag(request))) {
         in.match = match->index;
         g_matchedEntry = match->address;
     }
@@ -88,7 +93,7 @@ guest_join_rules::Inputs readInputs(const join_file::JoinRequest& request, uint6
 }
 
 void startQuery(const join_file::JoinRequest& request) {
-    const std::string filter = force_join_names::tagOf(request.token);
+    const std::string filter = sessionTag(request);
     game_text::write(kBrowserNameFilter, kTextBytes, filter);
     dwordField(kCustomGameFilter, 0) = kCustomGameAny;
     dwordField(kNameToUse, 0) = kNameToUseOnline;

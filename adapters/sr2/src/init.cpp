@@ -3,6 +3,7 @@
 #include "activity_patches.h"
 #include "code_check.h"
 #include "config.h"
+#include "content_hash.h"
 #include "coop_limits.h"
 #include "force_join.h"
 #include "game_port.h"
@@ -17,6 +18,7 @@
 #include "partner_patches.h"
 #include "player_cap.h"
 #include "replication_switch.h"
+#include "script_override.h"
 #include "sr2_addresses.h"
 #include "tunnel.h"
 #include "version_gate.h"
@@ -55,7 +57,10 @@ DWORD WINAPI initThread(LPVOID) {
         }
         game_socket::start();
 
-        version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, tunnelled, config.trace);
+        script_override::scan(config.trace);
+        const uint64_t contentHash = content_hash::compute();
+        version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, tunnelled, contentHash,
+                              config.trace);
 
         hooks::beginBatch();
         if (replicating) {

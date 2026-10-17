@@ -49,7 +49,7 @@ inline std::vector<Range> withoutForceJoin() {
     }
     const player_cap_patches::Thunks capThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
     const game_port_patches::Thunks portThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
-    const version_gate_patches::Thunks gateThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
+    const version_gate_patches::Thunks gateThunks{kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk, kAnyThunk};
     for (const auto& list : {player_cap_patches::forPlayers(kManyPlayers, capThunks, true),
                              game_port_patches::forPort(kMovedPort, kManyPlayers, true, Transport::Native, portThunks),
                              lan_address_patches::forPlayers(kManyPlayers, kAnyThunk), version_gate_patches::patches(gateThunks)}) {

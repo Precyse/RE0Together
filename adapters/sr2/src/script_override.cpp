@@ -25,11 +25,15 @@ std::string narrow(const wchar_t* text) {
 
 namespace script_override {
 
+const std::set<std::string>& names() { return g_names; }
+
+std::wstring directory() { return gameDirectory() + L"\\coop\\scripts"; }
+
 size_t scan(bool trace) {
     g_trace = trace;
     g_names.clear();
     WIN32_FIND_DATAW found;
-    const std::wstring pattern = gameDirectory() + L"\\coop\\scripts\\*";
+    const std::wstring pattern = directory() + L"\\*";
     HANDLE search = FindFirstFileW(pattern.c_str(), &found);
     if (search == INVALID_HANDLE_VALUE) return 0;
     do {

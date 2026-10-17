@@ -55,6 +55,8 @@ add_library(sr2_adapter SHARED
     src/activity_games.cpp
     src/activity_patches.cpp
     src/script_override.cpp
+    src/content_hash.cpp
+    src/browser_tag.cpp
     src/player_cap.cpp
     src/home_network.cpp
     src/game_port.cpp
@@ -142,6 +144,7 @@ add_unit_test(look_reset_test)
 add_unit_test(spawn_budget_test)
 add_unit_test(leave_rules_test)
 add_unit_test(trailer_rules_test)
+add_unit_test(content_hash_rules_test)
 add_unit_test(version_gate_sites_test)
 add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)

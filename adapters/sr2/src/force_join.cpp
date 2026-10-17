@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 
+#include "browser_tag.h"
 #include "code_patch.h"
 #include "force_join_guest.h"
 #include "force_join_lan.h"
@@ -73,12 +74,13 @@ void onRequestChanged() {
     if (!g_request && hadRequest) join_status::publish({"stopped", ""});
 }
 
-// The native host advertises on the online browser: the session name carries the token (Juiced writes the name once after
-// the login, so the token is put back whenever it is missing) and the join password is the launcher's (the version
-// gate's host check refuses a join_req without it).
+// The native host advertises on the online browser: the session name carries the session tag (the browser tag and the
+// token; Juiced writes the name once after the login, so the tag is put back whenever it is missing) and the join password
+// is the launcher's (the version gate's host check refuses a join_req without it).
 void advertiseOnBrowser(const JoinRequest& request) {
     const std::string name = game_text::read(kHostSessionName, kTextBytes);
-    const std::string tagged = force_join_names::withTag(name, request.token, kTextBytes);
+    const std::string tagged =
+        force_join_names::withTag(name, force_join_names::sessionTag(version_gate::browserTag(), request.token), kTextBytes);
     if (tagged != name) {
         game_text::write(kHostSessionName, kTextBytes, tagged);
         if (g_trace) logger::write("force join: host session name \"%s\"", tagged.c_str());
@@ -100,18 +102,24 @@ void hostTick(const JoinRequest& request) {
     if (readDword(sr2::kSessionPointer) == 0) join_status::publish({"advertising", ""});
 }
 
+// Follows the join file and does the host's or the guest's part of the request; nothing without one.
+void followRequest() {
+    if (g_ticks++ % kFilePollTicks == 0 && g_watcher->poll()) onRequestChanged();
+    if (!g_request) return;
+    if (g_request->role == Role::Host) {
+        hostTick(*g_request);
+    } else if (g_transport == Transport::Steam) {
+        force_join_lan::tick(GetTickCount64(), g_trace);
+    } else {
+        force_join_guest::tick(*g_request, GetTickCount64(), g_trace);
+    }
+}
+
 void frontEndTick() {
     if (g_failed) return;
     try {
-        if (g_ticks++ % kFilePollTicks == 0 && g_watcher->poll()) onRequestChanged();
-        if (!g_request) return;
-        if (g_request->role == Role::Host) {
-            hostTick(*g_request);
-        } else if (g_transport == Transport::Steam) {
-            force_join_lan::tick(GetTickCount64(), g_trace);
-        } else {
-            force_join_guest::tick(*g_request, GetTickCount64(), g_trace);
-        }
+        followRequest();
+        browser_tag::tick(g_trace);
     } catch (...) {
         g_failed = true;
         logger::write("force join: the tick failed with an exception, force join is stopped");
@@ -167,6 +175,7 @@ bool install(bool trace, Transport transport) {
     }
     g_trace = trace;
     g_transport = transport;
+    if (transport == Transport::Native) browser_tag::enable(version_gate::browserTag());
     join_status::open(trace);
     g_watcher.emplace(coopDirectory() + L"\\" + join_file::kJoinFileName);
     if (!hooks::install("force_join_front_end_tick", kFrontEndTick, reinterpret_cast<void*>(&frontEndTickStub),

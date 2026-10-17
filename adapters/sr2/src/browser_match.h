@@ -29,12 +29,12 @@ inline size_t listedCount(const std::vector<Entry>& entries) {
     return count;
 }
 
-// The first listed entry whose name holds the tag of `token`.
-inline std::optional<Match> find(const std::vector<Entry>& entries, const std::string& token) {
+// The first listed entry whose name holds `tag`.
+inline std::optional<Match> find(const std::vector<Entry>& entries, const std::string& tag) {
     size_t index = 0;
     for (const Entry& entry : entries) {
         if (!entry.listed) continue;
-        if (force_join_names::containsTag(entry.name, token)) return Match{index, entry.address};
+        if (force_join_names::containsTag(entry.name, tag)) return Match{index, entry.address};
         ++index;
     }
     return std::nullopt;

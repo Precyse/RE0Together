@@ -1,4 +1,4 @@
-// The milestone 8 sites as data (no game): the checked bytes, what is written, and clearance from every other patch site
+// The milestone 8 and 11 B3 sites as data (no game): the checked bytes, what is written, and clearance from every other patch site
 // and from everything Juiced touches.
 #include <algorithm>
 #include <cstdio>
@@ -18,11 +18,12 @@ constexpr uintptr_t kGateReq = 0x10007000;
 constexpr uintptr_t kGateAcc = 0x10007100;
 constexpr uintptr_t kSend = 0x10007200;
 constexpr uintptr_t kNoteDeny = 0x10007300;
+constexpr uintptr_t kRefusalText = 0x10007400;
 constexpr uintptr_t kOtherThunk = 0x10002000;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kMovedPort = 4201;
-constexpr size_t kSites = 9;
+constexpr size_t kSites = 12;
 
 int g_failures = 0;
 
@@ -87,8 +88,8 @@ bool clearOfOtherSites(const std::vector<CodePatch>& patches) {
 }  // namespace
 
 int main() {
-    const auto patches = version_gate_patches::patches({kGateReq, kGateAcc, kSend, kNoteDeny});
-    check(patches.size() == kSites, "nine sites: three table pointers, two sends and four function entries");
+    const auto patches = version_gate_patches::patches({kGateReq, kGateAcc, kSend, kNoteDeny, kRefusalText});
+    check(patches.size() == kSites, "twelve sites: three table pointers, three calls and six function entries");
 
     const CodePatch* req = patchAt(patches, 0xE8BF3C);
     check(req && req->expected == std::vector<uint8_t>{0xC0, 0x5B, 0x81, 0x00} &&
@@ -118,13 +119,22 @@ int main() {
               sendAcc->replacement == callTo(0x8162BB, kSend),
           "V4: the send in the join_acc sender goes to the same thunk");
 
-    for (const uintptr_t entry : {0x816F60u, 0x8163F0u, 0x815BC0u, 0x8162E0u}) {
+    const CodePatch* text = patchAt(patches, 0x81ECE7);
+    check(text && text->expected == std::vector<uint8_t>{0xE8, 0x64, 0xFD, 0xFF, 0xFF} && text->replacement == callTo(0x81ECE7, kRefusalText),
+          "VG1: the call of the error text function 0x81EA50 in the join error popup goes to the refusal thunk");
+
+    for (const uintptr_t entry : {0x816F60u, 0x8163F0u, 0x815BC0u, 0x8162E0u, 0x814790u, 0x81EA50u}) {
         const CodePatch* patch = patchAt(patches, entry);
         check(patch && patch->expected.size() == 8 && patch->replacement.empty(), "an entry the gates call is only checked");
     }
     check(patchAt(patches, 0x815BC0)->expected == std::vector<uint8_t>{0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x81, 0xEC} &&
               patchAt(patches, 0x816F60)->expected == std::vector<uint8_t>{0x81, 0xEC, 0x24, 0x05, 0x00, 0x00, 0xA1, 0x50},
           "V7 and V5: the bytes of the join_req handler and the join_deny sender");
+    check(patchAt(patches, 0x814790)->expected == std::vector<uint8_t>{0x81, 0xEC, 0x10, 0x02, 0x00, 0x00, 0xA1, 0x50} &&
+              patchAt(patches, 0x81EA50)->expected == std::vector<uint8_t>{0x83, 0xC1, 0xFF, 0x33, 0xC0, 0x83, 0xF9, 0x0C},
+          "VG2 and the error text function: the bytes of the send to an address and of the code to text function");
+    check(version_gate_patches::kJoinDenyHeaderFlag == 0xE8BF7C && version_gate_patches::kJoinRejectedCode == 8,
+          "the join_deny header flag byte and the join rejected code");
     check(clearOfJuiced(patches), "no site within 16 bytes of an address Juiced touches");
     check(clearOfOtherSites(patches), "no written site overlaps a milestone 3, 4, 5, 5b, 5e, 5g or 5h site");
     return g_failures == 0 ? 0 : 1;
