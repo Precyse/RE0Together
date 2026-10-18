@@ -34,6 +34,7 @@ void* g_bundleOriginal = nullptr;
 std::mutex g_bundleMutex;
 rate_limit::OncePerKey g_bundleReported;
 std::unordered_map<uintptr_t, uint64_t> g_lastShotMs;
+std::unordered_map<uintptr_t, uint32_t> g_lastNextShot;
 std::unordered_map<uintptr_t, uint64_t> g_lastWeaponState;
 
 uint8_t byteAt(uintptr_t address) {
@@ -61,12 +62,18 @@ uint8_t localSlot() {
 
 uint64_t nowMs() { return GetTickCount64(); }
 
-// TF1: cdecl(human) at the entry of the bullet spawn. A fire rate above the weapon's is a gap between shots below its refire.
+// TF1: cdecl(human) at 0x9C1B90, which runs for every human every frame. A shot is a change of the weapon's next shot time
+// (each shot re-arms it); a fire rate above the weapon's is a gap between shots below its refire.
 void __cdecl traceShot(GuestFrame* frame) {
     const uintptr_t human = frame->args[0];
-    const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
     const uintptr_t weapon = readDword(human + kHumanWeaponOffset);
-    const uintptr_t info = weapon ? readDword(weapon + kWeaponInfoOffset) : 0;
+    if (!weapon) return;
+    const uint32_t nextShot = readDword(weapon + kWeaponNextShotOffset);
+    uint32_t& seenNextShot = g_lastNextShot[human];
+    if (nextShot == seenNextShot) return;
+    seenNextShot = nextShot;
+    const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
+    const uintptr_t info = readDword(weapon + kWeaponInfoOffset);
     const uint64_t now = nowMs();
     uint64_t& last = g_lastShotMs[human];
     const uint64_t since = last ? now - last : 0;
