@@ -12,6 +12,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "split_rooms.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -48,6 +49,19 @@ void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint*
     }
 }
 
+// state mode: a projectile (grenade round, molotov, rocket) hits with its uBullet as the attacker, which identify() does
+// not know; the shooter is the player in HitInfo.attacker. The hit then goes the way a bullet's does: the shooter's
+// machine reports it (a remote shooter's, such as the puppet's own copy of the projectile, is dropped) and replays carry
+// the player instead of the uBullet.
+bool onProjectileHit(void* enemy, game::HitPoint* point, game::HitInfo* info, uintptr_t original) {
+    const Character shooter = character_owner::identify(reinterpret_cast<uintptr_t>(info->attacker));
+    if (shooter == Character::Unknown) return false;
+    logger::write("weapon_fx: projectile hit on slot %d by %s", enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy)),
+                  character_owner::name(shooter));
+    onPlayerHit(shooter, enemy, info->attacker, point, info, original);
+    return true;
+}
+
 void __stdcall onDamage(void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
                         uintptr_t original) {
     if (g_runningDamage || !net_pad::active()) {
@@ -59,6 +73,7 @@ void __stdcall onDamage(void* enemy, void* attacker, game::HitPoint* point, game
         onPlayerHit(shooter, enemy, attacker, point, info, original);
         return;
     }
+    if (state_mode::on() && onProjectileHit(enemy, point, info, original)) return;
     // Damage no player dealt (both machines see their own copy of it): the owner applies it and sends the outcome.
     const uintptr_t enemyAddress = reinterpret_cast<uintptr_t>(enemy);
     if (enemy_registry::slotOf(enemyAddress) == enemy_registry::kNoSlot) {
