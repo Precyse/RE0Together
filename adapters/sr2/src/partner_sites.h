@@ -316,6 +316,17 @@ enum class Thunk : uint16_t {
     SnatchWaypointPerRemote,
     MayhemDistrictAllPlayers,
     TraffickingExtraSeats,
+    // Milestone 17 wave 3 (trail_blazing_sites.h): Trail Blazing for every remote.
+    TrailNearestToFire,
+    TrailLevelStartEachRemote,
+    TrailLevelStepEachRemote,
+    TrailPutOutEachRemote,
+    TrailFireNodesEachRemote,
+    TrailObjectsEachRemote,
+    TrailWaterFailEachRemote,
+    TrailStartPlaceEachRemote,
+    TrailStartExitEachRemote,
+    TrailCheckpointDistance,
 };
 
 struct Site {
