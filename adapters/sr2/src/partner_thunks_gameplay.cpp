@@ -7,6 +7,8 @@
 #include "partner_scope.h"
 #include "partner_thunks.h"
 #include "remote_players.h"
+#include "revive_rules.h"
+#include "revive_state.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
 
@@ -30,13 +32,6 @@ const uintptr_t g_vehicleExitDone = sr2::kVehicleExitDone;
 const uintptr_t g_teamWipeResume = sr2::kTeamWipeResume;
 
 uint32_t read32(uintptr_t address) { return *reinterpret_cast<const uint32_t*>(address); }
-
-bool isDown(uintptr_t human) { return remote_players::downedTimerOf(human) >= 0; }
-
-bool isDownOrWaiting(uintptr_t human) {
-    return isDown(human) || (guest_call::call(sr2::kWaitingToRespawn, {.esi = human}) & 0xFF) != 0;
-}
-
 
 // D1: a human goes down (revivable) when any remote is within revive range, not only the first.
 void __cdecl wrapGoDown(GuestFrame* frame) {
@@ -130,37 +125,49 @@ void __cdecl wrapMaxFollowers(GuestFrame* frame) { wrapEachNative(frame, kLuaMax
 void __cdecl wrapDismissAll(GuestFrame* frame) { wrapEachNative(frame, kLuaDismissAll); }
 void __cdecl wrapMeleeOnly(GuestFrame* frame) { wrapEachNative(frame, kLuaMeleeOnly); }
 
-// D2: the team wipe check at a human's death. A remote's death kills a downed local when every other
-// remote is down or waiting too; the local's death wipes when every remote is down or waiting. Returns the flag the
-// game keeps in its frame.
+// D2: the team wipe check at a human's death (revive_rules). A remote's death kills a downed local when no other remote can revive it
+// and wipes the team when the local waits to respawn and every other remote is down or waiting; the local's death wipes when every
+// remote waits to respawn. Returns the flag the game keeps in its frame.
 uint32_t __cdecl teamWipe(uintptr_t dead) {
     FpuGuard guard;
-    remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
     const uintptr_t local = remote_players::localHuman();
+    const bool localDied = dead == local;
+    if (!localDied && !remote_players::isRemotePlayerHuman(dead)) return 0;
+    revive_rules::Player remotes[partner_rules::kMaxWalked];
+    const size_t count = revive_state::remotes(remotes, partner_rules::kMaxWalked);
+    const bool localDown = revive_state::localDown();
+    const bool localWaiting = revive_state::localWaiting();
 
-    uint32_t wipe = 0;
-    if (dead == local) {
-        wipe = snapshot.pairing.count && partner_rules::othersAllDown(snapshot.pairing, 0, isDownOrWaiting);
-    } else if (remote_players::isRemotePlayerHuman(dead) &&
-               partner_rules::othersAllDown(snapshot.pairing, dead, isDownOrWaiting)) {
-        if (isDown(local)) {
-            guest_call::call(sr2::kKillLocalHuman, {.esi = local});
-            wipe = 1;
-        } else if (isDownOrWaiting(local)) {
-            wipe = 1;
-        }
+    bool kill = false;
+    bool wipe = false;
+    if (localDied) {
+        wipe = revive_rules::wipeOnLocalDeath(remotes, count);
+    } else {
+        kill = revive_rules::killDownedLocal(localDown, remotes, count, dead);
+        if (kill) guest_call::call(sr2::kKillLocalHuman, {.esi = local});
+        wipe = kill || revive_rules::wipeOnRemoteDeath(localWaiting, remotes, count, dead);
     }
-    return wipe;
+    if (revive_state::trace()) {
+        logger::write("trace: team wipe: human 0x%X died (%s %u); local down %d waiting %d -> kill %d wipe %d", static_cast<unsigned>(dead),
+                      localDied ? "local" : "remote slot", localDied ? 0u : static_cast<unsigned>(revive_rules::slotOf(remotes, count, dead)),
+                      localDown ? 1 : 0, localWaiting ? 1 : 0, kill ? 1 : 0, wipe ? 1 : 0);
+    }
+    return wipe ? 1 : 0;
 }
 
-// D3: the downed message of a remote counts as a team wipe only when every other remote is down.
+// D3: the downed message of a remote counts as a team wipe only when no other remote can revive.
 uintptr_t __cdecl remoteIfTeamDown(uintptr_t human) {
     FpuGuard guard;
-    remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
-
-    return remote_players::isRemotePlayerHuman(human) && partner_rules::othersAllDown(snapshot.pairing, human, isDown) ? human : 0;
+    if (!remote_players::isRemotePlayerHuman(human)) return 0;
+    revive_rules::Player remotes[partner_rules::kMaxWalked];
+    const size_t count = revive_state::remotes(remotes, partner_rules::kMaxWalked);
+    const bool anotherCanRevive = revive_rules::anotherCanRevive(remotes, count, human);
+    if (revive_state::trace()) {
+        logger::write("trace: team down: human 0x%X slot %u went down; another remote can revive %d -> team down %d",
+                      static_cast<unsigned>(human), static_cast<unsigned>(revive_rules::slotOf(remotes, count, human)), anotherCanRevive ? 1 : 0,
+                      anotherCanRevive ? 0 : 1);
+    }
+    return anotherCanRevive ? 0 : human;
 }
 
 // B3 (probe G): 1 when the passenger is a remote player human.

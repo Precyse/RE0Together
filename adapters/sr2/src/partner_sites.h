@@ -186,6 +186,18 @@ enum class Thunk : uint8_t {
     KickTargetNamed,
     KickTargetTaken,
     RemoveEveryRemoteMember,
+    // Milestone 16 W2 (revive_sites.h): downed, revive, respawn wait, notoriety.
+    RemoteDeathWait,
+    DownedLocalKillGate,
+    LocalDeathWait,
+    RespawnWaitReset,
+    ReviveAnchor,
+    ReviveAnchorPlace,
+    MissionStartRemotesDowned,
+    NotorietyWitnessAnyRemote,
+    NotorietyRemoteInAirOrWater,
+    NotorietyGuestMinLock,
+    NotorietyGuestMaxLock,
 };
 
 struct Site {

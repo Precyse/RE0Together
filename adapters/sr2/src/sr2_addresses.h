@@ -582,6 +582,36 @@ constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall
 constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
 constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
 
+// Downed, revive, respawn wait and notoriety (milestone 16 W2, docs/SR2_NOTES.md "Downed, revive and notoriety (M16 W2)").
+// The respawn wait is a deadline on the game clock, in milliseconds, that wraps at kClockWrapMs.
+constexpr uintptr_t kGameClockMs = 0xE843AC;           // int
+constexpr int32_t kRespawnWaitMs = 30000;
+constexpr int32_t kClockWrapMs = 1800000000;
+constexpr int32_t kClockHalfMs = 900000000;
+constexpr uintptr_t kMiscDeathKillResume = 0x8CBC88;   // misc_19 handler: after the kill of the downed local
+constexpr uintptr_t kMiscDeathKeepResume = 0x8CBC49;   // misc_19 handler: the local keeps bleeding (pop esi, ret)
+constexpr uintptr_t kMissionStartDownedResume = 0x6A02D6;  // mission start: past the block that resets the partner's downed state
+constexpr uintptr_t kReleaseDownedHandle = 0x92D4B0;   // cdecl(1, handle, 1, 0), the caller pops 0x10
+constexpr uintptr_t kRemoveBlip = 0x79D1B0;            // eax = kBlipReleaseMode, ecx = the blip record
+constexpr uintptr_t kHumanBlipOffset = 0xC8C;          // the revive blip marker; 0 = none
+constexpr uintptr_t kBlipTable = 0x29E6C28;
+constexpr uintptr_t kBlipIdOffset = 0x20;              // record: the marker the blip was created for
+constexpr uintptr_t kBlipStride = 0x3C;
+constexpr uint32_t kBlipCount = 0x3C;
+constexpr uint32_t kBlipIndexMask = 0x1FFF;            // a marker's low bits are the record index
+constexpr uint32_t kBlipReleaseMode = 3;
+constexpr uint32_t kReleaseDownedFlag = 1;             // first and third argument of kReleaseDownedHandle
+constexpr uint32_t kNotorietyTeamCount = 4;
+constexpr uintptr_t kNotorietyTable = 0x279AA60;       // host: one record per team
+constexpr uintptr_t kNotorietyTeamStride = 0x3C;
+constexpr uintptr_t kNotorietyGuestMinOffset = 0x2C;   // record: the guest min locks, one int per lock index
+constexpr uintptr_t kNotorietyGuestMaxOffset = 0x34;   // record: the guest max locks
+constexpr size_t kNotorietyLockIndexes = 2;
+constexpr int32_t kNotorietyNoLock = -1;
+constexpr uintptr_t kTeamSeesHuman = 0x55DEC0;         // eax = team, cdecl(human): AL = the team sees it
+constexpr uintptr_t kObjectOfHandleUnlessKind5 = 0xAE28F0;  // ecx = a handle: the object, 0 when stale or when its kind (+0x4C) is 5
+constexpr uintptr_t kVehicleClassTests[] = {0xAB5140, 0xAB5190, 0xAB51D0};  // eax = vehicle: AL = class 2, 3 or 4 (air and water)
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

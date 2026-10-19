@@ -131,14 +131,4 @@ inline size_t nearestIndex(const Vec3* positions, size_t count, const Vec3& poin
     return best;
 }
 
-// Whether every remote other than `except` is down: `isDown(human)` is true for a human waiting to bleed out or respawn.
-template <typename IsDown>
-bool othersAllDown(const Pairing& pairing, uintptr_t except, IsDown isDown) {
-    for (size_t i = 0; i < pairing.count; ++i) {
-        const uintptr_t human = pairing.items[i].human;
-        if (human && human != except && !isDown(human)) return false;
-    }
-    return true;
-}
-
 }  // namespace partner_rules
