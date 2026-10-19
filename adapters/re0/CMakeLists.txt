@@ -25,6 +25,10 @@ target_include_directories(imgui PUBLIC ${IMGUI_DIR})
 
 set(NET_SOURCES src/net_client.cpp src/debug_stats.cpp src/log.cpp src/paths.cpp)
 
+# DS2's pure authority table, compiled as is; its headers need DS2's src beside this adapter's own.
+set(DS2_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ds2/src)
+set(DS2_AUTHORITY_SOURCES ${DS2_SRC_DIR}/authority.cpp ${DS2_SRC_DIR}/reject_counters.cpp)
+
 add_library(re0_adapter SHARED
     ${NET_SOURCES}
     src/proxy.cpp
@@ -82,6 +86,8 @@ add_library(re0_adapter SHARED
     src/state_mode.cpp
     src/state_net.cpp
     src/frame_router.cpp
+    src/room_authority.cpp
+    ${DS2_AUTHORITY_SOURCES}
     src/save_redirect.cpp
     src/remote_storage_proxy.cpp
     src/damage_thunk.cpp
@@ -97,6 +103,7 @@ add_library(re0_adapter SHARED
     src/toast_queue.cpp
     dinput8.def)
 set_target_properties(re0_adapter PROPERTIES OUTPUT_NAME dinput8 PREFIX "")
+target_include_directories(re0_adapter PRIVATE src ${DS2_SRC_DIR})
 target_link_libraries(re0_adapter PRIVATE minhook imgui ws2_32 dbghelp)
 add_custom_command(TARGET re0_adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:re0_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/dinput8.dll)
@@ -173,12 +180,11 @@ add_executable(timed_queue_test tests/timed_queue_test.cpp)
 
 add_executable(pose_capture_rule_test tests/pose_capture_rule_test.cpp)
 
+add_executable(room_authority_test tests/room_authority_test.cpp ${DS2_AUTHORITY_SOURCES})
+target_include_directories(room_authority_test PRIVATE src ${DS2_SRC_DIR})
+
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target stream_clock_test timed_queue_test pose_capture_rule_test)
-    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-endforeach()
-
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test room_authority_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

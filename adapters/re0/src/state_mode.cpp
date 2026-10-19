@@ -6,12 +6,13 @@
 #include "log.h"
 #include "pose_capture.h"
 #include "puppet.h"
+#include "room_authority.h"
 #include "scene.h"
 #include "state_net.h"
 
 namespace {
 
-constexpr unsigned kModuleCount = 3;  // load serial observer, pose capture, puppet
+constexpr unsigned kModuleCount = 4;  // load serial observer, pose capture, puppet, room authority
 
 std::atomic<bool> g_on{false};
 
@@ -32,6 +33,8 @@ void enableAll(NetClient& net) {
         ++enabled;
         if (puppet::enable()) ++enabled;
     }
+    room_authority::enable();
+    ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

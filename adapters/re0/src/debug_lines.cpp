@@ -117,6 +117,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"puppet seeks/misses", format(L"%u / %u", total(s, Counter::PuppetSeeks), total(s, Counter::PuppetMotionMisses)), false});
     lines.push_back({L"state refused", format(L"%u", total(s, Counter::StateSendRefused)), false});
     lines.push_back({L"router dropped", format(L"%u", total(s, Counter::RouterDropped)), false});
+    lines.push_back({L"room authority", widen(debug_stats::roomAuthorityLine()), false});
     lines.push_back({L"hit request sent/s", format(L"%u", rate(s, Counter::HitRequestSent)), false});
     lines.push_back({L"hit request recv/s", format(L"%u", rate(s, Counter::HitRequestReceived)), false});
     lines.push_back({L"hit applied sent/s", format(L"%u", rate(s, Counter::HitAppliedSent)), false});

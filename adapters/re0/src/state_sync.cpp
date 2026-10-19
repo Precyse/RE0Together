@@ -37,6 +37,7 @@
 #include "player_damage.h"
 #include "pose_capture.h"
 #include "resync.h"
+#include "room_authority.h"
 #include "session_slot.h"
 #include "scene.h"
 #include "state_correction.h"
@@ -214,6 +215,7 @@ void tick(NetClient& net) {
     debug_stats::setSession(session);
     announcePeerChanges(session);
     net_pad::onSession(session);
+    if (state_mode::on()) room_authority::onSession(session);
     character_owner::onSession(session);
     partner_hud::onNetTick(session);
     menu_mirror::onNetTick(net);
