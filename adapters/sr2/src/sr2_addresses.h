@@ -582,6 +582,27 @@ constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall
 constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
 constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
 
+// HUD and waypoints (milestone 16 wave 2; docs/SR2_NOTES.md, "HUD and waypoints (milestone 16 wave 2)").
+constexpr uintptr_t kFollowerBlipsDraw = 0x79F890;         // cdecl(human, scale, color*): the follower blips of one human on the minimap
+constexpr uintptr_t kMinimapArrowBody = 0x7A3AA4;          // the minimap's partner arrow block, after its entry test
+constexpr uintptr_t kMinimapArrowExit = 0x7A3BD8;          // the join every path of that block reaches
+constexpr uintptr_t kMinimapArrowAfterExit = 0x7A3BE2;     // the instruction after the two the exit stub runs
+constexpr uintptr_t kHudHalfScale = 0xE5C038;              // qword: the HUD scale the join multiplies by
+constexpr uintptr_t kPauseMapArrowBody = 0x77029A;         // the pause map's partner arrow block, after its entry test
+constexpr uintptr_t kPauseMapArrowExit = 0x77038F;
+constexpr uintptr_t kPauseMapArrowAfterExit = 0x770394;
+constexpr uintptr_t kMapViewMode = 0x25F5AE8;              // dword the exit of the pause map block loads
+constexpr uintptr_t kHumanBehaviourOffset = 0x149;         // byte
+constexpr uint8_t kBackPromptBehaviour = 0x22;             // the behaviour that hides HUD_PRESS_BACK_CANCEL_*
+constexpr uintptr_t kHumanFollowerCountOffset = 0xC3C;     // the count of the follower list at +0xC40
+constexpr uintptr_t kMissionDebugNative = 0xA398C0;        // Lua native mission_debug: does nothing but return one 0
+constexpr uintptr_t kLuaTopOffset = 8;                     // lua_State: the first free stack object
+constexpr uintptr_t kLuaBaseOffset = 0xC;                  // lua_State: the first argument of the running native
+constexpr uintptr_t kLuaObjectBytes = 0x10;
+constexpr uintptr_t kLuaValueOffset = 8;                   // stack object: the value (the string for a string)
+constexpr uint32_t kLuaTypeString = 4;                     // the type word at the start of a stack object
+constexpr uintptr_t kLuaStringCharsOffset = 0x10;          // string: the characters
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

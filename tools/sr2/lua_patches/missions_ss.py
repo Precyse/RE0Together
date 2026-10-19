@@ -29,6 +29,19 @@ PATCHES = {
                 "\tend\n"
                 "end",
             ),
+            (
+                1311, 1320, "coop_is_active()",
+                "if ( coop_is_active() ) then\n"
+                "\tfor i, p in pairs( coop_remote_players() ) do\n"
+                "\t\tlocal closest_nav_remote = coop_closest_navpoint( group_locations, p )\n"
+                "\t\tif ( Cur_dealer_group_path_location[p] ~= closest_nav_remote ) then\n"
+                "\t\t\tcoop_waypoint_remove_for( p, waypoint_remove, SYNC_REMOTE )\n"
+                "\t\t\tcoop_waypoint_add_for( p, waypoint_add, closest_nav_remote, SYNC_REMOTE )\n"
+                "\t\t\tCur_dealer_group_path_location[p] = closest_nav_remote\n"
+                "\t\tend\n"
+                "\tend\n"
+                "end",
+            ),
         ],
     ),
     "ss02.lua": Patch(

@@ -70,6 +70,13 @@ def test_generic_rules():
     check(rewrite(slots) == "inv_weapon_enable_or_disable_all_slots(false, coop_sync_for(PLAYER_SYNC, placer))", "weapon slots take a targeted mask")
     check(rewrite("mission_help_table(a, PLAYER_SYNC[p])") == "mission_help_table(a, PLAYER_SYNC[p])", "a help text mask is left alone")
     check(rewrite("local sync = PLAYER_SYNC[p]") == "local sync = PLAYER_SYNC[p]", "a stored mask is left alone")
+    check(rewrite("mission_waypoint_add(new_gps_bus, PLAYER_SYNC[player])") == "coop_waypoint_add_for(player, mission_waypoint_add, new_gps_bus, PLAYER_SYNC[player])", "a mission waypoint add is named to its player")
+    check(rewrite("waypoint_add(waypoint,PLAYER_SYNC[player])") == "coop_waypoint_add_for(player, waypoint_add, waypoint, PLAYER_SYNC[player])", "a waypoint add without spaces")
+    check(rewrite("mission_waypoint_remove(PLAYER_SYNC[player])") == "coop_waypoint_remove_for(player, mission_waypoint_remove, PLAYER_SYNC[player])", "a mission waypoint remove")
+    check(rewrite("waypoint_remove( PLAYER_SYNC[player] )") == "coop_waypoint_remove_for(player, waypoint_remove, PLAYER_SYNC[player])", "a waypoint remove with spaces")
+    check(rewrite("waypoint_add(nav, SYNC_REMOTE)") == "waypoint_add(nav, SYNC_REMOTE)", "a waypoint with a fixed mask is left alone")
+    check(rewrite("waypoint_add(nav, sync)") == "waypoint_add(nav, sync)", "a waypoint with a stored mask is left alone")
+    check(rewrite("waypoint_add(get_nav(a), PLAYER_SYNC[p])") == "waypoint_add(get_nav(a), PLAYER_SYNC[p])", "a waypoint whose target is a call is left alone")
 
 
 def test_lua_check():
@@ -143,6 +150,12 @@ def test_real_scripts():
         problems = lua_check.check_dir(out, Path(source))
         sync_calls = sum((Path(temporary) / name).read_bytes().decode("latin-1").count("coop_sync_for(") for name in ("rn02.lua", "ep02.lua", "rn08.lua"))
         check(sync_calls == 5, f"rn02, ep02 and rn08 hold the 5 targeted sync masks (found {sync_calls})")
+        waypoint_calls = sum(((Path(temporary) / name).read_bytes().decode("latin-1").count("coop_waypoint_add_for(") + (Path(temporary) / name).read_bytes().decode("latin-1").count("coop_waypoint_remove_for("))
+                             for name in written if name not in ("ug_lib.lua", "ss01.lua"))
+        check(waypoint_calls == 10, f"the generic rules name exactly 10 per-player waypoint calls (found {waypoint_calls})")
+        ss01 = (Path(temporary) / "ss01.lua").read_bytes().decode("latin-1")
+        check(ss01.count("coop_waypoint_add_for( p, waypoint_add, closest_nav_remote, SYNC_REMOTE )") == 1 and ss01.count("coop_closest_navpoint( group_locations, p )") == 1,
+              "ss01 sends each remote its own nearest dealer")
         rn02 = (Path(temporary) / "rn02.lua").read_bytes().decode("latin-1")
         check(rn02.count("COOP_NATIVE.inv_item_equip(FREE_WEAPON_GUN, p)") == 1, "rn02 equips the gun per remote")
         check(problems == [], "every real override parses and adds only Lua 5.0 code" + ("" if not problems else ": " + "; ".join(problems[:3])))

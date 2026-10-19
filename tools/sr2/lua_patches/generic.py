@@ -24,4 +24,13 @@ RULES = [
         rf"\b(customization_item_wear|inv_weapon_enable_or_disable_all_slots)\s*\(([^()]*?),\s*PLAYER_SYNC\[({NAME})\]\s*\)",
         r"\1(\2, coop_sync_for(PLAYER_SYNC, \3))",
     ),
+    # a per-player waypoint, sent to that player's machine alone when there is more than one remote player (coop_waypoints.lua)
+    (
+        rf"\b(mission_waypoint_add|waypoint_add)\(\s*([^(),]+?)\s*,\s*PLAYER_SYNC\[({NAME})\]\s*\)",
+        r"coop_waypoint_add_for(\3, \1, \2, PLAYER_SYNC[\3])",
+    ),
+    (
+        rf"\b(mission_waypoint_remove|waypoint_remove)\(\s*PLAYER_SYNC\[({NAME})\]\s*\)",
+        r"coop_waypoint_remove_for(\2, \1, PLAYER_SYNC[\2])",
+    ),
 ]

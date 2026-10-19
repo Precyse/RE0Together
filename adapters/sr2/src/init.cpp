@@ -12,6 +12,7 @@
 #include "game_port_rules.h"
 #include "game_socket.h"
 #include "hooks.h"
+#include "hud_patches.h"
 #include "join_net_trace.h"
 #include "join_trace.h"
 #include "lan_address.h"
@@ -90,6 +91,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) outfit_sync::install(config.trace);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
+        if (partnering) hud_patches::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);

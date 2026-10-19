@@ -11,7 +11,7 @@ from pathlib import Path
 import lupa.lua51
 
 LUA_DIR = Path(__file__).with_name("lua")
-LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua")
+LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua", "coop_waypoints.lua")
 RULES_FILE = "coop_rules.lua"
 LOCAL = "#PLAYER1#"
 PLAYERS = ["#PLAYER1#", "#PLAYER2#", "#PLAYER3#", "#PLAYER4#"]
@@ -224,8 +224,63 @@ def test_wrapping_twice():
     check(len(log) == 2, "wrapping twice does not wrap a wrapper")
 
 
+def test_waypoints():
+    """A waypoint for one remote is named to the adapter through mission_debug only when there is more than one remote player."""
+    names = '{"navA", "navB", "navC"}'
+    ss01_scan = """
+function ss01_get_closest_nav_to_char( navpoint_names, character_name )
+	local closest_nav_name = navpoint_names[1]
+	local closest_dist = get_dist_char_to_nav( character_name, navpoint_names[1] )
+	for nav_index, nav_name in pairs( navpoint_names ) do
+		local cur_dist = get_dist_char_to_nav( character_name, nav_name )
+		if ( cur_dist < closest_dist ) then
+			closest_nav_name = nav_name
+			closest_dist = cur_dist
+		end
+	end
+	return closest_nav_name
+end
+"""
+    for count in (1, 2):
+        lua = new_runtime(count)
+        lua.execute('mock("mission_debug"); mock("waypoint_add"); mock("waypoint_remove"); mock("mission_waypoint_add"); mock("mission_waypoint_remove")')
+        log, _ = call(lua, 'coop_waypoint_add_for(REMOTE_PLAYER, waypoint_add, "nav", SYNC_REMOTE)')
+        check(log == ["waypoint_add(nav,2)"], f"{count} players: a waypoint add is the plain call, no mission_debug")
+        log, _ = call(lua, "coop_waypoint_remove_for(REMOTE_PLAYER, mission_waypoint_remove, SYNC_REMOTE)")
+        check(log == ["mission_waypoint_remove(2)"], f"{count} players: a waypoint remove is the plain call, no mission_debug")
+    lua = new_runtime(3)
+    lua.execute('mock("mission_debug"); mock("waypoint_add"); mock("waypoint_remove"); mock("mission_waypoint_add"); mock("mission_waypoint_remove")')
+    log, _ = call(lua, 'coop_waypoint_add_for("#PLAYER3#", waypoint_add, "nav", SYNC_REMOTE)')
+    check(log == ["mission_debug(coop_send_to #PLAYER3#)", "waypoint_add(nav,2)", "mission_debug(coop_send_to)"],
+          "3 players: an add for a remote is named, made with its arguments, then cleared")
+    log, _ = call(lua, 'coop_waypoint_add_for("#PLAYER2#", mission_waypoint_add, "nav", SYNC_REMOTE)')
+    check(log == ["mission_debug(coop_send_to #PLAYER2#)", "mission_waypoint_add(nav,2)", "mission_debug(coop_send_to)"],
+          "3 players: the first remote is named too, with the function the call site used")
+    log, _ = call(lua, 'coop_waypoint_remove_for("#PLAYER3#", waypoint_remove, SYNC_REMOTE)')
+    check(log == ["mission_debug(coop_send_to #PLAYER3#)", "waypoint_remove(2)", "mission_debug(coop_send_to)"],
+          "3 players: a remove for a remote is named, made, then cleared")
+    log, _ = call(lua, 'coop_waypoint_add_for(LOCAL_PLAYER, waypoint_add, "nav", SYNC_LOCAL)')
+    check(log == ["waypoint_add(nav,1)"], "3 players: the local player gets the plain call")
+    lua.execute("RESULT.mission_waypoint_add = 'handle'")
+    _, value = call(lua, 'coop_waypoint_add_for("#PLAYER3#", mission_waypoint_add, "nav", SYNC_REMOTE)')
+    check(value == "handle", "3 players: the result of the native is returned")
+
+    lua = new_runtime(3)
+    lua.execute(ss01_scan)
+    lua.execute("RESULT.get_dist = function(p, nav) if nav == 'navB' then return 4 elseif nav == 'navC' then return 6 else return 9 end end")
+    log_original, name_original = call(lua, f'ss01_get_closest_nav_to_char({names}, "#PLAYER3#")')
+    log_library, name_library = call(lua, f'coop_closest_navpoint({names}, "#PLAYER3#")')
+    check(name_library == name_original == "navB", "3 players: coop_closest_navpoint names the same navpoint as ss01's scan")
+    check(log_library == log_original and len(log_library) == 4, "3 players: it reads get_dist in the same order (the first name, then every name)")
+    log, _ = call(lua, f'coop_closest_navpoint({names}, REMOTE_PLAYER)')
+    check(all("#PLAYER3#" not in entry for entry in log), "3 players: a distance for the first remote is not widened to the nearest remote")
+    lua.execute("RESULT.get_dist = function(p, nav) if nav == 'navA' then return 1 else return 5 end end")
+    _, value = call(lua, f'coop_closest_navpoint({names}, "#PLAYER2#")')
+    check(value == "navA", "3 players: the first name wins a tie of the scan")
+
+
 def main():
-    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_wrapping_twice):
+    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_waypoints, test_wrapping_twice):
         test()
     return 1 if failures else 0
 
