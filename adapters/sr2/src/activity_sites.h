@@ -89,7 +89,7 @@ inline constexpr Site kPhase2[] = {
     {"AC43", Kind::RetargetCall, Gate::Now, 0x659DDD, "E8 EE DD 37 00", Thunk::NearestRemoteEdi, ""},
     {"AC44", Kind::RetargetCall, Gate::Now, 0x657072, "E8 59 0B 38 00", Thunk::NearestRemoteEsi, ""},
     {"AC45", Kind::RetargetCall, Gate::Now, 0x657097, "E8 34 0B 38 00", Thunk::MatchRemoteEsi, ""},
-    {"AC46", Kind::RetargetCall, Gate::Now, 0x656D69, "E8 62 0E 38 00", Thunk::MatchRemoteEsi, ""},
+    {"AC46", Kind::CallBlock, Gate::Now, 0x656D69, "E8 62 0E 38 00 3B F0 75 0D 8B 44 24 04 8B 80 5C 04 00 00 C2 04 00", Thunk::SnatchCarryOfEsi, "74 0F C2 04 00 90 90 90 90 90 90 90 90 90 90 90 90"},
     {"AC47", Kind::RetargetCall, Gate::Now, 0x65B0F4, "E8 D7 CA 37 00", Thunk::MatchRemoteEsi, ""},
     {"AC48", Kind::RetargetCall, Gate::Now, 0x65B52E, "E8 9D C6 37 00", Thunk::MatchRemoteEsi, ""},
     {"AC49", Kind::RetargetCall, Gate::Now, 0x65E7D1, "E8 FA 93 37 00", Thunk::MatchRemoteEsi, ""},

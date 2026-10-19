@@ -5,6 +5,7 @@
 #include "activity_rules.h"
 #include "activity_state.h"
 #include "activity_thunks.h"
+#include "diversion_rules.h"
 #include "guest_call.h"
 #include "log.h"
 #include "memory.h"
@@ -29,6 +30,9 @@ void* g_deathTagOriginal = nullptr;
 // The member that asked for the zombie activity, until the start takes it as the partner.
 std::atomic<uintptr_t> g_zombieRequester{0};
 activity_rules::DeclineTally g_zombieTally;
+
+enum CompetitiveDiversion : size_t { kCatAndMouse, kDeathTag, kCompetitiveDiversions };
+diversion_rules::EdgeLog<kCompetitiveDiversions> g_competitiveLog;
 
 uint8_t byteAt(uintptr_t address) {
     uint8_t value = 0;
@@ -123,19 +127,27 @@ void __cdecl zombieAnswerGate(GuestFrame* frame) {
                                        {args[kBufferArg], args[kContextArg]});
 }
 
-// AD3, AD4: cat and mouse and death tag are 1 against 1; with more remote players they do not start.
-void blockOrStart(GuestFrame* frame, void* original, const char* name) {
-    if (activity_rules::blocksCompetitiveStart(remote_players::remoteHumanCount())) {
-        if (activity_state::tracing()) logger::write("trace: %s does not start with more than one remote player", name);
+// AD3, AD4: cat and mouse and death tag are 1 against 1; with more remote players they do not start. The game asks every
+// frame, so the trace says it when the answer of a diversion changes.
+void blockOrStart(GuestFrame* frame, void* original, CompetitiveDiversion which, const char* name) {
+    const bool blocked = activity_rules::blocksCompetitiveStart(remote_players::remoteHumanCount());
+    if (activity_state::tracing() && g_competitiveLog.changed(which, blocked)) {
+        if (blocked) {
+            logger::write("trace: %s does not start with more than one remote player", name);
+        } else {
+            logger::write("trace: %s may start", name);
+        }
+    }
+    if (blocked) {
         frame->regs.eax = 0;
         return;
     }
     frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(original), frame->regs);
 }
 
-void __cdecl blockCatAndMouse(GuestFrame* frame) { blockOrStart(frame, g_catAndMouseOriginal, "cat and mouse"); }
+void __cdecl blockCatAndMouse(GuestFrame* frame) { blockOrStart(frame, g_catAndMouseOriginal, kCatAndMouse, "cat and mouse"); }
 
-void __cdecl blockDeathTag(GuestFrame* frame) { blockOrStart(frame, g_deathTagOriginal, "death tag"); }
+void __cdecl blockDeathTag(GuestFrame* frame) { blockOrStart(frame, g_deathTagOriginal, kDeathTag, "death tag"); }
 
 // AD5: Chop Shop delivery: the remote riding in the delivered car, else the default partner. ebx is the delivery; the
 // car is the object its vehicle slot holds.

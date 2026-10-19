@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdio>
 
+#include "activity_participants.h"
 #include "log.h"
 #include "memory.h"
 #include "sr2_addresses.h"
@@ -107,8 +108,9 @@ void take(Snapshot& out) {
 
 Partner defaultPartner(const Snapshot& snapshot) {
     if (!snapshot.active || !snapshot.pairing.trusted) return {false, 0, 0};
+    const uintptr_t pinned = snapshot.pairing.count > 1 ? activity_participants::pinnedHuman() : 0;  // one remote is the pin
     const size_t index = partner_rules::pickDefault(snapshot.pairing, snapshot.hostMember,
-                                                    snapshot.localMember == snapshot.hostMember);
+                                                    snapshot.localMember == snapshot.hostMember, pinned);
     if (index == partner_rules::kNone) return {true, 0, 0};
     return {true, snapshot.pairing.items[index].human, snapshot.pairing.items[index].member};
 }

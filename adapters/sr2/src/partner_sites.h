@@ -21,11 +21,11 @@ enum class Kind : uint8_t {
 
 // When the site is patched: the experimental ones wait for a live probe (partner_experimental in the ini). G is a
 // milestone 4 probe (B passed in the logs and D2 and D3 are on), E and H are milestone 7's, T (players placed on one spot)
-// and CP (a checkpoint with a passenger) milestone 9's.
-enum class Gate : uint8_t { Now, ProbeG, ProbeE, ProbeH, ProbeT, ProbeCp };
+// and CP (a checkpoint with a passenger) milestone 9's, PhaseB is milestone 16 wave 2's second phase (diversion_sites.h).
+enum class Gate : uint8_t { Now, ProbeG, ProbeE, ProbeH, ProbeT, ProbeCp, PhaseB };
 
 // The code behind a site (partner_thunks_*.cpp). Several sites share a thunk.
-enum class Thunk : uint8_t {
+enum class Thunk : uint16_t {
     None,  // a Bytes site has no code of its own
     PartnerGetter,
     PartnerMember,
@@ -266,6 +266,56 @@ enum class Thunk : uint8_t {
     CheckpointVehicleHolder,
     MissionExitStopRemotes,
     MissionExitReleaseRemotes,
+    // Milestone 16 wave 2 (diversion_sites.h): diversions and activities. Selection thunks (one answer for "the partner").
+    AnyRemoteInVehicleEsi,
+    FraudTeammate,
+    AnyRemoteInFraudZoneEbp,
+    AnyRemoteInFraudArea,
+    AnyRemoteWithFraudZone,
+    FraudTandemRemote,
+    FraudTandemMatchEbp,
+    OwnerRemoteEsi,
+    NearestRemoteToEsi8C,
+    AnyRemoteInVehicle,
+    NearestRemoteToHoHome,
+    RemoteLeadingDealer,
+    MatchRemoteEdi30,
+    RemoteInZoneEdi,
+    RemoteInZoneAtEsi,
+    RemoteInZoneAtEbp,
+    RemoteInZoneE9E3F4,
+    // The per-player calls and loops that run once per remote.
+    EachRemoteDismissFollowers,
+    EachRemoteTraffickingArm,
+    EachRemoteTraffickingDisarm,
+    EachRemoteMayhemArm,
+    EachRemoteMayhemDisarm,
+    EachRemote9C8C20,
+    EachRemoteSnatchSetup,
+    EachRemoteVehicleAAAB60,
+    SnatchDeliveryEachPlayer,
+    EachRemoteStopVehicle,
+    EachRemoteMayhemCredit,
+    // Blocks and hooks with per-slot state: the streaking coat, the fraud team hits, the Snatch carry counts.
+    StreakMessage,
+    StreakTick,
+    StreakEnd,
+    StreakInit,
+    StreakCoatBufferOfBuilt,
+    FraudZoneOfEsi,
+    FraudTeamHitEbx,
+    NearestCachedPartnerEcx1c,
+    NearestCachedPartnerEbpAtEax,
+    SnatchCarryOfEsi,
+    SnatchCarrySet,
+    SnatchCarryDelivered,
+    SnatchCarryClearOf,
+    SnatchCarryClearAll,
+    // Phase B, written with partner_experimental only.
+    SnatchSpawnPerRemote,
+    SnatchWaypointPerRemote,
+    MayhemDistrictAllPlayers,
+    TraffickingExtraSeats,
 };
 
 struct Site {

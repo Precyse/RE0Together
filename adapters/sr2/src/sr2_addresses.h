@@ -719,6 +719,89 @@ constexpr uintptr_t kConfessNotCodeFar = 0x7A950F;      // misc_00 (CF8): the co
 constexpr uintptr_t kConfessShowPoor = 0x7A956D;        // misc_00 (CF9): the game shows "you can't afford" (code 5)
 constexpr uintptr_t kConfessNotCodePoor = 0x7A9514;     // misc_00 (CF9): the code is not 6
 constexpr uintptr_t kConfessReturn = 0x7A95D7;          // misc_00 (CF8, CF9): the handler returns
+// Diversions and activities (milestone 16 wave 2, diversion_sites.h). Streaking: the flashing diversion keeps one byte "the remote
+// streaks" and, per human (index 0 the local player, 1 any other), a coat morph object, a loaded flag, its size and its buffer.
+constexpr uintptr_t kStreakActiveByte = 0x2527895;
+constexpr uintptr_t kStreakCoatMorph = 0x140B26C;     // dword[2]
+constexpr uintptr_t kStreakCoatLoaded = 0x140B274;    // byte[2]
+constexpr uintptr_t kStreakCoatSize = 0x140B278;      // dword[2]
+constexpr uintptr_t kStreakCoatBuffer = 0x140B280;    // dword[2]
+constexpr size_t kStreakRemoteEntry = 1;
+constexpr uintptr_t kStreakCoatLoad = 0x610780;       // cdecl(human), AL out: loads the coat morph of that human
+constexpr uintptr_t kHumanCharacterOffset = 0x13B0;   // pointer to the human's character instance
+constexpr uintptr_t kCharacterIdOffset = 0x10;        // dword: the id a built character record and its instance share
+
+// Tow truck and fraud: tests the game keeps in functions of their own.
+constexpr uintptr_t kVehicleHolds = 0x9B8CB0;         // ECX = vehicle, EAX = a human handle; AL = that human is in it
+constexpr uintptr_t kFraudInZone = 0x64B010;          // ECX = point, EDX = zone; AL
+constexpr uintptr_t kFraudInArea = 0x649FB0;          // EDX = point; AL
+constexpr uintptr_t kFraudZoneOfHuman = 0x64F210;     // stdcall(human): the zone the human stands in, 0 for none
+constexpr uintptr_t kFraudPartnerZone = 0x252797C;    // dword: the zone of the default partner
+constexpr uintptr_t kFraudRecordOffset = 0x10;
+constexpr uintptr_t kFraudLocalHitOffset = 0x24;      // record: the last object the local player hit
+constexpr uintptr_t kFraudPartnerHitOffset = 0x28;    // record: the last object the partner hit
+
+// Snatch: the level holds the carried count of the partner and the two drop-off markers of the level table.
+constexpr uintptr_t kSnatchCarryOffset = 0x45C;
+constexpr uintptr_t kSnatchMarkerOffset = 0x1C;       // level: dword[2], the drop-off marker of the local side and of the remote side
+constexpr uintptr_t kSnatchMarkerFlagsOffset = 0x110; // marker: bit 8 = not accepting deliveries
+constexpr uint8_t kSnatchMarkerClosedBit = 8;
+constexpr uintptr_t kSnatchDeliver = 0x657880;        // stdcall(level, player)
+constexpr uintptr_t kSnatchRadiusInVehicle = 0xDD1C90;  // float
+constexpr uintptr_t kSnatchRadiusOnFoot = 0xE8735C;     // float
+constexpr uintptr_t kSnatchPartnerTargetOffset = 0x8C;  // instance: the object the partner is tested against to keep the ho's car (the local player's is at +0x88)
+constexpr uintptr_t kSnatchHoHomeOffset = 0x90;       // instance: the ho's home object
+constexpr uintptr_t kSnatchGroupPointOffset = 0x1C;   // a ho group or home object: the vec3
+constexpr uintptr_t kLevelInstanceOffset = 4;         // an activity level: pointer to its instance
+constexpr uintptr_t kSnatchWaypointGroupOffset = 0x390;   // level: target group of the remote side's waypoint
+constexpr uintptr_t kSnatchWaypointLastOffset = 0x398;    // level: its last target
+constexpr uintptr_t kSnatchSetupBoth = 0x9DE310;      // ECX = human, cdecl(3)
+constexpr uintptr_t kSnatchSetupLook = 0x9E0350;      // stdcall(human, 1)
+constexpr uintptr_t kSnatchSetupWeapons = 0x9DED00;   // cdecl(human, 0)
+constexpr uint32_t kSnatchSetupBothArg = 3;
+constexpr uintptr_t kVehiclePrepare = 0xAAAB60;       // ECX = -1, EDX = vehicle, cdecl(1.0f, 1, 1)
+constexpr uint32_t kFloatOne = 0x3F800000;
+constexpr uintptr_t kResumeSnatchSetup = 0x656C43;
+constexpr uintptr_t kResumeSnatchVehicles = 0x65DA35;
+constexpr uintptr_t kResumeSnatchDelivery = 0x65AF50;
+
+// Trafficking and Mayhem.
+constexpr uintptr_t kTraffickingArm = 0x6671B0;       // EAX = level, EDI = human
+constexpr uintptr_t kTraffickingDisarm = 0x6671F0;    // EAX = level, stdcall(human)
+constexpr uintptr_t kMayhemArm = 0x66ABB0;            // EAX = level, EDI = human
+constexpr uintptr_t kMayhemDisarm = 0x66B4C0;         // EAX = level, stdcall(human)
+constexpr uintptr_t kMayhemDestroyerOffset = 0x30;    // a destruction record: the human that destroyed it
+constexpr uintptr_t kMayhemCredit = 0x668240;         // ESI = human handle, cdecl(0, amount, human, 0)
+constexpr uintptr_t kMayhemComplication = 0x9C8C20;   // cdecl(human, flag)
+constexpr uintptr_t kVehicleObjectOf = 0xAE28F0;      // ECX = handle: the vehicle object, 0 for anything else; no stack arguments
+constexpr uintptr_t kTraffickingDealerSource = 0x58;  // instance: object that knows the dealer; vtable +0x2C tests, +0x34 returns it
+constexpr uintptr_t kDealerSourceHasSlot = 0x2C;
+constexpr uintptr_t kDealerSourceGetSlot = 0x34;
+constexpr uintptr_t kDealerLeaderOffset = 0x2A4;      // dealer: handle of the human it follows
+constexpr uintptr_t kResumeTraffickingVehicles = 0x666D80;
+constexpr uintptr_t kResumeMayhemCredit = 0x66864E;
+constexpr uintptr_t kSeatPlace = 0xAEFC40;            // EAX = a seat request
+constexpr size_t kSeatRequestBytes = 0x1B;
+constexpr uint32_t kFirstExtraSeat = 3;
+
+// District: a human holds the district record it stands in; the Mayhem level and the district objective compare it.
+constexpr uintptr_t kHumanDistrictOffset = 0xF00;
+constexpr uintptr_t kDistrictOfPoint = 0x4B19F0;      // cdecl(point, hint record) -> district index or -1
+constexpr uintptr_t kDistrictRecords = 0x2526C94;     // pointer to the district records
+constexpr uintptr_t kDistrictRecordStride = 0xA8;
+constexpr uintptr_t kDistrictKeyOffset = 0x54;        // record: the key the level compares
+constexpr uintptr_t kMayhemTargetIndexOffset = 0x544; // level: index of the target district
+constexpr uintptr_t kMayhemTargetStride = 100;
+constexpr uintptr_t kMayhemTargetKeyOffset = 0x50;    // in [level+4] + index * stride
+constexpr uintptr_t kMayhemAllInOffset = 0x548;       // level byte: every player is in the district
+constexpr uintptr_t kMayhemTimerOnOffset = 0x549;     // level byte
+constexpr uintptr_t kMayhemPlayerIn = 0x66BCA0;       // ECX = human, stdcall(level)
+constexpr uintptr_t kMayhemPlayerOut = 0x66BDA0;      // stdcall(level, human, 1)
+constexpr uintptr_t kResumeMayhemDistrict = 0x66C050;
+constexpr uintptr_t kDistrictObjectiveTarget = 0xE9E3F4;  // dword: the district record the objective at 0x5664A5 waits for
+
+// The co-op race diversion: a byte that is set while it runs.
+constexpr uintptr_t kCoopRaceFlag = 0x2527B4F;
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;

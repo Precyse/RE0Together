@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../src/activity_sites.h"
+#include "../src/diversion_sites.h"
 #include "../src/force_join_sites.h"
 #include "../src/game_port_patches.h"
 #include "../src/join_net_trace_sites.h"
@@ -68,13 +69,16 @@ inline std::vector<Range> milestones3to8() {
     return ranges;
 }
 
-// What milestone 7 writes.
+// What milestone 7 and milestone 16 wave 2 (the diversions) write.
 inline std::vector<Range> activities() {
     std::vector<Range> ranges;
     for (const auto table : {std::span<const partner_sites::Site>(activity_sites::kPhase1),
                              std::span<const partner_sites::Site>(activity_sites::kPhase2),
                              std::span<const partner_sites::Site>(activity_sites::kPhase3)}) {
         for (const partner_sites::Site& site : table) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
+    }
+    for (const diversion_sites::Set& set : diversion_sites::kSets) {
+        for (const partner_sites::Site& site : set.sites) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
     }
     return ranges;
 }

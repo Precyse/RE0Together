@@ -130,6 +130,9 @@ int main() {
     check(written.size() == sizeOf(*block) && written[0] == 0xE8 && written[5] == 0x84 && written[6] == 0xC0 &&
               written[7] == 0x0F && written[8] == 0x85 && written[9] == 0x32,
           "AV1: call, test al,al, jne to 0x64EDA9 (rel 0x32 from 0x64ED77), nops over the rest of its 17 bytes");
+    const Site* carry = siteNamed(sites, "AC46");
+    check(carry && carry->kind == Kind::CallBlock && sizeOf(*carry) == 22 && partner_sites::parseHex(carry->tail).size() == 17,
+          "AC46 (milestone 16 wave 2, DVP9a): the carried count function's first 22 bytes become a call, jz, ret 4 and nops");
     const uintptr_t jumpEnd = block->address + 7 + 6;
     check(jumpEnd + written[9] == 0x64EDA9, "AV1: the jne lands on the original's failure branch");
     return g_failures == 0 ? 0 : 1;

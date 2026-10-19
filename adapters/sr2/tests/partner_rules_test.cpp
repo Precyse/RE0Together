@@ -96,6 +96,28 @@ void defaultPartnerAgreesOnEveryMachine() {
           "a member without a human is never the default human");
 }
 
+// Milestone 16 wave 2: while a two player activity runs, the other participant is the default partner.
+void aPinnedParticipantIsTheDefaultPartner() {
+    const HumanEntry humans[] = {{0xA3, 3}, {0xA1, 1}, {0xA2, 2}};
+    const MemberEntry members[] = {{0xB3, 3, kInGame}, {0xB1, 1, kInGame}, {0xB2, 2, kInGame}};
+    const Pairing pairing = paired(humans, 3, members, 3);
+    check(pairing.items[partner_rules::pickDefault(pairing, 0, true, 0xA3)].human == 0xA3, "a pin wins on the host");
+    check(pairing.items[partner_rules::pickDefault(pairing, 0xB2, false, 0xA3)].human == 0xA3, "a pin wins on a guest");
+    check(pairing.items[partner_rules::pickDefault(pairing, 0, true, 0)].human == 0xA1, "no pin gives the shipped answer");
+    check(pairing.items[partner_rules::pickDefault(pairing, 0, true, 0xAF)].human == 0xA1,
+          "a pin that is not in the pairing gives the shipped answer");
+    const Pairing untrusted = paired(humans, 3, members, 2);
+    check(!untrusted.trusted &&
+              partner_rules::pickDefault(untrusted, 0, true, 0xA3) == partner_rules::pickDefault(untrusted, 0, true, 0),
+          "an untrusted pairing ignores the pin");
+    const HumanEntry one[] = {{0xA2, 2}};
+    const MemberEntry oneMember[] = {{0xB2, 2, kInGame}};
+    const Pairing single = paired(one, 1, oneMember, 1);
+    check(single.items[partner_rules::pickDefault(single, 0, true, 0xA2)].human == 0xA2 &&
+              single.items[partner_rules::pickDefault(single, 0, true, 0)].human == 0xA2,
+          "with one remote the pin changes nothing");
+}
+
 void readyWhenEveryRemoteMemberHasAReadyHuman() {
     const HumanEntry humans[] = {{0xA1, 1}, {0xA2, 2}};
     const MemberEntry members[] = {{0xB1, 1, kInGame}, {0xB2, 2, kInGame}};
@@ -163,6 +185,7 @@ int main() {
     aHumanWithoutMemberFallsBackToTheFirstOfEachList();
     emptyLists();
     defaultPartnerAgreesOnEveryMachine();
+    aPinnedParticipantIsTheDefaultPartner();
     readyWhenEveryRemoteMemberHasAReadyHuman();
     firstJoiningIsTheFirstBelowInGame();
     lastInGameEndsTheSession();

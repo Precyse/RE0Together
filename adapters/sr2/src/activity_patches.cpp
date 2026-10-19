@@ -5,6 +5,7 @@
 #include "activity_sites.h"
 #include "activity_state.h"
 #include "activity_thunks.h"
+#include "diversion_thunks.h"
 #include "log.h"
 #include "partner_thunks.h"
 #include "script_override.h"
@@ -23,10 +24,11 @@ const Phase kPhases[] = {
     {"3", activity_sites::kPhase3},
 };
 
-// The identity and nearest thunks of milestone 4 serve the same call patterns as the new ones.
+// The identity and nearest thunks of milestone 4 serve the same call patterns as the new ones; the Snatch carry count of
+// AC46 is milestone 16 wave 2's.
 partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
     for (const auto bind : {&activity_thunks::bindFramework, &activity_thunks::bindCredit, &activity_thunks::bindGames,
-                            &partner_thunks::bindCalls}) {
+                            &partner_thunks::bindCalls, &diversion_thunks::bind}) {
         const partner_thunks::Binding binding = bind(thunk);
         if (binding.entry) return binding;
     }

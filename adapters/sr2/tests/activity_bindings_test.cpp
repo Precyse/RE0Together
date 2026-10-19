@@ -1,10 +1,14 @@
-// Every milestone 7 site has a thunk, and no two hook sites share the slot that receives a trampoline (no game).
+// Every milestone 7 site and every milestone 16 wave 2 diversion site has a thunk, and no two hook sites share the slot that
+// receives a trampoline (no game).
 #include <cstdio>
 #include <set>
 #include <span>
+#include <vector>
 
 #include "../src/activity_sites.h"
 #include "../src/activity_thunks.h"
+#include "../src/diversion_sites.h"
+#include "../src/diversion_thunks.h"
 
 namespace logger {
 void write(const char*, ...) {}
@@ -22,7 +26,7 @@ void check(bool ok, const char* what) {
 
 partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
     for (const auto bind : {&activity_thunks::bindFramework, &activity_thunks::bindCredit, &activity_thunks::bindGames,
-                            &partner_thunks::bindCalls}) {
+                            &partner_thunks::bindCalls, &diversion_thunks::bind}) {
         const partner_thunks::Binding binding = bind(thunk);
         if (binding.entry) return binding;
     }
@@ -36,9 +40,9 @@ int main() {
     bool hooksHaveSlots = true;
     std::set<void**> slots;
     bool slotsAreDistinct = true;
-    for (const auto phase : {std::span<const partner_sites::Site>(activity_sites::kPhase1),
-                             std::span<const partner_sites::Site>(activity_sites::kPhase2),
-                             std::span<const partner_sites::Site>(activity_sites::kPhase3)}) {
+    std::vector<std::span<const partner_sites::Site>> tables = {activity_sites::kPhase1, activity_sites::kPhase2, activity_sites::kPhase3};
+    for (const diversion_sites::Set& set : diversion_sites::kSets) tables.push_back(set.sites);
+    for (const auto phase : tables) {
         for (const partner_sites::Site& site : phase) {
             const partner_thunks::Binding binding = bindingOf(site.thunk);
             if (!binding.entry) {
