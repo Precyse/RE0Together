@@ -357,6 +357,36 @@ function coop_seat_in_vehicle(...)
 	return answer
 end
 
+-- The seat player was given in vehicle (the vehicle the script names), for the waits that follow a seat call: first_seat for the first
+-- remote, whose seat is the script's, the seat of its placement, nil for a remote that stayed on foot or went to another vehicle.
+function coop_seat_of(vehicle, player, first_seat)
+	local placed = COOP_SEAT_PLACED[player]
+	local placement = nil
+	if placed ~= nil then
+		placement = placed[vehicle]
+	end
+	if placement == nil then
+		if player == coop_remote_players()[1] then
+			return first_seat
+		end
+		return nil
+	end
+	if placement == COOP_SEAT_ON_FOOT or placement.vehicle ~= vehicle then
+		return nil
+	end
+	return placement.seat
+end
+
+-- True when fn(p, vehicle) is true for every remote player that has a seat in vehicle.
+function coop_all_seated(fn, vehicle)
+	for i, p in ipairs(coop_remote_players()) do
+		if coop_seat_of(vehicle, p, 0) ~= nil and not fn(p, vehicle) then
+			return false
+		end
+	end
+	return true
+end
+
 COOP_RULE.seats = coop_seat_place
 COOP_SEAT_CLAIM.vehicle_enter_teleport = coop_seat_claim
 COOP_SEAT_CLAIM.vehicle_enter = coop_seat_claim

@@ -1,16 +1,18 @@
 #include "waypoint_scope.h"
 
+#include <cstring>
 #include <string>
 #include <string_view>
 
 #include "guest_call.h"
 #include "log.h"
+#include "lua_trace.h"
+#include "lua_trace_rules.h"
 #include "memory.h"
 #include "partner_rules.h"
 #include "remote_players.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
-#include "vehicle_seating_rules.h"
 #include "waypoint_scope_rules.h"
 
 namespace {
@@ -21,7 +23,6 @@ using waypoint_scope_rules::kMaxNameBytes;
 constexpr size_t kLuaStateArg = 0;
 constexpr size_t kBufferArg = 0;
 constexpr size_t kLengthArg = 1;
-constexpr size_t kDebugTextLimit = 128;  // a control is shorter; the Lua seat trace lines are the longest text logged
 
 bool g_trace = false;
 void* g_missionDebugOriginal = nullptr;  // the trampoline of mission_debug
@@ -40,14 +41,13 @@ bool firstArgumentText(uintptr_t lua, char* out, size_t capacity) {
 }
 
 // GP1: the control text of a script opens or closes the scope; the game's mission_debug then runs as it is. It is also the one hook of
-// mission_debug, so with trace=1 it logs the texts of the Lua seat rules (docs/SR2_NOTES.md, "Vehicle seating"), which use it as a log
-// channel; the game's own texts are many and are not logged.
+// mission_debug, so with trace=1 it passes the other texts to lua_trace::log, the Lua library's log channel.
 void __cdecl waypointScopeControl(GuestFrame* frame) {
-    char text[kDebugTextLimit];
+    char text[lua_trace_rules::kReadLimit + 1];
     if (!firstArgumentText(frame->args[kLuaStateArg], text, sizeof(text))) return;
     const waypoint_scope_rules::Control control = waypoint_scope_rules::parseControl(text);
     if (!control.isControl) {
-        if (g_trace && vehicle_seating_rules::isSeatTrace(text)) logger::write("trace: lua: %s", text);
+        if (g_trace) lua_trace::log(text, strlen(text));
         return;
     }
     if (!control.open) {

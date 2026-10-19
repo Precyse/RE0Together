@@ -16,7 +16,9 @@ import lua_patch  # noqa: E402
 from lua_patches import PATCHES  # noqa: E402
 
 LUA_DIR = Path(__file__).with_name("lua")
-LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua", "coop_seats.lua", "coop_waypoints.lua")
+LIBRARY_PARTS = (
+    "coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_slots.lua", "coop_wrappers.lua", "coop_seats.lua", "coop_waypoints.lua",
+)
 RULES_FILE = "coop_rules.lua"
 LOCAL = "#PLAYER1#"
 PLAYERS = ["#PLAYER1#", "#PLAYER2#", "#PLAYER3#", "#PLAYER4#"]
@@ -33,6 +35,14 @@ RESULT = {}
 PLAYERS = {}
 function player_names_get_all() return PLAYERS end
 function rand_int(low, high) return low end
+SEATS_IN_VEHICLE = 4
+OCCUPIED = {}
+TRACE = {}
+TRACE_COUNT = 0
+function vehicle_get_num_seats(vehicle) return SEATS_IN_VEHICLE end
+function get_char_in_vehicle(vehicle, seat) return OCCUPIED[seat] end
+function mission_debug(text) TRACE_COUNT = TRACE_COUNT + 1 TRACE[TRACE_COUNT] = text return 0 end
+function get_other_coop_player(name) if name == LOCAL_PLAYER then return REMOTE_PLAYER end return LOCAL_PLAYER end
 local concat = table.concat
 local function show(name, args)
 	local parts = {}
@@ -253,6 +263,102 @@ def test_sync_from_player():
     lua.execute(patched)
     check(all(lua.eval(f"ORIGINAL({name}) == sync_from_player({name})") for name in ("REMOTE_PLAYER", "LOCAL_PLAYER", "'npc'", "'#PLAYER3#'")),
           "sync: 2 players: the patched function answers as the game's for every name")
+def trace_lines(lua):
+    """The text of every mission_debug call since the last clear_trace."""
+    return list(lua.eval("TRACE").values())
+
+
+def clear_trace(lua):
+    lua.execute("TRACE = {}; TRACE_COUNT = 0")
+
+
+def lua_list(lua, code):
+    return list(lua.eval(code).values())
+
+
+def test_player_numbers():
+    lua = new_runtime(4)
+    check(all(lua.eval(f'coop_player_number("#PLAYER{n}#")') == n for n in range(1, 13)), "numbers: #PLAYER1# to #PLAYER12# are 1 to 12")
+    check(lua.eval('coop_player_number("#NPC#")') is None and lua.eval("coop_player_number(nil)") is None, "numbers: any other name has none")
+
+
+def test_hud_slots():
+    lua = new_runtime(4)
+    check(lua.eval('coop_hud_slot("#PLAYER1#", 0, {1, 2, 3})') == 0, "slots: the local player takes the local slot")
+    check([lua.eval(f'coop_hud_slot("#PLAYER{n}#", 0, {{1, 2, 3}})') for n in (2, 3, 4)] == [1, 2, 3], "slots: remote n takes remote_slots[n - 1]")
+    check(lua.eval('coop_hud_slot("#PLAYER4#", 1, {2, 3})') == 2, "slots: a remote without an entry shares the first remote slot")
+    clear_trace(lua)
+    lua.execute("S = coop_hud_slots(0, {1, 2, 3})")
+    check(lua.eval("S[LOCAL_PLAYER]") == 0 and lua.eval("S[REMOTE_PLAYER]") == 1, "slots: the table holds the local and the two-player remote slot")
+    check(trace_lines(lua) == [], "slots: those two entries trace nothing")
+    check(lua.eval('S["#PLAYER3#"]') == 2 and lua.eval('S["#PLAYER3#"]') == 2, "slots: a remote read gives its slot")
+    check(trace_lines(lua) == ["coop: hud slot #PLAYER3# 2"], "slots: the first read of a remote traces once")
+    check(lua.eval('S["#NPC#"]') is None, "slots: a name that is not a remote player has no slot")
+
+
+def test_each_remote_slot():
+    lua = new_runtime(4)
+    lua.execute("N = 0; CALLED = {}; function note(slot) N = N + 1; CALLED[N] = slot end")
+    lua.execute("coop_each_remote_slot(note, coop_hud_slots(0, {1, 2, 3}))")
+    check(lua_list(lua, "CALLED") == [1, 2, 3], "each slot: 4 players call slots 1, 2, 3")
+    lua.execute("N = 0; CALLED = {}; coop_each_remote_slot(note, coop_hud_slots(0, {2, 3}))")
+    check(lua_list(lua, "CALLED") == [2, 3], "each slot: a shared slot is called once")
+    for count in (1, 2):
+        lua = new_runtime(count)
+        lua.execute("N = 0; CALLED = {}; function note(slot) N = N + 1; CALLED[N] = slot end")
+        lua.execute("coop_each_remote_slot(note, coop_hud_slots(0, {1, 2, 3}))")
+        check(lua_list(lua, "CALLED") == [1], f"each slot: {count} players call slot 1 only")
+
+
+def test_other_players():
+    lua = new_runtime(2)
+    check(lua_list(lua, 'coop_other_players("#PLAYER1#")') == ["#PLAYER2#"] and lua_list(lua, 'coop_other_players("#PLAYER2#")') == [LOCAL],
+          "others: with 2 players exactly the other one")
+    lua.execute('V = {["#PLAYER1#"] = 5, ["#PLAYER2#"] = 7}')
+    check(lua.eval('coop_any_other_equal(V, "#PLAYER1#", 7)') is True and lua.eval('coop_any_other_equal(V, "#PLAYER2#", 7)') is False,
+          "others: coop_any_other_equal looks at the other player only")
+    check(lua_list(lua, "coop_remotes_equal(V, 7)") == ["#PLAYER2#"], "others: 2 players, coop_remotes_equal lists the remote")
+    check(lua.eval("coop_all_remotes_at_least(V, 7)") is True and lua.eval("coop_all_remotes_at_least(V, 8)") is False, "others: 2 players, at least")
+    lua.execute('function sees(p, who) return p == who end')
+    check(lua.eval('coop_any_other(sees, "#PLAYER1#", "#PLAYER2#")') is True, "others: coop_any_other passes the player and the extra arguments")
+    lua = new_runtime(4)
+    check(lua_list(lua, 'coop_other_players("#PLAYER2#")') == ["#PLAYER1#", "#PLAYER3#", "#PLAYER4#"], "others: 4 players, the local player first")
+    lua.execute('V = {["#PLAYER1#"] = 0, ["#PLAYER2#"] = 7, ["#PLAYER3#"] = 3, ["#PLAYER4#"] = 7}')
+    check(lua_list(lua, "coop_remotes_equal(V, 7)") == ["#PLAYER2#", "#PLAYER4#"], "others: 4 players, remotes with a value in order")
+    check(lua.eval("coop_all_remotes_at_least(V, 3)") is True and lua.eval("coop_all_remotes_at_least(V, 4)") is False, "others: 4 players, at least")
+    lua.execute('CAR = {["#PLAYER1#"] = "a", ["#PLAYER2#"] = "a", ["#PLAYER3#"] = "a", ["#PLAYER4#"] = "b"}')
+    check(lua.eval('coop_all_in_vehicle_of(CAR, "#PLAYER1#")') is False and lua.eval('coop_all_in_vehicle_of(CAR, "#PLAYER4#")') is False,
+          "others: coop_all_in_vehicle_of is false when one player is in another vehicle")
+    lua.execute('CAR["#PLAYER4#"] = "a"')
+    check(lua.eval('coop_all_in_vehicle_of(CAR, "#PLAYER2#")') is True, "others: coop_all_in_vehicle_of is true when all share it")
+
+
+def test_next_player():
+    lua = new_runtime(4)
+    order = [lua.eval(f'coop_next_player("#PLAYER{n}#")') for n in (1, 2, 3, 4)]
+    check(order == ["#PLAYER2#", "#PLAYER3#", "#PLAYER4#", "#PLAYER1#"], "next: cycles P1, P2, P3, P4, P1")
+    lua.execute('CLEAN = {["#PLAYER3#"] = true}')
+    check(lua.eval('coop_next_player_where("#PLAYER4#", function(p) return CLEAN[p] end)') == "#PLAYER3#", "next: where wraps around")
+    check(lua.eval('coop_next_player_where("#PLAYER3#", function(p) return CLEAN[p] end)') is None, "next: where never returns the start")
+    check(lua.eval("coop_next_player_where(LOCAL_PLAYER, function(p) return false end)") is None, "next: where gives nil when none fits")
+    two = new_runtime(2)
+    check(two.eval('coop_next_player("#PLAYER2#")') == LOCAL and two.eval("coop_next_player(LOCAL_PLAYER)") == "#PLAYER2#", "next: 2 players, the other one")
+
+
+def test_nearest_players():
+    lua = new_runtime(4)
+    lua.execute("RESULT.get_dist = function(a, b) if a == '#PLAYER2#' then return 1 elseif a == '#PLAYER3#' then return 3 else return 7 end end")
+    lua.execute("RESULT.character_is_dead = function(p) return p == '#PLAYER2#' end")
+    check(lua.eval('coop_nearest_other_player("truck", "#PLAYER1#")') == "#PLAYER3#", "nearest: a living player before a nearer dead one")
+    lua.execute("RESULT.character_is_dead = true")
+    check(lua.eval('coop_nearest_other_player("truck", "#PLAYER1#")') == "#PLAYER2#", "nearest: all dead gives the nearest dead")
+    lua.execute('IN = {["#PLAYER3#"] = true, ["#PLAYER4#"] = true}')
+    check(lua.eval('coop_nearest_other_in(IN, "truck", "#PLAYER1#")') == "#PLAYER3#", "nearest: the smallest distance among those marked")
+    check(lua.eval('coop_nearest_other_in({}, "truck", "#PLAYER1#")') == "#PLAYER2#", "nearest: none marked falls back to get_other_coop_player")
+    check(lua.eval('coop_nearest_dist_of({"#PLAYER3#", "#PLAYER4#"}, "nav")') == 3, "nearest: coop_nearest_dist_of is the smallest distance")
+    check(lua.eval('coop_nearest_dist_of({}, "nav")') == lua.eval("COOP_FAR_DISTANCE"), "nearest: an empty list is far")
+    lua.execute('function measure(navs, p) return "nav" .. p, 1, COOP_NATIVE.get_dist(p, "x") end')
+    check(lua.eval("(coop_best_remote(measure, 3, {}, REMOTE_PLAYER))") == "nav#PLAYER2#", "nearest: coop_best_remote gives the results of the best remote")
 
 
 def test_wrapping_twice():
@@ -318,7 +424,11 @@ end
 
 
 def main():
-    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_waypoints, test_sync_from_player, test_wrapping_twice):
+    for test in (
+        test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_waypoints,
+        test_sync_from_player, test_player_numbers, test_hud_slots, test_each_remote_slot, test_other_players, test_next_player,
+        test_nearest_players, test_wrapping_twice,
+    ):
         test()
     return 1 if failures else 0
 

@@ -339,9 +339,32 @@ def test_other_remote_vehicle():
     invariant(lua, "other remote vehicle")
 
 
+def test_seat_of():
+    """The mission waits ask coop_seat_of for the seat each remote got in the vehicle the script names."""
+    lua = new_world(4)
+    vehicles(lua, boat=5)
+    run(lua, '''
+        vehicle_enter_teleport(LOCAL_PLAYER, "boat", 0)
+        vehicle_enter_teleport(REMOTE_PLAYER, "boat", 2)
+        vehicle_enter_teleport("maero", "boat", 1)
+        vehicle_enter_teleport("carlos", "boat", 3)''')
+    check(lua.eval('coop_seat_of("boat", "#PLAYER2#", 2)') == 2, "seat of: the first remote has the scripted seat")
+    for remote in ("#PLAYER3#", "#PLAYER4#"):
+        vehicle, seat = place_of(lua, remote)
+        answer = lua.eval(f'coop_seat_of("boat", "{remote}", 9)')
+        check(answer == (seat if vehicle == "boat" else None), f"seat of: {remote} has its seat in the boat, or none when it stayed on foot")
+    check(lua.eval('coop_all_seated(function(p, v) return p == "#PLAYER2#" end, "boat")') is False, "seat of: a seated remote that fails the wait fails all seated")
+    lua = new_world(4)
+    vehicles(lua, buggy=4, boat=1)
+    run(lua, 'vehicle_enter_teleport(REMOTE_PLAYER, "buggy", 0)')
+    run(lua, 'vehicle_enter_teleport(REMOTE_PLAYER, "boat", 0)')
+    check(lua.eval('coop_seat_of("boat", "#PLAYER3#", 0)') is None, "seat of: a remote placed in another vehicle has no seat in the one the script names")
+    check(lua.eval('coop_all_seated(function(p, v) return p == "#PLAYER2#" end, "boat")') is True, "seat of: all seated asks only the remotes seated in that vehicle")
+
+
 def main():
     for test in (test_two_players, test_without_seat_natives, test_candidates, test_speedboat, test_parcel_truck, test_bikes, test_cart, test_mirror,
-                 test_forced_seats, test_unresolved_vehicle, test_mid_enter, test_other_remote_vehicle):
+                 test_forced_seats, test_unresolved_vehicle, test_mid_enter, test_other_remote_vehicle, test_seat_of):
         test()
     return 1 if failures else 0
 

@@ -13,11 +13,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import lua_check  # noqa: E402
 import lua_overrides  # noqa: E402
+import lua_params  # noqa: E402
 import lua_patch  # noqa: E402
 from lua_patch import Patch  # noqa: E402
 from lua_patches import GENERIC_RULES, PATCHES  # noqa: E402
 
 failures = 0
+REAL_SCRIPT_COUNT = 50
 
 
 def check(ok, what):
@@ -95,7 +97,7 @@ def test_lua_check():
 
 
 def made_up(directory, line_ending):
-    text = "-- made up\nfunction f(who)\n\tif who == REMOTE_PLAYER then\n\t\tg(REMOTE_PLAYER)\n\tend\nend\n"
+    text = "-- made up\nfunction f(who)\n\tif who == REMOTE_PLAYER then\n\t\tg(REMOTE_PLAYER)\n\tend\n\tteleport(who)\nend\n"
     (directory / "demo.lua").write_bytes(text.replace("\n", line_ending).encode("latin-1"))
     (directory / "ug_lib.lua").write_bytes(("-- library\n".replace("\n", line_ending)).encode("latin-1"))
     (directory / "fixed.lua").write_bytes(b"x = 1\n")
@@ -116,10 +118,11 @@ def test_build():
                 source, out = root / ("source_" + label), root / ("out_" + label)
                 source.mkdir()
                 made_up(source, ending)
-                written = lua_overrides.build(source, fixes, out)
+                written, parameter_rule = lua_overrides.build(source, fixes, out)
                 check(written == ["demo.lua", "fixed.lua", "ug_lib.lua"], f"{label}: every patched script is written")
                 demo = (out / "demo.lua").read_bytes().decode("latin-1")
                 check("coop_is_remote_player(who)" in demo and "coop_each_remote(g, REMOTE_PLAYER)" in demo, f"{label}: the patch and the generic rules apply")
+                check("coop_native(teleport)(who)" in demo and parameter_rule == (1, 1), f"{label}: the parameter rule applies and is counted")
                 check(demo.count("\r\n") == (demo.count("\n") if ending == "\r\n" else 0), f"{label}: line endings kept")
                 library = (out / "ug_lib.lua").read_bytes().decode("latin-1")
                 check("function coop_wrap(" in library and "function coop_player_table(" in library and "COOP_RULES" in library, f"{label}: ug_lib.lua gets the library")
@@ -138,6 +141,26 @@ def test_build():
         lua_overrides.FIXED_FILES = saved_fixed
 
 
+def real_edited_bodies(source, fixes):
+    """(script name, its text with the patch and generic rules applied, before the parameter rule) for every script but the library."""
+    for name, patch in PATCHES.items():
+        if name != lua_overrides.LIBRARY_FILE:
+            path = (fixes if name in lua_overrides.FIXED_FILES else source) / name
+            yield name, lua_overrides.edited_body(name, lua_overrides.read(path), patch)
+
+
+def real_parameter_calls(source, fixes):
+    return sum(lua_params.rewrite(body, lua_overrides.WRAPPED)[1] for _, body in real_edited_bodies(source, fixes))
+
+
+def real_risky_calls(source, fixes):
+    return [
+        f"{name}: {helper}({argument})"
+        for name, body in real_edited_bodies(source, fixes)
+        for _, helper, argument in lua_params.risky_calls(body, lua_overrides.WRAPPED)
+    ]
+
+
 def test_real_scripts():
     source, fixes = os.environ.get("SR2_LUA_SOURCE"), os.environ.get("SR2_LUA_FIXES")
     if not (source and fixes):
@@ -145,8 +168,11 @@ def test_real_scripts():
         return
     with tempfile.TemporaryDirectory() as temporary:
         out = Path(temporary)
-        written = lua_overrides.build(Path(source), Path(fixes), out)
-        check(sorted(written) == sorted(PATCHES), f"all {len(PATCHES)} real overrides are written")
+        written, (parameter_calls, parameter_scripts) = lua_overrides.build(Path(source), Path(fixes), out)
+        check(sorted(written) == sorted(PATCHES) and len(written) == REAL_SCRIPT_COUNT, f"all {REAL_SCRIPT_COUNT} real overrides are written")
+        check(parameter_calls == real_parameter_calls(Path(source), Path(fixes)), f"params: {parameter_calls} calls in {parameter_scripts} scripts")
+        check(real_risky_calls(Path(source), Path(fixes)) == ["rn05.lua: rn05_wait_for_vehicle_entry(passenger)"],
+              "the only helper with a rewritten parameter that is given the remote literal is rn05_wait_for_vehicle_entry")
         problems = lua_check.check_dir(out, Path(source))
         sync_calls = sum((Path(temporary) / name).read_bytes().decode("latin-1").count("coop_sync_for(") for name in ("rn02.lua", "ep02.lua", "rn08.lua"))
         check(sync_calls == 5, f"rn02, ep02 and rn08 hold the 5 targeted sync masks (found {sync_calls})")

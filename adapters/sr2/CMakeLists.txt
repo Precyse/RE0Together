@@ -81,6 +81,7 @@ add_library(sr2_adapter SHARED
     src/outfit_sync_trace.cpp
     src/store_sync.cpp
     src/vehicle_seating.cpp
+    src/lua_trace.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
     src/multiplayer_patches.cpp
@@ -144,7 +145,7 @@ set_source_files_properties(
     src/session_kick.cpp src/hud_remotes.cpp src/waypoint_scope.cpp
     src/revive_state.cpp src/revive_thunks.cpp src/notoriety_thunks.cpp src/revive_patches.cpp
     src/mission_flow_prompts.cpp src/mission_flow_rewards.cpp
-    src/store_sync.cpp
+    src/store_sync.cpp src/lua_trace.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -224,6 +225,7 @@ add_unit_test(frustum_rules_test)
 add_unit_test(handoff_rules_test)
 add_unit_test(cutscene_sync_rules_test)
 add_unit_test(script_trace_rules_test)
+add_unit_test(lua_trace_rules_test)
 add_unit_test(pause_mask_rules_test)
 add_unit_test(outfit_sync_rules_test)
 add_unit_test(outfit_sync_sites_test)
@@ -262,7 +264,7 @@ add_unit_test(outfit_sync_bindings_test src/outfit_sync.cpp src/outfit_sync_trac
     src/partner_identity.cpp src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
     src/memory.cpp src/guest_call.cpp src/activity_state.cpp ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(outfit_sync_bindings_test PRIVATE minhook)
-add_unit_test(hud_bindings_test src/hud_remotes.cpp src/waypoint_scope.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp
+add_unit_test(hud_bindings_test src/hud_remotes.cpp src/waypoint_scope.cpp src/lua_trace.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp
     src/guest_call.cpp src/activity_state.cpp ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(hud_bindings_test PRIVATE minhook)
