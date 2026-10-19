@@ -54,6 +54,7 @@ add_library(re0_adapter SHARED
     src/crash_dump.cpp
     src/net_trace.cpp
     src/flag_sync.cpp
+    src/flag_sequencer.cpp
     src/join_sync.cpp
     src/resync.cpp
     src/session_slot.cpp
@@ -166,6 +167,9 @@ add_executable(state_net_rule_test tests/state_net_rule_test.cpp)
 add_executable(frame_router_rule_test tests/frame_router_rule_test.cpp)
 
 add_executable(load_serial_test tests/load_serial_test.cpp)
+
+add_executable(flag_sequencer_test tests/flag_sequencer_test.cpp)
+target_compile_options(flag_sequencer_test PRIVATE /W4 /WX /utf-8)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 

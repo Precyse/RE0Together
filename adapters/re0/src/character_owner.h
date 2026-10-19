@@ -43,6 +43,9 @@ Character plannedLocalCharacter();
 // True on the linked session's host.
 bool isHost();
 
+// This machine's slot in the linked session.
+uint8_t localSlot();
+
 // True when the received ownership says `slot` drives `character`.
 bool isOwnedBy(Character character, uint8_t slot);
 

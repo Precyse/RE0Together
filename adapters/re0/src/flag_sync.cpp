@@ -7,11 +7,13 @@
 #include "debug_stats.h"
 #include "flag_diff.h"
 #include "flag_family.h"
+#include "flag_sequencer.h"
 #include "game.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -38,6 +40,10 @@ uintptr_t flagsAddress() {
 }
 
 void send(const std::vector<Change>& changes) {
+    if (state_mode::on()) {
+        flag_sequencer::submitLocal(changes);
+        return;
+    }
     std::vector<uint8_t> payload(kHeaderSize + changes.size() * sizeof(Change));
     const auto count = static_cast<uint16_t>(changes.size());
     std::memcpy(payload.data(), &count, sizeof(count));
@@ -57,6 +63,12 @@ void logChanges(const char* direction, const std::vector<Change>& changes) {
             if (change.clear & mask) logger::write("flag_sync: %s %s flag 0x%x clear", direction, family, index);
         }
     }
+}
+
+// State mode: the changes the host's order says to apply wait in the same queue a peer's FLAG_DIFF would use.
+void queueOrdered(const std::vector<Change>& ordered) {
+    std::lock_guard lock(g_mutex);
+    g_incoming.insert(g_incoming.end(), ordered.begin(), ordered.end());
 }
 
 void writeFlagWord(uintptr_t manager, uint16_t word, uint32_t set, uint32_t clear) {
@@ -106,6 +118,7 @@ void applyIncoming(uintptr_t manager, Words& words) {
 void onTick() {
     if (!net_pad::active()) {
         g_hasKnown = false;
+        if (state_mode::on()) flag_sequencer::reset();
         return;
     }
     if (++g_frame % kCheckEveryFrames != 0) return;
@@ -124,6 +137,7 @@ void onTick() {
         send(local);
         g_known = words;
     }
+    if (state_mode::on()) queueOrdered(flag_sequencer::collect(words));
     applyIncoming(manager, words);
 }
 
@@ -132,6 +146,7 @@ void onTick() {
 namespace flag_sync {
 
 void onFrame(const GameFrame& frame) {
+    if (state_mode::on()) return;  // FLAG_DIFF is replaced by FLAG_PROPOSE / FLAG_COMMIT (flag_sequencer)
     if (frame.type != proto::kMsgFlagDiff || frame.payload.size() < kHeaderSize) return;
     uint16_t count = 0;
     std::memcpy(&count, frame.payload.data(), sizeof(count));
@@ -155,6 +170,7 @@ void applySnapshot(const Words& words) {
     if (!address || !game::writeMemory(address, words)) return;
     g_known = words;
     g_hasKnown = true;
+    if (state_mode::on()) flag_sequencer::reset();
 }
 
 void enable(NetClient& net) {

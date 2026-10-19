@@ -44,6 +44,8 @@ enum class Counter : size_t {
     EnemyDecisionsApplied,
     FlagWordsSent,
     FlagWordsApplied,
+    FlagCommits,
+    FlagCorrections,
     EventsFired,
     EventsFollowed,
     EventsRefused,
