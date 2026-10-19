@@ -15,6 +15,7 @@ public sealed class Session : IDisposable
     private readonly PeerStats _stats = new();
     private readonly MemberGrace _grace = new();
     private readonly PeerBudget _budget = new();
+    private readonly FreshQueue? _fresh;
     private readonly Dictionary<ulong, string> _names = new();
 
     private ILobby _lobby;
@@ -27,6 +28,7 @@ public sealed class Session : IDisposable
     private bool _recheck;
     private int _seenRevision = -1;
     private long _lastBudgetReportMs;
+    private long _lastFreshReplaced;
 
     public Session(GameProfile profile, ILobby lobby, ITransport transport, LoopbackBridge bridge)
     {
@@ -36,6 +38,8 @@ public sealed class Session : IDisposable
         _hostId = lobby.OwnerId;
         _transport = transport;
         _bridge = bridge;
+        _fresh = FreshQueue.ForProfile(profile);
+        if (_fresh != null) Log.Info($"Fresh channel: {_fresh.TypeCount} types");
         _transport.FrameReceived += OnPeerFrame;
         _bridge.GameFrame += OnAdapterFrame;
         _bridge.AdapterReady += OnAdapterReady;
@@ -90,6 +94,7 @@ public sealed class Session : IDisposable
         }
         if (_active && !Ended)
             _stats.Tick(PeerSlots(), SendPing, (slot, rtt) => _bridge.Send(ControlMessages.PeerStats(slot, rtt)));
+        FlushFresh();
         ReportBudget(now);
     }
 
@@ -219,6 +224,11 @@ public sealed class Session : IDisposable
         if (nowMs - _lastBudgetReportMs < BudgetReportIntervalMs) return;
         _lastBudgetReportMs = nowMs;
         foreach (var line in _budget.TakeReport()) Log.Info(line);
+        if (_fresh != null && _fresh.Replaced != _lastFreshReplaced)
+        {
+            _lastFreshReplaced = _fresh.Replaced;
+            Log.Info($"Fresh channel: {_lastFreshReplaced} older frames replaced");
+        }
     }
 
     private void End(string reason)
@@ -230,8 +240,23 @@ public sealed class Session : IDisposable
         Ended = true;
     }
 
-    private void SendToPeer(ulong id, Frame frame) =>
-        _transport.Send(id, frame with { Flags = (byte)(frame.Flags & Framing.FlagReliable), Slot = _localSlot });
+    private Frame Outgoing(Frame frame) =>
+        frame with { Flags = (byte)(frame.Flags & Framing.FlagReliable), Slot = _localSlot };
+
+    private void SendToPeer(ulong id, Frame frame) => _transport.Send(id, Outgoing(frame));
+
+    /// <summary>A fresh type waits for the next flush (newest wins); everything else goes out now.</summary>
+    private void RouteToPeer(ulong id, Frame frame)
+    {
+        if (_fresh?.Accepts(frame) == true) _fresh.Enqueue(id, Outgoing(frame));
+        else SendToPeer(id, frame);
+    }
+
+    private void FlushFresh()
+    {
+        if (_fresh == null) return;
+        foreach (var (id, frame) in _fresh.Drain()) _transport.Send(id, frame, TransportChannel.Fresh);
+    }
 
     private void SendPing(byte slot)
     {
@@ -255,9 +280,9 @@ public sealed class Session : IDisposable
         if (!_active) return;
         if (frame.Slot == Framing.SlotAll)
         {
-            foreach (var id in _slots.Keys.Where(id => id != _transport.LocalId).ToList()) SendToPeer(id, frame);
+            foreach (var id in _slots.Keys.Where(id => id != _transport.LocalId).ToList()) RouteToPeer(id, frame);
         }
-        else if (TryGetPeerId(frame.Slot, out var id)) SendToPeer(id, frame);
+        else if (TryGetPeerId(frame.Slot, out var id)) RouteToPeer(id, frame);
     }
 
     private void OnPeerFrame(ulong senderId, Frame frame)

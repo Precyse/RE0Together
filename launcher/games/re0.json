@@ -3,6 +3,7 @@
   "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", "adapterIni": "coop/adapter.ini" },
   "adapterLog": "coop/adapter.log",
+  "freshTypes": ["0x0140", "0x0160", "0x0173"],
   "options": [
     { "key": "character", "label": "Character", "host": true, "values": [
       { "value": "rebecca", "label": "Rebecca" }, { "value": "billy", "label": "Billy" } ] },

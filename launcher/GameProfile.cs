@@ -29,7 +29,8 @@ public sealed record GameOption(string Key, string Label, List<OptionValue> Valu
 public sealed record GameProfile(
     string Id, string Name, int SteamAppId, string Exe, int MaxPlayers, int Port,
     List<AdapterFile> AdapterFiles, SaveSyncProfile? SaveSync = null, string? AdapterLog = null,
-    List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null)
+    List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
+    List<string>? FreshTypes = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

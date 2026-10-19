@@ -37,7 +37,7 @@ public sealed class LocalTransport : ITransport
 
     public event Action<ulong, Frame>? FrameReceived;
 
-    public bool Send(ulong peerId, Frame frame)
+    public bool Send(ulong peerId, Frame frame, TransportChannel channel = TransportChannel.Main)
     {
         if (peerId != PeerId) return false;
         SendDatagram(Framing.EncodeWire(frame));

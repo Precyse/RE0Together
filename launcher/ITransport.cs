@@ -1,5 +1,12 @@
 namespace CoopLauncher;
 
+/// <summary>The carrier's message lanes; the numbers are the Steam channels. Fresh carries a game's newest-wins state types.</summary>
+public enum TransportChannel
+{
+    Main = 0,
+    Fresh = 1,
+}
+
 /// <summary>Peer-to-peer frame carrier. Identity is a SteamID (Steam) or a UDP port (local test).</summary>
 public interface ITransport : IDisposable
 {
@@ -11,8 +18,9 @@ public interface ITransport : IDisposable
     /// <summary>Largest FILE_CHUNK data size this carrier can send in one message.</summary>
     int MaxChunkBytes { get; }
 
-    /// <summary>Returns false when the carrier refused the frame (e.g. its send buffer is full); the caller may retry.</summary>
-    bool Send(ulong peerId, Frame frame);
+    /// <summary>Returns false when the carrier refused the frame (e.g. its send buffer is full); the caller may retry.
+    /// A carrier without lanes sends every channel the same way.</summary>
+    bool Send(ulong peerId, Frame frame, TransportChannel channel = TransportChannel.Main);
 
     void Pump();
 }
