@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "enemy_observer.h"
 #include "flag_sequencer.h"
 #include "game_tick.h"
 #include "log.h"
@@ -15,7 +16,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 7;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay
+constexpr unsigned kModuleCount = 8;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, enemy observer
 
 std::atomic<bool> g_on{false};
 
@@ -41,6 +42,7 @@ void enableAll(NetClient& net) {
     if (flag_sequencer::enable()) ++enabled;
     if (weapon_fx_capture::enable()) ++enabled;
     if (weapon_fx_replay::enable()) ++enabled;
+    if (enemy_observer::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

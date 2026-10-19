@@ -10,23 +10,27 @@ constexpr uint32_t kSampleIntervalMs = 33;  // 30 Hz
 constexpr uint32_t kHeldAfterMs = 250;      // no sample for this long: the owner's world is not moving
 constexpr uint32_t kHeldIntervalMs = 250;   // 4 Hz resend while it is not
 
-// A time accumulator: one sample per interval however many moves the game runs in it (60 or 30 frames a second).
+// A time accumulator: one sample per interval however many moves the game runs in it (60 or 30 frames a second). The
+// interval is the pose puppet's unless the caller names another (the enemy observers sample at 20 Hz).
 class SampleTimer {
 public:
+    explicit SampleTimer(uint32_t intervalMs = kSampleIntervalMs) : intervalMs_(intervalMs) {}
+
     // True when a sample is due at `nowMs`; a late move does not owe the missed samples.
     bool due(uint32_t nowMs) {
         if (!started_) {
             started_ = true;
-            next_ = nowMs + kSampleIntervalMs;
+            next_ = nowMs + intervalMs_;
             return true;
         }
         if (stream_clock::after(next_, nowMs)) return false;
-        next_ += kSampleIntervalMs;
-        if (!stream_clock::after(next_, nowMs)) next_ = nowMs + kSampleIntervalMs;
+        next_ += intervalMs_;
+        if (!stream_clock::after(next_, nowMs)) next_ = nowMs + intervalMs_;
         return true;
     }
 
 private:
+    uint32_t intervalMs_;
     bool started_ = false;
     uint32_t next_ = 0;
 };

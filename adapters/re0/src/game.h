@@ -360,6 +360,14 @@ constexpr uintptr_t kSpawnRecordSize = 0x5c;
 constexpr uint32_t kSpawnRecordCount = 0x4e8;
 constexpr uintptr_t kSpawnRecordKindOffset = 0x4;
 constexpr uintptr_t kSpawnRecordIdOffset = 0x10;
+
+// state mode: phase 7 (enemy observers, docs/RE0_NOTES.md "State mode: enemy observers")
+// Slot 8 of all 38 enemy vtables and both players: fastcall(this), no stack arguments. When sGameInfo +0x50 bit 0 (the
+// CharPause bit, script op 160; tested at 0x526c7d) is set it runs only slot 31 (motion), the root-motion cancel and
+// slots 18 and 19 (joints, hit shapes) and skips slot 41, the class's update (jump at 0x526d4e).
+constexpr uintptr_t kUnitMoveFunction = 0x526b30;
+constexpr uint32_t kCharPauseBit = 0x1;
+constexpr uintptr_t kEnemyFlags6a0cOffset = 0x6a0c;  // u32, read by the player's aim filter and weapon hit path 0x52f520
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
     0xcbdcd8, 0xcc4f28, 0xcc50a0, 0xcc5218, 0xcc5390, 0xcc5508, 0xcc5680, 0xcc57f8, 0xcc5970, 0xcc3fe8,

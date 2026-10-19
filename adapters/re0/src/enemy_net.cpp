@@ -9,6 +9,7 @@
 #include "debug_stats.h"
 #include "enemy_damage_hook.h"
 #include "enemy_hit_wire.h"
+#include "enemy_observer.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
 #include "enemy_target.h"
@@ -18,6 +19,7 @@
 #include "net_pad.h"
 #include "player_damage.h"
 #include "scene.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -168,6 +170,8 @@ void applyHit(const Hit& event) {
         logger::write("enemy_net: hit dropped (slot %u: %s)", hit.slot, enemy ? "another class here" : "no enemy");
         return;
     }
+    // An observed enemy's HP, reaction and death come from the simulator's stream, not from a replayed damage function.
+    if (event.type == enemy_protocol::kMsgHitApplied && state_mode::on() && enemy_observer::observes(enemy)) return;
     if (hit.attackerCharacterId == enemy_protocol::kNoAttacker) return applyOutcome(enemy, hit);
     const uintptr_t attacker = character_owner::find(static_cast<Character>(hit.attackerCharacterId));
     if (!attacker) {

@@ -71,6 +71,13 @@ enum class Counter : size_t {
     StateSendRefused,
     RouterDropped,
     PuppetSubEvents,
+    EnemyObserverPoses,
+    EnemyObserverMotions,
+    EnemyObserverMisses,
+    EnemyObserverSeeks,
+    EnemyObserverStale,
+    EnemyObserverRefused,
+    EnemyObserverSent,
     Count
 };
 

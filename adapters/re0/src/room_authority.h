@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 #include "net_client.h"
 
@@ -21,5 +22,15 @@ void resendClaims();
 
 // This machine runs the enemies of `sceneId`. True while there is no linked session (the game plays as vanilla).
 bool runsHere(uint16_t sceneId);
+
+// The slot that runs `sceneId` and the table's epoch for it; `here` = that slot is this machine.
+struct Holder {
+    uint8_t slot;
+    uint32_t epoch;
+    bool here;
+};
+
+// Who runs `sceneId`, or nothing while there is no linked session or the room is unowned. Any thread.
+std::optional<Holder> holderOf(uint16_t sceneId);
 
 }  // namespace room_authority

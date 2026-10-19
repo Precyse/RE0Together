@@ -177,4 +177,12 @@ bool runsHere(uint16_t sceneId) {
     return g_table.isOwner(sceneId);
 }
 
+std::optional<Holder> holderOf(uint16_t sceneId) {
+    if (!g_linked) return std::nullopt;
+    std::lock_guard lock(g_mutex);
+    const uint8_t owner = g_table.ownerOf(sceneId);
+    if (owner == kNoOwner) return std::nullopt;
+    return Holder{owner, g_table.epochOf(sceneId), owner == g_local};
+}
+
 }  // namespace room_authority
