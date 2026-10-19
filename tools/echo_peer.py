@@ -18,8 +18,8 @@ HEARTBEAT = 0x0020
 PLAYER_STATE = 0x0100
 POSE_STATE = 0x0140
 ECHOED_TYPES = (PLAYER_STATE, 0x0101, POSE_STATE, 0x0141)
-SHIFTED_TYPES = (PLAYER_STATE, POSE_STATE)
-POS_X_OFFSET = 4  # PLAYER_STATE payload: u32 seq, f32 pos[3], f32 quat[4]; POSE_STATE: u32 sender ms, f32 pos[3], ...
+# Byte offset of pos[0] in the payload: PLAYER_STATE is u32 seq, f32 pos[3], ...; POSE_STATE v2 is u32 sender ms, u32 seq, f32 pos[3], ...
+POS_X_OFFSETS = {PLAYER_STATE: 4, POSE_STATE: 8}
 FLAG_RELIABLE = 1
 HEARTBEAT_S = 1.0
 IDLE_POLL_S = 0.005
@@ -61,9 +61,10 @@ class Echo:
             msg_type, flags, slot = struct.unpack("<HBB", body[:4])
             if msg_type in ECHOED_TYPES:
                 payload = bytearray(body[4:])
-                if msg_type in SHIFTED_TYPES and self.offset_x:
-                    (x,) = struct.unpack_from("<f", payload, POS_X_OFFSET)
-                    struct.pack_into("<f", payload, POS_X_OFFSET, x + self.offset_x)
+                if msg_type in POS_X_OFFSETS and self.offset_x:
+                    offset = POS_X_OFFSETS[msg_type]
+                    (x,) = struct.unpack_from("<f", payload, offset)
+                    struct.pack_into("<f", payload, offset, x + self.offset_x)
                 frame = encode(msg_type, flags, slot, bytes(payload))
                 with self.lock:
                     self.order += 1

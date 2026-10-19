@@ -59,6 +59,15 @@ void testSeek() {
     check(!seeksAfter(interrupted, puppet, {kWalk, 20.0f}, 1), "agreeing again clears the hold");
     check(!seeksAfter(interrupted, puppet, {kRun, 5.0f}, pr::kSeekHoldTicks - 1), "the hold counts from zero");
 
+    pr::SeekTracker placed;
+    placed.requestSeek();
+    check(!seeksAfter(placed, puppet, {pw::kNoMotion, 0.0f}, 1), "a requested seek waits for an owner motion");
+    check(seeksAfter(placed, puppet, {kWalk, 20.0f}, 1), "a requested seek happens at once even when the motions agree");
+    check(!seeksAfter(placed, puppet, {kWalk, 20.0f}, 1), "and only once");
+    placed.requestSeek();
+    placed.reset();
+    check(!seeksAfter(placed, puppet, {kWalk, 20.0f}, 1), "a reset forgets a requested seek");
+
     pr::SeekTracker looping;
     const pr::Layer0 wrapped{kWalk, 59.0f, kLoopLength};
     check(!seeksAfter(looping, wrapped, {kWalk, 2.0f}, 50), "a loop wrap is not drift");

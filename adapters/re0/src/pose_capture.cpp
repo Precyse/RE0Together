@@ -1,9 +1,13 @@
 #include "pose_capture.h"
 
+#include <atomic>
+#include <mutex>
+
 #include "character_owner.h"
 #include "debug_stats.h"
 #include "game_tick.h"
 #include "join_sync.h"
+#include "pose_capture_rule.h"
 #include "pose_game.h"
 #include "pose_wire.h"
 #include "scene.h"
@@ -11,12 +15,15 @@
 
 namespace {
 
-constexpr uint32_t kSampleEveryFrames = 2;  // the game moves a character 60 times a second: 30 Hz
-
 bool g_installed = false;
-uint32_t g_frame = 0;
-uint32_t g_poseSeq = 0;
+std::atomic<uint32_t> g_poseSeq{0};  // the game thread samples, the net thread resends
 uint32_t g_eventSeq = 0;
+pose_capture_rule::SampleTimer g_sampleTimer;  // game thread only
+
+std::mutex g_mutex;
+pose_wire::Pose g_lastPose;  // guarded by g_mutex
+bool g_hasPose = false;
+pose_capture_rule::HeldResend g_heldResend;
 
 // The object of the character this machine's player owns, or 0 without a peer.
 uintptr_t ownedPlayer() {
@@ -33,21 +40,34 @@ void onMotionRequest(uintptr_t animControl, const pose_game::MotionRequest& requ
                                        request.start,
                                        ++g_eventSeq,
                                        static_cast<uint16_t>(request.motionNo),
-                                       static_cast<uint16_t>(request.layer)};
+                                       pose_wire::packLayer(static_cast<uint16_t>(request.layer), pose_wire::kBodyTarget)};
     if (state_net::send(pose_wire::kMsgMotionEvent, true, proto::bytesOf(event))) {
         debug_stats::count(debug_stats::Counter::MotionEventsSent);
     }
 }
 
-void afterMove(uintptr_t player) {
-    if (player != ownedPlayer() || !join_sync::caughtUp() || ++g_frame % kSampleEveryFrames != 0) return;
-    pose_wire::Pose pose;
-    if (!pose_game::readPose(player, pose)) return;
-    pose.senderMs = pose_wire::clockMs();
-    pose.seq = ++g_poseSeq;
-    pose.room = scene::current();
+void sendPose(const pose_wire::Pose& pose) {
     const pose_wire::PoseState wire = pose_wire::encode(pose);
     state_net::send(pose_wire::kMsgPoseState, false, proto::bytesOf(wire));
+}
+
+void afterMove(uintptr_t player) {
+    if (player != ownedPlayer() || !join_sync::caughtUp()) return;
+    const uint32_t now = pose_wire::clockMs();
+    if (!g_sampleTimer.due(now)) return;
+    pose_wire::Pose pose;
+    if (!pose_game::readPose(player, pose)) return;
+    pose.senderMs = now;
+    pose.seq = ++g_poseSeq;
+    pose.room = scene::current();
+    pose.loadSerial = scene::loadSerial();
+    {
+        std::lock_guard lock(g_mutex);
+        g_lastPose = pose;
+        g_hasPose = true;
+        g_heldResend.onSample(now);
+    }
+    sendPose(pose);
 }
 
 }  // namespace
@@ -55,10 +75,24 @@ void afterMove(uintptr_t player) {
 namespace pose_capture {
 
 bool enable() {
-    g_installed = pose_game::installAnimHook(onMotionRequest);
+    g_installed = pose_game::addAnimObserver(onMotionRequest);
     if (!g_installed) return false;
     game_tick::addPostMove("pose_capture", afterMove);
     return true;
+}
+
+void onNetTick() {
+    const uint32_t now = pose_wire::clockMs();
+    pose_wire::Pose pose;
+    {
+        std::lock_guard lock(g_mutex);
+        if (!g_hasPose || !g_heldResend.due(now)) return;
+        pose = g_lastPose;
+    }
+    pose.senderMs = now;
+    pose.seq = ++g_poseSeq;
+    pose.held = true;
+    sendPose(pose);
 }
 
 void uninstall() {

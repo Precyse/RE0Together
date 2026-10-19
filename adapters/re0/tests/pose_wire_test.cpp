@@ -73,6 +73,12 @@ pw::Pose samplePose() {
     pose.phase = 2;
     pose.weapon = 9;
     pose.status = 0xdeadbeef;
+    pose.loadSerial = 0xbeef;
+    pose.x1034 = 0x1234;
+    pose.hitAttr = 0x2a5;
+    pose.manualPitch = -0.35f;
+    pose.aimTier = 2;
+    pose.held = true;
     return pose;
 }
 
@@ -86,9 +92,26 @@ void testPoseRoundTrip() {
     check(back.layer[1].motion == 0x34 && std::fabs(back.layer[1].frame - 7.25f) <= kFrameTolerance, "layer 1 survives");
     check(back.group == 1 && back.state == 5 && back.phase == 2 && back.weapon == 9 && back.status == 0xdeadbeef,
           "think, weapon and status survive");
+    check(back.loadSerial == 0xbeef && back.x1034 == 0x1234 && back.hitAttr == 0x2a5 && back.aimTier == 2 && back.held,
+          "load serial, +0x1034, hit attributes, aim tier and the held flag survive");
+    check(std::fabs(back.manualPitch - pose.manualPitch) <= 1.0f / pw::kPitchFixedScale, "aim pitch keeps 1/4096 radian precision");
+    pw::Pose live = pose;
+    live.held = false;
+    check(!pw::decode(pw::encode(live)).held, "a live pose is not held");
     pw::Pose none = pose;
     none.layer[1] = {pw::kNoMotion, 0.0f};
     check(pw::decode(pw::encode(none)).layer[1].motion == pw::kNoMotion, "no motion on layer 1 survives");
+}
+
+void testPitch() {
+    check(pw::packPitch(0.0f) == 0, "pitch 0 packs to 0");
+    check(std::fabs(pw::unpackPitch(pw::packPitch(1.2345f)) - 1.2345f) <= 1.0f / pw::kPitchFixedScale, "pitch keeps 1/4096 radian");
+    check(pw::packPitch(100.0f) == 32767 && pw::packPitch(-100.0f) == -32768, "a huge pitch saturates");
+}
+
+void testLayerTarget() {
+    check(pw::layerOf(pw::packLayer(5, 3)) == 5 && pw::targetOf(pw::packLayer(5, 3)) == 3, "layer and target share the layer field");
+    check(pw::packLayer(2, pw::kBodyTarget) == 2, "a body request is the plain layer number");
 }
 
 void testPoseValidation() {
@@ -105,6 +128,39 @@ void testPoseValidation() {
     bad.frame0 = INFINITY;
     std::memcpy(bytes, &bad, sizeof(bad));
     check(!pw::decodePose(bytes).has_value(), "an infinite frame is refused");
+
+    const auto refuses = [&](const pw::PoseState& state, const char* what) {
+        std::memcpy(bytes, &state, sizeof(state));
+        check(!pw::decodePose(bytes).has_value(), what);
+    };
+    bad = wire;
+    bad.group = pw::kMaxThinkGroup + 1;
+    refuses(bad, "a think group over 3 is refused");
+    bad = wire;
+    bad.weapon = pw::kMaxWeaponType + 1;
+    refuses(bad, "a weapon type over 0x1b is refused");
+    bad = wire;
+    bad.aimTier = pw::kMaxAimTier + 1;
+    refuses(bad, "an aim tier over 2 is refused");
+    bad = wire;
+    bad.hitAttr = pw::kHitAttributeMask + 1;
+    refuses(bad, "hit attributes over 10 bits are refused");
+    bad = wire;
+    bad.flags = 0x80;
+    refuses(bad, "an unknown flag is refused");
+    bad = wire;
+    bad.weapon = pw::kMaxWeaponType;
+    bad.aimTier = pw::kMaxAimTier;
+    bad.group = pw::kMaxThinkGroup;
+    std::memcpy(bytes, &bad, sizeof(bad));
+    check(pw::decodePose(bytes).has_value(), "the limits themselves are accepted");
+}
+
+void testPoseSize() {
+    static_assert(sizeof(pw::PoseState) == 56);
+    check(sizeof(pw::PoseState) == 56, "POSE_STATE v2 is 56 bytes");
+    const pw::PoseState wire = pw::encode(samplePose());
+    check(wire.pos[0] == 10.5f && wire.seq == 77 && wire.senderMs == 123456, "senderMs, seq and position lead the payload");
 }
 
 void testEventValidation() {
@@ -118,6 +174,12 @@ void testEventValidation() {
     event.layer = pw::kMotionLayers;
     std::memcpy(bytes, &event, sizeof(event));
     check(!pw::decodeEvent(bytes).has_value(), "a layer the engine does not have is refused");
+    event.layer = pw::packLayer(pw::kMotionLayers - 1, pw::kSubControls);
+    std::memcpy(bytes, &event, sizeof(event));
+    check(pw::decodeEvent(bytes).has_value(), "the last layer of the last sub-control is accepted");
+    event.layer = pw::packLayer(0, pw::kSubControls + 1);
+    std::memcpy(bytes, &event, sizeof(event));
+    check(!pw::decodeEvent(bytes).has_value(), "an anim control the character does not have is refused");
     event.layer = pw::kMotionLayers - 1;
     event.interp = std::nanf("");
     std::memcpy(bytes, &event, sizeof(event));
@@ -129,7 +191,10 @@ void testEventValidation() {
 int main() {
     testQuaternion();
     testFrame();
+    testPitch();
+    testLayerTarget();
     testPoseRoundTrip();
+    testPoseSize();
     testPoseValidation();
     testEventValidation();
     if (g_failures == 0) std::printf("pose_wire_test: all checks passed\n");

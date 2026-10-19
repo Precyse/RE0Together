@@ -1,7 +1,9 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 #include "net_client.h"
+#include "stream_clock.h"
 
 // Receiver side of partner_mode=state (docs/RE0_NOTES.md "Pose puppet"): the remote-owned character is a puppet. Its
 // brain is switched off with the engine's own script pause, held for the length of its own move; before the move the
@@ -15,11 +17,15 @@ bool enable();
 
 void uninstall();
 
-// True while `player` is a puppet: state mode, remote-owned and in play here, and the owner's poses are arriving.
-// Always false in input mode.
+// True while `player` is a puppet: state mode, remote-owned, and a peer is present (it holds still before the first
+// pose arrives, while the owner is in another room and while the stream is lost). Always false in input mode.
 bool active(uintptr_t player);
 
 // Net thread: POSE_STATE and MOTION_EVENT from the driving peer.
 void onFrame(const GameFrame& frame);
+
+// A copy of the clock this machine keeps for peer `slot` (the one the puppet, weapon effects and enemy streams of that
+// peer are shown by), or nothing before the peer's first message. Any thread.
+std::optional<stream_clock::StreamClock> clockFor(uint8_t slot);
 
 }  // namespace puppet

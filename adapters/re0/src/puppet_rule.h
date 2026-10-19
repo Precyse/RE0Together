@@ -32,13 +32,18 @@ struct Layer0 {
 
 enum class Verdict { Follow, Seek };
 
-// Compares the puppet's layer 0 with the owner's, once per puppet move.
+// Compares the puppet's layer 0 with the owner's, once per puppet move. A timeline reset asks for a seek at once.
 class SeekTracker {
 public:
     Verdict update(const Layer0& puppet, const pose_wire::Layer& owner) {
         if (owner.motion == pose_wire::kNoMotion) {
             ticks_ = 0;
             return Verdict::Follow;
+        }
+        if (seekPending_) {
+            seekPending_ = false;
+            ticks_ = 0;
+            return Verdict::Seek;
         }
         const bool apart = puppet.motion != owner.motion || frameDistance(puppet.frame, owner.frame, puppet.frameMax) > kSeekFrames;
         if (!apart) {
@@ -50,10 +55,17 @@ public:
         return Verdict::Seek;
     }
 
-    void reset() { ticks_ = 0; }
+    // The next update seeks whatever the difference (the owner was placed, not blended).
+    void requestSeek() { seekPending_ = true; }
+
+    void reset() {
+        ticks_ = 0;
+        seekPending_ = false;
+    }
 
 private:
     uint32_t ticks_ = 0;
+    bool seekPending_ = false;
 };
 
 }  // namespace puppet_rule
