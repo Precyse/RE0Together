@@ -38,6 +38,7 @@ inline constexpr Phase kPhases[] = {
     {"population partner", world_sites::kPartnerView, false},
     {"remote views", world_sites::kViews, false},
     {"mission players", mission_sites::kPlayers, false},
+    {"remote vehicles", world_sites::kRemoteVehicles, false},
     {"creation queue", world_sites::kQueue, false},
     {"upload share", world_sites::kUpload, false},
 

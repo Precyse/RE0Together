@@ -131,6 +131,8 @@ enum class Thunk : uint8_t {
     NetClockTick,
     TraceBundleSender,
     TraceNpcSetup,
+    TraceChunkNodes,
+    TraceRemoteVehicle,
 
 
 

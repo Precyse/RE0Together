@@ -4,24 +4,21 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "sr2_addresses.h"
-
 // The pure rules of the ambient population for 3 or more players (milestone 9, unit tested; docs/SR2_NOTES.md,
 // "Population"). 2-player co-op keeps the world at single-player density in two ways: the per-machine budgets are halved
 // while the partner is near and grow to the full single-player value as it walks away, and only the host spawns for a pair
-// that stands together. The invariant is "every player area is at single-player density"; these rules keep it for any
-// number of players. With one remote every rule gives the answer of the shipped game.
+// that stands together. For 3 or more players the budgets stop at what the game gives two players apart (milestone 12: the
+// pools are sized for that), so with 3 or 4 separate areas each has a share of it. With one remote every rule gives the
+// answer of the shipped game.
 namespace population_rules {
 
 struct Point {
     float x, y, z;
 };
 
-constexpr uint32_t kNpcBudgetBase = 0x96;    // the total humans budget (single player and multiplayer use 0x4B)
-constexpr uint32_t kNpcPoolCapacity = sr2::kNpcHumanPool;  // humans the static NPC pool holds
 constexpr int32_t kVehicleHeadroomPerRemote = 4;
-constexpr size_t kBudgetRemotesAtLeast
- = 2;  // below this the game's own function answers
+constexpr size_t kBudgetRemotesAtLeast = 2;  // below this the game's own function answers
+constexpr float kMostExtraAreas = 1.0f;      // the whole base is the 2-player session total: more areas thin the density
 
 inline float distance(const Point& a, const Point& b) {
     const float dx = a.x - b.x;
@@ -53,12 +50,14 @@ inline uint32_t areasHundredths(float extra) {
     return static_cast<uint32_t>((1.0f + extra) * static_cast<float>(kAreaHundredths) + 0.5f);
 }
 
-// The budget of `base` for the given number of extra areas: half the base for the local area, half more for each (the
-// shipped function truncates the fractional part the same way). The humans budget never exceeds what the NPC pool holds.
+// The budget of `base` for the given number of extra areas: half the base for the local area, and up to half more for the
+// others (the shipped function truncates the fractional part the same way). Every machine holds every replicated object of
+// the session, so `base`, the shipped maximum for 2 players apart, is also the session total: with three or four areas it
+// is shared out (base/3, base/4 per area), and the pools (150 humans, 32 vehicles) are never asked for more than the game
+// asks for two players.
 inline uint32_t budget(uint32_t base, float extra) {
     const uint32_t half = base >> 1;
-    const uint32_t result = half + static_cast<uint32_t>(static_cast<float>(half) * extra);
-    return base == kNpcBudgetBase ? std::min(result, kNpcPoolCapacity) : result;
+    return half + static_cast<uint32_t>(static_cast<float>(half) * std::min(extra, kMostExtraAreas));
 }
 
 // Another player with the owner slot of its machine, for the cluster rule.
@@ -83,9 +82,11 @@ inline bool clusterFar(bool localIsHost, uint8_t localSlot, const Point& local, 
     return true;
 }
 
-// The vehicles this machine may still add: the shipped function takes 4 off while a partner exists, here 4 per remote.
-inline int32_t vehicleHeadroom(int32_t free, size_t remotes) {
-    return free - kVehicleHeadroomPerRemote * static_cast<int32_t>(remotes);
+// The vehicles this machine may still add: the shipped function takes 4 off while a partner exists, here 4 per remote
+// session member. Members, not humans: a joiner counts the session's members from the join on, so it keeps room for the
+// other players' vehicles from its first spawn, before any remote human exists on it.
+inline int32_t vehicleHeadroom(int32_t free, size_t remoteMembers) {
+    return free - kVehicleHeadroomPerRemote * static_cast<int32_t>(remoteMembers);
 }
 
 }  // namespace population_rules

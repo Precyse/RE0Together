@@ -18,10 +18,13 @@ inline constexpr Site kPlayers[] = {
     {"TL2", Kind::HookEntry, Gate::Now, 0x9E9EB0, "51 A1 38 C4 E8 00", Thunk::TraceCoopBuffers, ""},
 };
 
-// The pool census (milestone 11 B6, docs/SR2_NOTES.md, "Pool census"): the NPC human setup, which counts a create that
-// returned nothing.
+// The pool census (milestone 11 B6, milestone 12; docs/SR2_NOTES.md, "Pool census"): the NPC human setup, which counts a
+// create that returned nothing (NC1), the chunk node loader, which takes groups and elements outside the group create (NC2),
+// and the vehicle class create, whose failed attempts are named per net id (VT1).
 inline constexpr Site kCensus[] = {
     {"NC1", Kind::HookEntry, Gate::Now, 0x9D0DE0, "51 53 8A 5C 24 0C 84 DB", Thunk::TraceNpcSetup, ""},
+    {"NC2", Kind::HookEntry, Gate::Now, 0x9140C0, "81 EC 4C 02 00 00 A1 50 0B E8", Thunk::TraceChunkNodes, ""},
+    {"VT1", Kind::PointerSwap, Gate::Now, 0xE2BA78, "30 3F 87 00", Thunk::TraceRemoteVehicle, ""},
 };
 
 }  // namespace trace_sites

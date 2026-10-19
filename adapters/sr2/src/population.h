@@ -6,10 +6,10 @@
 
 // Milestone 9, the ambient population with 3 or more players (docs/SR2_NOTES.md, "Population"; rules in
 // population_rules.h):
-//   W1a  the area budget 0x93E8D0 follows the number of separate player areas (the game's own function answers with one
-//        remote, so 2 players are bit-exact),
+//   W1a  the area budget 0x93E8D0 follows the number of separate player areas, capped at the shipped maximum (the game's
+//        own function answers with one remote, so 2 players are bit-exact),
 //   W2a  the cluster rule 0x957A40: the lowest slot of a cluster spawns for it,
-//   W10b the vehicle headroom 0x93C1D0 takes 4 off per remote.
+//   W10b the vehicle headroom 0x93C1D0 takes 4 off per remote session member.
 namespace population {
 
 // The player areas (the local one plus the soft count of the others, in hundredths) of the last W1a budget; 0 until one was

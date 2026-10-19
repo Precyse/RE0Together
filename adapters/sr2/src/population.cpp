@@ -98,9 +98,9 @@ void __cdecl clusterLeaderFar(GuestFrame* frame) {
 remotes.localIsHost, remotes.localSlot, local, peers, remotes.count, radius) ? 1 : 0;
 }
 
-// W10b: esi = the vehicles still allowed (0x20 less this machine's own), returns it less 4 per remote player.
+// W10b: esi = the vehicles still allowed (0x20 less this machine's own), returns it less 4 per remote session member.
 int32_t __cdecl vehicleHeadroom(int32_t free) {
-    return population_rules::vehicleHeadroom(free, remote_players::remoteHumanCount());
+    return population_rules::vehicleHeadroom(free, remote_players::remoteMemberCount());
 }
 
 PARTNER_WRAP_STUB(areaBudgetStub, areaBudget, 0)

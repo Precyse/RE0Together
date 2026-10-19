@@ -137,10 +137,18 @@ int main() {
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
     check(phaseSize("player traces") == 3, "player traces: 3 sites (TF1, TF2, TL2), written with trace=1 only");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
-    check(phaseSize("census trace") == 1, "census trace: 1 site (NC1), written with trace=1 only");
+    check(phaseSize("census trace") == 3, "census trace: 3 sites (NC1, NC2, VT1), written with trace=1 only");
     const Site* npcSetup = siteNamed(sites, "NC1");
     check(npcSetup && npcSetup->kind == Kind::HookEntry && npcSetup->address == 0x9D0DE0 && sizeOf(*npcSetup) == 8,
           "NC1 hooks the NPC human setup 0x9D0DE0, 8 checked bytes");
+    check(phaseSize("remote vehicles") == 1, "remote vehicles: 1 site (RV1)");
+    const Site* retry = siteNamed(sites, "RV1");
+    const auto retryBefore = retry ? partner_sites::parseHex(retry->expected) : std::vector<uint8_t>();
+    const auto retryAfter = retry ? partner_replacement::replacementFor(*retry, 0) : std::vector<uint8_t>();
+    check(retry && retry->kind == Kind::Bytes && retry->address == 0x805633 && retryBefore.size() == 19 && retryAfter.size() == 19 &&
+              retryBefore == std::vector<uint8_t>{0x32, 0xC0, 0x83, 0xF9, 0x03, 0x74, 0x0A, 0x83, 0xF9, 0x05, 0x74, 0x05, 0x83, 0xF9, 0x02, 0x75, 0x02, 0xB0, 0x01} &&
+              retryAfter == std::vector<uint8_t>{0x8D, 0x41, 0xFE, 0x83, 0xF8, 0x03, 0x0F, 0x96, 0xC0, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90},
+          "RV1: the class test of the create retry (19 bytes at 0x805633) becomes lea eax,[ecx-2]; cmp eax,3; setbe al; nops, so classes 2 to 5 get the long window");
     check(phaseSize("net clock") == 2, "net clock: 2 sites (CK1, CK2)");
     check(phaseSize("bundle sender trace") == 1, "bundle sender trace: 1 site (BUT), written with trace=1 only");
     check(phaseSize("cutscene handshake") == 4, "cutscene handshake: 4 sites (MC1, MC2, CS1, CS2)");

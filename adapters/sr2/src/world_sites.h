@@ -30,7 +30,7 @@ inline constexpr Site kCluster[] = {
 // What the population layer calls "the partner" is the remote nearest to the local player (W10): the partner spawn zone and
 // its box, the zone pick, the density level, the region and class gates, the AI vehicle target, the near-partner tests and
 // the spawn origins each ask the game's getter, which answers the first remote. W10a lets the category fallback take the
-// partner for any count >= 2, W10b takes 4 off the vehicle headroom per remote.
+// partner for any count >= 2, W10b takes 4 off the vehicle headroom per remote session member.
 inline constexpr Site kPartnerView[] = {
     {"W10_9236E8", Kind::RetargetCall, Gate::Now, 0x9236E8, "E8 E3 44 0B 00", Thunk::NearestRemoteLocal, ""},
     {"W10_923FF4", Kind::RetargetCall, Gate::Now, 0x923FF4, "E8 D7 3B 0B 00", Thunk::NearestRemoteLocal, ""},
@@ -66,6 +66,14 @@ inline constexpr Site kViews[] = {
 // Each member gets the upload rate it reported (W9), not that rate divided by the number of remotes.
 inline constexpr Site kUpload[] = {
     {"W9a", Kind::Bytes, Gate::Now, 0x814267, "F7 74 24 18", Thunk::None, "90 90 90 90"},
+};
+
+// A remote vehicle that arrives while the pool is full is given up after 5 s (RV1): the game retries the create of a player or
+// NPC (classes 2, 3 and 5) for 65.5 s but of a vehicle (class 4) for 5 s. The range test 2..5 gives the vehicle the long
+// window too: `lea eax, [ecx-2]; cmp eax, 3; setbe al`.
+inline constexpr Site kRemoteVehicles[] = {
+    {"RV1", Kind::Bytes, Gate::Now, 0x805633, "32 C0 83 F9 03 74 0A 83 F9 05 74 05 83 F9 02 75 02 B0 01", Thunk::None,
+     "8D 41 FE 83 F8 03 0F 96 C0 90 90 90 90 90 90 90 90 90 90"},
 };
 
 // A member's creation queue never overflows (W8): the three appends and the drain.

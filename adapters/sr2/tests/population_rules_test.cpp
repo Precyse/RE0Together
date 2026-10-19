@@ -13,6 +13,7 @@ using population_rules::Point;
 constexpr float kRadius = 70.0f;
 constexpr uint32_t kTrafficBase = 0x1A;
 constexpr uint32_t kHumansBase = 0x96;
+constexpr uint32_t kParkedBase = 0x0C;
 constexpr float kClusterRadius = 160.0f;
 
 int g_failures = 0;
@@ -56,39 +57,43 @@ void areasCountSeparatePlayerAreas() {
     const Point together[] = {at(10), at(20), at(30)};
     check(population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), together, 3, kRadius)) == kTrafficBase / 2,
           "four players together: one area, half the base");
-    const Point apart[] = {at(500), at(1000), at(1500)};
-    check(population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), apart, 3, kRadius)) == kTrafficBase / 2 * 4,
-          "four players apart: four areas");
-    const Point twoApart[] = {at(500), at(1000)};
-    check(population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), twoApart, 2, kRadius)) == kTrafficBase / 2 * 3,
-          "three players apart: three areas");
     const Point pairAway[] = {at(500), at(510)};
     check(population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), pairAway, 2, kRadius)) == kTrafficBase,
-          "two remotes together far from the local player: two areas, the same as one far remote");
+          "two remotes together far from the local player: two areas, the whole base");
     const Point pairHere[] = {at(10), at(20)};
     check(population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), pairHere, 2, kRadius)) == kTrafficBase / 2,
           "three players together: one area");
-    const Point halfway[] = {at(105), at(5000)};
-    const uint32_t partial = population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), halfway, 2, kRadius));
-    check(partial > kTrafficBase / 2 * 2 && partial < kTrafficBase / 2 * 3, "a remote halfway between near and far counts part of an area");
+    const Point one[] = {at(105)};
+    const uint32_t partial = population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), one, 1, kRadius));
+    check(partial > kTrafficBase / 2 && partial < kTrafficBase, "a remote halfway between near and far counts part of an area");
 }
 
-void theHumansBudgetFitsThePool() {
-    const Point apart[] = {at(5000), at(10000), at(15000)};
-    const uint32_t result = population_rules::budget(kHumansBase, population_rules::extraAreas(at(0), apart, 3, kRadius));
-    check(result == population_rules::kNpcPoolCapacity, "four players apart: the humans budget is held at the 150 of the NPC pool");
-    check(population_rules::budget(kTrafficBase, population_rules::extraAreas(at(0), apart, 3, kRadius)) == kTrafficBase / 2 * 4,
-          "the other budgets are not held");
-    const Point one[] = {at(5000)};
-    check(population_rules::budget(kHumansBase, population_rules::extraAreas(at(0), one, 1, kRadius)) == kHumansBase,
-          "two areas fit the pool exactly");
+void theBudgetNeverPassesTheShippedMaximum() {
+    const Point twoApart[] = {at(500), at(1000)};
+    const Point threeApart[] = {at(500), at(1000), at(1500)};
+    for (const uint32_t base : {kTrafficBase, kHumansBase, kParkedBase}) {
+        check(population_rules::budget(base, population_rules::extraAreas(at(0), twoApart, 2, kRadius)) == base,
+              "three players apart: the base, which the game gives two players apart");
+        check(population_rules::budget(base, population_rules::extraAreas(at(0), threeApart, 3, kRadius)) == base,
+              "four players apart: still the base, a quarter of it per area");
+    }
+    check(population_rules::budget(kTrafficBase, 1.0f) == kTrafficBase && population_rules::budget(kTrafficBase, 3.0f) == kTrafficBase,
+          "extra areas above one add nothing");
+    check(population_rules::budget(kTrafficBase, 0.0f) == kTrafficBase / 2, "no extra area: half the base");
+    check(population_rules::budget(kTrafficBase, 0.5f) == kTrafficBase / 2 + kTrafficBase / 4, "half an extra area: half of the other half");
+    const Point halfway[] = {at(105), at(5000)};
+    const float extra = population_rules::extraAreas(at(0), halfway, 2, kRadius);
+    check(extra > 1.0f && population_rules::areasHundredths(extra) == 250,
+          "the census still reports the uncapped number of areas (2.50 here)");
 }
 
 void vehicleHeadroomTakesFourPerRemote() {
     check(population_rules::vehicleHeadroom(20, 0) == 20 && population_rules::vehicleHeadroom(20, 1) == 16,
           "no remote: nothing off; one remote: 4 off, as the shipped function does");
     check(population_rules::vehicleHeadroom(20, 3) == 8 && population_rules::vehicleHeadroom(2, 3) == -10,
-          "three remotes: 12 off (it can go negative, the caller compares)");
+          "three remote members: 12 off (it can go negative, the caller compares)");
+    check(population_rules::vehicleHeadroom(28, 0) == 28 && population_rules::vehicleHeadroom(28, 1) == 24 && population_rules::vehicleHeadroom(28, 2) == 20,
+          "a joiner with no remote human yet but members in the session: 4 off per member");
 }
 
 void theLowestSlotOfAClusterAnswersFar() {
@@ -124,7 +129,7 @@ void areaCountForTheCensus() {
 int main() {
     oneRemoteIsTheShippedBudget();
     areasCountSeparatePlayerAreas();
-    theHumansBudgetFitsThePool();
+    theBudgetNeverPassesTheShippedMaximum();
     theLowestSlotOfAClusterAnswersFar();
     vehicleHeadroomTakesFourPerRemote();
     areaCountForTheCensus();

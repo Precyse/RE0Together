@@ -328,21 +328,42 @@ constexpr size_t kPlayerPoolCount = kMaxWalkedPlayers;
 constexpr uint32_t kHandleIndexMask = 0xFFF;             // the low 12 bits of an object handle index kObjectTable
 constexpr uintptr_t kObjectTableStride = 0x10;
 
-// Pool census (milestone 11 B6). The group create 0x910370 has three callers and the NPC human setup 0x9D0DE0 four (return
+// Pool census (milestone 11 B6). The group create 0x910370 has three known callers and the NPC human setup 0x9D0DE0 four (return
 // addresses below); the static pools they draw from have these sizes. The NPC humans are a static pool of 150 whose free
 // list head is at kNpcHumanFreeHead (circular through kNpcHumanLinkOffset, the layout of the builder at 0x9CF40F).
 constexpr size_t kSpawnElementPool = 2400;               // the element pool; the group pool is kMaxSpawnGroups
 constexpr uintptr_t kNpcHumanFreeHead = 0x215FFB4;
 constexpr uintptr_t kNpcHumanLinkOffset = 0x1160;
 constexpr size_t kNpcHumanPool = 150;
-constexpr uintptr_t kGroupCreateReturnA = 0x910B58;      // in 0x910AA0, from 0x914A60
-constexpr uintptr_t kGroupCreateReturnB = 0x912E4C;      // in 0x912D40, from 0x4505C0
-constexpr uintptr_t kGroupCreateReturnC = 0x9163C5;      // in 0x916390, from 0x9F2BF0
+constexpr uintptr_t kGroupCreateReturnA = 0x910B58;      // ambient: in 0x910AD0 (the child group spawn), from the group update 0x910DA0
+constexpr uintptr_t kGroupCreateReturnB = 0x912E4C;      // crews: in 0x912D80 (the crew builder), from the chunk object loads 0x4AC930 / 0x4ACC30 and the streaming 0x9FC4A0
+constexpr uintptr_t kGroupCreateReturnC = 0x9163C5;      // shops: in 0x916390, from the shop interior loader 0x9F2BF0
 constexpr uintptr_t kNpcCreateRegister = 0x9D0DE0;       // esi = the human a vtable +0x34 create returned (0 = it failed)
 constexpr uintptr_t kNpcCreateReturnA = 0x6D036C;
 constexpr uintptr_t kNpcCreateReturnB = 0x9CDF5E;
 constexpr uintptr_t kNpcCreateReturnC = 0x9D117D;
 constexpr uintptr_t kNpcCreateReturnD = 0x9D1253;
+
+// Population reserve and remote vehicles (milestone 12). Only the group create 0x910370 and the chunk node loader
+// kChunkNodeLoad take groups and elements (the game counts them in use at kGroupsInUse / kElementsInUse); the loader's
+// return addresses below identify its four callers. A remote vehicle is created through the vehicle class's create slot
+// (kVehicleNetCreateSlot, thiscall with 5 stack arguments) from the creation data free list (circular through
+// kVehicleCreationLinkOffset) and the static vehicle pool, whose free head is kVehicleFreeHead and in-use count kVehicleCount.
+constexpr uintptr_t kGroupsInUse = 0x2529594;
+constexpr uintptr_t kElementsInUse = 0x2529590;
+constexpr uintptr_t kChunkNodeLoad = 0x9140C0;           // cdecl(int, int), returns al
+constexpr uintptr_t kChunkNodeReturnA = 0x914820;
+constexpr uintptr_t kChunkNodeReturnB = 0xA25035;
+constexpr uintptr_t kChunkNodeReturnC = 0xA7E8B5;
+constexpr uintptr_t kChunkNodeReturnD = 0xA815C8;
+constexpr uintptr_t kVehicleCount = 0x252A0D4;           // dword: vehicles in use
+constexpr size_t kVehiclePool = 32;
+constexpr uintptr_t kVehicleFreeHead = 0x22A84D0;
+constexpr uintptr_t kVehicleCreationFreeHead = 0x2A4C518;
+constexpr uintptr_t kVehicleCreationLinkOffset = 0x284;
+constexpr size_t kVehicleCreationPool = 32;
+constexpr uintptr_t kVehicleNetCreateSlot = 0xE2BA78;    // the vehicle class vtable +0xC: 0x873F30
+
 constexpr uintptr_t kNpcCreationDataAllocator = 0x2A476F0;  // npc_creation_data, sized from [0xE8C43C]
 constexpr uintptr_t kNpcStateDataAllocator = 0x2A47BA0;     // npc_state_data, N=8
 constexpr uintptr_t kNpcSimStateAllocator = 0x2A47C90;      // npc_sim_state
