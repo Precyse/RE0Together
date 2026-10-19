@@ -10,6 +10,14 @@ namespace equip_refresh {
 // Game thread: a received inventory block changed the character's equipped slot.
 void request(character_owner::Character character);
 
+// Game thread: true while a re-equip of the character is requested and not yet done.
+bool pending(character_owner::Character character);
+
+// Game thread: re-equips a remote-owned character from its mirrored inventory block although no block change asked for
+// it (the puppet's held weapon differs from the owner's). False, and nothing done, when the character is not
+// remote-owned or a re-equip is already pending.
+bool requestFromMirror(character_owner::Character character);
+
 // Game thread, every tick for each character: advances a pending re-equip and logs a weapon change.
 void tick(character_owner::Character character);
 

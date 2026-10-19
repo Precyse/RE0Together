@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <optional>
 
 #include "character_owner.h"
 #include "debug_stats.h"
@@ -33,14 +34,16 @@ uintptr_t ownedPlayer() {
 
 void onMotionRequest(uintptr_t animControl, const pose_game::MotionRequest& request) {
     const uintptr_t player = ownedPlayer();
-    if (!player || animControl != pose_game::animControlOf(player) || request.layer >= pose_wire::kMotionLayers) return;
+    if (!player || request.layer >= pose_wire::kMotionLayers) return;
+    const std::optional<uint16_t> target = pose_game::controlTarget(player, animControl);
+    if (!target) return;
     const pose_wire::MotionEvent event{pose_wire::clockMs(),
                                        request.flags,
                                        request.interp,
                                        request.start,
                                        ++g_eventSeq,
                                        static_cast<uint16_t>(request.motionNo),
-                                       pose_wire::packLayer(static_cast<uint16_t>(request.layer), pose_wire::kBodyTarget)};
+                                       pose_wire::packLayer(static_cast<uint16_t>(request.layer), *target)};
     if (state_net::send(pose_wire::kMsgMotionEvent, true, proto::bytesOf(event))) {
         debug_stats::count(debug_stats::Counter::MotionEventsSent);
     }

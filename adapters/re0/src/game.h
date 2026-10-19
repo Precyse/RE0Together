@@ -446,6 +446,30 @@ constexpr uintptr_t kSetPartnerFunction = 0x4ece00;       // sPlayer::setPartner
 // sUnit::updateAll (vtable slot 6, thiscall, no args, plain ret), once per frame: walks every unit group through
 // slot 9 (0x7279e0, thiscall, group index, ret 4), which calls each unit's vtable slot 8 (the move chain).
 constexpr uintptr_t kUnitUpdateAllFunction = 0x727b50;
+
+// state mode: phase 4 (puppet body fidelity; docs/RE0_NOTES.md "State mode: puppet body")
+// A character holds 7 sub-unit slots of 0x20 bytes from +0x67d8; slot 3 is the held weapon. A slot starts with the
+// unit pointer and embeds its cAnimControl 4 bytes in (0x521a80 adds 4 before it calls cAnimControl::set).
+constexpr uintptr_t kSubSlotOffset = 0x67d8;
+constexpr uintptr_t kSubSlotStride = 0x20;
+constexpr uintptr_t kSubControlInSlot = 0x4;
+constexpr uintptr_t kPlayerStatusLockOffset = 0x67a0;      // CRITICAL_SECTION (0x18 bytes, up to the think) guarding +0x68c4
+constexpr uint32_t kPlayerStatusMask = 0x1ffff;            // the bits 0x512050 keeps when it clears flags
+constexpr uintptr_t kPlayerSetHitAttributesFunction = 0x528ee0;    // thiscall (mask) ret 4: |= mask
+constexpr uintptr_t kPlayerClearHitAttributesFunction = 0x528ec0;  // thiscall (mask) ret 4: &= ~mask & 0x3ff
+constexpr uintptr_t kPlayerHandPoseFunction = 0x50f910;    // fastcall (player): hand pose from motion and weapon type
+constexpr uintptr_t kPlayerSpineBendFunction = 0x518f70;   // fastcall (player): spine joints bent by +0x695c, after slot 31
+constexpr uintptr_t kPlayerLightProbeFunction = 0x50a880;  // fastcall (player), vtable slot 47: branch B of move only
+constexpr uintptr_t kPlayerHandSwapFunction = 0x5178b0;    // fastcall (player): frame-driven hand / holster swaps, move step G
+constexpr uintptr_t kPlayerRoomRecordFunction = 0x526490;  // thiscall (player) -> room record (+0xff4)
+constexpr uintptr_t kAreaGlobal = 0xdce9dc;                // the object 0x53faa0 runs on
+constexpr uintptr_t kAreaIdFunction = 0x53faa0;            // thiscall on kAreaGlobal (record, vec3*, mode) ret 0xc -> area id
+constexpr uint32_t kAreaIdMode = 2;                        // what move passes (0x514a41)
+constexpr uintptr_t kPlayerSetAreaIdFunction = 0x5295a0;   // thiscall (areaId) ret 4: +0x16e8
+constexpr uintptr_t kUnitMotionUpdateFunction = 0x5286c0;  // vtable slot 31 of every uModel unit: fastcall (unit)
+constexpr uintptr_t kThinkRumbleFunction = 0x4fac40;       // cPlayerThink slot 15, thiscall (strength) ret 4
+constexpr uintptr_t kThinkOwnerOffset = 0x4;               // within the think: the character it belongs to
+
 constexpr uint32_t kPlayerThinkSize = 0xd0;
 constexpr uint32_t kPartnerThinkSize = 0x1a0;  // cPlayerSubThink
 // Partner code may still treat the partner's think as a cPlayerSubThink and touch its larger layout, so a

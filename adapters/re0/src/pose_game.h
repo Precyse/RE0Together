@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "game.h"
 #include "pose_wire.h"
@@ -30,8 +31,11 @@ constexpr size_t kMaxAnimObservers = 4;
 bool addAnimObserver(SetObserver observer);
 void uninstallAnimHook();
 
-// The anim control of a character object.
-inline uintptr_t animControlOf(uintptr_t player) { return player + game::kAnimControlOffset; }
+// The MotionEvent target (pose_wire: 0 body, 1 + k sub-control k) of `animControl` when it is one of `player`'s own.
+std::optional<uint16_t> controlTarget(uintptr_t player, uintptr_t animControl);
+
+// True when the anim control `target` names has its unit: always for the body, for a sub-control once a weapon is attached.
+bool hasUnit(uintptr_t player, uint16_t target);
 
 // The character's current pose (position, rotation, both layers, think, weapon, status, +0x1034, hit attributes, aim
 // pitch and tier); the caller adds time, number, room and load serial.
@@ -43,15 +47,28 @@ bool readThink(uintptr_t player, pose_wire::Pose& out);
 // The character's layer 0 as the puppet rule compares it.
 bool readLayer0(uintptr_t player, puppet_rule::Layer0& out);
 
-// True when the character's motion banks hold the motion (the engine's own check).
-bool motionAvailable(uintptr_t player, uint16_t motionNo);
+// True when the motion banks of the unit the anim control `target` names hold the motion (the engine's own check); false
+// for a sub-control without a unit.
+bool motionAvailable(uintptr_t player, uint16_t target, uint16_t motionNo);
 
-// Runs a motion request on the character through the engine's own function, not seen by the observer.
-bool replay(uintptr_t player, const MotionRequest& request);
+// Runs a motion request on the character's anim control `target` through the engine's own function, not seen by the
+// observer.
+bool replay(uintptr_t player, uint16_t target, const MotionRequest& request);
 
-// Writes position and rotation, makes the motion's own displacement cancel, and mirrors the owner's think state (when
-// the puppet's think is a cPlayerThink).
+// Writes position and rotation, makes the motion's own displacement cancel, mirrors the owner's status flags (under the
+// character's lock), hit attributes (by diff through the engine's setter and clearer), +0x1034, manual pitch and aim
+// tier, and the owner's think state (when the puppet's think is a cPlayerThink).
 void writePose(uintptr_t player, const pose_wire::Pose& pose);
+
+// Engine steps the paused branch of a character's move skips, each exception-safe (false after a fault).
+// The hand pose from the current motion and weapon: playMotion does it, a replayed request does not.
+bool refreshHandPose(uintptr_t player);
+// The light probe, before the move.
+bool probeLight(uintptr_t player);
+// The spine bend by the manual pitch, right after the move's motion update.
+bool bendSpine(uintptr_t player);
+// The frame-driven hand / holster swaps and the area id, after the move.
+bool settleAfterMove(uintptr_t player);
 
 // Sends the character back to neutral the way the script's Player_Reset does.
 bool resetPlayer(uintptr_t player);

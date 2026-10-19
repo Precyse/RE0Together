@@ -7,6 +7,8 @@
 #include "game_state.h"
 #include "game_tick.h"
 #include "log.h"
+#include "puppet.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -35,32 +37,34 @@ bool needsPartnerAi(uintptr_t partner) {
     return partner && !coopControlled(partner) && !hasSubThink(partner);
 }
 
-bool doorSettled() {
-    g_framesSinceDoor = game_state::doorActive() ? 0 : std::min(g_framesSinceDoor + 1, kPostDoorFrames);
-    return g_framesSinceDoor >= kPostDoorFrames;
+void trackDoor() { g_framesSinceDoor = game_state::doorActive() ? 0 : std::min(g_framesSinceDoor + 1, kPostDoorFrames); }
+
+bool doorSettled() { return g_framesSinceDoor >= kPostDoorFrames; }
+
+// Replaces the character's cPlayerSubThink with a full cPlayerThink; the first one allows the partner AI to come back.
+bool replaceThink(uintptr_t player) {
+    void* think = game::allocThink();
+    if (!think) return false;
+    game::constructPlayerThink(think);
+    game::setThink(reinterpret_cast<void*>(player), think);
+    g_applied = true;
+    g_lastApplied = g_frame;
+    logger::write("partner_think: applied player=0x%x think=0x%x", static_cast<unsigned>(player),
+                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(think)));
+    return true;
 }
 
 void onTick() {
     ++g_frame;
+    trackDoor();
     if (!doorSettled() || !applyDue()) return;
-    if (const uintptr_t partner = game::partner(); g_applied && needsPartnerAi(partner)) {
-        game::setPartner(partner);
-        g_lastApplied = g_frame;
-        logger::write("partner_think: restored partner AI player=0x%x", static_cast<unsigned>(partner));
-        return;
-    }
+    if (g_applied && partner_think::restorePartnerAi(game::partner())) return;
     for (const uintptr_t player : {game::controlled(), game::partner()}) {
         if (!player || !coopControlled(player) || !hasSubThink(player)) {
             continue;
         }
-        void* think = game::allocThink();
-        if (!think) return;
-        game::constructPlayerThink(think);
-        game::setThink(reinterpret_cast<void*>(player), think);
-        g_applied = true;
-        g_lastApplied = g_frame;
-        logger::write("partner_think: applied player=0x%x think=0x%x", static_cast<unsigned>(player),
-                      static_cast<unsigned>(reinterpret_cast<uintptr_t>(think)));
+        if (state_mode::on() && puppet::active(player)) continue;  // a puppet is given its think when it becomes one
+        replaceThink(player);
         return;
     }
 }
@@ -70,5 +74,15 @@ void onTick() {
 namespace partner_think {
 
 void enable() { game_tick::addCallback("partner_think", onTick); }
+
+bool giveControllerThink(uintptr_t player) { return doorSettled() && hasSubThink(player) && replaceThink(player); }
+
+bool restorePartnerAi(uintptr_t partner) {
+    if (!doorSettled() || !needsPartnerAi(partner) || partner != game::partner()) return false;
+    game::setPartner(partner);
+    g_lastApplied = g_frame;
+    logger::write("partner_think: restored partner AI player=0x%x", static_cast<unsigned>(partner));
+    return true;
+}
 
 }  // namespace partner_think
