@@ -16,7 +16,7 @@ namespace {
 using join_net_trace_sites::Kind;
 using join_net_trace_sites::Site;
 
-constexpr size_t kNameBytes = 33;
+constexpr size_t kPasswordBytes = 33;
 constexpr size_t kReturnDepth = 4;
 constexpr uintptr_t kNatCookieOffset = 0;      // the first field of a queued negotiation
 constexpr uintptr_t kRequestMemberOffset = 4;  // ctx[1]: the member the sender is mapped to
@@ -71,13 +71,11 @@ SessionCounts countsOf(uintptr_t session) {
             readDword(readDword(session + sr2::kSessionInfoOffset) + sr2::kInfoMaxPlayersOffset)};
 }
 
-// A player name from a message, printable ASCII only.
-void readName(uintptr_t address, char (&out)[kNameBytes]) {
-    memset(out, 0, sizeof(out));
-    readMemory(address, out, sizeof(out) - 1);
-    for (char& c : out) {
-        if (c != 0 && (c < ' ' || c > '~')) c = '?';
-    }
+// The length of the narrow password a join_req starts with.
+size_t passwordLength(uintptr_t address) {
+    char password[kPasswordBytes] = {};
+    readMemory(address, password, sizeof(password) - 1);
+    return strlen(password);
 }
 
 // The stack arguments of the traced function (entry order).
@@ -109,18 +107,16 @@ void __cdecl traceNatComplete(GuestFrame* frame) {
                   static_cast<int>(readDword(args[kNatQueuedArg] + kNatCookieOffset)));
 }
 
-// T4: the host's join_req handler: the requested name, the sender's address words and the session counts.
+// T4: the host's join_req handler: the password length (its first field), the sender's address words and the session counts.
 void __cdecl traceJoinReq(GuestFrame* frame) {
     const uint32_t* args = argsOf(frame);
     const uintptr_t address = readDword(args[1]);
-    char name[kNameBytes];
-    readName(args[0], name);
     const uintptr_t session = readDword(sr2::kSessionPointer);
     const SessionCounts counts = countsOf(session);
-    logger::write("trace: join_req handler, name \"%s\", context 0x%X, mapped member 0x%X, sender words 0x%08X 0x%08X, "
+    logger::write("trace: join_req handler, password length %u, context 0x%X, mapped member 0x%X, sender words 0x%08X 0x%08X, "
                   "session 0x%X members %u reserved %u max %u",
-                  name, static_cast<unsigned>(args[1]), static_cast<unsigned>(readDword(args[1] + kRequestMemberOffset)),
-                  readDword(address), readDword(address + 4), static_cast<unsigned>(session), counts.members,
+                  static_cast<unsigned>(passwordLength(args[0])), static_cast<unsigned>(args[1]),
+                  static_cast<unsigned>(readDword(args[1] + kRequestMemberOffset)), readDword(address), readDword(address + 4), static_cast<unsigned>(session), counts.members,
                   counts.reserved, counts.max);
 }
 

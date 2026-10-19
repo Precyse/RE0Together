@@ -203,6 +203,10 @@ int main() {
                       partner_sites::parseHex(store->tail).size() == sizeOf(*store) - kBranchBytes;
     }
     check(readyStores, "CS1 and CS2: the store of 0 into the remote ready byte 0x2527D1D (7 bytes) becomes a call to the thunk and two nops");
+    const Site* pauseMessage = siteNamed(sites, "N4a");
+    check(pauseMessage && pauseMessage->kind == Kind::JumpOut && pauseMessage->address == 0x8CB12A &&
+              pauseMessage->thunk == partner_sites::Thunk::PauseMessage && sizeOf(*pauseMessage) == 13,
+          "N4a: the store, the jl and the tail jmp of the 0x80 handler (13 bytes) jump to the thunk");
     const Site* leave = siteNamed(sites, "N4b");
     check(leave && leave->kind == Kind::JumpOut && leave->thunk == partner_sites::Thunk::MemberLeft && sizeOf(*leave) == 21,
           "N4b: the member left prologue (21 bytes) jumps to the dispatcher");

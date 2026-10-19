@@ -19,6 +19,7 @@
 #include "log.h"
 #include "memory.h"
 #include "paths.h"
+#include "player_name.h"
 #include "remote_players.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
@@ -59,6 +60,7 @@ void resetGuest() {
 void onRequestChanged() {
     const bool hadRequest = g_request.has_value();
     g_request = g_watcher->request();
+    player_name::set(g_request ? g_request->name : std::string());
     resetGuest();
     join_status::writeNext();
     g_role = !g_request ? ActiveRole::None : g_request->role == Role::Host ? ActiveRole::Host : ActiveRole::Guest;

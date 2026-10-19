@@ -2,8 +2,9 @@ namespace CoopLauncher;
 
 /// <summary>
 /// The launcher's side of a rendezvous game (SessionKind.Rendezvous): the Steam lobby says who hosts, and the game's mod
-/// connects itself. This writes the game's join file (role, token = the lobby id, password = the lobby's secret) and passes
-/// the status line the mod writes on to the other lobby members. The file is removed when the session ends.
+/// connects itself. This writes the game's join file (role, token = the lobby id, password = the lobby's secret, name = the
+/// player's Steam name as <see cref="PlayerName"/> shapes it) and passes the status line the mod writes on to the other
+/// lobby members. The file is removed when the session ends.
 /// </summary>
 public sealed class NativeJoin : IDisposable
 {
@@ -66,7 +67,9 @@ public sealed class NativeJoin : IDisposable
     {
         if (_lobby.Id == 0 || _lobby.JoinSecret.Length == 0) return;
         var role = _lobby.OwnerId == _localId ? "host" : "guest";
-        var content = $"role={role}\ntoken={_lobby.Id}\npassword={_lobby.JoinSecret}\n";
+        var name = PlayerName.ForLocal(_localId, _lobby.Members);
+        var nameLine = name.Length > 0 ? $"name={name}\n" : string.Empty;
+        var content = $"role={role}\ntoken={_lobby.Id}\npassword={_lobby.JoinSecret}\n{nameLine}";
         if (content == _written) return;
         try
         {
@@ -75,7 +78,7 @@ public sealed class NativeJoin : IDisposable
             File.WriteAllText(temp, content);
             File.Move(temp, _joinPath, overwrite: true);
             _written = content;
-            Log.Info($"Join file written ({role}, lobby {_lobby.Id})");
+            Log.Info($"Join file written ({role}, lobby {_lobby.Id}, name \"{name}\")");
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

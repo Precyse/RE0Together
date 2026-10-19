@@ -52,6 +52,8 @@ std::optional<JoinRequest> parse(const std::string& text) {
         } else if (key == "password" && isDigits(value)) {
             request.password = value;
             password = true;
+        } else if (key == "name" && value.size() <= join_file::kMaxNameBytes) {
+            request.name = value;
         }
     }
     if (!role || !token || !password) return std::nullopt;

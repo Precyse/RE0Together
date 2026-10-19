@@ -6,6 +6,7 @@
 #include "multiplayer_sites.h"
 #include "multiplayer_thunks.h"
 #include "net_clock.h"
+#include "pause_mask.h"
 #include "sender_scope.h"
 #include "site_installer.h"
 
@@ -27,7 +28,7 @@ bool install(bool trace, bool leavePathInstalled, bool experimental) {
     creation_queue::setTrace(trace);
     join_admission::setTrace(trace);
     net_clock::setTrace(trace);
-
+    pause_mask::setTrace(trace);
 
     bool all = true;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {

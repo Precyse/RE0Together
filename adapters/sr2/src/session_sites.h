@@ -34,9 +34,10 @@ inline constexpr Site kCutscene[] = {
     {"CS2", Kind::CallBlock, Gate::Now, 0x6C6AB4, "C6 05 1D 7D 52 02 00", Thunk::CutsceneReadyConsumed, "90 90"},
 };
 
-// "The partner paused" is a bit per slot (N4).
+// "The partner paused" is a bit per slot, and the game applies the pause only when the byte goes between zero and not zero
+// (N4a replaces the store, the jump and the tail jump of the 0x80 handler; N4b the clear in the member left callback).
 inline constexpr Site kPause[] = {
-    {"N4a", Kind::CallBlock, Gate::Now, 0x8CB12A, "88 0D 2F 93 52 02", Thunk::PauseSenderBit, "90"},
+    {"N4a", Kind::JumpOut, Gate::Now, 0x8CB12A, "88 0D 2F 93 52 02 7C 05 E9 59 F0 FF FF", Thunk::PauseMessage, ""},
     {"N4b", Kind::JumpOut, Gate::Now, 0x8CB28E, "80 3D 2F 93 52 02 00 74 0C C6 05 2F 93 52 02 00 E8 ED EE FF FF", Thunk::MemberLeft, ""},
 };
 

@@ -17,6 +17,7 @@
 #include "multiplayer_patches.h"
 #include "partner_patches.h"
 #include "player_cap.h"
+#include "player_name.h"
 #include "replication_switch.h"
 #include "script_override.h"
 #include "sr2_addresses.h"
@@ -73,6 +74,7 @@ DWORD WINAPI initThread(LPVOID) {
         game_port::install(config.gamePort, config.maxPlayers, config.trace, transport);
         if (!tunnelled) lan_address::install(config.maxPlayers, config.trace);
         force_join::install(config.trace, transport);
+        player_name::install(config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);

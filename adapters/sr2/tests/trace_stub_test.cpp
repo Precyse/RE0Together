@@ -12,6 +12,8 @@ namespace {
 #define kSecond 0x22
 #define kThird 0x33
 #define kRegisterMark 0xC0FFEE
+#define kWrapEax 0x5A5A01
+#define kWrapEcx 0x5A5A02
 
 int g_failures = 0;
 
@@ -53,6 +55,40 @@ uint32_t __cdecl onReturnLeave(uint32_t result) {
 }
 
 TRACE_RETURN_STUBS(returnStub, exitStub, onReturnEntry, onReturnLeave, g_original)
+
+// PARTNER_WRAP_STUB entered by a jump from a frameless cdecl(a, b) function, as N4a is: the C++ side sees both arguments and
+// the caller's eax and ecx, and the stub returns to that caller with the stack balanced.
+uint32_t g_wrapSeen[2];
+uint32_t g_wrapEax = 0;
+uint32_t g_wrapEcx = 0;
+
+void __cdecl onWrap(GuestFrame* frame) {
+    g_wrapSeen[0] = frame->args[0];
+    g_wrapSeen[1] = frame->args[1];
+    g_wrapEax = frame->regs.eax;
+    g_wrapEcx = frame->regs.ecx;
+}
+
+PARTNER_WRAP_STUB(wrapStub, onWrap, 0)
+
+void __declspec(naked) jumpingFunction() { __asm jmp wrapStub }
+
+// Returns the stack pointer change over the call: 0 when the stub balanced the stack.
+int callJumpingFunction() {
+    int drift = 0;
+    __asm {
+        mov eax, kWrapEax
+        mov ecx, kWrapEcx
+        mov edx, esp
+        push kSecond
+        push kFirst
+        call jumpingFunction
+        add esp, 8
+        sub edx, esp
+        mov drift, edx
+    }
+    return drift;
+}
 
 using AddFn = uint32_t(__stdcall*)(uint32_t, uint32_t, uint32_t);
 
@@ -100,5 +136,10 @@ int main() {
     check(returnResult == kFirst + kSecond + kThird, "return stub: the function's result reaches the caller");
     check(g_exits == 1 && g_seenResult == kFirst + kSecond + kThird, "return stub: the trace sees the result");
     check(g_realReturn != 0 && kept, "return stub: it returns to the real caller with its registers kept");
+
+    const int drift = callJumpingFunction();
+    check(g_wrapSeen[0] == kFirst && g_wrapSeen[1] == kSecond, "wrap stub entered by a jump: args[0] and args[1] are the caller's cdecl arguments");
+    check(g_wrapEax == kWrapEax && g_wrapEcx == kWrapEcx, "wrap stub entered by a jump: the caller's eax and ecx are in the frame");
+    check(drift == 0, "wrap stub entered by a jump: it returns to the caller with the stack balanced");
     return g_failures == 0 ? 0 : 1;
 }

@@ -83,6 +83,7 @@ add_library(sr2_adapter SHARED
     src/game_socket.cpp
     src/tunnel.cpp
     src/join_file.cpp
+    src/player_name.cpp
     src/join_status.cpp
     src/force_join.cpp
     src/force_join_guest.cpp
@@ -104,7 +105,7 @@ add_custom_command(TARGET sr2_adapter POST_BUILD
 set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
-    src/join_net_trace.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/leave_path.cpp
+    src/join_net_trace.cpp src/player_name.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/leave_path.cpp
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -150,6 +151,7 @@ add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)
 add_unit_test(script_override_rules_test)
 add_unit_test(join_file_test src/join_file.cpp)
+add_unit_test(player_name_rules_test)
 add_unit_test(force_join_names_test)
 add_unit_test(join_deny_rules_test)
 add_unit_test(tunnel_rules_test)

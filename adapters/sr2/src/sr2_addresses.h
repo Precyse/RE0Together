@@ -280,10 +280,17 @@ constexpr uintptr_t kCutsceneRemoteDone = 0x2527D20;     // byte
 // A world object's chunk id is a word at +0x48 (0xBEEF = none); the chunk query O1 takes it in edi.
 constexpr uintptr_t kObjectChunkOffset = 0x48;
 
-// The pause flag (milestone 9 N4): a byte the pausing message sets, read as zero or not.
+// The pause flag (milestone 9 N4, milestone 12): a byte with a bit per pausing slot, read as zero or not.
 constexpr uintptr_t kPartnerPaused = 0x252932F;
 constexpr uintptr_t kPauseLeaveResume = 0x8CB2A3;  // the member left callback after the clear of the flag and the resume
-constexpr uintptr_t kUnpauseWorld = 0x8CA190;
+constexpr uintptr_t kApplyPartnerPause = 0x8CA190;  // no inputs: pauses the world (or the overlay) when the byte is set, resumes when clear
+constexpr uintptr_t kPauseRefCount = 0x2527C08;     // dword: pause_world 0x699840 adds one per call, 0x699910 takes one; the world runs at 0
+constexpr uintptr_t kWorldPausedFlag = 0x2527FDA;   // byte
+constexpr uintptr_t kRemotePauseFlag = 0x2527FDB;   // byte: the pause came from a remote (no message is sent when it ends)
+
+// The local player's name (milestone 12): cdecl(cap) with edi = a wide destination of at most 0x40 characters, AL = 1.
+constexpr uintptr_t kLocalNameBuilder = 0x80A070;
+constexpr const char* kLocalNameBuilderBytes = "83 EC 44 A1 50 0B E8 00";
 
 // Guest member left (milestone 9 N2a): the cutscene cleanup the guest branch of the callback 0x8CB260 calls.
 constexpr uintptr_t kCutsceneCleanup = 0x6C6B90;

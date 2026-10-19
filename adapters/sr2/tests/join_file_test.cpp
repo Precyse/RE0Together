@@ -40,6 +40,18 @@ int main() {
     const auto guest = join_file::parse("password=1\r\nrole = guest \r\ntoken=22\r\nextra=ignored\r\n");
     check(guest && guest->role == Role::Guest && guest->token == "22" && guest->password == "1",
           "keys in any order, spaces and CRLF, unknown keys ignored");
+    check(host && host->name.empty(), "no name line: no name");
+    const auto named = join_file::parse("role=host\ntoken=5\npassword=6\nname=T\xC3\xA9st Name\n");
+    check(named && named->name == "T\xC3\xA9st Name" && named->token == "5" && named->password == "6",
+          "a name line: the UTF-8 bytes as written, the other keys unchanged");
+    const auto equals = join_file::parse("name=a=b\nrole=host\ntoken=5\npassword=6\n");
+    check(equals && equals->name == "a=b", "a name keeps an equals sign");
+    const std::string longName(join_file::kMaxNameBytes, 'x');
+    const auto atLimit = join_file::parse("role=host\ntoken=5\npassword=6\nname=" + longName + "\n");
+    check(atLimit && atLimit->name == longName, "a name of 64 bytes is kept");
+    const auto tooLong = join_file::parse("role=host\ntoken=5\npassword=6\nname=" + longName + "x\n");
+    check(tooLong && tooLong->name.empty() && tooLong->token == "5", "a name over 64 bytes is dropped, the request stays");
+    check(!join_file::parse("name=Only\n"), "a name alone is no request");
     check(!join_file::parse(""), "an empty file is no request");
     check(!join_file::parse("role=spectator\ntoken=1\npassword=1\n"), "an unknown role is no request");
     check(!join_file::parse("token=1\npassword=1\n"), "a missing role is no request");

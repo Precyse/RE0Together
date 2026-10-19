@@ -4,8 +4,8 @@
 
 // Milestone 9 N4b, milestone 11 B4: the member left callback 0x8CB260 on every machine. Its prologue cleared the pause byte
 // and resumed the world; N4b (the 21 bytes at 0x8CB28E, ebx = the leaver) is now one dispatcher that tells each part of the
-// mod which member left: the pause flag (pause_mask::afterLeave, which also says whether the world resumes) and the cutscene
-// handshake (cutscene_sync::memberLeft).
+// mod which member left: the pause flag (pause_mask::afterLeave, which resumes the world itself when the last pauser left,
+// before the callback goes on at 0x8CB2A3 as the shipped game has it) and the cutscene handshake (cutscene_sync::memberLeft).
 namespace member_left {
 
 // The code behind N4b; {nullptr, nullptr} for a thunk of another file.
