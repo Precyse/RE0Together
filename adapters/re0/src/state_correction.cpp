@@ -13,6 +13,7 @@
 #include "net_pad.h"
 #include "player_damage.h"
 #include "position_blend.h"
+#include "puppet.h"
 #include "room_phase.h"
 #include "scene.h"
 #include "state_sync.h"
@@ -111,7 +112,9 @@ void afterMove(uintptr_t player) {
     if (!latestReport(report)) return;
     const state_sync::PlayerState& remote = report.last.state;
     const auto character = static_cast<character_owner::Character>(remote.characterId);
-    if (character_owner::identify(player) != character || !character_owner::isRemoteOwned(character)) return;
+    if (character_owner::identify(player) != character || !character_owner::isRemoteOwned(character) || puppet::active(player)) {
+        return;  // a puppet takes its position from the pose stream
+    }
     // Positions from another room are in unrelated coordinates; during a local event the script places it.
     if (room_phase::isEvent(game_state::roomPhase()) || remote.room != scene::current() || !game_state::inCurrentRoom(player) || game_state::doorActive()) {
         return;
@@ -159,7 +162,7 @@ void onFrame(const GameFrame& frame) {
 
 void enable() {
     game_tick::addCallback("state_correction", onTick);
-    game_tick::setPostMove(afterMove);
+    game_tick::addPostMove("post_move", afterMove);
 }
 
 void requestForcedCheck() { g_forcedUntil = Clock::now() + kForcedCheckWindow; }

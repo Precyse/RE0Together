@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace game_tick {
@@ -15,13 +16,16 @@ void addCallback(const char* name, Callback callback);
 // next frame. A fault that persists disables them again.
 void rearmAfterResync();
 
-// Called with true just before and false just after each player's own move runs.
+// Called with true just before and false just after each player's own move runs. Scopes enter in registration order
+// and exit in reverse; at most kMaxMoveScopes. Safe to add while the hook is live (the game thread reads a published count).
+constexpr size_t kMaxMoveScopes = 4;
 using MoveScope = void (*)(uintptr_t player, bool entering);
-void setMoveScope(MoveScope scope);
+void addMoveScope(MoveScope scope);
 
-// Called after each player's own move has run (game thread, guarded like the callbacks).
+// Called after each player's own move has run, in registration order (game thread). Guarded like the callbacks: an
+// exception is logged, toasted under `name` and the entry is disabled until the next resync. Call before install().
 using PostMove = void (*)(uintptr_t player);
-void setPostMove(PostMove postMove);
+void addPostMove(const char* name, PostMove postMove);
 
 // Hooks uPlayerBase::move. Call once, after the game code is decrypted.
 bool install();

@@ -76,6 +76,36 @@ void testRotation() {
     check(near(shortArc[1], out[1]) && near(shortArc[3], out[3]), "takes the shorter arc");
 }
 
+void testLerpAndSlerp() {
+    const float from[3] = {0, 10, -4};
+    const float to[3] = {8, 10, 4};
+    float point[3];
+    pb::lerp(from, to, 0.25f, point);
+    check(near(point[0], 2.0f) && near(point[1], 10.0f) && near(point[2], -2.0f), "lerp a quarter of the way");
+    pb::lerp(from, to, 0.0f, point);
+    check(near(point[0], 0.0f), "lerp at 0 is the start");
+    pb::lerp(from, to, 1.0f, point);
+    check(near(point[0], 8.0f) && near(point[2], 4.0f), "lerp at 1 is the end");
+
+    const float identity[4] = {0, 0, 0, 1};
+    const float quarter[4] = {0, std::sin(0.25f * 3.14159265f), 0, std::cos(0.25f * 3.14159265f)};  // 90 degrees about y
+    float rotation[4];
+    pb::slerp(identity, quarter, 0.5f, rotation);
+    const float half[4] = {0, std::sin(0.125f * 3.14159265f), 0, std::cos(0.125f * 3.14159265f)};  // 45 degrees about y
+    check(near(rotation[1], half[1]) && near(rotation[3], half[3]), "slerp halfway is half the angle");
+    pb::slerp(identity, quarter, 0.0f, rotation);
+    check(near(rotation[3], 1.0f), "slerp at 0 is the start");
+    pb::slerp(identity, quarter, 1.0f, rotation);
+    check(near(rotation[1], quarter[1]) && near(rotation[3], quarter[3]), "slerp at 1 is the end");
+    const float negated[4] = {0, -quarter[1], 0, -quarter[3]};
+    pb::slerp(identity, negated, 0.5f, rotation);
+    check(near(rotation[1], half[1]) && near(rotation[3], half[3]), "slerp takes the shorter arc");
+    const float nearIdentity[4] = {0, 0.01f, 0, std::sqrt(1.0f - 0.0001f)};
+    pb::slerp(identity, nearIdentity, 0.5f, rotation);
+    const float length = std::sqrt(rotation[0] * rotation[0] + rotation[1] * rotation[1] + rotation[2] * rotation[2] + rotation[3] * rotation[3]);
+    check(near(length, 1.0f) && rotation[1] > 0.0f, "nearly parallel rotations stay normalized");
+}
+
 }  // namespace
 
 int main() {
@@ -83,6 +113,7 @@ int main() {
     testPosition();
     testExtrapolation();
     testRotation();
+    testLerpAndSlerp();
     if (g_failures == 0) std::printf("position_blend_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

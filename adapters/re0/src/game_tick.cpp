@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <array>
 #include <atomic>
 #include <cstdio>
 #include <vector>
@@ -17,7 +18,6 @@ namespace {
 
 constexpr float kStoppedToastSeconds = 5.0f;
 constexpr size_t kTextLength = 96;
-constexpr char kPostMoveName[] = "post_move";
 
 struct Registered {
     const char* name;
@@ -25,14 +25,20 @@ struct Registered {
     bool disabled;
 };
 
+struct RegisteredPostMove {
+    const char* name;
+    game_tick::PostMove postMove;
+    bool disabled;
+};
+
 std::vector<Registered> g_callbacks;  // filled before install(), then only read on the game thread
+std::vector<RegisteredPostMove> g_postMoves;  // likewise
 std::atomic<bool> g_rearmRequested{false};
 
 using MoveFunction = void(__fastcall*)(void* self, void* edx);
 MoveFunction g_originalMove = nullptr;
-game_tick::MoveScope g_moveScope = nullptr;
-game_tick::PostMove g_postMove = nullptr;
-bool g_postMoveDisabled = false;
+std::array<game_tick::MoveScope, game_tick::kMaxMoveScopes> g_moveScopes{};
+std::atomic<size_t> g_moveScopeCount{0};  // scopes published to the game thread
 
 LONG report(EXCEPTION_POINTERS* info, const char* name) {
     char what[kTextLength];
@@ -50,11 +56,11 @@ bool runGuarded(game_tick::Callback callback, const char* name) {
     }
 }
 
-bool runPostMoveGuarded(uintptr_t player) {
+bool runPostMoveGuarded(const RegisteredPostMove& entry, uintptr_t player) {
     __try {
-        g_postMove(player);
+        entry.postMove(player);
         return true;
-    } __except (report(GetExceptionInformation(), kPostMoveName)) {
+    } __except (report(GetExceptionInformation(), entry.name)) {
         return false;
     }
 }
@@ -77,14 +83,16 @@ void rearm(const char* name, bool& disabled) {
     logger::write("game_tick: '%s' re-armed by a resync", name);
 }
 
-void runPostMove(uintptr_t player) {
-    if (g_postMove && !g_postMoveDisabled && !runPostMoveGuarded(player)) stop(kPostMoveName, g_postMoveDisabled);
+void runPostMoves(uintptr_t player) {
+    for (RegisteredPostMove& entry : g_postMoves) {
+        if (!entry.disabled && !runPostMoveGuarded(entry, player)) stop(entry.name, entry.disabled);
+    }
 }
 
 void tick() {
     if (g_rearmRequested.exchange(false)) {
         for (Registered& entry : g_callbacks) rearm(entry.name, entry.disabled);
-        rearm(kPostMoveName, g_postMoveDisabled);
+        for (RegisteredPostMove& entry : g_postMoves) rearm(entry.name, entry.disabled);
     }
     for (Registered& entry : g_callbacks) {
         if (!entry.disabled && !runGuarded(entry.callback, entry.name)) stop(entry.name, entry.disabled);
@@ -94,10 +102,11 @@ void tick() {
 void __fastcall moveDetour(void* self, void* edx) {
     const uintptr_t player = reinterpret_cast<uintptr_t>(self);
     if (player == game::controlled()) tick();
-    if (g_moveScope) g_moveScope(player, true);
+    const size_t scopes = g_moveScopeCount.load(std::memory_order_acquire);
+    for (size_t i = 0; i < scopes; ++i) g_moveScopes[i](player, true);
     g_originalMove(self, edx);
-    if (g_moveScope) g_moveScope(player, false);
-    runPostMove(player);
+    for (size_t i = scopes; i-- > 0;) g_moveScopes[i](player, false);
+    runPostMoves(player);
 }
 
 }  // namespace
@@ -106,9 +115,14 @@ namespace game_tick {
 
 void addCallback(const char* name, Callback callback) { g_callbacks.push_back({name, callback, false}); }
 
-void setMoveScope(MoveScope scope) { g_moveScope = scope; }
+void addMoveScope(MoveScope scope) {
+    const size_t count = g_moveScopeCount.load();
+    if (count >= kMaxMoveScopes) return;
+    g_moveScopes[count] = scope;
+    g_moveScopeCount.store(count + 1, std::memory_order_release);
+}
 
-void setPostMove(PostMove postMove) { g_postMove = postMove; }
+void addPostMove(const char* name, PostMove postMove) { g_postMoves.push_back({name, postMove, false}); }
 
 void rearmAfterResync() { g_rearmRequested = true; }
 

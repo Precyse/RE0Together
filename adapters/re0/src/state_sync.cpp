@@ -34,6 +34,8 @@
 #include "party_mode.h"
 #include "phase_watch.h"
 #include "player_damage.h"
+#include "pose_wire.h"
+#include "puppet.h"
 #include "resync.h"
 #include "session_slot.h"
 #include "scene.h"
@@ -145,6 +147,10 @@ void onFrame(const GameFrame& frame) {
     }
     if (frame.type == appearance_rule::kMsgAppearance) {
         appearance::onFrame(frame);
+        return;
+    }
+    if (frame.type == pose_wire::kMsgPoseState || frame.type == pose_wire::kMsgMotionEvent) {
+        puppet::onFrame(frame);
         return;
     }
     if (frame.type == player_damage::kMsgPlayerDied) {

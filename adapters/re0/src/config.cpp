@@ -40,6 +40,16 @@ std::vector<VtableTrace> parseVtables(const std::string& list) {
     return out;
 }
 
+void parsePartnerMode(const std::string& value, Config& config) {
+    if (value == partnerModeName(PartnerMode::Input)) {
+        config.partnerMode = PartnerMode::Input;
+    } else if (value == partnerModeName(PartnerMode::State)) {
+        config.partnerMode = PartnerMode::State;
+    } else {
+        logger::write("config: partner_mode=%s ignored (input or state), keeping input", value.c_str());
+    }
+}
+
 void parseCharacter(const std::string& value, Config& config) {
     if (value == "rebecca") {
         config.hostCharacter = character_owner::Character::Rebecca;
@@ -62,6 +72,8 @@ void parseOutfit(const char* key, character_owner::Character character, const st
 }
 
 }  // namespace
+
+const char* partnerModeName(PartnerMode mode) { return mode == PartnerMode::State ? "state" : "input"; }
 
 Config loadConfig() {
     const std::wstring path = coopDirectory() + L"\\adapter.ini";
@@ -87,6 +99,8 @@ Config loadConfig() {
             config.netTrace = value == "1";
         } else if (key == "auto_join") {
             config.autoJoin = value == "1";
+        } else if (key == "partner_mode") {
+            parsePartnerMode(value, config);
         } else if (key == "character") {
             parseCharacter(value, config);
         } else if (key == "outfit_rebecca") {
@@ -99,6 +113,7 @@ Config loadConfig() {
     }
     logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d auto_join=%d", config.port, config.trace,
                   config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.autoJoin);
+    logger::write("config: partner_mode=%s", partnerModeName(config.partnerMode));
     logger::write("config: character=%s outfit_rebecca=%02x outfit_billy=%02x", character_owner::name(config.hostCharacter),
                   config.outfit[static_cast<size_t>(character_owner::Character::Rebecca)],
                   config.outfit[static_cast<size_t>(character_owner::Character::Billy)]);

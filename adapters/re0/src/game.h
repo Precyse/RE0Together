@@ -395,6 +395,32 @@ constexpr uintptr_t kThinkPadSlotOffset = 0x50;         // vtable slot 20, which
 constexpr uintptr_t kControlledThinkPadFunction = 0x4f9f10;  // getPad(0)
 constexpr uintptr_t kPartnerThinkPadFunction = 0x4f4be0;     // getPad(1)
 
+// Pose puppet (docs/RE0_NOTES.md "Pose puppet", static analysis of build 17178773).
+// sGameInfo +0x50 bit 1 is the script pause (PlayerPause 0x56c620): uPlayerBase::move (test at 0x5131d4) then skips
+// the think and the locomotion and only animates, cancels the root motion (unless kPlayerKeepRootMotionOffset is
+// set), rebuilds the matrices and the collision shapes. The bit is global, so the puppet holds it for one move only.
+constexpr uintptr_t kGameInfoModeFlagsOffset = 0x50;  // u32
+constexpr uint32_t kPlayerPauseBit = 0x2;
+// Every motion request of a character ends in cAnimControl::set, a member of the character at kAnimControlOffset:
+// thiscall (layer < 8, motionNo, flags, f32 interp, f32 start), ret 0x14, no return value (0x4144d0).
+constexpr uintptr_t kAnimControlOffset = 0xff8;
+constexpr uintptr_t kAnimControlSetFunction = 0x4144d0;
+constexpr uintptr_t kMotionAvailableFunction = 0x73e650;  // thiscall on the character (motionNo) ret 4: nonzero when its bank holds it
+constexpr uintptr_t kPlayerResetFunction = 0x516440;      // thiscall, plain ret: the script's Player_Reset (back to neutral)
+// Vtable slot 34 of both players: the damage / grab entry, thiscall with five stack dwords (ret 0x14), 0 = refused.
+constexpr uintptr_t kPlayerDamageEntryFunction = 0x512570;
+// uModel::Motion layers: 8 of 0x140 bytes from +0x4a0.
+constexpr uintptr_t kMotionLayerBaseOffset = 0x4a0;
+constexpr uintptr_t kMotionLayerStride = 0x140;
+constexpr uintptr_t kMotionNumberOffset = 0x4;    // within a layer: u16, bank in bits 8..11, 0xffff = none
+constexpr uintptr_t kMotionFrameOffset = 0x4c;    // f32 current frame
+constexpr uintptr_t kMotionFrameMaxOffset = 0x54; // f32 motion length - 1
+constexpr uintptr_t kThinkGroupOffset = 0x8;      // within the think: i32 group / state / phase
+constexpr uintptr_t kThinkStateOffset = 0xc;
+constexpr uintptr_t kThinkPhaseOffset = 0x10;
+constexpr uintptr_t kPlayerStatusFlagsOffset = 0x68c4;     // u32, read by enemies
+constexpr uintptr_t kPlayerKeepRootMotionOffset = 0x6a70;  // u8, playMotion's flags & 0x10; 0 = the position is the caller's
+
 // sGamePad
 constexpr uintptr_t kGetPadFunction = 0x600630;  // thiscall, 1 stack arg, i < 2
 constexpr uintptr_t kPadTableOffset = 0xc24;

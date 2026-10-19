@@ -40,7 +40,9 @@
 #include "party_mode.h"
 #include "pickup_guard.h"
 #include "player_damage.h"
+#include "pose_capture.h"
 #include "protocol.h"
+#include "puppet.h"
 #include "resync.h"
 #include "save_redirect.h"
 #include "session_slot.h"
@@ -63,6 +65,11 @@ bool waitForDecryption() {
         Sleep(kDecryptPollMs);
     }
     return false;
+}
+
+// partner_mode=state: the owner's pose and motion requests go out, the remote-owned character becomes a puppet.
+void enableStateMode() {
+    if (!pose_capture::enable(g_net) || !puppet::enable()) logger::write("adapter: state mode unavailable");
 }
 
 // Registration order is execution order within a frame: ownership first, then the think swap, then the remote pad advance.
@@ -99,6 +106,7 @@ void enableCoop(const Config& config) {
     enemy_spawn::install();
     player_damage::install(g_net);
     menu_mirror::enable();
+    if (config.partnerMode == PartnerMode::State) enableStateMode();
 }
 
 // The host's new save goes to the guests (its launcher re-sends the profile's save files), so a continue after a
@@ -156,6 +164,8 @@ void shutdownAdapter() {
     event_sync::uninstall();
     session_slot::uninstall();
     pickup_guard::uninstall();
+    puppet::uninstall();
+    pose_capture::uninstall();
     game_tick::uninstall();
     vtable_tracer::uninstall();
 }

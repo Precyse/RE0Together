@@ -58,6 +58,11 @@ enum class Counter : size_t {
     CommandsSent,
     PickupsAborted,
     Blends,
+    PosesReceived,
+    MotionEventsSent,
+    MotionEventsReceived,
+    PuppetSeeks,
+    PuppetMotionMisses,
     Count
 };
 
