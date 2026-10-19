@@ -155,12 +155,25 @@ enum class Thunk : uint8_t {
     TraceStreamingSync,
     TraceAnimUnload,
     TraceAnimDelta,
-
-
-
-
-
-
+    // Milestone 16 W1 (anim_stream_sites.h): anim and asset streaming per remote.
+    StreamingSyncGate,
+    SendStreamingSync,
+    SetNeedBitEdx,
+    SetNeedBitEbp,
+    ClearNeedBitEsi,
+    LeaverReleases,
+    MoveNeedTable,
+    LedgerWorldAdd,
+    LedgerWorldRemove,
+    LedgerCharacterAdd,
+    LedgerCharacterRemove,
+    SetChangePerSender,
+    ResetSenderGates,
+    TriggerSetPerSender,
+    TriggerTick,
+    TriggerCleanupPass,
+    TriggerReset,
+    TraceAnimLoad,
 };
 
 struct Site {

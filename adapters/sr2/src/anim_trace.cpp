@@ -3,7 +3,12 @@
 #include <cstdio>
 #include <iterator>
 #include <mutex>
+#include <string>
+#include <vector>
 
+#include "activity_state.h"
+#include "anim_stream_rules.h"
+#include "anim_stream_state.h"
 #include "anim_trace_rules.h"
 #include "guest_call.h"
 #include "log.h"
@@ -14,60 +19,68 @@
 
 namespace {
 
-using anim_trace_rules::NeedRow;
-
 constexpr size_t kPayloadArg = 0;
 constexpr size_t kContextArg = 1;
 constexpr size_t kSlotArg = 0;
 constexpr size_t kEntryArg = 0;
-constexpr uintptr_t kSyncGroupOffset = 1;  // word: the anim group, after the sub id
-constexpr uint8_t kNoSlot = 0xFF;
+constexpr size_t kLoadGroupArg = 1;
+constexpr size_t kLoadSlotArg = 3;
 constexpr size_t kAnimSlots = std::size(sr2::kAnimSlotPools);
 
 void* g_syncOriginal = nullptr;
 void* g_unloadOriginal = nullptr;
 void* g_deltaOriginal = nullptr;
+void* g_loadOriginal = nullptr;
 std::mutex g_mutex;
 rate_limit::OncePerKey g_seen;  // the (entry, data) pairs already logged
 
-uint16_t readWord(uintptr_t address) {
-    uint16_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
-// The session slot of the member a message came from (the context's [+4]), kNoSlot for none.
-uint8_t senderSlot(uintptr_t context) {
-    const uintptr_t member = readDword(context + sr2::kMessageContextMemberOffset);
-    return member ? readByte(member + sr2::kMemberSlotOffset) : kNoSlot;
-}
+// How much of chunk anim slot `slot`'s pool is used, 0 for a slot the game does not have.
+uint32_t slotUsed(uint32_t slot) { return slot < kAnimSlots ? readDword(sr2::kAnimSlotPools[slot] + sr2::kPoolUsedOffset) : 0; }
 
 std::string needTable() {
-    NeedRow rows[sr2::kAnimNeedRows];
-    for (size_t i = 0; i < sr2::kAnimNeedRows; ++i) {
-        const uintptr_t row = sr2::kAnimNeedTable + i * sr2::kAnimNeedRowBytes;
-        rows[i] = {readWord(row + sr2::kAnimNeedGroupOffset), readByte(row + sr2::kAnimNeedLocalOffset) != 0,
-                   readByte(row + sr2::kAnimNeedRemoteOffset) != 0};
-    }
-    return anim_trace_rules::needTableText(rows, sr2::kAnimNeedRows);
+    const std::vector<anim_trace_rules::NeedRow> rows = anim_stream_state::needRows();
+    return anim_trace_rules::needTableText(rows.data(), rows.size());
 }
 
-// AN1: the game's handler runs, then the line names the message and the need table it left.
+// ", count C, answer loads Y" of an answer: whether the game's 0xA83340 will load the set, read before the handler removes the pending entry.
+std::string answerText(uintptr_t payload, uint16_t group, uint32_t id) {
+    const bool loads = anim_stream_rules::answerWouldLoad(anim_stream_state::chunkLoaded(group), anim_stream_state::streamNames(group),
+                                                         anim_stream_rules::pendingFor(anim_stream_state::pendingRequests(), group), id);
+    char text[48];
+    std::snprintf(text, sizeof(text), ", count %u, answer loads %c", readDword(payload + sr2::kStreamingCountOffset), loads ? 'Y' : 'N');
+    return text;
+}
+
+// AN1: the message and what the game's handler will do with it are read, the handler runs, then the line names the need table it left.
 void __cdecl traceStreamingSync(GuestFrame* frame) {
     const uintptr_t payload = frame->args[kPayloadArg];
     const uintptr_t context = frame->args[kContextArg];
-    const unsigned sub = readByte(payload);
-    const unsigned group = readWord(payload + kSyncGroupOffset);
-    const unsigned slot = senderSlot(context);
+    const uint8_t sub = readByte(payload);
+    const uint16_t group = anim_stream_state::readWord(payload + sr2::kStreamingGroupOffset);
+    const unsigned from = anim_stream_state::slotOfMember(activity_state::senderOf(context));
+    std::string detail;
+    std::string answer;
+    if (sub <= sr2::kStreamingSubAnswer) {
+        const uint32_t id = readDword(payload + sr2::kStreamingIdOffset);
+        char slotText[24];
+        std::snprintf(slotText, sizeof(slotText), " slot %u", readDword(payload + sr2::kStreamingSlotOffset));
+        detail = anim_trace_rules::syncIdText(sub, id) + slotText;
+        if (sub == sr2::kStreamingSubAnswer) answer = answerText(payload, group, id);
+    }
     frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(g_syncOriginal), frame->regs, {static_cast<uint32_t>(payload), static_cast<uint32_t>(context)});
-    logger::write("trace: anim sets: streaming_sync sub %u group 0x%04X from slot %u, need table %s", sub, group, slot, needTable().c_str());
+    logger::write("trace: anim sets: streaming_sync sub %u group 0x%04X%s from slot %u%s, need table %s", sub, group, detail.c_str(), from,
+                  answer.c_str(), needTable().c_str());
 }
 
-// AN2: a chunk anim slot is released (thiscall: ecx = the group, the slot on the stack).
+// AN2: a chunk anim slot is released (thiscall: ecx = the group, the slot on the stack). The other sets in the slot are listed: a slot holds
+// one set, so any is a bystander or a duplicate load.
 void __cdecl traceAnimUnload(GuestFrame* frame) {
     const uint32_t slot = frame->args[kSlotArg];
-    const uint32_t used = slot < kAnimSlots ? readDword(sr2::kAnimSlotPools[slot] + sr2::kPoolUsedOffset) : 0;
-    logger::write("trace: anim sets: unload group 0x%04X slot %u, slot used 0x%X", frame->regs.ecx & 0xFFFF, slot, used);
+    const uint16_t group = frame->regs.ecx & 0xFFFF;
+    std::vector<uint16_t> others;
+    if (slot < kAnimSlots) others = anim_trace_rules::otherSetsInSlot(anim_stream_state::streamEntries(), anim_stream_state::slotDescriptor(slot), group);
+    logger::write("trace: anim sets: unload group 0x%04X slot %u, slot used 0x%X, other sets in the slot %s", group, slot, slotUsed(slot),
+                  anim_trace_rules::groupsText(others).c_str());
 }
 
 // AN3: the root motion decode is about to read an anim whose header offset cannot be right; once per (entry, data).
@@ -91,9 +104,20 @@ void __cdecl traceAnimDelta(GuestFrame* frame) {
                   readDword(entry + sr2::kAnimEntryHashOffset), data, headerOffset, size, where);
 }
 
+// AN4: an anim set is loaded into a chunk anim slot (cdecl(out, group, name, slot, list, count)). The caller says whose set it is.
+void __cdecl traceAnimLoad(GuestFrame* frame) {
+    const uint16_t group = frame->args[kLoadGroupArg] & 0xFFFF;
+    const uint32_t slot = frame->args[kLoadSlotArg];
+    char source[16];
+    std::snprintf(source, sizeof(source), "0x%08X", frame->returnAddress);
+    const char* from = frame->returnAddress == sr2::kAnimLoadFromAnswer ? "an answer" : frame->returnAddress == sr2::kAnimLoadFromRequest ? "our request" : source;
+    logger::write("trace: anim sets: load group 0x%04X slot %u from %s, slot used 0x%X", group, slot, from, slotUsed(slot));
+}
+
 PARTNER_WRAP_STUB(streamingSyncStub, traceStreamingSync, 0)
 TRACE_ENTRY_STUB(animUnloadStub, traceAnimUnload, g_unloadOriginal)
 TRACE_ENTRY_STUB(animDeltaStub, traceAnimDelta, g_deltaOriginal)
+TRACE_ENTRY_STUB(animLoadStub, traceAnimLoad, g_loadOriginal)
 
 }  // namespace
 
@@ -104,6 +128,7 @@ partner_thunks::Binding bind(partner_sites::Thunk thunk) {
         case partner_sites::Thunk::TraceStreamingSync: return {reinterpret_cast<void*>(&streamingSyncStub), &g_syncOriginal};
         case partner_sites::Thunk::TraceAnimUnload: return {reinterpret_cast<void*>(&animUnloadStub), &g_unloadOriginal};
         case partner_sites::Thunk::TraceAnimDelta: return {reinterpret_cast<void*>(&animDeltaStub), &g_deltaOriginal};
+        case partner_sites::Thunk::TraceAnimLoad: return {reinterpret_cast<void*>(&animLoadStub), &g_loadOriginal};
         default: return {nullptr, nullptr};
     }
 }
