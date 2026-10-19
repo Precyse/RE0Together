@@ -2,6 +2,7 @@
 
 #include "activity_patches.h"
 #include "anim_stream.h"
+#include "char_types.h"
 #include "code_check.h"
 #include "config.h"
 #include "content_hash.h"
@@ -89,6 +90,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
+        if (replicating) char_types::install(config.maxPlayers, config.trace);
 
         if (config.trace) {
             join_trace::install(config.maxPlayers);
