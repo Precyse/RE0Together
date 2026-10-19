@@ -32,6 +32,9 @@ static_assert(sizeof(FloorTake) == 20);
 // Net thread: queues a peer's event (or a snapshot's events) for the game thread.
 void onFrame(const GameFrame& frame);
 
+// Game thread: the live floor item of `itemId` nearest to `around` within `reach`; its position goes to `out`.
+bool locateItem(uint32_t itemId, const Vec3& around, float reach, Vec3& out);
+
 // Game thread: forgets the journal of floor changes (a save or a load makes the game's own data current).
 void clearJournal();
 

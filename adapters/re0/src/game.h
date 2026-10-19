@@ -121,6 +121,7 @@ constexpr uintptr_t kPickupPhaseOffset = 0x10;  // u32 phase of the action state
 constexpr uintptr_t kPickupPlayerOffset = 0x18;  // the player doing the pickup
 // Player field: the interaction target (the item being picked up); the game clears it when that item is removed.
 constexpr uintptr_t kPlayerInteractTargetOffset = 0x67a0;
+constexpr uint32_t kPickupStartPhase = 0;
 constexpr uint32_t kPickupTakePhase = 1;
 constexpr uint32_t kPickupDonePhase = 2;
 
@@ -141,6 +142,12 @@ struct ItemPutRecord {
     uint32_t reserved1[3];
 };
 static_assert(sizeof(ItemPutRecord) == 0x24);
+
+// state mode: phase 12 (item ledger; docs/RE0_NOTES.md "State mode: item ledger")
+// The item data record the player's interaction target points at during a pickup: the take step reads the item id at +4
+// and the stack count at +8 (u16) from it (0x4ded40 returns the record + 4).
+constexpr uintptr_t kItemRecordIdOffset = 0x4;
+constexpr uintptr_t kItemRecordCountOffset = 0x8;
 
 // Rooms, doors and menus (single-byte reads are enough for every value below except the door phase, an i32)
 constexpr uintptr_t kGameInfoStageOffset = 0x2a80;

@@ -45,7 +45,7 @@ The host plays Rebecca; the fake peer owns Billy, so Billy is the puppet and rep
 | line | meaning |
 |---|---|
 | `config: partner_mode=state` | the mode is on; `adapter: state mode unavailable` instead means a hook failed (the game runs as in `input`, no puppet) |
-| `state_mode: on, 8 modules enabled` | the state modules came up; `scene: load serial N (scene 0x..)` appears once per room change; F8 `state refused` and `router dropped` stay 0 and `pad sent/s` stays 0 (no PAD_FRAME in this mode); `state_net: refused` or `router: dropped` lines are failures |
+| `state_mode: on, 9 modules enabled` | the state modules came up; `scene: load serial N (scene 0x..)` appears once per room change; F8 `state refused` and `router dropped` stay 0 and `pad sent/s` stays 0 (no PAD_FRAME in this mode); `state_net: refused` or `router: dropped` lines are failures |
 | `puppet: Billy is shown from the owner's pose` | the puppet took over; `puppet: Billy released` when it ends (peer left, or the owner left the room) |
 | `puppet: Billy motion 0x.... (owner 0x....) frame f (owner f) think g/s/p (owner g/s/p) mode flags A -> B -> C, events in N, misses M, seeks S, delay Dms, poses buffered P`, once a second | pass: motion and frame follow the owner's within a few frames, B has bit 0x2 set and A == C (the pause bit is back as it was), N grows with your actions, S stays small while you move calmly, D stays near 100 |
 | `puppet: Billy timeline reset (serial)` | once per door or room change (`room`, `gap`, `lead`, `depth`, `clock` are rarer; `teleport` in plain running is a failure: send the log) |
