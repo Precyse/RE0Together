@@ -97,6 +97,9 @@ add_library(re0_adapter SHARED
     src/enemy_net.cpp
     src/enemy_state.cpp
     src/enemy_target.cpp
+    src/enemy_observer.cpp
+    src/enemy_observer_capture.cpp
+    src/enemy_observer_game.cpp
     src/player_damage.cpp
     src/d3d9_hook.cpp
     src/debug_lines.cpp
@@ -185,6 +188,20 @@ add_executable(flag_sequencer_test tests/flag_sequencer_test.cpp)
 
 add_executable(room_authority_test tests/room_authority_test.cpp ${DS2_AUTHORITY_SOURCES})
 target_include_directories(room_authority_test PRIVATE src ${DS2_SRC_DIR})
+
+add_executable(enemy_policy_test tests/enemy_policy_test.cpp)
+
+add_executable(enemy_observer_wire_test tests/enemy_observer_wire_test.cpp)
+target_include_directories(enemy_observer_wire_test PRIVATE src ${DS2_SRC_DIR})
+
+add_executable(enemy_observer_rule_test tests/enemy_observer_rule_test.cpp)
+target_include_directories(enemy_observer_rule_test PRIVATE src ${DS2_SRC_DIR})
+
+add_executable(enemy_observer_send_rule_test tests/enemy_observer_send_rule_test.cpp)
+
+foreach(target enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test)
+    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+endforeach()
 
 add_executable(trace_replay tools/trace_replay.cpp)
 

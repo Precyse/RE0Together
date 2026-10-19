@@ -8,6 +8,7 @@
 
 #include "debug_stats.h"
 #include "enemy_follow_rule.h"
+#include "enemy_observer.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
 #include "enemy_target.h"
@@ -20,6 +21,7 @@
 #include "position_blend.h"
 #include "scene.h"
 #include "split_rooms.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -155,6 +157,7 @@ void applyEntry(const EnemyEntry& entry) {
         follow = Follow{};
         return logMismatchOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
     }
+    if (state_mode::on() && enemy_observer::observes(enemy)) return;  // shown from the simulator's stream (enemy_observer)
     follow.valid = true;
     follow.target = entry.target;
     follow.ownerHp = entry.hp;
