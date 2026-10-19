@@ -87,6 +87,7 @@ add_library(sr2_adapter SHARED
     src/outfit_sync.cpp
     src/outfit_sync_trace.cpp
     src/store_sync.cpp
+    src/zombie_uprising.cpp
     src/vehicle_seating.cpp
     src/lua_trace.cpp
     src/creation_queue.cpp
@@ -160,6 +161,8 @@ set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:
 # The follower and NPC AI thunks of milestone 16 wave 2 run inside x87 game code; squared_distance.cpp hands back a float in ST0.
 set_source_files_properties(src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/net_handlers.cpp src/net_handlers_confess.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
+# The Zombie Uprising stubs run inside the picker and tick that keep floats on the x87 stack.
+set_source_files_properties(src/zombie_uprising.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
@@ -256,6 +259,8 @@ add_unit_test(party_ai_sites_test src/party_thunks.cpp src/npc_ai_thunks.cpp src
     src/activity_state.cpp src/activity_participants.cpp)
 add_unit_test(store_rules_test)
 add_unit_test(store_sites_test)
+add_unit_test(zombie_uprising_rules_test)
+add_unit_test(zombie_uprising_sites_test)
 add_unit_test(net_handlers_rules_test)
 add_unit_test(net_handlers_sites_test)
 add_unit_test(net_clock_rules_test)

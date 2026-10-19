@@ -316,6 +316,13 @@ enum class Thunk : uint16_t {
     SnatchWaypointPerRemote,
     MayhemDistrictAllPlayers,
     TraffickingExtraSeats,
+    // Milestone 17 wave 3 (zombie_uprising_sites.h): Zombie Uprising for every remote.
+    ZombieStartEachRemote,
+    ZombieEndEachRemote,
+    ZombieWaveHealthAverage,
+    ZombieSpawnPlayers,
+    ZombieSpawnPlayerAtEax,
+    ZombieSpawnPlayerAtEcx,
 };
 
 struct Site {

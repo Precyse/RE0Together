@@ -815,4 +815,14 @@ constexpr uintptr_t kGarageHideResume = 0xA6D03C;       // after the partner re-
 constexpr uintptr_t kLevelChoiceSendReturn = 0x75B676;   // return address of the guest's choice broadcast (0x75B671)
 constexpr uintptr_t kLevelCancelSendReturn = 0x75B749;   // return address of the guest's cancel broadcast (0x75B744)
 
+// Zombie Uprising for 3 to 4 players (milestone 17 wave 3; docs/SR2_NOTES.md, "Zombie Uprising for 3 to 4 players (milestone 17 wave 3)").
+constexpr uintptr_t kRecruitSetMode = kSnatchSetupBoth;       // recruit_set_mode's worker: ECX = human, cdecl(mode), 0 none, 1 friendly gang
+constexpr uintptr_t kCharacterDontRegenerate = 0x9694A0;      // EDI = human, stdcall(flag), pops its argument
+constexpr uintptr_t kEvacuateFromVehicles = 0xB076C0;         // EDI = human, cdecl(flag)
+constexpr uintptr_t kZombieStartMarkerOffset = 0x418;         // zombie level: the start marker record
+constexpr uintptr_t kMarkerPositionOffset = 0x1C;             // marker: the vec3 position
+constexpr uintptr_t kMarkerOrientationOffset = 0x28;          // marker: the orientation
+constexpr uintptr_t kZombiePartnerStartOffset = 0xE5BF40;     // double: the x offset of the partner's start spot from the local player's
+constexpr uintptr_t kHumanMaxHealthOffset = 0x1120;           // int32; the health at +0x1124 divided by it is the fraction
+
 }  // namespace sr2

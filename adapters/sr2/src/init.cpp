@@ -37,6 +37,7 @@
 #include "vehicle_pool_rules.h"
 #include "vehicle_seating.h"
 #include "version_gate.h"
+#include "zombie_uprising.h"
 
 DWORD WINAPI initThread(LPVOID) {
     try {
@@ -104,6 +105,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (crowd) revive_patches::install(config.trace);
         if (partnering) party_ai_patches::install(config.trace);
         if (crowd) store_sync::install(config.trace);
+        if (activities && crowd) zombie_uprising::install(config.trace);
         if (crowd) vehicle_seating::install(config.partnerExperimental, config.trace);
         if (crowd) net_handlers::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
