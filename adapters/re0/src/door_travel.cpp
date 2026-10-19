@@ -162,7 +162,7 @@ void onTick() {
     }
     const auto now = Clock::now();
     if (now - g_lastSend >= kRoomStateInterval) sendRoomState();
-    checkDesync(now);
+    if (!state_mode::on()) checkDesync(now);  // state mode: ROOM_MOVE and the pose room keep the puppet right (room_move)
     logEnemyAuthority();
 }
 

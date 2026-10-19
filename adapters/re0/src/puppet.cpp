@@ -38,10 +38,12 @@ constexpr float kNoSeekInterp = 0.0f;  // a seek restarts the motion at the owne
 
 std::atomic<bool> g_enabled{false};
 std::atomic<bool> g_hasPose{false};  // a pose from the driving peer arrived
+std::atomic<uint16_t> g_ownerRoom{scene::kNone};  // the room named by the owner's newest pose
 
 std::mutex g_mutex;
 pose_timeline::Timeline g_timeline;  // guarded by g_mutex
 int g_sourceSlot = kNoSlot;          // guarded by g_mutex
+uint32_t g_ownerRoomSeq = 0;         // guarded by g_mutex: the sequence of the pose g_ownerRoom came from
 std::array<stream_clock::StreamClock, kMaxPeerSlots> g_clocks;  // one per peer slot, guarded by g_mutex
 
 // Game thread only.
@@ -66,6 +68,7 @@ void discardStream() {
     if (g_sourceSlot != kNoSlot) g_clocks[static_cast<size_t>(g_sourceSlot)].clear();
     g_sourceSlot = kNoSlot;
     g_hasPose = false;
+    g_ownerRoom = scene::kNone;
 }
 
 bool available(uintptr_t player, uint16_t target, uint16_t motionNo) {
@@ -290,9 +293,10 @@ bool inMoveScope(uintptr_t player) { return player != 0 && player == g_scopePlay
 bool active(uintptr_t player) {
     if (!g_enabled.load(std::memory_order_relaxed)) return false;
     const Character character = character_owner::identify(player);
-    return character != Character::Unknown && net_pad::active() &&
-           character_owner::controlOf(character) == character_owner::Control::Remote;
+    return character != Character::Unknown && character_owner::isRemoteOwned(character);
 }
+
+uint16_t ownerRoom() { return g_ownerRoom; }
 
 void onFrame(const GameFrame& frame) {
     if (!g_enabled || static_cast<int>(frame.slot) != net_pad::peerSlot() || frame.slot >= kMaxPeerSlots) return;
@@ -302,12 +306,17 @@ void onFrame(const GameFrame& frame) {
         g_timeline.clear();
         g_clocks[frame.slot].clear();
         g_sourceSlot = frame.slot;
+        g_ownerRoom = scene::kNone;
     }
     stream_clock::StreamClock& clock = g_clocks[frame.slot];
     if (frame.type == pose_wire::kMsgPoseState) {
         const auto pose = pose_wire::decodePose(frame.payload);
         if (!pose) return;
         g_timeline.addPose(clock, *pose, arrival);
+        if (g_ownerRoom == scene::kNone || stream_clock::after(pose->seq, g_ownerRoomSeq)) {
+            g_ownerRoomSeq = pose->seq;
+            g_ownerRoom = pose->room;
+        }
         g_hasPose = true;
         debug_stats::count(Counter::PosesReceived);
     } else if (const auto event = pose_wire::decodeEvent(frame.payload)) {

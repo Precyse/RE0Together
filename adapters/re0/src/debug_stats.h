@@ -81,6 +81,12 @@ enum class Counter : size_t {
     EnemyObserverStale,
     EnemyObserverRefused,
     EnemyObserverSent,
+    RoomMovesSent,
+    RoomMovesApplied,
+    RoomMoveHeals,
+    DoorFollowsSent,
+    DoorFollowsAccepted,
+    DoorFollowsRejected,
     Count
 };
 

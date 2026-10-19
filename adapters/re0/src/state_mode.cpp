@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "door_follow.h"
 #include "enemy_observer.h"
 #include "flag_sequencer.h"
 #include "game_tick.h"
@@ -10,6 +11,7 @@
 #include "pose_capture.h"
 #include "puppet.h"
 #include "room_authority.h"
+#include "room_move.h"
 #include "scene.h"
 #include "state_net.h"
 #include "weapon_fx_capture.h"
@@ -17,7 +19,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 9;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, enemy observer, item ledger
+constexpr unsigned kModuleCount = 11;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, enemy observer, item ledger, room move, door follow
 
 std::atomic<bool> g_on{false};
 
@@ -45,6 +47,8 @@ void enableAll(NetClient& net) {
     if (weapon_fx_replay::enable()) ++enabled;
     if (enemy_observer::enable()) ++enabled;
     if (item_ledger::enable()) ++enabled;
+    if (room_move::enable()) ++enabled;
+    if (door_follow::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

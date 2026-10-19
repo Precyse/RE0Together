@@ -673,6 +673,13 @@ void onFrame(const GameFrame& frame) {
     }
 }
 
+bool leadsAny() {
+    for (const Slot& slot : g_slots) {
+        if (slot.role == Role::Leads) return true;
+    }
+    return false;
+}
+
 bool enable(NetClient& net) {
     g_net = &net;
     return hooks::install("sEventScript::startTriggerThread", game::kStartTriggerThreadFunction,

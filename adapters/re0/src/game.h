@@ -511,6 +511,11 @@ constexpr uint32_t kPartnerThinkSize = 0x1a0;  // cPlayerSubThink
 constexpr uint32_t kThinkAllocationSize = kPartnerThinkSize > kPlayerThinkSize ? kPartnerThinkSize : kPlayerThinkSize;
 constexpr uint32_t kPlayerThinkAlign = 0x10;
 
+// state mode: phase 10 (native rooms; docs/RE0_NOTES.md "State mode: native rooms")
+// sRoomControl::changeRoom: thiscall (scene, entry, flags) ret 0xc, the door's commit point. It runs the room change
+// 0x61e2c0 before it returns and its only caller is the door thunk 0x552720 (sDoorLoad update phase 4, once per door).
+constexpr uintptr_t kChangeRoomFunction = 0x610c60;
+
 // MSVC cannot declare a free thiscall pointer; __fastcall with edx unused has the same register and stack layout.
 template <class R, class... Args>
 R callThiscall(uintptr_t function, void* self, Args... args) {

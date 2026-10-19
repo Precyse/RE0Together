@@ -130,6 +130,8 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"enemy observer motions/misses/seeks", format(L"%u / %u / %u", total(s, Counter::EnemyObserverMotions), total(s, Counter::EnemyObserverMisses), total(s, Counter::EnemyObserverSeeks)), false});
     lines.push_back({L"enemy observer stale/refused", format(L"%u / %u", total(s, Counter::EnemyObserverStale), total(s, Counter::EnemyObserverRefused)), false});
     lines.push_back({L"enemy observer sent", format(L"%u", total(s, Counter::EnemyObserverSent)), false});
+    lines.push_back({L"room moves sent/applied/healed", format(L"%u / %u / %u", total(s, Counter::RoomMovesSent), total(s, Counter::RoomMovesApplied), total(s, Counter::RoomMoveHeals)), false});
+    lines.push_back({L"door follows sent/accepted/rejected", format(L"%u / %u / %u", total(s, Counter::DoorFollowsSent), total(s, Counter::DoorFollowsAccepted), total(s, Counter::DoorFollowsRejected)), false});
     lines.push_back({L"hit request sent/s", format(L"%u", rate(s, Counter::HitRequestSent)), false});
     lines.push_back({L"hit request recv/s", format(L"%u", rate(s, Counter::HitRequestReceived)), false});
     lines.push_back({L"hit applied sent/s", format(L"%u", rate(s, Counter::HitAppliedSent)), false});

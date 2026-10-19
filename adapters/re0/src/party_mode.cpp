@@ -11,6 +11,7 @@
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -44,10 +45,11 @@ void announce() {
 void toastMode() { debug_overlay::toast(g_mode == PartyMode::Team ? "Team" : "Split up", kToastSeconds); }
 
 // The game's own follow flag carries the partner through doors with the focused character, so it mirrors the
-// mode: following in TEAM, staying in LEAVE_BEHIND. Written only when it differs.
+// mode: following in TEAM, staying in LEAVE_BEHIND. Written only when it differs. In state mode it stays 0: the
+// engine's carry must never move a remote-owned character, TEAM is a DOOR_FOLLOW request instead (door_follow).
 void applyFollowFlag() {
     const uintptr_t player = game::readPointer(game::kPlayerGlobal);
-    const uint8_t wanted = g_mode == PartyMode::Team ? 1 : 0;
+    const uint8_t wanted = g_mode == PartyMode::Team && !state_mode::on() ? 1 : 0;
     uint8_t current = 0;
     if (!player || !game::readMemory(player + game::kPlayerFollowOffset, current) || current == wanted) return;
     game::writeMemory(player + game::kPlayerFollowOffset, wanted);
