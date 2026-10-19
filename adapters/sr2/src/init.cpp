@@ -16,6 +16,7 @@
 #include "join_trace.h"
 #include "lan_address.h"
 #include "log.h"
+#include "lua_trace.h"
 #include "multiplayer_patches.h"
 #include "outfit_sync.h"
 #include "partner_patches.h"
@@ -98,6 +99,7 @@ DWORD WINAPI initThread(LPVOID) {
             join_trace::install(config.maxPlayers);
             join_net_trace::install();
             multiplayer_patches::installScriptTraces();
+            if (activities) lua_trace::install();
         }
         hooks::applyBatch();
         logger::write("sr2 adapter ready");

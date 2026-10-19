@@ -295,6 +295,18 @@ constexpr uintptr_t kLuaCallAlert = 0xCD9060;  // eax = L
 constexpr uintptr_t kLuaThreadNameOffset = 0x10;  // char* in the thread record the runner holds
 constexpr int kLuaStackTop = -1;
 
+// The Lua native mission_debug (M16 wave 2, LT1): ignores its arguments and returns the number 0. The layout of Lua 5.0 in this exe:
+// L+8 is the stack top, L+0xC the base (the first argument); an object is 16 bytes with its type tag at +0 and its value at +8; a
+// string value points to a TString whose characters start at +0x10.
+constexpr uintptr_t kLuaMissionDebug = 0xA398C0;
+constexpr uintptr_t kLuaTopOffset = 0x8;
+constexpr uintptr_t kLuaBaseOffset = 0xC;
+constexpr uintptr_t kLuaObjectSize = 0x10;
+constexpr uintptr_t kLuaObjectTypeOffset = 0x0;
+constexpr uintptr_t kLuaObjectValueOffset = 0x8;
+constexpr uintptr_t kLuaStringCharsOffset = 0x10;
+constexpr uint32_t kLuaTypeString = 4;
+
 // A world object's chunk id is a word at +0x48 (0xBEEF = none); the chunk query O1 takes it in edi.
 constexpr uintptr_t kObjectChunkOffset = 0x48;
 

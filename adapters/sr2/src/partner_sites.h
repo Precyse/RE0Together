@@ -186,6 +186,8 @@ enum class Thunk : uint8_t {
     KickTargetNamed,
     KickTargetTaken,
     RemoveEveryRemoteMember,
+    // Milestone 16 wave 2 (lua_trace_sites.h): the trace line of the mission scripts.
+    TraceLuaDebug,
 };
 
 struct Site {
