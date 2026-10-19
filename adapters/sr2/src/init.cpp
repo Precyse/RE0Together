@@ -1,6 +1,7 @@
 #include "init.h"
 
 #include "activity_patches.h"
+#include "anim_stream.h"
 #include "code_check.h"
 #include "config.h"
 #include "content_hash.h"
@@ -53,6 +54,8 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering && !activities) logger::write("activities: sites differ, the activity logic is not installed");
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
+        const bool animStreaming = crowd && anim_stream::sitesMatch();
+        if (crowd && !animStreaming) logger::write("anim streaming: sites differ, the anim and asset streaming logic is not installed");
         if (vehicle_pool_rules::requested(config.maxPlayers, crowd)) vehicle_pool::request();
 
         const bool tunnelled = tunnel::install(config.transport, config.trace);
@@ -83,6 +86,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
+        if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
 
         if (config.trace) {
             join_trace::install(config.maxPlayers);

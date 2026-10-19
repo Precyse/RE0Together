@@ -1,5 +1,5 @@
-// The anim set trace rules of milestone 14 (no game): the need table text, the anim headers that cannot be decoded and the chunk anim
-// slot an address is in, and the three trace sites as data.
+// The anim set trace rules of milestones 14 and 16 W1 (no game): the need table text and where the code keeps the table, the other sets
+// in a slot, the anim headers that cannot be decoded and the chunk anim slot an address is in, and the three trace sites as data.
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -20,9 +20,40 @@ void check(bool ok, const char* what) {
 }
 
 void theNeedTable() {
-    const NeedRow rows[] = {{0x2BF, true, true}, {0x2C5, true, false}, {0, false, false}, {0x2FE, false, true}, {0x2C6, false, false}};
-    check(anim_trace_rules::needTableText(rows, 5) == "{0x02BF 1 1, 0x02C5 1 0, 0x02FE 0 1}", "only the rows somebody needs: group, local byte, remote byte");
+    const NeedRow rows[] = {{0x2BF, true, 0}, {0x2C5, false, 0x06}, {0, false, 0}, {0x2FE, true, 0x01}, {0x2C6, false, 0}};
+    check(anim_trace_rules::needTableText(rows, 5) == "{0x02BF 1 0x00, 0x02C5 0 0x06, 0x02FE 1 0x01}", "only the rows somebody needs: group, local byte, remote mask in hex");
     check(anim_trace_rules::needTableText(rows + 2, 1) == "{}" && anim_trace_rules::needTableText(nullptr, 0) == "{}", "nothing needed: empty braces");
+    check(anim_trace_rules::needTableText(rows + 1, 1) == "{0x02C5 0 0x06}", "two guests needing one group: one row with both bits");
+}
+
+void theNeedTableFromCode() {
+    using anim_trace_rules::needTableFromCode;
+    const auto shipped = needTableFromCode(sr2::kAnimNeedTable, sr2::kAnimNeedTableEnd);
+    check(shipped.base == sr2::kAnimNeedTable && shipped.rows == 8, "the shipped immediates give the shipped table: 8 rows");
+    constexpr uint32_t kMoved = 0x3A00000;
+    const auto moved = needTableFromCode(kMoved, kMoved + 14 * sr2::kAnimNeedRowBytes);
+    check(moved.base == kMoved && moved.rows == 14, "a moved table: the new base and 14 rows");
+    check(needTableFromCode(0, 0).rows == 0 && needTableFromCode(kMoved, kMoved).rows == 0 && needTableFromCode(kMoved + 0xD0, kMoved).rows == 0,
+          "an unreadable pair, an empty table and an end before the base give no rows");
+    check(needTableFromCode(kMoved, kMoved + 14 * sr2::kAnimNeedRowBytes + 1).rows == 0, "a pair that is not a whole number of rows gives no rows");
+}
+
+void theOtherSets() {
+    using anim_trace_rules::StreamEntry;
+    constexpr uint32_t kDescriptor = 0x2771894;
+    constexpr uint32_t kOtherDescriptor = 0x27718EC;
+    constexpr uint32_t kInUse = 1;
+    const StreamEntry entries[] = {{kInUse, kDescriptor, 0x2C5},    {0, kDescriptor, 0x2C6}, {3, kDescriptor, 0x2C7},
+                                   {4, kDescriptor, 0x2C8},         {kInUse, kDescriptor, 0x2C9}, {2, kOtherDescriptor, 0x2CA},
+                                   {kInUse, kDescriptor, 0x2C5}};
+    const auto others = anim_trace_rules::otherSetsInSlot(entries, kDescriptor, 0x2C5);
+    check(others.size() == 1 && others[0] == 0x2C9, "the free states 0, 3 and 4, the same group and another slot's sets are skipped; a different group in the slot is listed");
+    check(anim_trace_rules::otherSetsInSlot(entries, kDescriptor, 0x2C9).size() == 2 && anim_trace_rules::otherSetsInSlot({}, kDescriptor, 0x2C5).empty(),
+          "the group being unloaded is whichever the call names (a duplicate load of another group is listed twice), and no entries list nothing");
+    check(anim_trace_rules::groupsText({}) == "{}" && anim_trace_rules::groupsText({0x2C5}) == "{0x02C5}" && anim_trace_rules::groupsText({0x2C5, 0x2C6}) == "{0x02C5, 0x02C6}",
+          "the list as the trace prints it");
+    check(anim_trace_rules::syncIdText(0, 0x1234) == " id 0x00001234" && anim_trace_rules::syncIdText(1, 0x1234) == " id 0x00001234" && anim_trace_rules::syncIdText(2, 0x1234).empty(),
+          "a request and an answer name the set's id, a drop has none");
 }
 
 void theUndecodableHeader() {
@@ -59,6 +90,8 @@ void theSites() {
 
 int main() {
     theNeedTable();
+    theNeedTableFromCode();
+    theOtherSets();
     theUndecodableHeader();
     theSlots();
     theSites();

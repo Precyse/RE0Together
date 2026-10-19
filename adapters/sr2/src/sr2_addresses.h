@@ -466,6 +466,70 @@ constexpr uintptr_t kAnimHeaderFlagsOffset = 5;        // byte: bit 0x40 = the h
 constexpr uint8_t kAnimHeaderOffsetFlag = 0x40;
 constexpr uintptr_t kAnimHeaderOffsetOffset = 0x2C;    // dword
 
+// Anim and asset streaming per remote (milestone 16 W1, docs/SR2_NOTES.md "Anim and asset streaming per remote (milestone 16 W1)").
+constexpr uintptr_t kStreamingSyncHandlerSlot = 0xE8BDCC;  // the message table entry of message 0x7E (kStreamingSyncHandler)
+constexpr uintptr_t kStreamingSyncRelFlag = 0xE8BDDC;      // byte: nonzero = the message has a 4 byte header (0xA84032)
+constexpr uint8_t kStreamingSubRequest = 0;
+constexpr uint8_t kStreamingSubAnswer = 1;
+constexpr uint8_t kStreamingSubDrop = 2;                   // "the remote no longer needs the set"
+constexpr uintptr_t kStreamingGroupOffset = 1;             // payload fields (0xA83F84..0xA83F99); the sub is the byte at 0
+constexpr uintptr_t kStreamingIdOffset = 3;
+constexpr uintptr_t kStreamingSlotOffset = 7;
+constexpr uintptr_t kStreamingCountOffset = 0xB;
+constexpr uintptr_t kStreamingListOffset = 0xF;
+constexpr uintptr_t kMessageHeaderBytes = 3;               // the id and the length before a payload
+constexpr uintptr_t kMessageHeaderWithRelBytes = 4;
+constexpr uintptr_t kAnimPendingList = 0xEB8148;           // dword: the pending list, {u16 group, u32 id at +4} of 8 bytes
+constexpr uintptr_t kAnimPendingCapacity = 0xEB814C;
+constexpr uintptr_t kAnimPendingCount = 0xEB8150;
+constexpr uintptr_t kAnimPendingStride = 8;
+constexpr uintptr_t kAnimPendingIdOffset = 4;
+constexpr uintptr_t kChunkLoadedTable = 0xF7AAE8;          // dword per group, nonzero = loaded
+constexpr uint32_t kChunkCount = 0x866;
+constexpr uint16_t kNoGroup = 0xFFFF;
+constexpr uintptr_t kStreamState = 0x2225B3C;              // dword: the stream state s
+constexpr uintptr_t kStreamStateKindOffset = 4;            // [s+4] 1 or 2 = a set is being streamed
+constexpr uint32_t kStreamStateKindFirst = 1;
+constexpr uint32_t kStreamStateKindLast = 2;
+constexpr uintptr_t kStreamStateObjectOffset = 0x10;       // [s+0x10] -> the object of that set
+constexpr uintptr_t kStreamObjectNamedGroupOffset = 0x52E; // word: its group
+constexpr uintptr_t kStreamEntries = 0x2225B4C;            // dword: the stream entries of 0x28 bytes
+constexpr uintptr_t kStreamEntryCount = 0xE87BC0;          // dword
+constexpr uintptr_t kStreamEntryStride = 0x28;
+constexpr uintptr_t kStreamEntryStateOffset = 4;
+constexpr uintptr_t kStreamEntryObjectOffset = 0x10;
+constexpr uintptr_t kStreamObjectGroupOffset = 0x772;      // word
+constexpr uintptr_t kStreamObjectSlotOffset = 0x778;       // dword: the slot descriptor
+constexpr uintptr_t kAnimSlotDescriptors = 0x2771894;
+constexpr uintptr_t kAnimSlotDescriptorStride = 0x58;
+constexpr uintptr_t kAnimNeedClear = 0xA82600;             // di = group, dl = isLocal
+constexpr uintptr_t kAnimNeedInit = 0xA83400;              // the table reset of the level loader
+constexpr uintptr_t kAnimNeedTableEnd = 0x2229BA8;
+constexpr uintptr_t kAnimSetLoad = 0xA82EA0;               // cdecl(out, group, name, slot, list, count)
+constexpr uintptr_t kAnimLoadFromAnswer = 0xA8402A;        // return addresses of kAnimSetLoad
+constexpr uintptr_t kAnimLoadFromRequest = 0xA84769;
+constexpr uintptr_t kMemberLeftNeedClear = 0x819943;       // call kClearEveryRemoteNeed
+constexpr uintptr_t kClearEveryRemoteNeed = 0xA84170;
+constexpr uintptr_t kStrmReqSlot = 0xE8BCC4;               // message table entries of the stream request messages
+constexpr uintptr_t kStrmRemReqSlot = 0xE8BCDC;
+constexpr uintptr_t kCharReqSlot = 0xE8BCF4;
+constexpr uintptr_t kCharRemReqSlot = 0xE8BD0C;
+constexpr uintptr_t kSetChangeSlot = 0xE8BCAC;             // strm_set_change
+constexpr uintptr_t kSetChangeGates = 0x22248B0;           // 8 + 10 time gates, one dword each
+constexpr size_t kSetChangeGateCount = 18;
+constexpr uintptr_t kStreamReset = 0xA78F10;               // resets both gates
+constexpr uintptr_t kMiscTriggerSlot = 0xE8ABF0;           // misc sub 0x16 (Set_Player_Character / Restore_Player_Character)
+constexpr uintptr_t kTriggerLocalPreset = 0x2527B64;
+constexpr uintptr_t kTriggerPartnerPreset = 0x2527B68;
+constexpr uintptr_t kTriggerTick = 0x687B40;
+constexpr uintptr_t kTriggerCleanupLoop = 0x688700;
+constexpr uintptr_t kTriggerCleanupDone = 0x688763;
+constexpr uintptr_t kTriggerReset = 0x687A80;
+constexpr uintptr_t kTriggerPartnerLoadCategory = 0x685750; // byte: the category of the game's own partner load, 4 (6 under Juiced)
+constexpr uintptr_t kStreamRelease = 0xA79240;             // edx = set; cdecl(category, key, isHost)
+constexpr uintptr_t kPresetSetOffset = 8;
+constexpr uintptr_t kPresetSetIdOffset = 0x68;
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
