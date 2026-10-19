@@ -31,7 +31,7 @@ inline constexpr Site kCutscene[] = {
     {"MC1", Kind::HookEntry, Gate::Now, 0x6BECA0, "83 EC 3C 57 8B 7C 24 44", Thunk::CutsceneAllRemotes, ""},
     {"MC2", Kind::CallBlock, Gate::Now, 0x6C3E9D, "C6 05 1E 7D 52 02 00", Thunk::CutsceneSetsReset, "90 90"},
     {"CS1", Kind::CallBlock, Gate::Now, 0x6C5849, "C6 05 1D 7D 52 02 00", Thunk::CutsceneReadyConsumed, "90 90"},
-    {"CS2", Kind::CallBlock, Gate::Now, 0x6C6AB4, "C6 05 1D 7D 52 02 00", Thunk::CutsceneReadyConsumed, "90 90"},
+    {"CS2", Kind::CallBlock, Gate::Now, 0x6C6AB4, "C6 05 1D 7D 52 02 00", Thunk::CutsceneReadyGaveUp, "90 90"},
 };
 
 // "The partner paused" is a bit per slot, and the game applies the pause only when the byte goes between zero and not zero

@@ -276,6 +276,24 @@ constexpr uintptr_t kCutsceneLocalSkipped = 0x2527D1E;   // byte
 constexpr uintptr_t kCutsceneRemoteReady = 0x2527D1D;    // byte
 constexpr uintptr_t kCutsceneRemoteSkipped = 0x2527D1F;  // byte
 constexpr uintptr_t kCutsceneRemoteDone = 0x2527D20;     // byte
+constexpr uintptr_t kCutsceneDoneWait = 0x2527D15;       // byte: the end waits for every remote's done (15 s at most)
+constexpr uintptr_t kCutsceneDonePending = 0x2527D21;    // byte: the local done could not be sent at the end
+constexpr uintptr_t kCutsceneFadeInAfter = 0xE8DD1F;     // byte: the start argument "fade in after the end"
+constexpr uint32_t kCutsceneDoneWaitMs = 15000;
+
+// The screen fade (script fade_in 0xA2E280, fade_out 0xA2E390, the tick 0x4D1790; state 0 none, 1 out, 2 in).
+constexpr uintptr_t kFadeState = 0x2526D9C;       // dword
+constexpr uintptr_t kFadePercent = 0x2526DA0;     // float
+constexpr uintptr_t kFadeTimer = 0xE9D358;        // dword: -1 when no fade runs
+constexpr uintptr_t kFadeIgnorePause = 0x2526D95;  // byte: the fade runs while the world is paused
+
+// The script interpreter (Lua 5.0, base library only). Thread errors are silent: the thread runner 0xCE0570 calls
+// lua_resume and drops the thread; load errors go through callalert.
+constexpr uintptr_t kLuaResume = 0xCDAC30;     // cdecl(nargs), esi = L; the result is nonzero for an error
+constexpr uintptr_t kLuaToString = 0xCDCA80;   // ecx = L, eax = stack index; the text or 0
+constexpr uintptr_t kLuaCallAlert = 0xCD9060;  // eax = L
+constexpr uintptr_t kLuaThreadNameOffset = 0x10;  // char* in the thread record the runner holds
+constexpr int kLuaStackTop = -1;
 
 // A world object's chunk id is a word at +0x48 (0xBEEF = none); the chunk query O1 takes it in edi.
 constexpr uintptr_t kObjectChunkOffset = 0x48;

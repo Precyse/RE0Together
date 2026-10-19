@@ -8,6 +8,10 @@ namespace multiplayer_patches {
 // Checks the bytes of every site and logs each difference. True when all match.
 bool sitesMatch();
 
+// Writes the trace sites of the cutscene end, Lua errors and fades one by one, with trace=1 at any max_players (inside a hooks
+// batch); a site whose bytes differ is left out and logged.
+void installScriptTraces();
+
 // Writes the phases (the trace phase only with `trace`, the guest leave phase only when the leave path edits of milestone
 // 5i are in); a phase whose sites cannot all be written is left out and logged. The sites that wait for a live probe (the
 // mission placement rows) are written with `experimental` only. True when every phase went in.

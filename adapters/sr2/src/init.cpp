@@ -82,6 +82,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (config.trace) {
             join_trace::install(config.maxPlayers);
             join_net_trace::install();
+            multiplayer_patches::installScriptTraces();
         }
         hooks::applyBatch();
         logger::write("sr2 adapter ready");

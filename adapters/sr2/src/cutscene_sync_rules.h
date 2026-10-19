@@ -35,6 +35,15 @@ inline Handshake handshakeOf(int8_t sub, bool skippedTogether) {
     }
 }
 
+inline const char* name(Handshake handshake) {
+    switch (handshake) {
+        case Handshake::Ready: return "ready";
+        case Handshake::Skip: return "skip";
+        case Handshake::Done: return "done";
+        default: return "none";
+    }
+}
+
 // Who has sent each handshake in the running cutscene, and whether the game's byte for it was put back because some remote
 // has not sent yet (withheld).
 class SenderSets {
@@ -43,6 +52,13 @@ public:
         Set& set = of(handshake);
         if (has(set, member) || set.count == kMaxMembers) return;
         set.members[set.count++] = member;
+    }
+
+    // The members that have sent `handshake`, copied to `out`; their number.
+    size_t senders(Handshake handshake, uintptr_t (&out)[kMaxMembers]) const {
+        const Set& set = of(handshake);
+        for (size_t i = 0; i < set.count; ++i) out[i] = set.members[i];
+        return set.count;
     }
 
     // True when every member of `required` is in the set (also when nobody is required: a lone player's own cutscene).

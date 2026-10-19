@@ -23,6 +23,11 @@ struct GuestFrame {
 #define PARTNER_REG_STUB(name, reg, impl) \
     void __declspec(naked) name() { __asm push reg __asm call impl __asm add esp, 4 __asm ret }
 
+// Replacement of a block of stores or a call, entered by a call: `impl()` runs with all registers and the flags saved (the
+// x87 stack is not touched), then the code after the block goes on. `impl` makes the stores the block made.
+#define PARTNER_BLOCK_STUB(name, impl) \
+    void __declspec(naked) name() { __asm pushfd __asm pushad __asm call impl __asm popad __asm popfd __asm ret }
+
 // Entry trace of a game function: `impl(GuestFrame*)` runs with all registers and the flags saved, then the function
 // runs as the game has it. `original` holds the MinHook trampoline.
 #define TRACE_ENTRY_STUB(name, impl, original) \

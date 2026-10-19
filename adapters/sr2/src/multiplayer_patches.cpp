@@ -1,6 +1,7 @@
 #include "multiplayer_patches.h"
 
 #include "creation_queue.h"
+#include "cutscene_sync.h"
 #include "join_admission.h"
 #include "log.h"
 #include "multiplayer_sites.h"
@@ -23,7 +24,25 @@ bool sitesMatch() {
     return ok;
 }
 
+void installScriptTraces() {
+    size_t installed = 0;
+    size_t total = 0;
+    for (const auto table : multiplayer_sites::kScriptTraces) {
+        for (const partner_sites::Site& site : table) {
+            ++total;
+            const std::span<const partner_sites::Site> one(&site, 1);
+            if (!site_installer::sitesMatch(one)) {
+                logger::write("trace: %s not installed, the bytes differ", site.id);
+                continue;
+            }
+            if (site_installer::install(one, false, &multiplayer_thunks::bindingOf).installed) ++installed;
+        }
+    }
+    logger::write("trace: cutscene end, Lua error and fade traces, %zu of %zu sites installed", installed, total);
+}
+
 bool install(bool trace, bool leavePathInstalled, bool experimental) {
+    cutscene_sync::setTrace(trace);
     sender_scope::setTrace(trace);
     creation_queue::setTrace(trace);
     join_admission::setTrace(trace);

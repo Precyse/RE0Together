@@ -133,6 +133,16 @@ enum class Thunk : uint8_t {
     TraceNpcSetup,
     TraceChunkNodes,
     TraceRemoteVehicle,
+    // Milestone 13 (trace_sites.h): the cutscene end, Lua errors and fades.
+    CutsceneReadyGaveUp,
+    CutsceneDoneWait,
+    CutsceneDoneTimeout,
+    CutsceneFinished,
+    LuaThreadResume,
+    LuaLoadError,
+    TraceFadeIn,
+    TraceFadeOut,
+    TraceFadeTick,
 
 
 

@@ -27,4 +27,23 @@ inline constexpr Site kCensus[] = {
     {"VT1", Kind::PointerSwap, Gate::Now, 0xE2BA78, "30 3F 87 00", Thunk::TraceRemoteVehicle, ""},
 };
 
+// The cutscene end (milestone 13; docs/SR2_NOTES.md, "Cutscenes"): the stores that start the done wait (CE3), end it by the
+// game's own timer (CE4) and finish the cutscene (CE5). Each thunk makes the store it replaces and logs.
+inline constexpr Site kCutsceneTrace[] = {
+    {"CE3", Kind::CallBlock, Gate::Now, 0x6C64CB, "C6 05 15 7D 52 02 01", Thunk::CutsceneDoneWait, "90 90"},
+    {"CE4", Kind::CallBlock, Gate::Now, 0x6C68E9, "C6 05 20 7D 52 02 01", Thunk::CutsceneDoneTimeout, "90 90"},
+    {"CE5", Kind::CallBlock, Gate::Now, 0x6C69AF, "C6 05 15 7D 52 02 00", Thunk::CutsceneFinished, "90 90"},
+};
+
+// Script errors and fades (milestone 13; docs/SR2_NOTES.md, "Script errors and fades"): the thread runner's lua_resume (CE1),
+// the two load error alerts (CE2), the script fade natives (FD1, FD2) and the fade tick (FD3).
+inline constexpr Site kScriptTrace[] = {
+    {"CE1", Kind::RetargetCall, Gate::Now, 0xCE0645, "E8 E6 A5 FF FF", Thunk::LuaThreadResume, ""},
+    {"CE2a", Kind::RetargetCall, Gate::Now, 0xCD97E5, "E8 76 F8 FF FF", Thunk::LuaLoadError, ""},
+    {"CE2b", Kind::RetargetCall, Gate::Now, 0xCD99FF, "E8 5C F6 FF FF", Thunk::LuaLoadError, ""},
+    {"FD1", Kind::HookEntry, Gate::Now, 0xA2E280, "55 8B EC 83 E4 F8 83 EC 0C 53 56 57", Thunk::TraceFadeIn, ""},
+    {"FD2", Kind::HookEntry, Gate::Now, 0xA2E390, "55 8B EC 83 E4 F8 83 EC 1C 53 56 8B", Thunk::TraceFadeOut, ""},
+    {"FD3", Kind::HookEntry, Gate::Now, 0x4D1790, "83 EC 10 83 3D 9C 6D 52 02 00", Thunk::TraceFadeTick, ""},
+};
+
 }  // namespace trace_sites

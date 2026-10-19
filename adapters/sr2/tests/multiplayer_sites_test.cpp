@@ -30,6 +30,7 @@ void check(bool ok, const char* what) {
 std::vector<Site> allSites() {
     std::vector<Site> all;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) all.insert(all.end(), phase.sites.begin(), phase.sites.end());
+    for (const auto table : multiplayer_sites::kScriptTraces) all.insert(all.end(), table.begin(), table.end());
     return all;
 }
 
@@ -206,11 +207,42 @@ int main() {
     bool readyStores = true;
     for (const char* id : {"CS1", "CS2"}) {
         const Site* store = siteNamed(sites, id);
-        readyStores = readyStores && store && store->kind == Kind::CallBlock && store->thunk == partner_sites::Thunk::CutsceneReadyConsumed &&
+        readyStores = readyStores && store && store->kind == Kind::CallBlock &&
                       partner_sites::parseHex(store->expected) == std::vector<uint8_t>{0xC6, 0x05, 0x1D, 0x7D, 0x52, 0x02, 0x00} &&
                       partner_sites::parseHex(store->tail).size() == sizeOf(*store) - kBranchBytes;
     }
     check(readyStores, "CS1 and CS2: the store of 0 into the remote ready byte 0x2527D1D (7 bytes) becomes a call to the thunk and two nops");
+    check(siteNamed(sites, "CS1")->thunk == partner_sites::Thunk::CutsceneReadyConsumed && siteNamed(sites, "CS2")->thunk == partner_sites::Thunk::CutsceneReadyGaveUp,
+          "CS1 and CS2 have a thunk each, so that their trace lines differ");
+
+    // Milestone 13: the cutscene end stores (each thunk makes the store it replaces) and the script traces.
+    struct EndStore {
+        const char* id;
+        uintptr_t address;
+        uint8_t byteAddressLow;
+        uint8_t value;
+    };
+    bool endStores = true;
+    for (const EndStore& expected : {EndStore{"CE3", 0x6C64CB, 0x15, 1}, EndStore{"CE4", 0x6C68E9, 0x20, 1}, EndStore{"CE5", 0x6C69AF, 0x15, 0}}) {
+        const Site* store = siteNamed(sites, expected.id);
+        endStores = endStores && store && store->kind == Kind::CallBlock && store->address == expected.address &&
+                    partner_sites::parseHex(store->expected) == std::vector<uint8_t>{0xC6, 0x05, expected.byteAddressLow, 0x7D, 0x52, 0x02, expected.value} &&
+                    partner_sites::parseHex(store->tail) == std::vector<uint8_t>{0x90, 0x90};
+    }
+    check(endStores, "CE3 to CE5: the stores into 0x2527D15, 0x2527D20 and 0x2527D15 (7 bytes) become a call to the thunk and two nops");
+    check(trace_sites::kCutsceneTrace[0].thunk == partner_sites::Thunk::CutsceneDoneWait &&
+              trace_sites::kCutsceneTrace[1].thunk == partner_sites::Thunk::CutsceneDoneTimeout &&
+              trace_sites::kCutsceneTrace[2].thunk == partner_sites::Thunk::CutsceneFinished,
+          "CE3, CE4 and CE5 each have their own thunk");
+    const Site* resume = siteNamed(sites, "CE1");
+    check(resume && resume->kind == Kind::RetargetCall && resume->address == 0xCE0645 && callTarget(*resume) == 0xCDAC30,
+          "CE1 retargets the thread runner's call of lua_resume 0xCDAC30");
+    check(callTarget(*siteNamed(sites, "CE2a")) == 0xCD9060 && callTarget(*siteNamed(sites, "CE2b")) == 0xCD9060 &&
+              siteNamed(sites, "CE2a")->thunk == siteNamed(sites, "CE2b")->thunk,
+          "CE2a and CE2b retarget the two calls of callalert 0xCD9060 to one thunk");
+    check(siteNamed(sites, "FD1")->address == 0xA2E280 && siteNamed(sites, "FD2")->address == 0xA2E390 && siteNamed(sites, "FD3")->address == 0x4D1790 &&
+              siteNamed(sites, "FD1")->kind == Kind::HookEntry && siteNamed(sites, "FD2")->kind == Kind::HookEntry && siteNamed(sites, "FD3")->kind == Kind::HookEntry,
+          "FD1 to FD3 hook fade_in 0xA2E280, fade_out 0xA2E390 and the fade tick 0x4D1790");
     const Site* pauseMessage = siteNamed(sites, "N4a");
     check(pauseMessage && pauseMessage->kind == Kind::JumpOut && pauseMessage->address == 0x8CB12A &&
               pauseMessage->thunk == partner_sites::Thunk::PauseMessage && sizeOf(*pauseMessage) == 13,

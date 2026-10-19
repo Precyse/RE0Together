@@ -46,4 +46,7 @@ inline constexpr Phase kPhases[] = {
 
 };
 
+// Written one by one with trace=1 at any max_players, a site whose bytes differ is left out (multiplayer_patches::installScriptTraces).
+inline constexpr std::span<const partner_sites::Site> kScriptTraces[] = {trace_sites::kCutsceneTrace, trace_sites::kScriptTrace};
+
 }  // namespace multiplayer_sites

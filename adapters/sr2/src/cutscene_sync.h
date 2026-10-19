@@ -11,6 +11,8 @@
 //        game keeps its ready byte there, so an early ready survives),
 //   CS1  the playback start and
 //   CS2  the wait that gives up clear the game's ready byte, and the ready set with it.
+// With trace=1 each of them logs (`trace: cutscene: ...`), and the end of a cutscene is traced at any player count: CE3 (the
+// done wait starts), CE4 (the game's timer ends it) and CE5 (the cutscene is finished) make the stores they replace and log.
 // A member that leaves is handled by memberLeft, which the member left dispatcher (member_left.h) calls.
 namespace cutscene_sync {
 
@@ -18,7 +20,10 @@ namespace cutscene_sync {
 // only for it is completed the way the game's handler would have (its bytes are set), while a cutscene runs.
 void memberLeft(uintptr_t leaver);
 
-// The code behind MC1, MC2, CS1 and CS2; {nullptr, nullptr} for a thunk of another file.
+// Turns the trace lines of MC1, MC2, CS1 and CS2 on (trace=1).
+void setTrace(bool trace);
+
+// The code behind MC1, MC2, CS1, CS2 and CE3 to CE5; {nullptr, nullptr} for a thunk of another file.
 partner_thunks::Binding bind(partner_sites::Thunk thunk);
 
 }  // namespace cutscene_sync

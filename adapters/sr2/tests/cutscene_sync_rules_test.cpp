@@ -1,6 +1,7 @@
 // The cutscene handshake rules of milestones 9 and 11 B4 (no game): which message is which handshake, when it is complete, a
 // leaver that stops counting, and how long an early ready lives.
 #include <cstdio>
+#include <string_view>
 
 #include "../src/cutscene_sync_rules.h"
 
@@ -104,5 +105,18 @@ int main() {
     early.clearReady();
     check(!early.complete(Handshake::Ready, stayed, 1) && !early.withheld(Handshake::Ready) && !early.memberLeft(kHost, stayed, 1).ready,
           "the playback start or the wait giving up (CS1, CS2) clears the ready set, so a stale set cannot carry into the next cutscene");
+
+    // The trace reads who has sent a handshake.
+    SenderSets traced;
+    uintptr_t listed[kMaxMembers] = {};
+    check(traced.senders(Handshake::Done, listed) == 0, "no sender yet: the list is empty");
+    traced.add(Handshake::Done, kGuestTwo);
+    traced.add(Handshake::Done, kGuestThree);
+    traced.add(Handshake::Done, kGuestTwo);
+    check(traced.senders(Handshake::Done, listed) == 2 && listed[0] == kGuestTwo && listed[1] == kGuestThree && traced.senders(Handshake::Ready, listed) == 0,
+          "the senders of a handshake in arrival order, a repeat counted once");
+    check(std::string_view(name(Handshake::Ready)) == "ready" && std::string_view(name(Handshake::Skip)) == "skip" &&
+              std::string_view(name(Handshake::Done)) == "done",
+          "the handshakes have their names");
     return g_failures == 0 ? 0 : 1;
 }
