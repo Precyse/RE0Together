@@ -11,6 +11,7 @@
 #include "puppet.h"
 #include "room_authority.h"
 #include "scene.h"
+#include "slow_frame.h"
 #include "state_net.h"
 #include "weapon_fx_capture.h"
 #include "weapon_fx_replay.h"
@@ -31,6 +32,7 @@ bool on() { return g_on.load(std::memory_order_relaxed); }
 
 void enableAll(NetClient& net) {
     state_net::bind(net);
+    slow_frame::enable();
     game_tick::addCallback("load_serial", scene::observeLoad);
     unsigned enabled = 1;
     // The puppet needs the cAnimControl::set hook that pose_capture installs.

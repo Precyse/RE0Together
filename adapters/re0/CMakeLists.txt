@@ -37,6 +37,7 @@ add_library(re0_adapter SHARED
     src/state_sync.cpp
     src/vtable_tracer.cpp
     src/game_tick.cpp
+    src/slow_frame.cpp
     src/hooks.cpp
     src/character_owner.cpp
     src/inventory_sync.cpp
@@ -214,6 +215,9 @@ add_executable(enemy_observer_rule_test tests/enemy_observer_rule_test.cpp)
 target_include_directories(enemy_observer_rule_test PRIVATE src ${DS2_SRC_DIR})
 
 add_executable(enemy_observer_send_rule_test tests/enemy_observer_send_rule_test.cpp)
+
+add_executable(slow_frame_test tests/slow_frame_test.cpp)
+target_compile_options(slow_frame_test PRIVATE /W4 /WX /utf-8)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 

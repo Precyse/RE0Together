@@ -273,7 +273,7 @@ bool enable() {
         player_contact::uninstall();
         return false;
     }
-    game_tick::addMoveScope(onMoveScope);
+    game_tick::addMoveScope(onMoveScope, "puppet");
     game_tick::addPostMove("puppet", afterMove);
     g_enabled = true;
     return true;

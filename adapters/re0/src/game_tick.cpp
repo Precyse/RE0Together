@@ -13,6 +13,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "slow_frame.h"
 
 namespace {
 
@@ -23,12 +24,19 @@ struct Registered {
     const char* name;
     game_tick::Callback callback;
     bool disabled;
+    slow_frame::Category category;
 };
 
 struct RegisteredPostMove {
     const char* name;
     game_tick::PostMove postMove;
     bool disabled;
+    slow_frame::Category category;
+};
+
+struct RegisteredMoveScope {
+    game_tick::MoveScope scope;
+    slow_frame::Category category;
 };
 
 std::vector<Registered> g_callbacks;  // filled before install(), then only read on the game thread
@@ -37,7 +45,7 @@ std::atomic<bool> g_rearmRequested{false};
 
 using MoveFunction = void(__fastcall*)(void* self, void* edx);
 MoveFunction g_originalMove = nullptr;
-std::array<game_tick::MoveScope, game_tick::kMaxMoveScopes> g_moveScopes{};
+std::array<RegisteredMoveScope, game_tick::kMaxMoveScopes> g_moveScopes{};
 std::atomic<size_t> g_moveScopeCount{0};  // scopes published to the game thread
 
 LONG report(EXCEPTION_POINTERS* info, const char* name) {
@@ -85,27 +93,35 @@ void rearm(const char* name, bool& disabled) {
 
 void runPostMoves(uintptr_t player) {
     for (RegisteredPostMove& entry : g_postMoves) {
+        const slow_frame::Scope timing(entry.category);
         if (!entry.disabled && !runPostMoveGuarded(entry, player)) stop(entry.name, entry.disabled);
     }
 }
 
 void tick() {
+    slow_frame::beginFrame();
     if (g_rearmRequested.exchange(false)) {
         for (Registered& entry : g_callbacks) rearm(entry.name, entry.disabled);
         for (RegisteredPostMove& entry : g_postMoves) rearm(entry.name, entry.disabled);
     }
     for (Registered& entry : g_callbacks) {
+        const slow_frame::Scope timing(entry.category);
         if (!entry.disabled && !runGuarded(entry.callback, entry.name)) stop(entry.name, entry.disabled);
     }
+}
+
+void runMoveScope(const RegisteredMoveScope& entry, uintptr_t player, bool entering) {
+    const slow_frame::Scope timing(entry.category);
+    entry.scope(player, entering);
 }
 
 void __fastcall moveDetour(void* self, void* edx) {
     const uintptr_t player = reinterpret_cast<uintptr_t>(self);
     if (player == game::controlled()) tick();
     const size_t scopes = g_moveScopeCount.load(std::memory_order_acquire);
-    for (size_t i = 0; i < scopes; ++i) g_moveScopes[i](player, true);
+    for (size_t i = 0; i < scopes; ++i) runMoveScope(g_moveScopes[i], player, true);
     g_originalMove(self, edx);
-    for (size_t i = scopes; i-- > 0;) g_moveScopes[i](player, false);
+    for (size_t i = scopes; i-- > 0;) runMoveScope(g_moveScopes[i], player, false);
     runPostMoves(player);
 }
 
@@ -113,16 +129,20 @@ void __fastcall moveDetour(void* self, void* edx) {
 
 namespace game_tick {
 
-void addCallback(const char* name, Callback callback) { g_callbacks.push_back({name, callback, false}); }
+void addCallback(const char* name, Callback callback) {
+    g_callbacks.push_back({name, callback, false, slow_frame::categoryOf(name)});
+}
 
-void addMoveScope(MoveScope scope) {
+void addMoveScope(MoveScope scope, const char* name) {
     const size_t count = g_moveScopeCount.load();
     if (count >= kMaxMoveScopes) return;
-    g_moveScopes[count] = scope;
+    g_moveScopes[count] = {scope, slow_frame::categoryOf(name)};
     g_moveScopeCount.store(count + 1, std::memory_order_release);
 }
 
-void addPostMove(const char* name, PostMove postMove) { g_postMoves.push_back({name, postMove, false}); }
+void addPostMove(const char* name, PostMove postMove) {
+    g_postMoves.push_back({name, postMove, false, slow_frame::categoryOf(name)});
+}
 
 void rearmAfterResync() { g_rearmRequested = true; }
 
