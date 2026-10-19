@@ -186,6 +186,23 @@ enum class Thunk : uint8_t {
     KickTargetNamed,
     KickTargetTaken,
     RemoveEveryRemoteMember,
+    // Milestone 16 W2 (mission_flow_sites.h): mission start, replay prompt and mission bonus for 3 to 4 players.
+    StartPromptAnswer,
+    StartRequesterHuman,
+    RememberStartRequester,
+    SendStartReply,
+    FirstAcceptStarts,
+    PairRemoteHuman,
+    AskedHumanNames,
+    SendGuestToHost,
+    RememberReplayRequester,
+    SendReplayAnswer,
+    ReplayAnswerTally,
+    AskedMemberNames,
+    RememberBonusHuman,
+    SendBonusPerRecipient,
+    ObjectiveBonusEachRemote,
+    TraceMissionState,
 };
 
 struct Site {

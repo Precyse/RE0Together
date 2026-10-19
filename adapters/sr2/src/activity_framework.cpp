@@ -6,6 +6,7 @@
 #include "guest_call.h"
 #include "log.h"
 #include "memory.h"
+#include "mission_flow_rules.h"
 #include "partner_scope.h"
 #include "remote_players.h"
 #include "script_override.h"
@@ -48,7 +49,8 @@ uint32_t __cdecl declineEnds(uintptr_t context) {
     uintptr_t required[activity_rules::kMaxMembers];
     const size_t count = activity_state::remoteMembersInGame(required);
     const uint32_t pending = readDword(sr2::kPendingMissionId);
-    const bool all = g_declineTally.declinedAll(pending, member, required, count);
+    const uint32_t key = mission_flow_rules::declineKey(readDword(sr2::kStartWaitDialog), pending);
+    const bool all = g_declineTally.declinedAll(key, member, required, count);
     if (activity_state::tracing()) {
         logger::write("trace: start declined by member 0x%X for request %u, %s", static_cast<unsigned>(member), pending,
                       all ? "every remote has declined, the start ends" : "the start goes on");

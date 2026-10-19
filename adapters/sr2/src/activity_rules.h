@@ -37,6 +37,9 @@ public:
         return true;
     }
 
+    // How many members have declined the current request.
+    size_t declinedCount() const { return count_; }
+
 private:
     bool has(uintptr_t member) const {
         for (size_t i = 0; i < count_; ++i) {

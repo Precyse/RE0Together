@@ -582,6 +582,28 @@ constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall
 constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
 constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
 
+// Mission flow (milestone 16 W2): the start request and its prompts, the replay prompt, the mission bonus counters.
+constexpr uintptr_t kStartRequest = 0x6A8680;          // ecx = &mission id; cdecl(flag byte), the caller pops: asks for (flag 0) or starts (flag 1) the mission
+constexpr uintptr_t kStartReply = 0x6A83C0;            // cdecl(reason), the caller pops: mssn_req with the no-mission id; 0 = decline or cancel, 1 = busy, 2 = low respect
+constexpr uintptr_t kMissionOwnerHuman = 0x6A80C0;     // eax out: the human the owner handle names, 0 when it is stale
+constexpr uintptr_t kMissionPartnerHuman = 0x6A8100;   // eax out: the human the partner handle names, 0 when it is stale
+constexpr uintptr_t kBonusAward = 0x6A9640;            // edx = human; cdecl(position, text, flag): the mission bonus line, act 7 to the guests
+constexpr uintptr_t kStartPromptDialog = 0x2527C94;    // dword: the accept prompt of this machine, 0 when closed
+constexpr uintptr_t kStartWaitDialog = 0x2527C9C;      // dword: the host's wait dialog of its own ask, 0 when closed
+constexpr uintptr_t kStartPromptDeferred = 0x2527C87;  // byte: the accept prompt waits to be opened later
+constexpr uintptr_t kNoMissionId = 0x33D630C;          // dword: the id that means no mission
+constexpr uintptr_t kAcceptResume = 0x6A8B60;          // the host's accept path, past the pending id test
+constexpr uintptr_t kAcceptSkip = 0x6A8C98;            // the end of the start request handler
+constexpr uintptr_t kHumanNameOffset = 0x12E0;         // wide name of a player human, written with a 0x40 character cap
+constexpr size_t kNameChars = 0x40;
+constexpr uintptr_t kReplayAsker = 0x25274A4;          // byte: this machine asked for the replay
+constexpr uintptr_t kReplayDialog = 0x25274A8;         // dword: the replay wait dialog or prompt, 0 when none
+constexpr uint8_t kReplayAnswerAccept = 3;
+constexpr uintptr_t kActHeaderWide = 0xE8BC2C;         // byte: the act header is 4 bytes
+constexpr uintptr_t kStartHeaderWide = 0xE8BADC;       // byte: the mssn_req header is 4 bytes
+constexpr uintptr_t kReplayHeaderWide = 0xE8BC44;      // byte: the misc header is 4 bytes
+constexpr uint8_t kActBonusSub = 7;
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
