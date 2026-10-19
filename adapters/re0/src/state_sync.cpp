@@ -21,6 +21,7 @@
 #include "event_sync.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
+#include "frame_router.h"
 #include "game.h"
 #include "game_state.h"
 #include "inventory_sync.h"
@@ -34,8 +35,6 @@
 #include "party_mode.h"
 #include "phase_watch.h"
 #include "player_damage.h"
-#include "pose_wire.h"
-#include "puppet.h"
 #include "resync.h"
 #include "session_slot.h"
 #include "scene.h"
@@ -149,10 +148,6 @@ void onFrame(const GameFrame& frame) {
         appearance::onFrame(frame);
         return;
     }
-    if (frame.type == pose_wire::kMsgPoseState || frame.type == pose_wire::kMsgMotionEvent) {
-        puppet::onFrame(frame);
-        return;
-    }
     if (frame.type == player_damage::kMsgPlayerDied) {
         player_damage::onFrame(frame);
         return;
@@ -205,6 +200,7 @@ void onFrame(const GameFrame& frame) {
         floor_items_sync::onFrame(frame);
         return;
     }
+    if (frame_router::dispatch(frame, g_lastSession.hostSlot)) return;
     if (frame.type == state_sync::kMsgPlayerState) debug_stats::count(debug_stats::Counter::PlayerStateReceived);
     logRemoteState(frame);
     state_correction::onFrame(frame);

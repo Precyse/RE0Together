@@ -79,6 +79,9 @@ add_library(re0_adapter SHARED
     src/pose_game.cpp
     src/pose_capture.cpp
     src/puppet.cpp
+    src/state_mode.cpp
+    src/state_net.cpp
+    src/frame_router.cpp
     src/save_redirect.cpp
     src/remote_storage_proxy.cpp
     src/damage_thunk.cpp
@@ -158,8 +161,14 @@ add_executable(pose_timeline_test tests/pose_timeline_test.cpp)
 
 add_executable(puppet_rule_test tests/puppet_rule_test.cpp)
 
+add_executable(state_net_rule_test tests/state_net_rule_test.cpp)
+
+add_executable(frame_router_rule_test tests/frame_router_rule_test.cpp)
+
+add_executable(load_serial_test tests/load_serial_test.cpp)
+
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

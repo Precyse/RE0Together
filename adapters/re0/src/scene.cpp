@@ -2,11 +2,17 @@
 
 #include <windows.h>
 
+#include <atomic>
+
 #include "game.h"
+#include "load_serial.h"
 #include "log.h"
 #include "spot_rule.h"
 
 namespace {
+
+load_serial::Tracker g_loadTracker;  // game thread only
+std::atomic<uint16_t> g_loadSerial{load_serial::kFirstSerial};
 
 uintptr_t sceneInfo() { return game::readPointer(game::kSceneInfoGlobal); }
 
@@ -81,6 +87,15 @@ namespace scene {
 uint16_t of(uintptr_t player) { return idOf(recordOf(player)); }
 
 uint16_t current() { return idOf(currentRecord()); }
+
+uint16_t loadSerial() { return g_loadSerial.load(std::memory_order_relaxed); }
+
+void observeLoad() {
+    const uintptr_t record = currentRecord();
+    if (!g_loadTracker.observe(record, idOf(record))) return;
+    g_loadSerial = g_loadTracker.value();
+    logger::write("scene: load serial %u (scene 0x%02x)", g_loadTracker.value(), idOf(record));
+}
 
 bool move(uintptr_t player, uint16_t sceneId, uint32_t entry) {
     if (!moveGuarded(player, sceneId, entry)) {

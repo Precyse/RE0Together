@@ -13,6 +13,13 @@ uint16_t of(uintptr_t player);
 // Scene id of the loaded room, or kNone.
 uint16_t current();
 
+// The load serial (load_serial.h): +1 whenever the loaded room record or its scene id changes, never 0. Any thread.
+// Advances only while observeLoad runs (state mode registers it as a game tick callback).
+uint16_t loadSerial();
+
+// Game thread, once per game tick: feeds the loaded record to the load serial and logs a change.
+void observeLoad();
+
 // Moves `player` into room `sceneId` at door entry `entry` the way the engine's door carry does, but alone: the
 // room's record is found (or loaded dormant), the player is put on the entry spot and assigned to it, and its old
 // record is released when nobody is left in it. Into the loaded room the player appears at the door; out of it, it

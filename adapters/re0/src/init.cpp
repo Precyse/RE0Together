@@ -48,6 +48,7 @@
 #include "session_slot.h"
 #include "split_rooms.h"
 #include "state_correction.h"
+#include "state_mode.h"
 #include "state_sync.h"
 #include "vtable_tracer.h"
 
@@ -67,13 +68,9 @@ bool waitForDecryption() {
     return false;
 }
 
-// partner_mode=state: the owner's pose and motion requests go out, the remote-owned character becomes a puppet.
-void enableStateMode() {
-    if (!pose_capture::enable(g_net) || !puppet::enable()) logger::write("adapter: state mode unavailable");
-}
-
 // Registration order is execution order within a frame: ownership first, then the think swap, then the remote pad advance.
 void enableCoop(const Config& config) {
+    state_mode::configure(config.partnerMode);
     if (!input_record::captureOriginals()) logger::write("adapter: cannot read the pad vtable, input sync disabled");
     character_owner::enable(g_net, config.hostCharacter);
     if (!appearance::enable(g_net, config)) logger::write("adapter: outfit sync unavailable");
@@ -98,7 +95,7 @@ void enableCoop(const Config& config) {
     camera_parity::enable();
     partner_think::enable();
     game_tick::addCallback("net_pad", net_pad::advance);
-    input_record::enable(g_net);
+    if (!state_mode::on()) input_record::enable(g_net);
     state_correction::enable();
     enemy_damage_hook::install();
     enemy_target::install();
@@ -106,7 +103,7 @@ void enableCoop(const Config& config) {
     enemy_spawn::install();
     player_damage::install(g_net);
     menu_mirror::enable();
-    if (config.partnerMode == PartnerMode::State) enableStateMode();
+    if (state_mode::on()) state_mode::enableAll(g_net);
 }
 
 // The host's new save goes to the guests (its launcher re-sends the profile's save files), so a continue after a

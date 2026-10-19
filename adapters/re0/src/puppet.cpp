@@ -7,6 +7,7 @@
 
 #include "character_owner.h"
 #include "debug_stats.h"
+#include "frame_router.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
@@ -185,6 +186,10 @@ uint32_t __fastcall damageEntryDetour(void* self, void* edx, uint32_t a, uint32_
 namespace puppet {
 
 bool enable() {
+    if (!frame_router::add(pose_wire::kMsgPoseState, frame_router::SenderPolicy::Any, onFrame) ||
+        !frame_router::add(pose_wire::kMsgMotionEvent, frame_router::SenderPolicy::Any, onFrame)) {
+        return false;
+    }
     if (!hooks::install("player damage entry", game::kPlayerDamageEntryFunction, reinterpret_cast<void*>(&damageEntryDetour),
                         reinterpret_cast<void**>(&g_originalDamageEntry))) {
         return false;

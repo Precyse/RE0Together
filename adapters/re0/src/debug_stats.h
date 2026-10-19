@@ -63,6 +63,8 @@ enum class Counter : size_t {
     MotionEventsReceived,
     PuppetSeeks,
     PuppetMotionMisses,
+    StateSendRefused,
+    RouterDropped,
     Count
 };
 

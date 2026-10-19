@@ -8,8 +8,9 @@
 // owner's pose, delayed by `pose_timeline::kRenderDelayMs`, is written and the owner's motion requests are replayed.
 namespace puppet {
 
-// Hooks the player damage entry (refused for a puppet) and registers the move scope. Needs the cAnimControl::set hook
-// (pose_capture::enable). Safe to call after the game tick hook is live.
+// Registers POSE_STATE and MOTION_EVENT with the frame router (policy Any), hooks the player damage entry (refused for
+// a puppet) and registers the move scope. Needs the cAnimControl::set hook (pose_capture::enable). Safe to call after
+// the game tick hook is live.
 bool enable();
 
 void uninstall();

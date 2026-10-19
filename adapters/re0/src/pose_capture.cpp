@@ -7,12 +7,13 @@
 #include "pose_game.h"
 #include "pose_wire.h"
 #include "scene.h"
+#include "state_net.h"
 
 namespace {
 
 constexpr uint32_t kSampleEveryFrames = 2;  // the game moves a character 60 times a second: 30 Hz
 
-NetClient* g_net = nullptr;
+bool g_installed = false;
 uint32_t g_frame = 0;
 uint32_t g_poseSeq = 0;
 uint32_t g_eventSeq = 0;
@@ -33,7 +34,7 @@ void onMotionRequest(uintptr_t animControl, const pose_game::MotionRequest& requ
                                        ++g_eventSeq,
                                        static_cast<uint16_t>(request.motionNo),
                                        static_cast<uint16_t>(request.layer)};
-    if (g_net->send(pose_wire::kMsgMotionEvent, true, proto::kSlotAll, proto::bytesOf(event))) {
+    if (state_net::send(pose_wire::kMsgMotionEvent, true, proto::bytesOf(event))) {
         debug_stats::count(debug_stats::Counter::MotionEventsSent);
     }
 }
@@ -46,22 +47,22 @@ void afterMove(uintptr_t player) {
     pose.seq = ++g_poseSeq;
     pose.room = scene::current();
     const pose_wire::PoseState wire = pose_wire::encode(pose);
-    g_net->send(pose_wire::kMsgPoseState, false, proto::kSlotAll, proto::bytesOf(wire));
+    state_net::send(pose_wire::kMsgPoseState, false, proto::bytesOf(wire));
 }
 
 }  // namespace
 
 namespace pose_capture {
 
-bool enable(NetClient& net) {
-    g_net = &net;
-    if (!pose_game::installAnimHook(onMotionRequest)) return false;
+bool enable() {
+    g_installed = pose_game::installAnimHook(onMotionRequest);
+    if (!g_installed) return false;
     game_tick::addPostMove("pose_capture", afterMove);
     return true;
 }
 
 void uninstall() {
-    if (g_net) pose_game::uninstallAnimHook();
+    if (g_installed) pose_game::uninstallAnimHook();
 }
 
 }  // namespace pose_capture
