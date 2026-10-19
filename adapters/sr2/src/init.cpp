@@ -37,6 +37,7 @@
 #include "vehicle_pool_rules.h"
 #include "vehicle_seating.h"
 #include "version_gate.h"
+#include "world_walks.h"
 
 DWORD WINAPI initThread(LPVOID) {
     try {
@@ -109,6 +110,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);
+        if (crowd) world_walks::install(config.trace, activities);
 
         if (config.trace) {
             join_trace::install(config.maxPlayers);

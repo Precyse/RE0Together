@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <optional>
-#include <set>
 
 #include "guest_call.h"
 #include "hud_rules.h"
@@ -234,28 +233,6 @@ void __declspec(naked) nearestRemoteToStackPoint18Stub() {
     }
 }
 
-// HT1: the getter's own answer, and with 2 or more remotes and no message handler running the text that asked, once per caller.
-uintptr_t __cdecl clientNameOutsideHandler(uintptr_t caller) {
-    static std::set<uintptr_t> callers;
-    const uintptr_t named = partner_scope::partnerHuman();
-    if (!partner_scope::overrideActive() && remote_players::remoteHumanCount() >= 2 && callers.insert(caller).second) {
-        const RemoteList list = remoteList();
-        logger::write("trace: hud: CLIENT_NAME outside a message handler names 0x%X (slot %u), caller 0x%08X", static_cast<unsigned>(named),
-                      static_cast<unsigned>(slotOf(list, named)), static_cast<unsigned>(caller));
-    }
-    return named;
-}
-
-// 0x7EDB60 pushed esi before the call, so its own caller is at [esp+8] in the thunk.
-void __declspec(naked) traceClientNameStub() {
-    __asm {
-        push dword ptr [esp + 8]
-        call clientNameOutsideHandler
-        add esp, 4
-        ret
-    }
-}
-
 }  // namespace
 
 namespace hud_remotes {
@@ -271,7 +248,6 @@ partner_thunks::Binding bind(Thunk thunk) {
         case Thunk::PauseMapArrowsNext: return {reinterpret_cast<void*>(&pauseMapNextStub), nullptr};
         case Thunk::RemoteInBackPromptBehaviour: return {reinterpret_cast<void*>(&remoteInBackPromptBehaviour), nullptr};
         case Thunk::NearestRemoteToStackPoint18: return {reinterpret_cast<void*>(&nearestRemoteToStackPoint18Stub), nullptr};
-        case Thunk::TraceClientName: return {reinterpret_cast<void*>(&traceClientNameStub), nullptr};
         default: return {nullptr, nullptr};
     }
 }

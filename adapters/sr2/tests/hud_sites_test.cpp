@@ -1,4 +1,4 @@
-// The milestone 16 wave 2 site tables (no game): the 18 rows and their six sets, ids and addresses, shapes, the callee of each
+// The milestone 16 wave 2 site tables (no game): the 17 rows and their five sets, ids and addresses, shapes, the callee of each
 // call, the resume addresses of the looped blocks, and clearance from every other site and from everything Juiced touches.
 #include <algorithm>
 #include <cstdio>
@@ -29,11 +29,10 @@ constexpr size_t kHookBytes = 5;
 constexpr size_t kDwordBytes = 4;
 constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint8_t kCallOpcode = 0xE8;
-constexpr size_t kRows = 18;
+constexpr size_t kRows = 17;
 constexpr size_t kWrittenRows = 13;
-constexpr size_t kTraceRows = 1;
 constexpr size_t kCheckRows = 4;
-constexpr size_t kSets = 6;
+constexpr size_t kSets = 5;
 
 // The dword operands Juiced's range scans in DFEngine.dll rewrite (the HUD scale floats 0x022DBFAC and 0x022DBFA8) in the minimap
 // block 0x7A37E0..0x7A3D2F, and the sites they must stay clear of.
@@ -88,19 +87,15 @@ void theTables() {
     std::set<uintptr_t> addresses;
     bool unique = true;
     for (const Site& site : all) unique = ids.insert(site.id).second && addresses.insert(site.address).second && unique;
-    check(all.size() == kRows, "18 rows");
+    check(all.size() == kRows, "17 rows");
     check(unique, "ids and addresses are unique");
-    check(std::size(hud_sites::kSets) == kSets, "six sets");
+    check(std::size(hud_sites::kSets) == kSets, "five sets");
     const size_t checkOnly = static_cast<size_t>(std::count_if(all.begin(), all.end(), [](const Site& s) { return s.kind == Kind::Bytes; }));
     check(checkOnly == kCheckRows, "4 rows are check only");
-    check(all.size() - checkOnly - std::size(hud_sites::kClientNameTrace) == kWrittenRows, "13 rows are written always");
-    check(std::size(hud_sites::kClientNameTrace) == kTraceRows, "1 row is written with trace=1 only");
+    check(all.size() - checkOnly == kWrittenRows, "13 rows are written");
     check(setSize("minimap") == 6 && setSize("pause map") == 4 && setSize("back prompt") == 1 && setSize("map distance") == 2 &&
-              setSize("client name trace") == 1 && setSize("waypoint scope") == 4,
-          "the sets hold 6, 4, 1, 2, 1 and 4 rows");
-    bool traceOnly = true;
-    for (const hud_sites::Set& set : hud_sites::kSets) traceOnly = traceOnly && (set.traceOnly == (std::string_view(set.name) == "client name trace"));
-    check(traceOnly, "only the client name trace set waits for trace=1");
+              setSize("waypoint scope") == 4,
+          "the sets hold 6, 4, 1, 2 and 4 rows");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now && site.tail.empty(); }),
           "every row is written when its set is (no probe gate, no tail)");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == Thunk::None); }),
@@ -140,8 +135,8 @@ void theCallees() {
     const auto callee = [&](std::string_view id) { return callTarget(*siteNamed(all, id)); };
     check(callee("HM1") == sr2::kFollowerBlipsDraw, "HM1 calls the follower blips 0x79F890");
     bool getters = true;
-    for (const std::string_view id : {"HM2", "HM4", "HP1", "HP1r", "HQ1", "HQ2", "HQ3", "HT1"}) getters = getters && callee(id) == sr2::kRemotePlayerGetter;
-    check(getters, "HM2, HM4, HP1, HP1r, HQ1, HQ2, HQ3 and HT1 call the getter 0x9D7BD0");
+    for (const std::string_view id : {"HM2", "HM4", "HP1", "HP1r", "HQ1", "HQ2", "HQ3"}) getters = getters && callee(id) == sr2::kRemotePlayerGetter;
+    check(getters, "HM2, HM4, HP1, HP1r, HQ1, HQ2 and HQ3 call the getter 0x9D7BD0");
     check(callee("GP2") == sr2::kSendBroadcast && callee("GP3") == sr2::kSendBroadcast && callee("GP4") == sr2::kSendBroadcast,
           "GP2, GP3 and GP4 call the broadcast 0x814740");
     check(siteNamed(all, "GP1")->address == sr2::kMissionDebugNative, "GP1 hooks mission_debug 0xA398C0");

@@ -10,7 +10,7 @@ namespace hud_remotes {
 // With trace on, the thunks log the remotes of each pass, the back prompt holder and the nearest remote on change.
 void setTrace(bool trace);
 
-// The code behind HM1 to HM3, HP1, HP2, HQ1 to HQ3 and HT1; {nullptr, nullptr} for a thunk of another file.
+// The code behind HM1 to HM3, HP1, HP2 and HQ1 to HQ3; {nullptr, nullptr} for a thunk of another file.
 partner_thunks::Binding bind(partner_sites::Thunk thunk);
 
 }  // namespace hud_remotes
