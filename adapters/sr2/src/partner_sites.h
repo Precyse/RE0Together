@@ -149,6 +149,12 @@ enum class Thunk : uint8_t {
     TraceVehicleApply,
     VehicleHeadroomEcx,
     VehicleHeadroomEax,
+    // Milestone 14 (player_sites.h): the cutscene hide and restore of every remote, the anim set traces.
+    HideRemotesAtCutsceneStart,
+    RestoreRemotesAtCutsceneEnd,
+    TraceStreamingSync,
+    TraceAnimUnload,
+    TraceAnimDelta,
 
 
 

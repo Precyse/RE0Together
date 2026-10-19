@@ -8,6 +8,7 @@
 #include "multiplayer_thunks.h"
 #include "net_clock.h"
 #include "pause_mask.h"
+#include "player_visuals.h"
 #include "population.h"
 #include "sender_scope.h"
 #include "site_installer.h"
@@ -51,6 +52,7 @@ bool install(bool trace, bool leavePathInstalled, bool experimental) {
     net_clock::setTrace(trace);
     pause_mask::setTrace(trace);
     population::setTrace(trace);
+    player_visuals::setTrace(trace);
     vehicle_pool::setTrace(trace);
 
     bool all = true;

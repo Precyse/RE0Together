@@ -201,6 +201,22 @@ partner_rules::Vec3 positionOf(uintptr_t object) {
     return *reinterpret_cast<const partner_rules::Vec3*>(object + sr2::kObjectPositionOffset);
 }
 
+Visuals visualsOf(uintptr_t human) {
+    Visuals visuals{};
+    visuals.hidden = static_cast<uint8_t>(readDword(human + sr2::kHumanVisibilityFlagsOffset) & sr2::kHumanHiddenFlags);
+    visuals.type = readDword(human + sr2::kHumanTypeOffset);
+    const uintptr_t render = readDword(human + sr2::kHumanRenderInstanceOffset);
+    uint16_t word = 0;
+    if (render && readMemory(render + sr2::kRenderHiddenWordOffset, &word, sizeof(word))) visuals.render = word & sr2::kRenderHiddenBit;
+    const uintptr_t charInstance = readDword(human + sr2::kHumanCharInstanceOffset);
+    if (charInstance) {
+        visuals.skin = readDword(charInstance + sr2::kCharInstanceSkinOffset) != 0;
+        const uintptr_t index = readDword(charInstance + sr2::kCharInstanceIndexOffset);
+        visuals.record = readDword(sr2::kCharTables + index * sr2::kCharTableStride + sr2::kCharTableRecordOffset);
+    }
+    return visuals;
+}
+
 int32_t downedTimerOf(uintptr_t human) {
     return static_cast<int32_t>(read32(human + sr2::kHumanDownedTimerOffset));
 }
@@ -241,6 +257,9 @@ uint64_t signatureOf(const Snapshot& snapshot) {
         const uintptr_t human = snapshot.humans[i].human;
         hash = mix(mix(mix(hash, human), snapshot.humans[i].ownerSlot), downedTimerOf(human));
         hash = mix(hash, isJoining(human));
+        const Visuals visuals = visualsOf(human);
+        hash = mix(mix(mix(hash, visuals.hidden), visuals.render), visuals.skin);
+        hash = mix(mix(hash, visuals.type), visuals.record);
     }
     return hash;
 }
@@ -256,11 +275,12 @@ std::vector<std::string> describeRemotes(const Snapshot& snapshot) {
         }
         char memberText[16] = "none";
         if (member) snprintf(memberText, sizeof(memberText), "0x%X", static_cast<unsigned>(member));
-        char line[200];
-        snprintf(line, sizeof(line), "remote human 0x%X owner slot %u member %s flags 0x%02X downed %d%s\n",
+        const Visuals visuals = visualsOf(entry.human);
+        char line[320];
+        snprintf(line, sizeof(line), "remote human 0x%X owner slot %u member %s flags 0x%02X downed %d hidden 0x%02X render 0x%X skin %u type 0x%X record 0x%X%s\n",
                  static_cast<unsigned>(entry.human), entry.ownerSlot, memberText,
-                 read8(entry.human + sr2::kHumanJoinFlagsOffset), downedTimerOf(entry.human),
-                 entry.human == partner.human ? " default partner" : "");
+                 read8(entry.human + sr2::kHumanJoinFlagsOffset), downedTimerOf(entry.human), visuals.hidden, visuals.render,
+                 visuals.skin ? 1u : 0u, visuals.type, visuals.record, entry.human == partner.human ? " default partner" : "");
         lines.push_back(line);
     }
     return lines;

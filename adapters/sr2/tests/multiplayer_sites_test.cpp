@@ -174,6 +174,8 @@ int main() {
     check(phaseSize("population cluster") == 1, "population cluster: 1 site (W2a)");
     check(phaseSize("creation queue") == 4, "creation queue: 4 sites (W8a to W8d)");
     check(phaseSize("upload share") == 1, "upload share: 1 site (W9a)");
+    check(phaseSize("cutscene visuals") == 4, "cutscene visuals: 4 rows (PV1, PV2 and the check of what each resumes at)");
+    check(phaseSize("anim trace") == 3, "anim trace: 3 sites (AN1 to AN3), written with trace=1 only");
     check(phaseSize("mission players") == 3, "mission players: 3 sites (MC3, MC4, MC5), probe gated");
     check(siteNamed(sites, "MC3")->gate == partner_sites::Gate::ProbeT && siteNamed(sites, "MC5")->gate == partner_sites::Gate::ProbeT &&
               siteNamed(sites, "MC4")->gate == partner_sites::Gate::ProbeCp,

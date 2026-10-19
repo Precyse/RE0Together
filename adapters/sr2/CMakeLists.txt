@@ -70,6 +70,8 @@ add_library(sr2_adapter SHARED
     src/traffic_list.cpp
     src/traffic_trace.cpp
     src/vehicle_pool.cpp
+    src/player_visuals.cpp
+    src/anim_trace.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
     src/multiplayer_patches.cpp
@@ -110,7 +112,7 @@ add_custom_command(TARGET sr2_adapter POST_BUILD
 set_source_files_properties(
     src/remote_players.cpp src/partner_scope.cpp src/guest_call.cpp
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
-    src/join_net_trace.cpp src/player_name.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/vehicle_trace.cpp src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/leave_path.cpp
+    src/join_net_trace.cpp src/player_name.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/vehicle_trace.cpp src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp src/leave_path.cpp
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -176,6 +178,8 @@ add_unit_test(population_rules_test)
 add_unit_test(vehicle_trace_rules_test)
 add_unit_test(traffic_trace_rules_test)
 add_unit_test(vehicle_pool_test)
+add_unit_test(player_visuals_rules_test)
+add_unit_test(anim_trace_rules_test)
 add_unit_test(spread_rules_test)
 add_unit_test(frustum_rules_test)
 add_unit_test(handoff_rules_test)
@@ -188,5 +192,5 @@ add_unit_test(creation_queue_rules_test)
 add_unit_test(multiplayer_sites_test)
 add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp src/vehicle_trace.cpp
-    src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp)
+    src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)

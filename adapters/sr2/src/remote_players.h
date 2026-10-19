@@ -72,6 +72,18 @@ uintptr_t localHuman();
 // True for a human in the player list that is not the local player.
 bool isRemotePlayerHuman(uintptr_t human);
 
+// What the trace shows of how a human is drawn (milestone 14 PV-T): its hidden flags (+0x80 & 0x14), whether its render instance is
+// hidden (bit 3 of the word at +0x244), whether its char instance has a skin composite object, its character type and the record
+// the char table holds for its pool index. All zero for a human without the pointers.
+struct Visuals {
+    uint8_t hidden;
+    uint16_t render;
+    bool skin;
+    uint32_t type;
+    uint32_t record;
+};
+Visuals visualsOf(uintptr_t human);
+
 // Fields of a human.
 partner_rules::Vec3 positionOf(uintptr_t object);
 int32_t downedTimerOf(uintptr_t human);

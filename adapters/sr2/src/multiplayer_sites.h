@@ -41,6 +41,8 @@ inline constexpr Phase kPhases[] = {
     {"remote vehicles", world_sites::kRemoteVehicles, false},
     {"creation queue", world_sites::kQueue, false},
     {"upload share", world_sites::kUpload, false},
+    {"cutscene visuals", player_sites::kCutsceneVisuals, false},
+    {"anim trace", player_sites::kAnimTrace, true},
 
 
 

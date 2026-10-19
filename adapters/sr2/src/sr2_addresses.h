@@ -423,6 +423,49 @@ constexpr uintptr_t kAllocatorDynamicOffset = 0x20;  // byte: sized at activatio
 constexpr uintptr_t kAllocatorActiveOffset = 0x21;   // byte: the block exists
 constexpr uintptr_t kAllocatorLockOffset = 0x30;     // the critical section
 
+// Remote player visuals (milestone 14; docs/SR2_NOTES.md, "Remote player visuals (M14)"). A human's visibility flags are a dword
+// at +0x80: bit 0x10 hides it, bit 0x04 marks it not shown. A cutscene hides the remotes (0x926860) and its end restores them
+// (0x6BF9F0); the skin composite pool is an array of objects the char instances take one each from.
+constexpr uintptr_t kHumanVisibilityFlagsOffset = 0x80;
+constexpr uint32_t kHumanHiddenFlags = 0x14;
+constexpr uintptr_t kHideHuman = 0x926860;             // thiscall(human; hidden, arg, force), the caller pops 12
+constexpr uintptr_t kKillHuman = 0x9B04D0;             // cdecl(human, 1)
+constexpr uintptr_t kRestoreHuman = 0x6BF9F0;          // cdecl(human): the post cutscene restore
+constexpr uintptr_t kHumanHealthOffset = 0x1124;       // float
+constexpr uintptr_t kCutsceneStartHideResume = 0x6C0584;
+constexpr uintptr_t kCutsceneEndRestoreResume = 0x6C563C;
+constexpr uintptr_t kHumanRenderInstanceOffset = 0x5E0;
+constexpr uintptr_t kRenderHiddenWordOffset = 0x244;   // word: bit 3 = hidden
+constexpr uint16_t kRenderHiddenBit = 8;
+constexpr uintptr_t kHumanCharInstanceOffset = 0x13B0;
+constexpr uintptr_t kCharInstanceSkinOffset = 8;       // the skin composite object, 0 = none
+constexpr uintptr_t kCharInstanceIndexOffset = 0x10;   // the pool index
+constexpr uintptr_t kHumanTypeOffset = 0xD4;
+constexpr uintptr_t kCharTables = 0x21703D8;           // per pool index {type, record}
+constexpr uintptr_t kCharTableStride = 8;
+constexpr uintptr_t kCharTableRecordOffset = 4;
+constexpr uintptr_t kSkinFreeList = 0x21F297C;
+constexpr uintptr_t kSkinUsedList = 0x21F2980;
+constexpr uintptr_t kSkinLevels = 0x21F2970;           // set by the pool's build 0x9EEFA0
+
+// Anim set traces (milestone 14): the chunk streamed anim sets, their need table and the root motion decode.
+constexpr uintptr_t kStreamingSyncHandler = 0xA83F30;  // cdecl(payload, context); message 0x7E
+constexpr uintptr_t kAnimUnload = 0xA841C0;            // thiscall(ecx = group, [esp+4] = slot)
+constexpr uintptr_t kAnimDelta = 0xCE4870;             // cdecl(anim entry, t0, t1)
+constexpr uintptr_t kAnimNeedTable = 0x2229528;        // 8 rows
+constexpr uintptr_t kAnimNeedRowBytes = 0xD0;
+constexpr size_t kAnimNeedRows = 8;
+constexpr uintptr_t kAnimNeedGroupOffset = 0xCC;       // word
+constexpr uintptr_t kAnimNeedLocalOffset = 0xCE;       // byte
+constexpr uintptr_t kAnimNeedRemoteOffset = 0xCF;      // byte
+constexpr uintptr_t kAnimSlotPools[] = {0x2771AA0, 0x2771AF4, 0x2771B48};  // chunk_anim0 .. chunk_anim2
+constexpr uintptr_t kAnimEntryHashOffset = 4;
+constexpr uintptr_t kAnimEntrySizeOffset = 0x18;
+constexpr uintptr_t kAnimEntryDataOffset = 0x1C;
+constexpr uintptr_t kAnimHeaderFlagsOffset = 5;        // byte: bit 0x40 = the header has an offset to decode
+constexpr uint8_t kAnimHeaderOffsetFlag = 0x40;
+constexpr uintptr_t kAnimHeaderOffsetOffset = 0x2C;    // dword
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

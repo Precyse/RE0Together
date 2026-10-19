@@ -18,6 +18,7 @@
 #include "partner_patches.h"
 #include "player_cap.h"
 #include "player_name.h"
+#include "player_visuals.h"
 #include "replication_switch.h"
 #include "script_override.h"
 #include "sr2_addresses.h"
@@ -45,6 +46,7 @@ DWORD WINAPI initThread(LPVOID) {
         bool supported = gameMatchesBuild();
         if (replicating) supported = replication_switch::sitesMatch() && supported;
         if (!supported) return 0;
+        if (replicating) player_visuals::installSkinPool(config.maxPlayers);
         const bool partnering = replicating && partner_patches::sitesMatch();
         if (replicating && !partnering) logger::write("partner: sites differ, the partner logic is not installed");
         const bool activities = partnering && activity_patches::sitesMatch();
