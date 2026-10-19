@@ -841,5 +841,19 @@ constexpr uintptr_t kMarkerPositionOffset = 0x1C;             // marker: the vec
 constexpr uintptr_t kMarkerOrientationOffset = 0x28;          // marker: the orientation
 constexpr uintptr_t kZombiePartnerStartOffset = 0xE5BF40;     // double: the x offset of the partner's start spot from the local player's
 constexpr uintptr_t kHumanMaxHealthOffset = 0x1120;           // int32; the health at +0x1124 divided by it is the fraction
+// Milestone 17 wave 3: FUZZ (fuzz_sites.h).
+constexpr uintptr_t kFuzzSetMode = 0x968930;              // stdcall(human, const uint8_t* mode): human +0x111C, a remote's owner is sent message 0x6E
+constexpr uintptr_t kGiveWeapon = 0xB71CF0;               // ECX = human; cdecl, 5 arguments (the weapon info first), the caller pops
+constexpr uintptr_t kRemoveWeapon = 0xB723D0;             // ECX = human, EDX = weapon info; cdecl(flag), the caller pops
+constexpr uintptr_t kGivePickupWeapon = 0x53D1F0;         // ECX and AL as the caller sets them; cdecl(human, const weapon info*, flag), the caller pops
+constexpr uintptr_t kHumanFighting = 0x960C30;            // ESI = human; AL = the human is fighting
+constexpr uintptr_t kFuzzCrimeDistrictKeyOffset = 0x1C0;  // crime: the key of the district the crime area is in
+constexpr uintptr_t kFuzzRioterHeightWindow = 0xDD522C;   // float: how far above or below a rioter a player counts as near
+constexpr uint32_t kFuzzRioterPartnerSlot = 0x14;         // [esp + 0x14] at the rioter block: the human the partner getter returned
+constexpr uint32_t kFuzzRioterRadiusSlot = 0x20;          // [esp + 0x20] at the rioter block: the squared radius, a double
+constexpr uintptr_t kObjectPositionYOffset = 0x18;        // the height inside an object's position
+constexpr uintptr_t kFuzzRioterJoins = 0x5CE6FC;          // where a rioter that is near a player goes on
+constexpr uintptr_t kFuzzRioterSkips = 0x5CE7BF;          // where the rioter loop goes on with the next human
+constexpr uint32_t kFuzzSpawnPointSlot = 0x8;             // [esp + 8] at the spawn point's partner getter call: the point's vec3
 
 }  // namespace sr2

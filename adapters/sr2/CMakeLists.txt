@@ -61,6 +61,8 @@ add_library(sr2_adapter SHARED
     src/diversion_snatch.cpp
     src/diversion_streak.cpp
     src/diversion_patches.cpp
+    src/fuzz_thunks.cpp
+    src/fuzz_patches.cpp
     src/script_override.cpp
     src/content_hash.cpp
     src/browser_tag.cpp
@@ -160,6 +162,8 @@ set_source_files_properties(
     src/activity_participants.cpp src/diversion_select.cpp src/diversion_each.cpp src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
+# The FUZZ thunks of milestone 17 wave 3 run inside x87 game code (the rioter test compares floats of the game).
+set_source_files_properties(src/fuzz_thunks.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 # The follower and NPC AI thunks of milestone 16 wave 2 run inside x87 game code; squared_distance.cpp hands back a float in ST0.
 set_source_files_properties(src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/net_handlers.cpp src/net_handlers_confess.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -208,6 +212,8 @@ add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)
 add_unit_test(diversion_rules_test)
 add_unit_test(diversion_sites_test)
+add_unit_test(fuzz_rules_test)
+add_unit_test(fuzz_sites_test)
 add_unit_test(script_override_rules_test)
 add_unit_test(join_file_test src/join_file.cpp)
 add_unit_test(player_name_rules_test)
@@ -296,3 +302,10 @@ add_unit_test(world_walks_bindings_test src/world_walks.cpp src/world_walks_thun
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp
     src/activity_state.cpp src/activity_participants.cpp ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(world_walks_bindings_test PRIVATE minhook)
+add_unit_test(fuzz_bindings_test src/fuzz_thunks.cpp src/fuzz_patches.cpp src/site_installer.cpp src/diversion_select.cpp src/diversion_each.cpp
+    src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp
+    src/squared_distance.cpp src/partner_identity.cpp src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp
+    src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp
+    src/script_override.cpp src/revive_state.cpp src/sender_scope.cpp src/activity_state.cpp src/activity_participants.cpp ${SHARED_DIR}/paths.cpp
+    ${SHARED_DIR}/hooks.cpp)
+target_link_libraries(fuzz_bindings_test PRIVATE minhook)

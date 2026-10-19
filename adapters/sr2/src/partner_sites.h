@@ -331,6 +331,19 @@ enum class Thunk : uint16_t {
     ZombieSpawnPlayers,
     ZombieSpawnPlayerAtEax,
     ZombieSpawnPlayerAtEcx,
+    // Milestone 17 wave 3 (fuzz_sites.h): FUZZ for 3 or 4 players.
+    EachRemoteFuzzMode,
+    EachRemoteGiveWeapon,
+    EachRemoteRemoveWeapon,
+    EachRemoteGivePickup,
+    RemoteInCrimeDistrictEbx,
+    AnyRemoteFighting,
+    RandomRemoteHuman,
+    AnyRemoteInVehicleEcx,
+    NearestRemoteToStack8,
+    FuzzRiotNearAnyRemote,
+    FuzzPointNearAnyRemote,
+    FuzzRioterNearAnyRemote,
 };
 
 struct Site {
