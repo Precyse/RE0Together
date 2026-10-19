@@ -163,7 +163,6 @@ enum class Thunk : uint16_t {
     PauseMapArrowsNext,
     RemoteInBackPromptBehaviour,
     NearestRemoteToStackPoint18,
-    TraceClientName,
     WaypointScopeControl,
     SendWaypointToScope,
     // Milestone 16 wave 2 (net_handlers_sites.h): the busted wait, the race hold, the replay answers, the confessional, the session lost name.
@@ -316,6 +315,15 @@ enum class Thunk : uint16_t {
     SnatchWaypointPerRemote,
     MayhemDistrictAllPlayers,
     TraffickingExtraSeats,
+    // Milestone 17 wave 3 (world_walks_sites.h): remote poses, world and HUD walks, activity warp gate, garage door, client name.
+    AmbulancePoseOfEdi,
+    RecordAmbulancePose,
+    AnyRemoteSeesSpawnPoint,
+    FollowerBarsEachRemote,
+    FreeRemoteForActivityWarp,
+    RemoteInGarageBoxes,
+    RememberCompletionSender,
+    ClientNameHuman,
 };
 
 struct Site {

@@ -5,7 +5,7 @@
 // one set, byte-checked and written all or nothing, and only with the milestone 4 partner logic.
 namespace hud_patches {
 
-// Writes the sets (the client name trace only with `trace`); a set whose bytes differ is left out. Each result is logged.
+// Writes the sets; a set whose bytes differ is left out. Each result is logged. `trace` turns on the thunks' trace lines.
 void install(bool trace);
 
 }  // namespace hud_patches

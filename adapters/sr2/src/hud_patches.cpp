@@ -37,7 +37,6 @@ void install(bool trace) {
     hud_remotes::setTrace(trace);
     waypoint_scope::setTrace(trace);
     for (const hud_sites::Set& set : hud_sites::kSets) {
-        if (set.traceOnly && !trace) continue;
         installSet(set);
     }
 }

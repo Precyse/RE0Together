@@ -93,6 +93,8 @@ add_library(sr2_adapter SHARED
     src/leave_path.cpp
     src/multiplayer_patches.cpp
     src/session_kick.cpp
+    src/world_walks.cpp
+    src/world_walks_thunks.cpp
     src/hud_remotes.cpp
     src/waypoint_scope.cpp
     src/hud_patches.cpp
@@ -160,6 +162,7 @@ set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:
 # The follower and NPC AI thunks of milestone 16 wave 2 run inside x87 game code; squared_distance.cpp hands back a float in ST0.
 set_source_files_properties(src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/net_handlers.cpp src/net_handlers_confess.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
+set_source_files_properties(src/world_walks_thunks.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
@@ -250,6 +253,8 @@ add_unit_test(hud_sites_test)
 add_unit_test(revive_rules_test)
 add_unit_test(notoriety_rules_test)
 add_unit_test(revive_sites_test)
+add_unit_test(world_walks_rules_test)
+add_unit_test(world_walks_sites_test)
 add_unit_test(party_ai_rules_test)
 add_unit_test(party_ai_sites_test src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp src/partner_identity.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp
@@ -282,3 +287,7 @@ target_link_libraries(hud_bindings_test PRIVATE minhook)
 add_unit_test(vehicle_seating_bindings_test src/vehicle_seating.cpp src/site_installer.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/activity_state.cpp src/activity_participants.cpp ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(vehicle_seating_bindings_test PRIVATE minhook)
+add_unit_test(world_walks_bindings_test src/world_walks.cpp src/world_walks_thunks.cpp src/site_installer.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp
+    src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp
+    src/activity_state.cpp src/activity_participants.cpp ${SHARED_DIR}/hooks.cpp)
+target_link_libraries(world_walks_bindings_test PRIVATE minhook)

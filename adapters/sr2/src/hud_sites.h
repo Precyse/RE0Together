@@ -45,11 +45,6 @@ inline constexpr Site kMapDistance[] = {
     {"HQ3", Kind::RetargetCall, Gate::Now, 0x7922D3, "E8 F8 58 24 00", Thunk::NearestRemoteToStackPoint18, ""},
 };
 
-// HT1 (trace=1 only): the getter call of the CLIENT_NAME text tag (0x7EDB60) logs its caller when no message handler is running.
-inline constexpr Site kClientNameTrace[] = {
-    {"HT1", Kind::RetargetCall, Gate::Now, 0x7EDBA9, "E8 22 A0 1E 00", Thunk::TraceClientName, ""},
-};
-
 // GP1 hooks mission_debug, which a script calls with a control text to name the player the next waypoints are sent to; GP2 to GP4
 // are the three broadcasts of the waypoint senders (on an object, at a position, remove).
 inline constexpr Site kWaypointScope[] = {
@@ -62,16 +57,14 @@ inline constexpr Site kWaypointScope[] = {
 struct Set {
     const char* name;
     std::span<const Site> sites;
-    bool traceOnly;  // written only with trace=1
 };
 
 inline constexpr Set kSets[] = {
-    {"minimap", kMinimap, false},
-    {"pause map", kPauseMap, false},
-    {"back prompt", kBackPrompt, false},
-    {"map distance", kMapDistance, false},
-    {"client name trace", kClientNameTrace, true},
-    {"waypoint scope", kWaypointScope, false},
+    {"minimap", kMinimap},
+    {"pause map", kPauseMap},
+    {"back prompt", kBackPrompt},
+    {"map distance", kMapDistance},
+    {"waypoint scope", kWaypointScope},
 };
 
 }  // namespace hud_sites

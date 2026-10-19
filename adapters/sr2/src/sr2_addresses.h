@@ -815,4 +815,22 @@ constexpr uintptr_t kGarageHideResume = 0xA6D03C;       // after the partner re-
 constexpr uintptr_t kLevelChoiceSendReturn = 0x75B676;   // return address of the guest's choice broadcast (0x75B671)
 constexpr uintptr_t kLevelCancelSendReturn = 0x75B749;   // return address of the guest's cancel broadcast (0x75B744)
 
+// Remote poses, world and HUD walks, garage door, client name (milestone 17 wave 3).
+constexpr uintptr_t kAmbulanceRemotePose = 0xE97C8C;    // dword: the CPR anim of "the remote", kNoAnimState for none
+constexpr uintptr_t kAmbulancePoseActive = 0x5F7DF0;    // AL out: a CPR pose is set and the partner has no scripted action
+constexpr uintptr_t kHumanCurrentAction = 0x96F3F0;     // ESI = human, EAX out: the scripted action in progress, kNoAnimState for none
+constexpr uint32_t kNoAnimState = 0xFFFFFFFF;
+constexpr uintptr_t kSpawnSeenByHuman = 0x936080;       // ESI = point, EDI = human, cdecl(flag), AL out: seen by or near that human
+constexpr uintptr_t kCurrentGarage = 0x2799304;         // pointer to the crib garage the door logic works on, 0 for none
+constexpr uintptr_t kGarageBoxOffsets[] = {0x10, 0x08, 0x0C};  // the three boxes a garage holds (pointers at garage + offset)
+constexpr uintptr_t kPointInGarageBox = 0x552F80;       // EAX = box, cdecl(point), AL out; false for a null box
+constexpr uintptr_t kFollowerBarsPartnerLocal = 0x18;   // 0x797CD0's local: the partner of the follower bars
+constexpr uintptr_t kFollowerBarsFirstLocal = 0x24;     // 0x797CD0's locals: the three bar humans, one dword each
+constexpr size_t kFollowerBarCount = 3;
+constexpr uintptr_t kFollowerBarsResume = 0x797DF4;     // after the walk that fills the bars
+constexpr uintptr_t kActHandlerTable = 0xE8AA28;        // act message handlers, one pointer per sub
+constexpr uint32_t kActAmbulancePoseSub = 0x4B;         // the CPR pose of the Ambulance diversion
+constexpr uintptr_t kMiscHandlerTable = 0xE8AB98;       // misc message handlers, one pointer per sub
+constexpr uint32_t kMiscCompletionSub = 7;              // a client's activity completion masks
+
 }  // namespace sr2
