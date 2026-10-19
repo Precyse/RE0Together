@@ -33,6 +33,7 @@
 #include "tunnel.h"
 #include "vehicle_pool.h"
 #include "vehicle_pool_rules.h"
+#include "vehicle_seating.h"
 #include "version_gate.h"
 
 DWORD WINAPI initThread(LPVOID) {
@@ -98,6 +99,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (crowd) revive_patches::install(config.trace);
         if (partnering) party_ai_patches::install(config.trace);
         if (crowd) store_sync::install(config.trace);
+        if (crowd) vehicle_seating::install(config.partnerExperimental, config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);

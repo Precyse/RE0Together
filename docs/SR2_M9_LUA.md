@@ -18,6 +18,7 @@ The story mission scripts name exactly one partner (`REMOTE_PLAYER` = `"#PLAYER2
 | `coop_missions.lua` | `coop_player_table(local_value, remote_value)` (a name-keyed table with an entry, and a default on first read, for every remote), `coop_all_players_in`, `coop_any_remote(fn, args)` and the like (the call as written, `REMOTE_PLAYER` replaced by each remote), `coop_each_remote`, `coop_nearest_remote`, `coop_farthest_remote_dist`, `coop_expand_remote`, `coop_stop_remote_vehicles` |
 | `coop_outfit_sync.lua` | `coop_sync_for(sync_table, player)`: a per-player sync mask (`PLAYER_SYNC[x]`) with the number of that player above its two bits (`mask = base + 16 * n`) while there is more than one remote player; the adapter's outfit sync sites read it (docs/SR2_NOTES.md, "Outfits, items and weapon slots (M16 W1)") |
 | `coop_wrappers.lua` | `coop_wrap(name, rule)`: the global is replaced by a wrapper; with `REMOTE_PLAYER` among the arguments and more than one remote it applies the rule, else it makes the original call |
+| `coop_seats.lua` | the seat allocator: `COOP_RULE.seats` and `seat_lock`, `coop_seat_claim`, `coop_seat_in_vehicle` (milestone 16 W2, docs/SR2_NOTES.md "Vehicle seating") |
 | `coop_rules.lua` | which function follows which rule |
 
 Rules: `fanout` (once per remote; also `thread_new` and the ten `on_*` registrations), `seats` (the k-th remote takes seat + k; seat -1 stays), `group` (REMOTE_PLAYER in a character list becomes every remote), `target` (the remote nearest to the first argument), `all`, `any`, `nearest`. `keep` functions (`party_add`, `cutscene_play`, `get_char_vehicle_*`, `mission_debug`) are not wrapped. The `get_dist_*` helpers of ug_lib are wrapped around the raw `get_dist` so one call is not widened twice. The wrappers keep the originals in `COOP_NATIVE`; loops that must act on one remote call those (`coop_native(fn)`).
@@ -59,7 +60,7 @@ Kept on purpose: navpoint-name constants (`..._REMOTE_PLAYER`), one nav or HUD v
 
 ## Open review items
 
-- Seats: P3/P4 take the seats after P2's. Where the script seats an NPC right after (bh01 speedboat seat 3, bh06 truck seat 1, rn04 van, rn07 helicopter, ss07) or the vehicle is small (rn03 and rn09 motorcycles, rn05 two-seat cart, which cannot carry P3), they may collide or fail. No seat-free test exists, so nothing falls back.
+- Seats: handled by the seat allocator (`coop_seats.lua`, milestone 16 W2); its live gates are open, see docs/SR2_NOTES.md "Vehicle seating".
 - The first remote is `"#PLAYER2#"`, the name of `REMOTE_PLAYER`. A mission helper that is called with that name and queries a wrapped function inside (`get_dist`, `character_is_in_vehicle`) gets the all/nearest answer over every remote for P2. Loops written in the patches use `COOP_NATIVE`, but the game's own per-player helpers do not.
 - Index-based state is not name-keyed: ss06 (`*_INDEX`), tss01 `REMOTE_PLAYER_ON_2ND_ROOFTOP`, tss04 (two towed vehicles, jump counters) and the HUD bar / timer slots give P3 and P4 the remote side's slot.
 - Two-player waits that the patches left on `nearest`: ss04 and ss07 teleport waits (offsets from a future position spread would hang `farthest`), bh01 win distance.

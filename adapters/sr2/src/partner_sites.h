@@ -248,6 +248,11 @@ enum class Thunk : uint8_t {
     ActivityOwnerIfRemote,
     SendToActivityOwner,
     SendAnswerToHost,
+    // Milestone 16 wave 2 (vehicle_seating_sites.h): vehicle seating for 3 or 4 players.
+    TraffickingRemoteSeat,
+    CheckpointVehicleHolder,
+    MissionExitStopRemotes,
+    MissionExitReleaseRemotes,
 };
 
 struct Site {

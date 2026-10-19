@@ -2,7 +2,8 @@
 -- A wrapper replaces the global function. It looks for REMOTE_PLAYER among the arguments and, when there is more than one
 -- remote player, applies the function's rule; with one remote player (or none) it makes the original call unchanged.
 --   fanout   the call is made once per remote player
---   seats    as fanout, the k-th remote player takes the seat k places after the given one
+--   seats    each remote player gets a seat of its own (coop_seats.lua)
+--   seat_lock as fanout, except to a remote player that is on foot for lack of a seat (coop_seats.lua)
 --   group    REMOTE_PLAYER in a list of characters is replaced by every remote player
 --   target   the call is made for the remote player nearest to the first argument
 --   all      true when the call is true for every remote player
@@ -12,8 +13,8 @@
 COOP_NATIVE = {}
 COOP_ORIGINAL = {}
 COOP_RULE = {}
-COOP_SEAT_ARG = { vehicle_enter_teleport = 3, player_force_vehicle_seat = 2 }
-COOP_MAX_SEAT = 7
+-- Called with the arguments of a seat call that does not name REMOTE_PLAYER (coop_seats.lua fills it).
+COOP_SEAT_CLAIM = {}
 
 -- The function the game registered for a wrapper made by coop_wrap (any other function as it is).
 function coop_native(fn)
@@ -98,22 +99,6 @@ function COOP_RULE.target(native, args, at, remotes)
 	return native(unpack(copy, 1, copy.n))
 end
 
--- A seat number below 0 means no seat (the player is released), it is not moved on.
-function COOP_RULE.seats(native, args, at, remotes, name)
-	local seat_at = COOP_SEAT_ARG[name]
-	local first = nil
-	for k, p in ipairs(remotes) do
-		local copy = coop_args_for(args, at, p)
-		local seat = args[seat_at]
-		if type(seat) == "number" and seat >= 0 then
-			copy[seat_at] = seat + k - 1
-		end
-		local results = { native(unpack(copy, 1, copy.n)) }
-		first = first or results
-	end
-	return unpack(first)
-end
-
 function COOP_RULE.group(native, args, at, remotes)
 	local copy = { n = 0 }
 	for i = 1, args.n do
@@ -144,6 +129,9 @@ function coop_wrap(name, rule, native)
 	local wrapper = function(...)
 		local at = coop_remote_arg_index(arg)
 		if at == nil then
+			if COOP_SEAT_CLAIM[name] ~= nil then
+				COOP_SEAT_CLAIM[name](name, arg)
+			end
 			return native(unpack(arg, 1, arg.n))
 		end
 		local remotes = coop_remote_players()

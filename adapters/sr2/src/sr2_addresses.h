@@ -687,6 +687,17 @@ constexpr uintptr_t kActHeaderWide = 0xE8BC2C;         // byte: the act header i
 constexpr uintptr_t kStartHeaderWide = 0xE8BADC;       // byte: the mssn_req header is 4 bytes
 constexpr uintptr_t kReplayHeaderWide = 0xE8BC44;      // byte: the misc header is 4 bytes
 constexpr uint8_t kActBonusSub = 7;
+// Vehicle seating (milestone 16 wave 2; docs/SR2_NOTES.md "Vehicle seating")
+constexpr uintptr_t kVehicleSeatsOffset = 0x8ABC;          // seat array of a vehicle, the occupant's handle at +0 of each seat
+constexpr uintptr_t kVehicleSeatStride = 0x24;
+constexpr uintptr_t kVehicleSeatsDeclaredOffset = 0x84D8;  // byte: 1 = the vehicle declares its seat count
+constexpr uintptr_t kVehicleSeatCountOffset = 0x6CE8;      // dword: the seat count when the byte above is 1
+constexpr uintptr_t kVehicleComponentOffset = 0x84EC;      // pointer to the component whose vtable +0x20 the mission exit calls (stdcall(0))
+constexpr uintptr_t kComponentStopSlot = 0x20;             // vtable offset of that call
+constexpr uintptr_t kVehicleOfHandleChecked = 0xAE28F0;    // ECX = handle: the vehicle or 0
+constexpr uintptr_t kHumanInVehicle = 0x9B8C50;            // ESI = human, EDI = vehicle: AL = 1 when settled in it
+constexpr uintptr_t kReleaseHeld = 0x69DDA0;               // EDX = human: releases the human it holds (+0xEA8)
+constexpr uintptr_t kMissionExitPartnerDone = 0x6A4E85;    // the mission exit after the default partner's stop (SE3 resumes here)
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;

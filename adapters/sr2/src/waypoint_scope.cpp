@@ -10,24 +10,25 @@
 #include "remote_players.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "vehicle_seating_rules.h"
 #include "waypoint_scope_rules.h"
 
 namespace {
 
 using partner_sites::Thunk;
-using waypoint_scope_rules::kMaxControlBytes;
 using waypoint_scope_rules::kMaxNameBytes;
 
 constexpr size_t kLuaStateArg = 0;
 constexpr size_t kBufferArg = 0;
 constexpr size_t kLengthArg = 1;
+constexpr size_t kDebugTextLimit = 128;  // a control is shorter; the Lua seat trace lines are the longest text logged
 
 bool g_trace = false;
 void* g_missionDebugOriginal = nullptr;  // the trampoline of mission_debug
 waypoint_scope_rules::Scope g_scope;
 
-// The first argument of the running Lua native as text; false when the native got none or it is not a string. One character more
-// than a control can hold is read, so a longer text is not mistaken for one.
+// The first argument of the running Lua native as text; false when the native got none or it is not a string. The text is cut to the
+// capacity, which is more than a control holds, so a longer text is not mistaken for one.
 bool firstArgumentText(uintptr_t lua, char* out, size_t capacity) {
     const uint32_t base = readDword(lua + sr2::kLuaBaseOffset);
     const uint32_t top = readDword(lua + sr2::kLuaTopOffset);
@@ -38,12 +39,17 @@ bool firstArgumentText(uintptr_t lua, char* out, size_t capacity) {
     return true;
 }
 
-// GP1: the control text of a script opens or closes the scope; the game's mission_debug then runs as it is.
+// GP1: the control text of a script opens or closes the scope; the game's mission_debug then runs as it is. It is also the one hook of
+// mission_debug, so with trace=1 it logs the texts of the Lua seat rules (docs/SR2_NOTES.md, "Vehicle seating"), which use it as a log
+// channel; the game's own texts are many and are not logged.
 void __cdecl waypointScopeControl(GuestFrame* frame) {
-    char text[kMaxControlBytes + 2];
+    char text[kDebugTextLimit];
     if (!firstArgumentText(frame->args[kLuaStateArg], text, sizeof(text))) return;
     const waypoint_scope_rules::Control control = waypoint_scope_rules::parseControl(text);
-    if (!control.isControl) return;
+    if (!control.isControl) {
+        if (g_trace && vehicle_seating_rules::isSeatTrace(text)) logger::write("trace: lua: %s", text);
+        return;
+    }
     if (!control.open) {
         g_scope.close();
         return;
