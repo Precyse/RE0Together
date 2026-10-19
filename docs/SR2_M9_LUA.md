@@ -42,8 +42,8 @@ The generic rule `customization_item_wear(..., PLAYER_SYNC[x])` and `inv_weapon_
 | UG, keep | 12 | stay on the default partner (`party_add`, `cutscene_play`, ...) |
 | UG? | 160 | default rule, 63 of them patched where the default was wrong |
 | FILE, generic rule | 215 | name tests, tables, and/or pairs |
-| FILE, patched | 127 | per-script edits |
-| FILE, kept | 54 | see below |
+| FILE, patched | 128 | per-script edits |
+| FILE, kept | 53 | see below |
 | FILE, wrapper | 4 | `thread_new` fan-out |
 
 Kept on purpose: navpoint-name constants (`..._REMOTE_PLAYER`), one nav or HUD value for the whole remote side (`teleport_coop(T[LOCAL], T[REMOTE])`, `HUD_BAR`, `PLAYER_TIMER`, cutscene end positions), `target = REMOTE_PLAYER` choices that stay on the default partner (rn07 lieutenants, bh11, ss01 waypoints, tss04 tow vehicle), and the comment block in ss01.

@@ -89,6 +89,12 @@ partner_rules::Vec3 positionOf(uintptr_t object);
 int32_t downedTimerOf(uintptr_t human);
 bool isJoining(uintptr_t human);
 
+// True while a human is down (its downed timer is running).
+bool isDown(uintptr_t human);
+
+// True while a human is down or waiting to bleed out or respawn (the game's 0x8CBDB0).
+bool isDownOrWaiting(uintptr_t human);
+
 // The remote closest to `point` among those that have a human: false without one. Float math: callers inside game
 // code guard the FPU.
 bool nearestRemote(const partner_rules::Vec3& point, partner_rules::Remote& out);

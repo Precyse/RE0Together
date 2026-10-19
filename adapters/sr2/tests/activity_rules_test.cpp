@@ -54,6 +54,14 @@ int main() {
         check(tally.declinedAll(kRequest, kFourth, three, 3), "all three declined: the start ends");
         check(tally.declinedAll(kRequest, kSecond, both, 0), "no remote required: nothing to wait for");
     }
+    {
+        DeclineTally tally;
+        check(tally.declinedCount(kRequest) == 0, "a fresh tally has no decline");
+        tally.declinedAll(kRequest, kSecond, both, 2);
+        tally.declinedAll(kRequest, kSecond, both, 2);
+        check(tally.declinedCount(kRequest) == 1 && tally.declinedCount(kOtherRequest) == 0,
+              "the count is the members that declined this request, once each, and 0 for another request");
+    }
 
     check(!activity_rules::blocksCompetitiveStart(0) && !activity_rules::blocksCompetitiveStart(1) &&
               activity_rules::blocksCompetitiveStart(2),

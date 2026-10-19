@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdio>
 
+#include "guest_call.h"
 #include "log.h"
 #include "memory.h"
 #include "sr2_addresses.h"
@@ -223,6 +224,12 @@ int32_t downedTimerOf(uintptr_t human) {
 
 bool isJoining(uintptr_t human) {
     return (read8(human + sr2::kHumanJoinFlagsOffset) & sr2::kHumanJoiningBit) != 0;
+}
+
+bool isDown(uintptr_t human) { return downedTimerOf(human) >= 0; }
+
+bool isDownOrWaiting(uintptr_t human) {
+    return isDown(human) || (guest_call::call(sr2::kWaitingToRespawn, {.esi = human}) & 0xFF) != 0;
 }
 
 bool nearestRemote(const partner_rules::Vec3& point, partner_rules::Remote& out) {

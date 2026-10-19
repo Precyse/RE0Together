@@ -28,6 +28,18 @@ struct GuestFrame {
 #define PARTNER_BLOCK_STUB(name, impl) \
     void __declspec(naked) name() { __asm pushfd __asm pushad __asm call impl __asm popad __asm popfd __asm ret }
 
+// Replacement of a block that ends by going on at one of several addresses (a resume point), entered by a jump: `impl()`
+// returns the address, with all registers saved. The slot under the saved registers receives it and `ret` jumps there, every
+// register as the game left it and the stack as it was before the jump. The flags are not kept.
+#define PARTNER_RESUME_STUB(name, impl) \
+    void __declspec(naked) name() { __asm sub esp, 4 __asm pushad __asm call impl __asm mov [esp + 0x20], eax __asm popad __asm ret }
+
+// The same for `impl(ebx)`.
+#define PARTNER_RESUME_EBX_STUB(name, impl) \
+    void __declspec(naked) name() { \
+        __asm sub esp, 4 __asm pushad __asm push ebx __asm call impl __asm add esp, 4 __asm mov [esp + 0x20], eax __asm popad __asm ret \
+    }
+
 // Entry trace of a game function: `impl(GuestFrame*)` runs with all registers and the flags saved, then the function
 // runs as the game has it. `original` holds the MinHook trampoline.
 #define TRACE_ENTRY_STUB(name, impl, original) \

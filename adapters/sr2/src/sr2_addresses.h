@@ -582,6 +582,39 @@ constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall
 constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
 constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
 
+// Milestone 16 wave 2: net handlers, chat, pause (M16_W2_NET.md).
+constexpr uintptr_t kGameClock = 0xE843AC;              // dword: the game's millisecond clock, it wraps at kClockWrap
+constexpr int32_t kClockWrap = 0x6B49D200;
+constexpr int32_t kClockHalfRange = 0x35A4E900;         // a gap of at least this many ticks is the clock having wrapped
+constexpr int32_t kBustedWaitMs = 30000;                // the busted wait of misc_19 and of the local bust
+constexpr uintptr_t kHumanCashOffset = 0x1114;          // int: the cash of a human
+constexpr uintptr_t kBustedClear = 0x8CBC04;            // misc_19 (BW2): the game's clear of the co-op notoriety
+constexpr uintptr_t kBustedRecord = 0x8CBC1D;           // misc_19 (BW2, BW3): after the partner's deadline is recorded
+constexpr uintptr_t kBustedBleedOut = 0x8CBC83;         // misc_19 (BW3): the downed local bleeds out
+constexpr uintptr_t kBustedReturn = 0x8CBC49;           // misc_19 (BW3): the handler returns
+constexpr uintptr_t kRaceHoldLocal = 0x252981D;         // byte: the local player holds the race resource set
+constexpr uintptr_t kRaceHoldRemote = 0x252981E;        // byte: a remote holds it (a bit per session slot with 3 or more players)
+constexpr uintptr_t kRaceResourceSet = 0x140C818;       // the name of the race resource set (.mms / .ods), esi of the release
+constexpr uintptr_t kRaceResourceRelease = 0xA25760;    // ESI = the set name: unloads it
+constexpr uintptr_t kRaceHoldLoad = 0xA25D33;           // scrpt_02 (RH1): the game loads the set
+constexpr uintptr_t kRaceHoldReturn = 0xA25D4B;         // scrpt_02 (RH1): the handler returns
+constexpr uintptr_t kRaceHoldUnload = 0xA25D7A;         // scrpt_03 (RH2): the game unloads the set
+constexpr uintptr_t kRaceHoldSkip = 0xA25D91;           // scrpt_03 (RH2): the handler returns
+constexpr uintptr_t kReplayWait = 0x25274A8;            // dword: the handle of the mission replay wait dialog, 0 when none
+constexpr uintptr_t kReplayWaitCancel = 0x544F10;       // cancels the replay wait
+constexpr int8_t kReplayAnswerAccept = 3;               // misc_1b: 0 declined, 1 busy, 2 not enough respect, 3 accepted
+constexpr uintptr_t kConfessLocal = 0x2528778;          // pointer: the confessional object of the local player
+constexpr uintptr_t kConfessLock = 0x252877C;           // pointer: the confessional object a remote is in, 0 when none
+constexpr uintptr_t kConfessDistanceLimit = 0xE5C688;   // double: the squared distance a partner may be from the confessional
+constexpr uintptr_t kPriceToCents = 0x4B2680;           // ESI = out; stdcall(float price): the price in clamped integer cents
+constexpr uint8_t kConfessNoticeFar = 2;                // misc_00 code: a partner is too far away
+constexpr uint8_t kConfessNoticePoor = 6;               // misc_00 code: a partner cannot pay
+constexpr uintptr_t kConfessShowFar = 0x7A94F7;         // misc_00 (CF8): the game shows "you are too far" (code 3)
+constexpr uintptr_t kConfessNotCodeFar = 0x7A950F;      // misc_00 (CF8): the code is not 2
+constexpr uintptr_t kConfessShowPoor = 0x7A956D;        // misc_00 (CF9): the game shows "you can't afford" (code 5)
+constexpr uintptr_t kConfessNotCodePoor = 0x7A9514;     // misc_00 (CF9): the code is not 6
+constexpr uintptr_t kConfessReturn = 0x7A95D7;          // misc_00 (CF8, CF9): the handler returns
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

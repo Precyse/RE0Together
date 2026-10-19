@@ -37,6 +37,9 @@ public:
         return true;
     }
 
+    // How many members have declined the request `key`; 0 for any other request.
+    size_t declinedCount(uint32_t key) const { return key == key_ ? count_ : 0; }
+
 private:
     bool has(uintptr_t member) const {
         for (size_t i = 0; i < count_; ++i) {

@@ -135,6 +135,16 @@ void nearestRemote() {
     check(partner_rules::nearestIndex(heights, 2, {0, 0, 0}) == 1, "height counts");
 }
 
+void farthestRemote() {
+    const Vec3 positions[] = {{10, 0, 0}, {100, 0, 0}, {100, 0, 0}, {0, 50, 0}};
+    check(partner_rules::farthestIndex(positions, 4, {0, 0, 0}) == 1, "farthest wins, the first of equals");
+    check(partner_rules::farthestIndex(positions, 1, {99, 0, 0}) == 0, "one position");
+    check(partner_rules::farthestIndex(positions, 0, {0, 0, 0}) == kNone, "no position");
+    const Vec3 heights[] = {{0, 0, 30}, {0, 0, -40}};
+    check(partner_rules::farthestIndex(heights, 2, {0, 0, 0}) == 1, "height counts");
+    check(partner_rules::distanceSquared({1, 2, 3}, {4, 6, 3}) == 25, "the squared distance of two positions");
+}
+
 void othersAllDown() {
     const HumanEntry humans[] = {{0xA1, 1}, {0xA2, 2}, {0xA3, 3}};
     const MemberEntry members[] = {{0xB1, 1, kInGame}, {0xB2, 2, kInGame}, {0xB3, 3, kInGame}};
@@ -169,6 +179,7 @@ int main() {
     firstJoiningIsTheFirstBelowInGame();
     lastInGameEndsTheSession();
     nearestRemote();
+    farthestRemote();
     othersAllDown();
     playerPool();
     return g_failures == 0 ? 0 : 1;

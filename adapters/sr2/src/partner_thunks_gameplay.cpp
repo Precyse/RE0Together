@@ -31,13 +31,6 @@ const uintptr_t g_teamWipeResume = sr2::kTeamWipeResume;
 
 uint32_t read32(uintptr_t address) { return *reinterpret_cast<const uint32_t*>(address); }
 
-bool isDown(uintptr_t human) { return remote_players::downedTimerOf(human) >= 0; }
-
-bool isDownOrWaiting(uintptr_t human) {
-    return isDown(human) || (guest_call::call(sr2::kWaitingToRespawn, {.esi = human}) & 0xFF) != 0;
-}
-
-
 // D1: a human goes down (revivable) when any remote is within revive range, not only the first.
 void __cdecl wrapGoDown(GuestFrame* frame) {
     const bool revivable = partner_scope::anyRemoteHuman([&](uintptr_t) {
@@ -141,13 +134,13 @@ uint32_t __cdecl teamWipe(uintptr_t dead) {
 
     uint32_t wipe = 0;
     if (dead == local) {
-        wipe = snapshot.pairing.count && partner_rules::othersAllDown(snapshot.pairing, 0, isDownOrWaiting);
+        wipe = snapshot.pairing.count && partner_rules::othersAllDown(snapshot.pairing, 0, remote_players::isDownOrWaiting);
     } else if (remote_players::isRemotePlayerHuman(dead) &&
-               partner_rules::othersAllDown(snapshot.pairing, dead, isDownOrWaiting)) {
-        if (isDown(local)) {
+               partner_rules::othersAllDown(snapshot.pairing, dead, remote_players::isDownOrWaiting)) {
+        if (remote_players::isDown(local)) {
             guest_call::call(sr2::kKillLocalHuman, {.esi = local});
             wipe = 1;
-        } else if (isDownOrWaiting(local)) {
+        } else if (remote_players::isDownOrWaiting(local)) {
             wipe = 1;
         }
     }
@@ -160,7 +153,7 @@ uintptr_t __cdecl remoteIfTeamDown(uintptr_t human) {
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
 
-    return remote_players::isRemotePlayerHuman(human) && partner_rules::othersAllDown(snapshot.pairing, human, isDown) ? human : 0;
+    return remote_players::isRemotePlayerHuman(human) && partner_rules::othersAllDown(snapshot.pairing, human, remote_players::isDown) ? human : 0;
 }
 
 // B3 (probe G): 1 when the passenger is a remote player human.

@@ -83,6 +83,8 @@ add_library(sr2_adapter SHARED
     src/leave_path.cpp
     src/multiplayer_patches.cpp
     src/session_kick.cpp
+    src/net_handlers.cpp
+    src/net_handlers_confess.cpp
     src/multiplayer_thunks.cpp
     src/sender_scope.cpp
     src/join_admission.cpp
@@ -126,6 +128,7 @@ set_source_files_properties(
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
+set_source_files_properties(src/net_handlers.cpp src/net_handlers_confess.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
@@ -204,6 +207,8 @@ add_unit_test(outfit_sync_rules_test)
 add_unit_test(outfit_sync_sites_test)
 add_unit_test(session_kick_rules_test)
 add_unit_test(session_kick_sites_test)
+add_unit_test(net_handlers_rules_test)
+add_unit_test(net_handlers_sites_test)
 add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)
@@ -212,6 +217,7 @@ add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_p
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp src/vehicle_trace.cpp
     src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp
     src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/site_installer.cpp)
+target_sources(multiplayer_bindings_test PRIVATE src/net_handlers.cpp src/net_handlers_confess.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)
 add_unit_test(outfit_sync_bindings_test src/outfit_sync.cpp src/outfit_sync_trace.cpp src/site_installer.cpp src/partner_thunks_calls.cpp
     src/partner_identity.cpp src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
