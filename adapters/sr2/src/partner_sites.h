@@ -155,6 +155,17 @@ enum class Thunk : uint8_t {
     TraceStreamingSync,
     TraceAnimUnload,
     TraceAnimDelta,
+    // Milestone 16 wave 2 (hud_sites.h): HUD and waypoints.
+    EachRemoteFollowerBlips,
+    MinimapArrowsBegin,
+    MinimapArrowsNext,
+    PauseMapArrowsBegin,
+    PauseMapArrowsNext,
+    RemoteInBackPromptBehaviour,
+    NearestRemoteToStackPoint18,
+    TraceClientName,
+    WaypointScopeControl,
+    SendWaypointToScope,
     // Milestone 16 W1 (anim_stream_sites.h): anim and asset streaming per remote.
     StreamingSyncGate,
     SendStreamingSync,
