@@ -8,11 +8,8 @@
 // size of a new block and where an old address of a table lands in it.
 namespace vehicle_pool_rules {
 
-// The move is asked for only with 3 or more players, partner_experimental and the milestone 4 and 9 logic in: max_players 2
-// installs none of it.
-constexpr bool requested(uint32_t maxPlayers, bool experimental, bool crowdLogic) {
-    return maxPlayers > sr2::kCoopDefaultPlayers && experimental && crowdLogic;
-}
+// The move is asked for with 3 or more players and the milestone 4 and 9 logic in: max_players 2 installs none of it.
+constexpr bool requested(uint32_t maxPlayers, bool crowdLogic) { return maxPlayers > sr2::kCoopDefaultPlayers && crowdLogic; }
 
 using vehicle_pool_sites::kGrownEntries;
 using vehicle_pool_sites::kGrownTrailer;

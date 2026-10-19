@@ -118,9 +118,8 @@ void theAddressMath() {
         fits = fits && moved >= kFakeBase && moved <= kFakeBase + vehicle_pool_rules::blockBytes(table);
     }
     check(fits, "every reference lands inside its table's new block");
-    check(vehicle_pool_rules::requested(4, true, true) && !vehicle_pool_rules::requested(2, true, true) && !vehicle_pool_rules::requested(4, false, true) &&
-              !vehicle_pool_rules::requested(4, true, false),
-          "the move is asked for only with 3 or more players, partner_experimental and the partner logic: max_players 2 installs none of it");
+    check(vehicle_pool_rules::requested(4, true) && !vehicle_pool_rules::requested(2, true) && !vehicle_pool_rules::requested(4, false),
+          "the move is asked for only with 3 or more players and the partner logic: max_players 2 installs none of it");
 }
 
 void theBoundsAndTheHeadroomBlocks() {

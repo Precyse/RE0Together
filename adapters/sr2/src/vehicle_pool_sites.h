@@ -10,7 +10,7 @@
 // The static vehicle pool and everything sized one to one with it are `.bss` arrays reached through absolute addresses, so each
 // is moved to a new block and every reference to it is rewritten. The layout of each table, the bound immediates and the two
 // headroom call blocks are here; the reference rows (the exe's base relocation entries that fall in a table) are generated
-// into vehicle_pool_references.h by tools/sr2/vehicle_pool_sites.py. Written all or nothing, only with partner_experimental.
+// into vehicle_pool_references.h by tools/sr2/vehicle_pool_sites.py. Written all or nothing, only with 3 or more players.
 namespace vehicle_pool_sites {
 
 constexpr uint32_t kShippedEntries = 32;

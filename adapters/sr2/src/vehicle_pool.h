@@ -7,7 +7,7 @@
 
 // Milestone 15 B3: the static vehicle pool of 32 and everything sized one to one with it, moved to blocks of 64 (docs/SR2_NOTES.md,
 // "Vehicle pool (milestone 15)"; the site tables are vehicle_pool_sites.h and the generated vehicle_pool_references.h). Written
-// all or nothing, only with partner_experimental, 3 or more players and the partner logic. The move happens at the first co-op
+// all or nothing, only with 3 or more players and the partner logic. The move happens at the first co-op
 // entry, when the game is on its front end: before it every table is checked to be empty and the world never initialised.
 namespace vehicle_pool {
 
