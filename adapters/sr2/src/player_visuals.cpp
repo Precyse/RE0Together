@@ -23,15 +23,6 @@ bool g_trace = false;
 const uintptr_t g_hideResume = sr2::kCutsceneStartHideResume;
 const uintptr_t g_restoreResume = sr2::kCutsceneEndRestoreResume;
 
-// The remote player humans in list order (the list walk, not the pairing: a human whose member is not known yet is hidden too).
-size_t remoteHumans(uintptr_t* out) {
-    remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
-    size_t count = 0;
-    for (size_t i = 0; i < snapshot.humanCount && count < kMaxRemotes; ++i) out[count++] = snapshot.humans[i].human;
-    return count;
-}
-
 // The game's own treatment of the one human the cutscene start hid (0x6C0526): hide it locally, then kill it off unless it is a live
 // human that is not down.
 void hide(uintptr_t human) {
@@ -46,7 +37,7 @@ void hide(uintptr_t human) {
 
 void __cdecl hideRemotes() {
     uintptr_t humans[kMaxRemotes];
-    const size_t count = remoteHumans(humans);
+    const size_t count = remote_players::remoteHumans(humans, kMaxRemotes);
     for (size_t i = 0; i < count; ++i) hide(humans[i]);
     if (g_trace && count > 0) logger::write("trace: cutscene: hid remote humans %s", player_visuals_rules::humansText(humans, count).c_str());
 }
@@ -54,7 +45,7 @@ void __cdecl hideRemotes() {
 // The cutscene end must leave edi = 0 and ebx = the running cutscene (what the replaced block set), whatever else it did.
 void __cdecl restoreRemotes(guest_call::Regs* regs) {
     uintptr_t humans[kMaxRemotes];
-    const size_t count = remoteHumans(humans);
+    const size_t count = remote_players::remoteHumans(humans, kMaxRemotes);
     for (size_t i = 0; i < count; ++i) {
         dwordField(humans[i], sr2::kHumanVisibilityFlagsOffset) &= ~sr2::kHumanHiddenFlags;
         guest_call::call(sr2::kRestoreHuman, {}, {static_cast<uint32_t>(humans[i])});

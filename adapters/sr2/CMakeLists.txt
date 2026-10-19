@@ -79,6 +79,7 @@ add_library(sr2_adapter SHARED
     src/anim_stream_triggers.cpp
     src/outfit_sync.cpp
     src/outfit_sync_trace.cpp
+    src/store_sync.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
     src/multiplayer_patches.cpp
@@ -139,6 +140,7 @@ set_source_files_properties(
     src/session_kick.cpp src/hud_remotes.cpp src/waypoint_scope.cpp
     src/revive_state.cpp src/revive_thunks.cpp src/notoriety_thunks.cpp src/revive_patches.cpp
     src/mission_flow_prompts.cpp src/mission_flow_rewards.cpp
+    src/store_sync.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -232,6 +234,8 @@ add_unit_test(party_ai_rules_test)
 add_unit_test(party_ai_sites_test src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp src/partner_identity.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp
     src/activity_state.cpp)
+add_unit_test(store_rules_test)
+add_unit_test(store_sites_test)
 add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)

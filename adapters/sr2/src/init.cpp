@@ -29,6 +29,7 @@
 #include "script_override.h"
 #include "session_kick.h"
 #include "sr2_addresses.h"
+#include "store_sync.h"
 #include "tunnel.h"
 #include "vehicle_pool.h"
 #include "vehicle_pool_rules.h"
@@ -96,6 +97,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) hud_patches::install(config.trace);
         if (crowd) revive_patches::install(config.trace);
         if (partnering) party_ai_patches::install(config.trace);
+        if (crowd) store_sync::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);

@@ -240,6 +240,14 @@ enum class Thunk : uint8_t {
     SendBonusPerRecipient,
     ObjectiveBonusEachRemote,
     TraceMissionState,
+    // Milestone 16 wave 2 (store_sites.h): store and garage hiding, the garage vehicle box, the activity level menu.
+    HideRemotesInStore,
+    ShowRemotesAfterStore,
+    HideRemotesInGarage,
+    AnyRemoteInVehicleBox,
+    ActivityOwnerIfRemote,
+    SendToActivityOwner,
+    SendAnswerToHost,
 };
 
 struct Site {
