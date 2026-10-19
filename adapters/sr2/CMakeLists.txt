@@ -66,6 +66,7 @@ add_library(sr2_adapter SHARED
     src/crowd_control_select.cpp
     src/crowd_control_each.cpp
     src/crowd_control_patches.cpp
+    src/trail_blazing.cpp
     src/script_override.cpp
     src/content_hash.cpp
     src/browser_tag.cpp
@@ -168,6 +169,7 @@ set_source_files_properties(
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 # The FUZZ thunks of milestone 17 wave 3 run inside x87 game code (the rioter test compares floats of the game).
 set_source_files_properties(src/fuzz_thunks.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
+set_source_files_properties(src/trail_blazing.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 # The follower and NPC AI thunks of milestone 16 wave 2 run inside x87 game code; squared_distance.cpp hands back a float in ST0.
 set_source_files_properties(src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/net_handlers.cpp src/net_handlers_confess.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -260,6 +262,8 @@ add_unit_test(outfit_sync_rules_test)
 add_unit_test(outfit_sync_sites_test)
 add_unit_test(vehicle_seating_rules_test)
 add_unit_test(vehicle_seating_sites_test)
+add_unit_test(trail_blazing_rules_test)
+add_unit_test(trail_blazing_sites_test)
 add_unit_test(session_kick_rules_test)
 add_unit_test(session_kick_sites_test)
 add_unit_test(hud_rules_test)
@@ -315,3 +319,7 @@ add_unit_test(fuzz_bindings_test src/fuzz_thunks.cpp src/fuzz_patches.cpp src/si
     src/script_override.cpp src/revive_state.cpp src/sender_scope.cpp src/activity_state.cpp src/activity_participants.cpp ${SHARED_DIR}/paths.cpp
     ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(fuzz_bindings_test PRIVATE minhook)
+add_unit_test(trail_blazing_bindings_test src/trail_blazing.cpp src/site_installer.cpp src/partner_identity.cpp src/squared_distance.cpp src/partner_scope.cpp
+    src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/activity_state.cpp
+    src/activity_participants.cpp ${SHARED_DIR}/hooks.cpp)
+target_link_libraries(trail_blazing_bindings_test PRIVATE minhook)

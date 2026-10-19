@@ -877,5 +877,48 @@ constexpr uintptr_t kResumeCrowdWeapon = 0x5AD8E0;
 constexpr uintptr_t kResumeCrowdStartFlags = 0x5AD9C4;
 constexpr uintptr_t kResumeCrowdRelease = 0x5ADF19;
 constexpr uintptr_t kResumeCrowdEndFlags = 0x5AE224;
+// Trail Blazing (milestone 17 wave 3): the torch activity for every remote (docs/SR2_NOTES.md, "Trail Blazing (milestone 17 wave 3)").
+constexpr uintptr_t kHumanEffect = 0x55A930;                // stdcall(component, id, 1, 0)
+constexpr uintptr_t kHumanEffectComponentOffset = 0x10C4;   // human: the component the effect is started on
+constexpr uint32_t kTrailStartEffectId = 0;
+constexpr uintptr_t kTrailStartCheck = 0x9C3A90;            // EDX = human: AL
+constexpr uintptr_t kTrailStartStep = 0x9C3B00;             // cdecl(human)
+constexpr uintptr_t kPutOutHuman = 0x98CEB0;                // EDI = handle; cdecl(flag): puts the burning human out
+constexpr uintptr_t kTrailNodeInRange = 0x557F60;           // ECX = fire node; stdcall(x, y, z, radius): AL
+constexpr uintptr_t kTrailLightNode = 0x558000;             // stdcall(node, igniter handle)
+constexpr uintptr_t kTrailLightObjectNear = 0x58D9B0;       // ESI = flammable object entry, EDI = human
+constexpr uintptr_t kExitRequestInit = 0x433190;            // EAX = a 0x24 byte request
+constexpr uintptr_t kRequestVehicleExit = 0xB072F0;         // cdecl(human, request)
+constexpr uintptr_t kTrailNodeRadius = 0xE38AE0;            // float: how close a rider lights a fire node
+constexpr uintptr_t kTrailStartSpacing = 0xE5C130;          // double: the gap between two players at the stage start
+constexpr uintptr_t kTrailCheckpointReach = 0xE5C330;       // double: a player this close (squared) takes the checkpoint
+constexpr uintptr_t kTrailLevelStateOffset = 0x28;          // level: 2 while the course runs
+constexpr uint32_t kTrailLevelRunning = 2;
+constexpr uintptr_t kTrailNodesOffset = 0x34;               // level: the list of fire nodes
+constexpr uintptr_t kTrailNodeLitOffset = 0xD0;             // fire node byte: lit
+constexpr uintptr_t kTrailObjectLitOffset = 4;              // flammable object entry byte: lit
+constexpr uintptr_t kHumanSwimmingOffset = 0xE88;           // dword: non-zero while swimming
+constexpr uintptr_t kHumanSubmergedFlagsOffset = 0x84;      // byte: bit 0 = submerged
+constexpr uintptr_t kHumanSubmergedDepthOffset = 0x94;      // float
+constexpr uintptr_t kTrailStartRecordOffset = 4;            // the start argument: the spawn record
+constexpr uintptr_t kTrailStartRightOffset = 0x28;          // spawn record: the row to the right (also the orientation the warp takes)
+constexpr uintptr_t kTrailStartForwardOffset = 0x40;        // spawn record: the forward row
+constexpr uintptr_t kTrailCheckpointPositionOffset = 0x1C;  // checkpoint record: the position
+constexpr uintptr_t kExitRequestFlagsOffset = 0x20;         // exit request byte: bit 0 asks to leave
+constexpr uintptr_t kTrailFireLocalSlot = 0x10;             // stack at TB6: the local player
+constexpr uintptr_t kTrailFailByteSlot = 0x13;              // stack at TB8: the byte that fails the level
+constexpr uintptr_t kTrailStartLocalSlot = 0x28;            // stack at TB9: the local player's start position
+constexpr uintptr_t kTrailStartPartnerSlot = 0x34;          // stack at TB9: the default partner's start position
+constexpr uintptr_t kTrailExitRequestSlot = 0x34;           // stack at TB10: the exit request
+constexpr uintptr_t kTrailCheckpointDistanceSlot = 8;       // stack at TB11: the float distance
+constexpr uintptr_t kTrailCheckpointPartnerSlot = 0xC;      // stack at TB11: the getter's answer
+constexpr uintptr_t kTrailCheckpointTargetSlot = 0x14;      // stack at TB11: the pointer to the checkpoint position
+constexpr uintptr_t kResumeTrailLevelStart = 0x58CDF5;
+constexpr uintptr_t kResumeTrailLevelStep = 0x58CE4C;
+constexpr uintptr_t kResumeTrailFireNodes = 0x58DADA;
+constexpr uintptr_t kResumeTrailWaterFail = 0x58DDF4;
+constexpr uintptr_t kResumeTrailStartPlace = 0x58EEB1;
+constexpr uintptr_t kResumeTrailStartExit = 0x58FAFF;
+constexpr uintptr_t kResumeTrailCheckpoint = 0x5903B1;
 
 }  // namespace sr2
