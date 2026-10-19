@@ -24,6 +24,7 @@
 #include "player_name.h"
 #include "player_visuals.h"
 #include "replication_switch.h"
+#include "revive_patches.h"
 #include "script_override.h"
 #include "session_kick.h"
 #include "sr2_addresses.h"
@@ -92,6 +93,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (partnering) hud_patches::install(config.trace);
+        if (crowd) revive_patches::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);

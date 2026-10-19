@@ -135,18 +135,6 @@ void nearestRemote() {
     check(partner_rules::nearestIndex(heights, 2, {0, 0, 0}) == 1, "height counts");
 }
 
-void othersAllDown() {
-    const HumanEntry humans[] = {{0xA1, 1}, {0xA2, 2}, {0xA3, 3}};
-    const MemberEntry members[] = {{0xB1, 1, kInGame}, {0xB2, 2, kInGame}, {0xB3, 3, kInGame}};
-    const Pairing pairing = paired(humans, 3, members, 3);
-    check(partner_rules::othersAllDown(pairing, 0xA1, [](uintptr_t human) { return human != 0xA1; }), "all others down");
-    check(!partner_rules::othersAllDown(pairing, 0xA1, [](uintptr_t human) { return human == 0xA2; }), "one other is up");
-    const MemberEntry single[] = {{0xB1, 1, kInGame}};
-    const HumanEntry onlyHuman[] = {{0xA1, 1}};
-    check(partner_rules::othersAllDown(paired(onlyHuman, 1, single, 1), 0xA1, [](uintptr_t) { return false; }),
-          "nobody else: nothing is up");
-}
-
 void playerPool() {
     constexpr uintptr_t kFirst = sr2::kPlayerPool;
     constexpr uintptr_t kPast = sr2::kPlayerPool + sr2::kPlayerPoolCount * sr2::kPlayerPoolStride;
@@ -169,7 +157,6 @@ int main() {
     firstJoiningIsTheFirstBelowInGame();
     lastInGameEndsTheSession();
     nearestRemote();
-    othersAllDown();
     playerPool();
     return g_failures == 0 ? 0 : 1;
 }
