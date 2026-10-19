@@ -2,10 +2,12 @@
 -- A wrapper replaces the global function. It looks for REMOTE_PLAYER among the arguments and, when there is more than one
 -- remote player, applies the function's rule; with one remote player (or none) it makes the original call unchanged.
 --   fanout   the call is made once per remote player
---   seats    as fanout, the k-th remote player takes the seat k places after the given one
+--   seats    as fanout; the first remote player takes the given seat, every other one the highest free seat that the
+--            script does not reserve (coop_slots.lua), or stays out when there is none
 --   group    REMOTE_PLAYER in a list of characters is replaced by every remote player
 --   target   the call is made for the remote player nearest to the first argument
 --   all      true when the call is true for every remote player
+--   in_vehicle  as all, leaving out a remote player the seats rule found no seat for in that vehicle
 --   any      true when the call is true for any remote player
 --   nearest  the smallest value over the remote players
 
@@ -13,7 +15,8 @@ COOP_NATIVE = {}
 COOP_ORIGINAL = {}
 COOP_RULE = {}
 COOP_SEAT_ARG = { vehicle_enter_teleport = 3, player_force_vehicle_seat = 2 }
-COOP_MAX_SEAT = 7
+COOP_VEHICLE_ARG = { vehicle_enter_teleport = 2, player_force_vehicle_seat = 3 }
+COOP_LEFT_OUT = {}  -- vehicle .. player: the in_vehicle rule has traced that it leaves this remote out
 
 -- The function the game registered for a wrapper made by coop_wrap (any other function as it is).
 function coop_native(fn)
@@ -98,20 +101,62 @@ function COOP_RULE.target(native, args, at, remotes)
 	return native(unpack(copy, 1, copy.n))
 end
 
--- A seat number below 0 means no seat (the player is released), it is not moved on.
+-- A seat that is not a number of 0 or more (none given, or below 0 to release the player) is passed on unchanged. The
+-- seats given are recorded in COOP_SEATS[vehicle] (false: no free seat, the call is not made for that remote).
 function COOP_RULE.seats(native, args, at, remotes, name)
 	local seat_at = COOP_SEAT_ARG[name]
+	local given = args[seat_at]
+	local vehicle = args[COOP_VEHICLE_ARG[name]]
+	local seating = type(given) == "number" and given >= 0
+	local record = nil
+	if seating and vehicle ~= nil then
+		record = COOP_SEATS[vehicle] or {}
+		COOP_SEATS[vehicle] = record
+	end
+	local taken = {}
 	local first = nil
 	for k, p in ipairs(remotes) do
-		local copy = coop_args_for(args, at, p)
-		local seat = args[seat_at]
-		if type(seat) == "number" and seat >= 0 then
-			copy[seat_at] = seat + k - 1
+		local seat = given
+		if seating and k > 1 then
+			if record == nil then
+				seat = given + k - 1
+			elseif type(record[p]) == "number" then
+				seat = record[p]
+			else
+				seat = coop_free_seat(vehicle, taken)
+			end
+			coop_trace("seat " .. tostring(vehicle) .. " " .. p .. " " .. tostring(seat))
 		end
-		local results = { native(unpack(copy, 1, copy.n)) }
-		first = first or results
+		if seating and seat ~= nil then
+			taken[seat] = true
+		end
+		if record ~= nil then
+			record[p] = seat or false
+		end
+		if seat ~= nil or not seating then
+			local copy = coop_args_for(args, at, p)
+			copy[seat_at] = seat
+			local results = { native(unpack(copy, 1, copy.n)) }
+			first = first or results
+		end
 	end
 	return unpack(first)
+end
+
+function COOP_RULE.in_vehicle(native, args, at, remotes)
+	local record = COOP_SEATS[args[2]]
+	for i, p in ipairs(remotes) do
+		if record == nil or record[p] ~= false then
+			local copy = coop_args_for(args, at, p)
+			if not native(unpack(copy, 1, copy.n)) then
+				return false
+			end
+		elseif not COOP_LEFT_OUT[tostring(args[2]) .. p] then
+			COOP_LEFT_OUT[tostring(args[2]) .. p] = true
+			coop_trace("in vehicle " .. tostring(args[2]) .. " leaves out " .. p .. ", it has no seat")
+		end
+	end
+	return true
 end
 
 function COOP_RULE.group(native, args, at, remotes)

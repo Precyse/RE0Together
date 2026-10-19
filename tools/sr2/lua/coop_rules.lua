@@ -17,10 +17,11 @@ COOP_RULES = {
 	group = { "vehicle_enter_group_teleport" },
 	target = { "attack", "vehicle_chase", "turn_to_char", "force_throw_char" },
 	all = {
-		"teleport_check_done", "character_is_in_vehicle", "character_is_ready", "character_is_in_a_driver_seat",
+		"teleport_check_done", "character_is_ready", "character_is_in_a_driver_seat",
 		"inv_item_is_equipped", "inv_has_item", "inv_item_is_firearm_equipped", "character_has_specific_human_shield",
 		"character_has_human_shield", "character_is_dead", "navpoint_in_player_fov", "npc_in_player_fov", "los_check",
 	},
+	in_vehicle = { "character_is_in_vehicle" },
 	nearest = { "get_dist" },
 }
 

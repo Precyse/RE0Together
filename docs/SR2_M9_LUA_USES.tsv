@@ -79,7 +79,7 @@ bh05.lua	138	other			FILE	kept: stays the default partner
 bh05.lua	140	other			FILE	kept: stays the default partner
 bh05.lua	183	table			FILE	rewritten by a generic rule
 bh05.lua	184	table			FILE	rewritten by a generic rule
-bh05.lua	288	other			FILE	kept: stays the default partner
+bh05.lua	288	other			FILE	patched
 bh05.lua	329	callback	on_weapon_fired		UG	wrapper
 bh05.lua	342	query	get_dist_char_to_nav	nearest	UG?	default: nearest
 bh05.lua	375	callback	on_take_damage		UG	wrapper
@@ -175,7 +175,7 @@ bh11.lua	443	thread	thread_new		FILE	patched
 bh11.lua	505	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
 bh11.lua	524	thread	thread_new		FILE	patched
 bh11.lua	528	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
-bh11.lua	614	other			FILE	kept: stays the default partner
+bh11.lua	614	other			FILE	patched
 bh11.lua	679	query	character_is_dead	all	UG?	default: all
 bh11.lua	680	action	teleport	fanout	UG	wrapper
 bh11.lua	703	action	turn_vulnerable	fanout	UG	wrapper
@@ -243,16 +243,16 @@ ep01.lua	741	local	get_new_player_waypoint		FILE	patched
 ep01.lua	780	query	character_is_in_a_driver_seat	all	UG?	patched (default was wrong)
 ep01.lua	809	table			FILE	patched
 ep01.lua	848	table			FILE	patched
-ep01.lua	1204	table			FILE	kept: one value for the whole remote side
+ep01.lua	1204	table			FILE	patched
 ep01.lua	1353	query	get_dist	nearest	UG?	default: nearest
 ep01.lua	1355	local	escort_attack	target	FILE	patched
-ep01.lua	1411	table			FILE	kept: one value for the whole remote side
-ep01.lua	1477	table			FILE	kept: one value for the whole remote side
-ep01.lua	1704	table			FILE	kept: one value for the whole remote side
-ep01.lua	1781	table			FILE	kept: one value for the whole remote side
-ep01.lua	1792	table			FILE	kept: one value for the whole remote side
-ep01.lua	1813	table			FILE	kept: one value for the whole remote side
-ep01.lua	1881	table			FILE	kept: one value for the whole remote side
+ep01.lua	1411	table			FILE	patched
+ep01.lua	1477	table			FILE	patched
+ep01.lua	1704	table			FILE	patched
+ep01.lua	1781	table			FILE	patched
+ep01.lua	1792	table			FILE	patched
+ep01.lua	1813	table			FILE	patched
+ep01.lua	1881	table			FILE	patched
 ep01.lua	1904	action	turn_vulnerable	fanout	UG	wrapper
 ep01.lua	1954	table			FILE	patched
 ep02.lua	134	table			FILE	rewritten by a generic rule
@@ -264,7 +264,7 @@ ep02.lua	148	table			FILE	rewritten by a generic rule
 ep02.lua	313	callback	on_district_changed		UG	wrapper
 ep02.lua	321	table			FILE	rewritten by a generic rule
 ep02.lua	344	callback	on_district_changed		UG	wrapper
-ep02.lua	356	table			FILE	kept: one value for the whole remote side
+ep02.lua	356	table			FILE	patched
 ep02.lua	587	query	character_is_in_vehicle	all	UG?	default: all
 ep02.lua	597	query	character_is_in_vehicle	all	UG?	default: all
 ep02.lua	615	table			FILE	rewritten by a generic rule
@@ -277,7 +277,7 @@ ep02.lua	755	local	ep02_update_waypoint		FILE	patched
 ep02.lua	793	local	ep02_update_waypoint		FILE	patched
 ep02.lua	945	action	turn_vulnerable	fanout	UG	wrapper
 ep02.lua	946	action	clear_animation_state	fanout	UG	wrapper
-ep02.lua	960	table			FILE	kept: one value for the whole remote side
+ep02.lua	960	table			FILE	patched
 ep02.lua	986	callback	on_district_changed		UG	wrapper
 ep03.lua	41	other			FILE	kept: name constant or list entry
 ep03.lua	170	local	ep03_character_in_vehicle_of_correct_type		FILE	patched
@@ -414,10 +414,10 @@ rn07.lua	1089	identity			FILE	rewritten by a generic rule
 rn07.lua	1195	action	teleport	fanout	UG	wrapper
 rn07.lua	1206	thread	thread_new		FILE	patched
 rn07.lua	1211	table			FILE	patched
-rn07.lua	1305	other			FILE	kept: stays the default partner
-rn07.lua	1310	other			FILE	kept: stays the default partner
+rn07.lua	1305	other			FILE	patched
+rn07.lua	1310	other			FILE	patched
 rn07.lua	1442	identity			FILE	rewritten by a generic rule
-rn07.lua	1451	other			FILE	kept: stays the default partner
+rn07.lua	1451	other			FILE	patched
 rn07.lua	1465	identity			FILE	rewritten by a generic rule
 rn07.lua	1486	identity			FILE	rewritten by a generic rule
 rn07.lua	1597	table			FILE	patched
@@ -526,7 +526,7 @@ ss01.lua	641	table			FILE	patched
 ss01.lua	643	other			FILE	patched
 ss01.lua	673	table			FILE	kept: stays the default partner
 ss01.lua	707	identity			FILE	rewritten by a generic rule
-ss01.lua	778	other			FILE	kept: stays the default partner
+ss01.lua	778	other			FILE	patched
 ss01.lua	856	table			FILE	patched
 ss01.lua	857	table			FILE	patched
 ss01.lua	858	action	mission_debug	keep	UG	keeps the default partner
@@ -541,7 +541,7 @@ ss01.lua	1053	action	turn_invulnerable	fanout	UG	wrapper
 ss01.lua	1054	action	vehicle_stop_do	fanout	UG	wrapper
 ss01.lua	1147	callback	on_district_changed		UG	wrapper
 ss01.lua	1298	table			FILE	kept: stays the default partner
-ss01.lua	1312	local	ss01_get_closest_nav_to_char		FILE	kept: stays the default partner
+ss01.lua	1312	local	ss01_get_closest_nav_to_char		FILE	patched
 ss01.lua	1315	table			FILE	kept: stays the default partner
 ss01.lua	1318	table			FILE	kept: stays the default partner
 ss01.lua	1329	callback	on_district_changed		UG	wrapper
@@ -619,7 +619,7 @@ ss06.lua	454	table			FILE	rewritten by a generic rule
 ss06.lua	929	table			FILE	kept: one value for the whole remote side
 ss06.lua	1372	table			FILE	patched
 ss06.lua	1372	thread	thread_new		FILE	patched
-ss06.lua	1451	other			FILE	kept: stays the default partner
+ss06.lua	1451	other			FILE	patched
 ss06.lua	1546	action	party_add	keep	UG	keeps the default partner
 ss06.lua	1664	identity			FILE	rewritten by a generic rule
 ss06.lua	1675	identity			FILE	rewritten by a generic rule
@@ -865,15 +865,15 @@ tss04.lua	505	query	get_dist_char_to_char	nearest	UG?	patched (default was wrong
 tss04.lua	696	action	turn_invulnerable	fanout	UG	wrapper
 tss04.lua	754	query	get_dist_char_to_nav	nearest	UG?	default: nearest
 tss04.lua	865	identity			FILE	rewritten by a generic rule
-tss04.lua	927	other			FILE	kept: stays the default partner
+tss04.lua	927	other			FILE	patched
 tss04.lua	951	identity			FILE	rewritten by a generic rule
 tss04.lua	961	identity			FILE	rewritten by a generic rule
 tss04.lua	1082	query	get_dist_char_to_vehicle	nearest	UG?	default: nearest
 tss04.lua	1097	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
-tss04.lua	1106	other			FILE	kept: stays the default partner
+tss04.lua	1106	other			FILE	patched
 tss04.lua	1161	action	attack	target	UG?	default: target
 tss04.lua	1183	query	character_is_in_vehicle	all	UG?	patched (default was wrong)
-tss04.lua	1192	other			FILE	kept: stays the default partner
+tss04.lua	1192	other			FILE	patched
 tss04.lua	1233	identity			FILE	rewritten by a generic rule
 tss04.lua	1259	identity			FILE	rewritten by a generic rule
 tss04.lua	1309	query	navpoint_in_player_fov	all	UG?	patched (default was wrong)
@@ -887,6 +887,6 @@ ug_lib.lua	1189	other			FILE	kept: stays the default partner
 ug_lib.lua	1810	action	player_controls_disable	fanout	UG	wrapper
 ug_lib.lua	1829	action	player_controls_enable	fanout	UG	wrapper
 ug_lib.lua	1843	action	player_controls_enable	fanout	UG	wrapper
-ug_lib.lua	2421	identity			FILE	kept: stays the default partner
+ug_lib.lua	2421	identity			FILE	patched
 ug_lib.lua	2434	action	teleport	fanout	UG	wrapper
 ug_lib.lua	2442	action	teleport_check_done	all	UG?	default: all

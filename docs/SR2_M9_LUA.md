@@ -8,7 +8,7 @@ The story mission scripts name exactly one partner (`REMOTE_PLAYER` = `"#PLAYER2
 - The game's scripts are never in the repo. The repo holds the generator, the Lua library (`tools/sr2/lua`) and the patch data (`tools/sr2/lua_patches`), applied to copies extracted read-only (`vpp.py extract patch.vpp_pc <dir> lua`). `em01.lua` and `rn07.lua` start from Juiced's copies.
 - SR2 runs Lua 5.0 with the base library only (no table, string or math), so the library and the patches use plain Lua: `coop_count(list)` counts entries, appends are `list[coop_count(list) + 1] = value`. `lua_check.py` rejects `table.`, `string.`, `math.`, `os.`, `io.` and `debug.` in added code, and `lua_library_test.py` runs with those libraries removed.
 - Every patch must find its text (line number plus expected text, or an expected count) or nothing is written.
-- 48 scripts are generated: `ug_lib.lua`, 6 strongholds (M7) and 41 story scripts. All parse (Lua 5.1 parser) and the added code is Lua 5.0 style (`tools/sr2/lua_check.py`).
+- 50 scripts are generated: `ug_lib.lua`, 6 strongholds (M7) and 43 story scripts. All parse (Lua 5.1 parser) and the added code is Lua 5.0 style (`tools/sr2/lua_check.py`).
 
 ## ML1: the library appended to ug_lib.lua
 
@@ -17,10 +17,11 @@ The story mission scripts name exactly one partner (`REMOTE_PLAYER` = `"#PLAYER2
 | `coop_helpers.lua` | `coop_remote_players()` (the other names in `player_names_get_all()`; `REMOTE_PLAYER` when alone, so one or two players behave exactly like the original), `coop_is_remote_player`, any/all/near helpers (M7) |
 | `coop_missions.lua` | `coop_player_table(local_value, remote_value)` (a name-keyed table with an entry, and a default on first read, for every remote), `coop_all_players_in`, `coop_any_remote(fn, args)` and the like (the call as written, `REMOTE_PLAYER` replaced by each remote), `coop_each_remote`, `coop_nearest_remote`, `coop_farthest_remote_dist`, `coop_expand_remote`, `coop_stop_remote_vehicles` |
 | `coop_outfit_sync.lua` | `coop_sync_for(sync_table, player)`: a per-player sync mask (`PLAYER_SYNC[x]`) with the number of that player above its two bits (`mask = base + 16 * n`) while there is more than one remote player; the adapter's outfit sync sites read it (docs/SR2_NOTES.md, "Outfits, items and weapon slots (M16 W1)") |
+| `coop_slots.lua` | per-remote slots (M16 wave 2): `coop_hud_slots`, `coop_each_remote_slot`, `coop_other_players` and the other-player queries, `coop_next_player`, seat reservations and `coop_seat_of`, `coop_trace` |
 | `coop_wrappers.lua` | `coop_wrap(name, rule)`: the global is replaced by a wrapper; with `REMOTE_PLAYER` among the arguments and more than one remote it applies the rule, else it makes the original call |
 | `coop_rules.lua` | which function follows which rule |
 
-Rules: `fanout` (once per remote; also `thread_new` and the ten `on_*` registrations), `seats` (the k-th remote takes seat + k; seat -1 stays), `group` (REMOTE_PLAYER in a character list becomes every remote), `target` (the remote nearest to the first argument), `all`, `any`, `nearest`. `keep` functions (`party_add`, `cutscene_play`, `get_char_vehicle_*`, `mission_debug`) are not wrapped. The `get_dist_*` helpers of ug_lib are wrapped around the raw `get_dist` so one call is not widened twice. The wrappers keep the originals in `COOP_NATIVE`; loops that must act on one remote call those (`coop_native(fn)`).
+Rules: `fanout` (once per remote; also `thread_new` and the ten `on_*` registrations), `seats` (the first remote takes the given seat, every other one the highest free seat the script does not reserve, or stays out; seat -1 and no seat stay), `in_vehicle` (as `all`, leaving out a remote the seats rule found no seat for), `group` (REMOTE_PLAYER in a character list becomes every remote), `target` (the remote nearest to the first argument), `all`, `any`, `nearest`. `keep` functions (`party_add`, `cutscene_play`, `get_char_vehicle_*`, `mission_debug`) are not wrapped. The `get_dist_*` helpers of ug_lib are wrapped around the raw `get_dist` so one call is not widened twice. The wrappers keep the originals in `COOP_NATIVE`; loops that must act on one remote call those (`coop_native(fn)`).
 
 Verified by `tools/sr2/lua_library_test.py` (lupa, mock natives): with 2 players every wrapped call reaches the original once with the same arguments and result; with 3 players each rule gives the expected calls; a wrapper is never wrapped twice.
 
@@ -42,11 +43,11 @@ The generic rule `customization_item_wear(..., PLAYER_SYNC[x])` and `inv_weapon_
 | UG, keep | 12 | stay on the default partner (`party_add`, `cutscene_play`, ...) |
 | UG? | 160 | default rule, 63 of them patched where the default was wrong |
 | FILE, generic rule | 215 | name tests, tables, and/or pairs |
-| FILE, patched | 127 | per-script edits |
-| FILE, kept | 54 | see below |
+| FILE, patched | 149 | per-script edits (22 more since M16 wave 2) |
+| FILE, kept | 32 | see below |
 | FILE, wrapper | 4 | `thread_new` fan-out |
 
-Kept on purpose: navpoint-name constants (`..._REMOTE_PLAYER`), one nav or HUD value for the whole remote side (`teleport_coop(T[LOCAL], T[REMOTE])`, `HUD_BAR`, `PLAYER_TIMER`, cutscene end positions), `target = REMOTE_PLAYER` choices that stay on the default partner (rn07 lieutenants, bh11, ss01 waypoints, tss04 tow vehicle), and the comment block in ss01.
+Kept on purpose: navpoint-name constants (`..._REMOTE_PLAYER`), one nav value for the whole remote side (`teleport_coop(T[LOCAL], T[REMOTE])`, cutscene end positions), `target = REMOTE_PLAYER` choices that stay on the default partner (`party_add`, the tss04 tow vehicle), and the comment block in ss01. The HUD slots and the other-player choices that M9 kept moved to M16 wave 2 below.
 
 ## The 160 `UG?` sites: defaults chosen
 
@@ -54,14 +55,25 @@ Kept on purpose: navpoint-name constants (`..._REMOTE_PLAYER`), one nav or HUD v
 |---|---|---|---|
 | nearest | 59 | "a remote is within D" and "a remote is close" tests use the nearest remote | "a remote left" (bh09 ship, ss04, ss07 waits are left as nearest on purpose: a spread-out arrival must not hang a wait) use `coop_any_remote_farther_than` / `coop_farthest_remote_dist` |
 | all | 64 | "wait until every remote is in the vehicle / equipped / ready" | "either player ..." tests (in vehicle, dead, shield, driver seat, fov, firearm) use `coop_any_remote`; "nobody sees it" tests use `not coop_any_remote` |
-| seats | 26 | seat + k for the k-th remote, all sites | none; see the review list |
+| seats | 26 | the first remote keeps the script's seat, the others take free seats (M16 wave 2) | reservations at 17 sites, see below |
 | target | 11 | the remote nearest to the NPC | none |
+
+## M16 wave 2: per-remote slots, seats, other players, the parameter rule
+
+Four rules replace the single partner that M9 kept. The two-player result is unchanged by each: with one remote every wrapper makes the shipped call and every table, slot and seat reads as before.
+
+- **Parameter rule (`lua_params.py`).** In every script but `ug_lib.lua`, a call of a wrapped function (`coop_rules.lua`) that is given a parameter of an enclosing function and not the literal `REMOTE_PLAYER` becomes `coop_native(f)(...)`. A parameter holds one player (a callback gets the triggering human's name, the per-remote helpers pass one remote per call), so a trigger callback for P2 no longer teleports or freezes P3 and P4. `lua_overrides.py` prints `params: N calls in K scripts`. `risky_calls` lists the one helper that is still called with the literal (`rn05_wait_for_vehicle_entry(passenger)`: only P2 fits the two-seat cart).
+- **HUD slots (`coop_hud_slots(local_slot, remote_slots)`).** The game has four slots of each HUD element kind (bars, timers, objective texts, x-of-y). `#PLAYERn#` takes `remote_slots[n - 1]`, a remote without an entry shares the first. ep01 bars, ep02 and rn11 failure timers, the tss01 searchlight timer, the tss04 stunt jump and ss06 kill objectives use it; `coop_each_remote_slot(fn, slots)` stops, clears or switches off once per distinct remote slot. ss06 P4 shares P2's objective slot (slots 0 and 1 are the mission's). The slots stay `SYNC_REMOTE` elements, so every remote machine shows every remote's element (cosmetic).
+- **Seats.** The first remote takes the seat the script gives. Every other remote takes the highest free seat below `vehicle_get_num_seats` that is not in `COOP_RESERVED_SEATS[vehicle]` (the seats the script gives the local player and its NPCs, set by `coop_reserve_seats` on the line of the remote's seating at 17 sites), not taken in this call and empty, or stays out. The seat is recorded in `COOP_SEATS[vehicle][player]` (retries keep it); the `in_vehicle` rule counts a remote without a seat as in the vehicle so a full cart or boat does not hang a wait; rn01, rn02, em01 and rn09 take the recorded seat with `coop_seat_of` / `coop_all_seated`.
+- **Name-keyed state and "the other player".** `coop_other_players(name)` replaces `OTHER_PLAYER[x]`; ss06, tss01, tss04 and rn07 state is keyed by player name; ep01 sequence joining, bh01, bh05, bh07, bh10, bh11, rn03, ss01, ss02 and tss02 look at every other player; `sync_from_player` gives any remote `SYNC_REMOTE`; `get_dist_closest_player_to_object` measures with the game's `get_dist`.
+
+`coop_trace(text)` calls the no-op native `mission_debug("coop: " .. text)`; the adapter's LT1 hook writes it to the log under `trace=1` (`docs/SR2_NOTES.md`, "Lua per-remote slots and LT1 (M16 wave 2)").
 
 ## Open review items
 
-- Seats: P3/P4 take the seats after P2's. Where the script seats an NPC right after (bh01 speedboat seat 3, bh06 truck seat 1, rn04 van, rn07 helicopter, ss07) or the vehicle is small (rn03 and rn09 motorcycles, rn05 two-seat cart, which cannot carry P3), they may collide or fail. No seat-free test exists, so nothing falls back.
-- The first remote is `"#PLAYER2#"`, the name of `REMOTE_PLAYER`. A mission helper that is called with that name and queries a wrapped function inside (`get_dist`, `character_is_in_vehicle`) gets the all/nearest answer over every remote for P2. Loops written in the patches use `COOP_NATIVE`, but the game's own per-player helpers do not.
-- Index-based state is not name-keyed: ss06 (`*_INDEX`), tss01 `REMOTE_PLAYER_ON_2ND_ROOFTOP`, tss04 (two towed vehicles, jump counters) and the HUD bar / timer slots give P3 and P4 the remote side's slot.
-- Two-player waits that the patches left on `nearest`: ss04 and ss07 teleport waits (offsets from a future position spread would hang `farthest`), bh01 win distance.
-- Probe LW (spec): the engine passes the triggering human's name to the `on_*` callbacks for `#PLAYER3#`; the library assumes it.
-- Callbacks, thread fan-out and the library need the whole folder installed; a mission override without the `ug_lib.lua` override fails on the missing `coop_*` functions.
+- Seats: whether a character seated a few lines earlier is visible to `get_char_in_vehicle` before its teleport completes (the reservations cover it either way), the real seat counts of the mission vehicles and the meaning of the vehicle byte +0x84D8 (live gate LG8).
+- The first remote is `"#PLAYER2#"`; with three and four players the remotes are `#PLAYER3#` and `#PLAYER4#` (the pool hands out the lowest free number, verified from the exe) and the engine passes those names to the `on_*` callbacks (live gate LG1, probe LW).
+- Two-player waits that the patches left on `nearest`: ss04 and ss07 teleport waits (offsets from a future position spread would hang `farthest`).
+- Kept on purpose: one remote nav per teleport and cutscene end (`teleport_coop`), `party_add` with one leader, the one remote towed vehicle in tss04, rn07 lieutenant debug lines, the bh05 player voice lines, bh07 `mission_help_table(..., OTHER_PLAYER[...])` (a shipped bug that shows nothing), rn02 free clothing (reaches every remote, cosmetic), and markers, waypoints and help text sent with `SYNC_REMOTE` (shown on every remote).
+- ss10's repair outfit already reaches every remote (`customization_outfit_wear` with `SYNC_REMOTE`), so it needs no change.
+- Callbacks, thread fan-out and the library need the whole folder installed (every player needs the new `coop\scripts` folder: the version gate hashes it); a mission override without the `ug_lib.lua` override fails on the missing `coop_*` functions.
