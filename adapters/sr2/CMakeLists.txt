@@ -71,6 +71,7 @@ add_library(sr2_adapter SHARED
     src/traffic_trace.cpp
     src/vehicle_pool.cpp
     src/player_visuals.cpp
+    src/char_types.cpp
     src/anim_trace.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
@@ -116,6 +117,7 @@ set_source_files_properties(
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
+set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
@@ -179,6 +181,8 @@ add_unit_test(vehicle_trace_rules_test)
 add_unit_test(traffic_trace_rules_test)
 add_unit_test(vehicle_pool_test)
 add_unit_test(player_visuals_rules_test)
+add_unit_test(char_types_rules_test)
+add_unit_test(char_types_sites_test)
 add_unit_test(anim_trace_rules_test)
 add_unit_test(spread_rules_test)
 add_unit_test(frustum_rules_test)

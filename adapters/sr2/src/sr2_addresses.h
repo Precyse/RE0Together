@@ -466,6 +466,39 @@ constexpr uintptr_t kAnimHeaderFlagsOffset = 5;        // byte: bit 0x40 = the h
 constexpr uint8_t kAnimHeaderOffsetFlag = 0x40;
 constexpr uintptr_t kAnimHeaderOffsetOffset = 0x2C;    // dword
 
+// One character type per remote (M16 W1; docs/SR2_NOTES.md)
+constexpr uintptr_t kCharTypeCategorySetup = 0x9D65D0;  // sizes stream category 3 for the MP characters; returns at once in co-op
+constexpr uintptr_t kCoopLoaderMerge = 0x69CB6C;        // the level loader's merge point after the co-op block for styletest_pc_mp2
+constexpr uintptr_t kCoopLoaderResume = 0x69CB72;
+constexpr uintptr_t kCoopTableFill = 0x9D7FFC;          // the co-op fill of the char table with styletest_pc_mp2
+constexpr uintptr_t kCoopTableFillResume = 0x9D8083;
+constexpr uintptr_t kStringHash = 0xBDCB30;             // eax = 0, ecx = name, [esp+4] = out; stores the hash, returns the out pointer
+constexpr uintptr_t kCharEntries = 0x2526C58;           // pointer to the character type entries
+constexpr uintptr_t kCharEntryCount = 0xF5BB68;
+constexpr uintptr_t kCharEntryStride = 0x6C;
+constexpr uintptr_t kCharEntryHashOffset = 0xC;
+constexpr uintptr_t kCharEntryIdOffset = 0x68;          // the stream id; its top byte is the stream category
+constexpr uintptr_t kTypeLookup = 0x4A5F60;             // stdcall(name hash, create): pointer to the type, or 0
+constexpr uintptr_t kTypeEntryOffset = 8;               // the type's character entry
+constexpr uintptr_t kStreamCategories = 0x2F9B2E8;
+constexpr uintptr_t kStreamCategoryStride = 0xD4;
+constexpr uintptr_t kCategoryCpuSlotOffset = 0x20;
+constexpr uintptr_t kCategoryCpuBaseOffset = 0x24;
+constexpr uintptr_t kCategoryGpuSlotOffset = 0x28;
+constexpr uintptr_t kCategoryGpuBaseOffset = 0x2C;
+constexpr uintptr_t kCategoryNodeSizes = 0xA756A0;      // eax = category, edx = id, edi = &cpu size, esi = &gpu size
+constexpr uintptr_t kCategoryResetSlots = 0xA75CC0;     // eax = category
+constexpr uintptr_t kStreamRequest = 0xA757F0;          // eax = category, stack (id, 5, 0, 1)
+constexpr uintptr_t kStreamCategoryPump = 0x946790;     // cdecl(category, 0, 0)
+constexpr uintptr_t kStreamLoaded = 0xA79490;           // edi = id; al = loaded
+constexpr uintptr_t kRecordRegistry = 0x15B8680;        // pointers to the character records
+constexpr size_t kRecordRegistryCount = 0x19;
+constexpr uintptr_t kCharRecordIdOffset = 0x60;
+constexpr uintptr_t kRecordFlagsOffset = 0x49;          // byte
+constexpr uint8_t kRecordHeldFlag = 2;
+constexpr uintptr_t kMultiplayerFlag = 0x2528B48;       // byte: a multiplayer (not co-op) session is running
+constexpr uintptr_t kLoaderSkipFlag = 0x2527C00;        // byte: the level loader's second entry test of the co-op block
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
