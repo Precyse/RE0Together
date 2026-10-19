@@ -582,6 +582,25 @@ constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall
 constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
 constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
 
+// Vehicle seating (milestone 16 wave 2; docs/SR2_NOTES.md "Vehicle seating")
+constexpr uintptr_t kVehicleSeatsOffset = 0x8ABC;          // seat array of a vehicle, the occupant's handle at +0 of each seat
+constexpr uintptr_t kVehicleSeatStride = 0x24;
+constexpr uintptr_t kVehicleSeatsDeclaredOffset = 0x84D8;  // byte: 1 = the vehicle declares its seat count
+constexpr uintptr_t kVehicleSeatCountOffset = 0x6CE8;      // dword: the seat count when the byte above is 1
+constexpr uintptr_t kVehicleComponentOffset = 0x84EC;      // pointer to the component whose vtable +0x20 the mission exit calls (stdcall(0))
+constexpr uintptr_t kComponentStopSlot = 0x20;             // vtable offset of that call
+constexpr uintptr_t kVehicleOfHandleChecked = 0xAE28F0;    // ECX = handle: the vehicle or 0
+constexpr uintptr_t kHumanInVehicle = 0x9B8C50;            // ESI = human, EDI = vehicle: AL = 1 when settled in it
+constexpr uintptr_t kReleaseHeld = 0x69DDA0;               // EDX = human: releases the human it holds (+0xEA8)
+constexpr uintptr_t kMissionExitPartnerDone = 0x6A4E85;    // the mission exit after the default partner's stop (SE3 resumes here)
+constexpr uintptr_t kLuaMissionDebug = 0xA398C0;           // Lua native mission_debug: a stub that returns 0 (ST1 reads its text)
+constexpr uintptr_t kLuaStateTopOffset = 0x8;              // lua_State: the stack top
+constexpr uintptr_t kLuaStateBaseOffset = 0xC;             // lua_State: the base of the native's arguments
+constexpr uintptr_t kLuaValueSize = 0x10;                  // one stack value: the type tag at +0, the payload at +8
+constexpr uintptr_t kLuaValuePayloadOffset = 8;
+constexpr uint32_t kLuaStringTag = 4;
+constexpr uintptr_t kLuaStringCharsOffset = 0x10;          // a Lua string object: the characters start here
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

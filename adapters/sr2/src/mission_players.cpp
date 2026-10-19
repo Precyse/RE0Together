@@ -10,6 +10,7 @@
 #include "spread_rules.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "vehicle_seating_state.h"
 
 namespace {
 
@@ -91,7 +92,7 @@ void __cdecl sendCutsceneEndPerRemote(GuestFrame* frame) {
 }
 
 // MC4: replaces the partner getter before `cmp esi, [eax + 0x18D0]` (esi = this machine's last vehicle): the remote in that
-// vehicle with a lower slot than ours (the one that keeps it), else the default partner.
+// vehicle with a lower slot than ours (the one that keeps it), else the default partner. The slot answered is remembered for SE2.
 uintptr_t __cdecl sharedVehicleHolder(uint32_t vehicle) {
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
@@ -103,9 +104,11 @@ uintptr_t __cdecl sharedVehicleHolder(uint32_t vehicle) {
     for (size_t i = 0; i < snapshot.pairing.count; ++i) {
         const partner_rules::Remote& remote = snapshot.pairing.items[i];
         if (remote.human && remote.slot < localSlot && readDword(remote.human + sr2::kHumanDrivenVehicleOffset) == vehicle) {
+            vehicle_seating_state::rememberCheckpointHolder(remote.slot);
             return remote.human;
         }
     }
+    vehicle_seating_state::rememberCheckpointHolder(vehicle_seating_rules::kDefaultHolder);
     return partner_scope::partnerHuman();
 }
 
