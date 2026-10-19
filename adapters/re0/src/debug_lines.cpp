@@ -116,6 +116,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"snaps", format(L"%u", total(s, Counter::Snaps)), false});
     lines.push_back({L"puppet poses in/s", format(L"%u", rate(s, Counter::PosesReceived)), false});
     lines.push_back({L"puppet events in/out", format(L"%u / %u", total(s, Counter::MotionEventsReceived), total(s, Counter::MotionEventsSent)), false});
+    lines.push_back({L"puppet sub events", format(L"%u", total(s, Counter::PuppetSubEvents)), false});
     lines.push_back({L"puppet seeks/misses", format(L"%u / %u", total(s, Counter::PuppetSeeks), total(s, Counter::PuppetMotionMisses)), false});
     lines.push_back({L"state refused", format(L"%u", total(s, Counter::StateSendRefused)), false});
     lines.push_back({L"router dropped", format(L"%u", total(s, Counter::RouterDropped)), false});

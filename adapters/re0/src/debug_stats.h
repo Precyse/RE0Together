@@ -67,6 +67,7 @@ enum class Counter : size_t {
     PuppetMotionMisses,
     StateSendRefused,
     RouterDropped,
+    PuppetSubEvents,
     Count
 };
 

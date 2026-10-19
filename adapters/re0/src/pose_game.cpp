@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <optional>
 
 #include "crash_dump.h"
 #include "game.h"
@@ -76,31 +77,100 @@ bool readThinkByte(uintptr_t think, uintptr_t offset, uint8_t& out) {
     return true;
 }
 
-bool callSet(void* animControl, const pose_game::MotionRequest& request) {
+// Runs `step`; false when it raised an exception, which is reported under `what`.
+template <class Step>
+bool guarded(const char* what, Step step) {
     __try {
-        g_originalSet(animControl, nullptr, request.layer, request.motionNo, request.flags, request.interp, request.start);
+        step();
         return true;
-    } __except (crash_dump::reportCaught(GetExceptionInformation(), "pose_game: cAnimControl::set")) {
+    } __except (crash_dump::reportCaught(GetExceptionInformation(), what)) {
         return false;
     }
 }
 
-bool callMotionAvailable(uintptr_t player, uint16_t motionNo) {
-    __try {
-        return game::callThiscall<uintptr_t>(game::kMotionAvailableFunction, reinterpret_cast<void*>(player),
-                                             static_cast<uint32_t>(motionNo)) != 0;
-    } __except (crash_dump::reportCaught(GetExceptionInformation(), "pose_game: motion available")) {
-        return false;
-    }
+constexpr puppet_rule::ControlLayout kControls{game::kAnimControlOffset, game::kSubSlotOffset + game::kSubControlInSlot,
+                                               game::kSubSlotStride};
+
+// The object a MotionEvent target's anim control drives: the character for the body, the slot's unit for a sub-control.
+uintptr_t unitOf(uintptr_t player, uint16_t target) {
+    return target == pose_wire::kBodyTarget
+               ? player
+               : game::readPointer(player + game::kSubSlotOffset + (target - 1) * game::kSubSlotStride);
+}
+
+std::optional<uintptr_t> controlOf(uintptr_t player, uint16_t target) {
+    const auto offset = puppet_rule::controlOffset(kControls, target);
+    return offset ? std::optional<uintptr_t>(player + *offset) : std::nullopt;
+}
+
+bool callSet(void* animControl, const pose_game::MotionRequest& request) {
+    return guarded("pose_game: cAnimControl::set", [&] {
+        g_originalSet(animControl, nullptr, request.layer, request.motionNo, request.flags, request.interp, request.start);
+    });
+}
+
+bool callMotionAvailable(uintptr_t unit, uint16_t motionNo) {
+    uintptr_t found = 0;
+    return guarded("pose_game: motion available",
+                   [&] {
+                       found = game::callThiscall<uintptr_t>(game::kMotionAvailableFunction, reinterpret_cast<void*>(unit),
+                                                             static_cast<uint32_t>(motionNo));
+                   }) &&
+           found != 0;
 }
 
 bool callReset(uintptr_t player) {
-    __try {
-        game::callThiscall<void>(game::kPlayerResetFunction, reinterpret_cast<void*>(player));
-        return true;
-    } __except (crash_dump::reportCaught(GetExceptionInformation(), "pose_game: Player_Reset")) {
-        return false;
-    }
+    return guarded("pose_game: Player_Reset",
+                   [&] { game::callThiscall<void>(game::kPlayerResetFunction, reinterpret_cast<void*>(player)); });
+}
+
+// A fastcall(player) engine step.
+bool callStep(uintptr_t function, uintptr_t player, const char* what) {
+    return guarded(what, [&] { game::callThiscall<void>(function, reinterpret_cast<void*>(player)); });
+}
+
+// The status flags change under the character's own lock (0x512e90 sets, 0x512050 clears, 0x50e1a0 reads).
+void writeStatus(uintptr_t player, uint32_t status) {
+    guarded("pose_game: status flags", [&] {
+        CRITICAL_SECTION* lock = reinterpret_cast<CRITICAL_SECTION*>(player + game::kPlayerStatusLockOffset);
+        EnterCriticalSection(lock);
+        game::writeMemory(player + game::kPlayerStatusFlagsOffset, status & game::kPlayerStatusMask);
+        LeaveCriticalSection(lock);
+    });
+}
+
+// The hit attributes are changed only through the engine's setter and clearer, by the difference.
+void writeHitAttributes(uintptr_t player, uint16_t wanted) {
+    uint32_t current = 0;
+    if (!game::readMemory(player + game::kPlayerHitAttributesOffset, current)) return;
+    const puppet_rule::HitChange change = puppet_rule::hitChange(current, wanted);
+    guarded("pose_game: hit attributes", [&] {
+        void* self = reinterpret_cast<void*>(player);
+        if (change.set) game::callThiscall<void>(game::kPlayerSetHitAttributesFunction, self, change.set);
+        if (change.clear) game::callThiscall<void>(game::kPlayerClearHitAttributesFunction, self, change.clear);
+    });
+}
+
+// What the owner's character shows that its think would have written, mirrored raw.
+void writeMirrors(uintptr_t player, const pose_wire::Pose& pose) {
+    writeStatus(player, pose.status);
+    writeHitAttributes(player, pose.hitAttr);
+    game::writeMemory(player + game::kPlayerX1034Offset, pose.x1034);
+    game::writeMemory(player + game::kPlayerManualPitchOffset, pose.manualPitch);
+    game::writeMemory(player + game::kPlayerAimTierOffset, static_cast<int32_t>(pose.aimTier));
+}
+
+bool callSettle(uintptr_t player) {
+    return guarded("pose_game: post-move steps", [&] {
+        void* self = reinterpret_cast<void*>(player);
+        game::callThiscall<void>(game::kPlayerHandSwapFunction, self);
+        void* area = reinterpret_cast<void*>(game::readPointer(game::kAreaGlobal));
+        if (!area) return;
+        const uintptr_t record = game::callThiscall<uintptr_t>(game::kPlayerRoomRecordFunction, self);
+        const uint32_t areaId = game::callThiscall<uint32_t>(game::kAreaIdFunction, area, record,
+                                                             player + game::kPlayerPositionOffset, game::kAreaIdMode);
+        game::callThiscall<void>(game::kPlayerSetAreaIdFunction, self, areaId);
+    });
 }
 
 uintptr_t modeFlagsAddress() {
@@ -162,21 +232,40 @@ bool readLayer0(uintptr_t player, puppet_rule::Layer0& out) {
            game::readMemory(base + game::kMotionFrameMaxOffset, out.frameMax);
 }
 
-bool motionAvailable(uintptr_t player, uint16_t motionNo) { return callMotionAvailable(player, motionNo); }
+std::optional<uint16_t> controlTarget(uintptr_t player, uintptr_t animControl) {
+    return animControl >= player ? puppet_rule::controlTarget(kControls, animControl - player) : std::nullopt;
+}
 
-bool replay(uintptr_t player, const MotionRequest& request) {
-    return g_originalSet && callSet(reinterpret_cast<void*>(animControlOf(player)), request);
+bool hasUnit(uintptr_t player, uint16_t target) { return unitOf(player, target) != 0; }
+
+bool motionAvailable(uintptr_t player, uint16_t target, uint16_t motionNo) {
+    const uintptr_t unit = unitOf(player, target);
+    return unit && callMotionAvailable(unit, motionNo);
+}
+
+bool replay(uintptr_t player, uint16_t target, const MotionRequest& request) {
+    const auto control = controlOf(player, target);
+    return g_originalSet && control && callSet(reinterpret_cast<void*>(*control), request);
 }
 
 void writePose(uintptr_t player, const pose_wire::Pose& pose) {
     game::writeTransform(player, pose.pos, pose.quat);
     game::writeMemory(player + game::kPlayerKeepRootMotionOffset, uint8_t{0});
+    writeMirrors(player, pose);
     const uintptr_t think = thinkOf(player);
     if (!think) return;
     game::writeMemory(think + game::kThinkGroupOffset, static_cast<int32_t>(pose.group));
     game::writeMemory(think + game::kThinkStateOffset, static_cast<int32_t>(pose.state));
     game::writeMemory(think + game::kThinkPhaseOffset, static_cast<int32_t>(pose.phase));
 }
+
+bool refreshHandPose(uintptr_t player) { return callStep(game::kPlayerHandPoseFunction, player, "pose_game: hand pose"); }
+
+bool probeLight(uintptr_t player) { return callStep(game::kPlayerLightProbeFunction, player, "pose_game: light probe"); }
+
+bool bendSpine(uintptr_t player) { return callStep(game::kPlayerSpineBendFunction, player, "pose_game: spine bend"); }
+
+bool settleAfterMove(uintptr_t player) { return callSettle(player); }
 
 bool resetPlayer(uintptr_t player) { return callReset(player); }
 

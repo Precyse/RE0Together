@@ -84,6 +84,8 @@ add_library(re0_adapter SHARED
     src/pose_game.cpp
     src/pose_capture.cpp
     src/puppet.cpp
+    src/puppet_hooks.cpp
+    src/player_contact.cpp
     src/state_mode.cpp
     src/state_net.cpp
     src/frame_router.cpp
