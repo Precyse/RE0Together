@@ -15,6 +15,9 @@ using Binder = partner_thunks::Binding (*)(partner_sites::Thunk);
 // Checks the bytes of every site (the gated ones included) and logs each difference. True when all match.
 bool sitesMatch(std::span<const partner_sites::Site> sites);
 
+// The address of the first site whose bytes differ, 0 when all match. Logs each difference, as sitesMatch does.
+uintptr_t firstDifference(std::span<const partner_sites::Site> sites);
+
 struct Result {
     bool installed;
     size_t patched;

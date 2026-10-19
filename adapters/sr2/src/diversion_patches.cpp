@@ -2,7 +2,6 @@
 
 #include <array>
 #include <iterator>
-#include <span>
 
 #include "activity_state.h"
 #include "activity_thunks.h"
@@ -29,14 +28,6 @@ partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
     return {nullptr, nullptr};
 }
 
-// The address of the first row of `sites` whose bytes differ, 0 when all match.
-uintptr_t firstDifference(std::span<const partner_sites::Site> sites) {
-    for (const partner_sites::Site& site : sites) {
-        if (!site_installer::sitesMatch(std::span<const partner_sites::Site>(&site, 1))) return site.address;
-    }
-    return 0;
-}
-
 }  // namespace
 
 namespace diversion_patches {
@@ -45,7 +36,7 @@ bool sitesMatch() {
     bool any = false;
     for (size_t i = 0; i < std::size(diversion_sites::kSets); ++i) {
         const diversion_sites::Set& set = diversion_sites::kSets[i];
-        const uintptr_t differs = firstDifference(set.sites);
+        const uintptr_t differs = site_installer::firstDifference(set.sites);
         g_matched[i] = differs == 0;
         any = any || g_matched[i];
         if (differs) {
