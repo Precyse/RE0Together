@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "flag_sequencer.h"
 #include "game_tick.h"
 #include "log.h"
 #include "pose_capture.h"
@@ -12,7 +13,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 4;  // load serial observer, pose capture, puppet, room authority
+constexpr unsigned kModuleCount = 5;  // load serial observer, pose capture, puppet, room authority, flag sequencer
 
 std::atomic<bool> g_on{false};
 
@@ -35,6 +36,7 @@ void enableAll(NetClient& net) {
     }
     room_authority::enable();
     ++enabled;
+    if (flag_sequencer::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

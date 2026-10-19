@@ -58,6 +58,7 @@ add_library(re0_adapter SHARED
     src/crash_dump.cpp
     src/net_trace.cpp
     src/flag_sync.cpp
+    src/flag_sequencer.cpp
     src/join_sync.cpp
     src/resync.cpp
     src/session_slot.cpp
@@ -180,11 +181,13 @@ add_executable(timed_queue_test tests/timed_queue_test.cpp)
 
 add_executable(pose_capture_rule_test tests/pose_capture_rule_test.cpp)
 
+add_executable(flag_sequencer_test tests/flag_sequencer_test.cpp)
+
 add_executable(room_authority_test tests/room_authority_test.cpp ${DS2_AUTHORITY_SOURCES})
 target_include_directories(room_authority_test PRIVATE src ${DS2_SRC_DIR})
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test room_authority_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test room_authority_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()
