@@ -344,6 +344,16 @@ enum class Thunk : uint16_t {
     FuzzRiotNearAnyRemote,
     FuzzPointNearAnyRemote,
     FuzzRioterNearAnyRemote,
+    // Milestone 17 wave 3 (crowd_control_sites.h): Crowd Control for 3 or 4 players.
+    RemoteHoldingEdi,
+    NearestRemoteToCelebCarEsi,
+    NearestRemoteToRemoteStart,
+    EachPlayerProtectStart,
+    EachRemoteCrowdWeapon,
+    EachRemoteCrowdStartFlags,
+    TeleportLocalOrEachRemote,
+    EachRemoteReleaseHeld,
+    EachRemoteCrowdEndFlags,
 };
 
 struct Site {

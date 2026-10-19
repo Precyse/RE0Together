@@ -7,6 +7,7 @@
 #include "config.h"
 #include "content_hash.h"
 #include "coop_limits.h"
+#include "crowd_control_patches.h"
 #include "diversion_patches.h"
 #include "force_join.h"
 #include "fuzz_patches.h"
@@ -69,6 +70,8 @@ DWORD WINAPI initThread(LPVOID) {
         if (activities && !diversions) logger::write("diversions: sites differ, the diversion logic is not installed");
         const bool fuzz = activities && fuzz_patches::sitesMatch();
         if (activities && !fuzz) logger::write("fuzz: sites differ, the FUZZ logic is not installed");
+        const bool crowdControl = activities && crowd_control_patches::sitesMatch();
+        if (activities && !crowdControl) logger::write("crowd control: sites differ, the crowd control logic is not installed");
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
         const bool animStreaming = crowd && anim_stream::sitesMatch();
@@ -105,6 +108,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (diversions) diversion_patches::install(config.partnerExperimental, config.trace);
         if (fuzz) fuzz_patches::install(config.trace);
+        if (crowdControl) crowd_control_patches::install(config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (partnering) hud_patches::install(config.trace);
         if (crowd) revive_patches::install(config.trace);

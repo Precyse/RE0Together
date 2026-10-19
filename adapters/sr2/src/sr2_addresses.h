@@ -855,5 +855,27 @@ constexpr uintptr_t kObjectPositionYOffset = 0x18;        // the height inside a
 constexpr uintptr_t kFuzzRioterJoins = 0x5CE6FC;          // where a rioter that is near a player goes on
 constexpr uintptr_t kFuzzRioterSkips = 0x5CE7BF;          // where the rioter loop goes on with the next human
 constexpr uint32_t kFuzzSpawnPointSlot = 0x8;             // [esp + 8] at the spawn point's partner getter call: the point's vec3
+// Milestone 17 wave 3: Crowd Control (M17_W3_CROWD.md). The calls the level start and end make for the local player and "the partner",
+// the fields they read and the addresses the jump outs resume at.
+constexpr uintptr_t kCrowdGiveWeapon = 0xB71CF0;        // ECX = human; cdecl(weapon, 1, -1, 0, 0), the caller pops
+constexpr uintptr_t kSyncIgnoreEquipOnGrab = 0x9E0710;  // stdcall(human, flag): sync flag ignore_equip_on_grab (+0x18E8 bit 3), tells the owner
+constexpr uintptr_t kForceBeerMuscles = 0x9676E0;       // stdcall(human, flag): force flag beer_muscles (+0x110C bit 25)
+constexpr uintptr_t kInventoryEquip = 0x55A930;         // stdcall(inventory, value, 1, 0)
+constexpr uintptr_t kProtectStartVehicle = 0xB076C0;    // EDI = human; cdecl(1)
+constexpr uintptr_t kReleaseHeldAtEnd = 0x9B2240;       // ECX = human; cdecl(1): lets go of what the human holds
+constexpr uintptr_t kHumanHeldOffset = 0xEA8;           // handle of the human (or celebrity) this human holds, 0 for none
+constexpr uintptr_t kHumanInventoryOffset = 0x10C4;     // the inventory of a human (the same offset as kNpcArmedStateOffset)
+constexpr uintptr_t kCrowdWeaponOffset = 0x74;          // level: the bean bag gun
+constexpr uintptr_t kCrowdEventIndexOffset = 0x7C;      // level: the running event
+constexpr uintptr_t kCrowdEventStride = 0x16C8;         // [level + 4]: one record per event
+constexpr uintptr_t kCrowdNavOffset = 0x60;             // event record: the navs, one dword each (local start, partner start, end)
+constexpr uintptr_t kNavPositionOffset = 0x1C;          // nav: the vec3
+constexpr uintptr_t kProtectLocalSlot = 0x10;           // protect start: stack slot of the local player's human
+constexpr uintptr_t kProtectCelebSlot = 0x18;           // protect start: stack slot of the celebrity
+constexpr uintptr_t kResumeProtectStart = 0x5A1B55;
+constexpr uintptr_t kResumeCrowdWeapon = 0x5AD8E0;
+constexpr uintptr_t kResumeCrowdStartFlags = 0x5AD9C4;
+constexpr uintptr_t kResumeCrowdRelease = 0x5ADF19;
+constexpr uintptr_t kResumeCrowdEndFlags = 0x5AE224;
 
 }  // namespace sr2

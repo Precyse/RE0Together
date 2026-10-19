@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../src/activity_sites.h"
+#include "../src/crowd_control_sites.h"
 #include "../src/diversion_sites.h"
 #include "../src/force_join_sites.h"
 #include "../src/game_port_patches.h"
@@ -69,7 +70,7 @@ inline std::vector<Range> milestones3to8() {
     return ranges;
 }
 
-// What milestone 7 and milestone 16 wave 2 (the diversions) write.
+// What milestone 7, milestone 16 wave 2 (the diversions) and milestone 17 wave 3 (Crowd Control) write.
 inline std::vector<Range> activities() {
     std::vector<Range> ranges;
     for (const auto table : {std::span<const partner_sites::Site>(activity_sites::kPhase1),
@@ -78,6 +79,9 @@ inline std::vector<Range> activities() {
         for (const partner_sites::Site& site : table) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
     }
     for (const diversion_sites::Set& set : diversion_sites::kSets) {
+        for (const partner_sites::Site& site : set.sites) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
+    }
+    for (const crowd_control_sites::Set& set : crowd_control_sites::kSets) {
         for (const partner_sites::Site& site : set.sites) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size()});
     }
     return ranges;
