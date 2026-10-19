@@ -421,6 +421,12 @@ constexpr uintptr_t kThinkPhaseOffset = 0x10;
 constexpr uintptr_t kPlayerStatusFlagsOffset = 0x68c4;     // u32, read by enemies
 constexpr uintptr_t kPlayerKeepRootMotionOffset = 0x6a70;  // u8, playMotion's flags & 0x10; 0 = the position is the caller's
 
+// state mode: phase 3 (POSE_STATE v2 fields; docs/RE0_NOTES.md "State mode: timeline and POSE v2")
+constexpr uintptr_t kPlayerX1034Offset = 0x1034;       // u32, uCharaBase; zombie grabs require 0 (meaning open, probe F1)
+constexpr uintptr_t kPlayerHitAttributesOffset = 0x16ec;  // u32, low 10 bits are the hit attributes (0x528ee0 sets, 0x528ec0 clears)
+constexpr uintptr_t kPlayerAimTierOffset = 0x6954;     // i32, 0..2: the vertical aim band
+constexpr uintptr_t kPlayerManualPitchOffset = 0x695c; // f32, radians: the analog up/down pitch while aiming
+
 // sGamePad
 constexpr uintptr_t kGetPadFunction = 0x600630;  // thiscall, 1 stack arg, i < 2
 constexpr uintptr_t kPadTableOffset = 0xc24;

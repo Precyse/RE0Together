@@ -3,6 +3,9 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
 
 #include "crash_dump.h"
 #include "game.h"
@@ -17,14 +20,17 @@ using SetFunction = void(__fastcall*)(void* animControl, void* edx, uint32_t lay
 constexpr uint32_t kMaxByte = 0xff;
 
 SetFunction g_originalSet = nullptr;
-pose_game::SetObserver g_observer = nullptr;
+bool g_hookInstalled = false;
+std::array<pose_game::SetObserver, pose_game::kMaxAnimObservers> g_observers{};
+std::atomic<size_t> g_observerCount{0};  // observers published to the game thread
 uintptr_t g_pauseAddress = 0;  // where the bit was set; 0 while not held
 bool g_pauseWasSet = false;
 
 void __fastcall setDetour(void* animControl, void* edx, uint32_t layer, uint32_t motionNo, uint32_t flags, float interp,
                           float start) {
     g_originalSet(animControl, edx, layer, motionNo, flags, interp, start);
-    if (g_observer) g_observer(reinterpret_cast<uintptr_t>(animControl), {layer, motionNo, flags, interp, start});
+    const size_t count = g_observerCount.load(std::memory_order_acquire);
+    for (size_t i = 0; i < count; ++i) g_observers[i](reinterpret_cast<uintptr_t>(animControl), {layer, motionNo, flags, interp, start});
 }
 
 uintptr_t layerAddress(uintptr_t player, size_t layer) {
@@ -45,6 +51,23 @@ uintptr_t thinkOf(uintptr_t player) {
 }
 
 uint8_t asByte(int32_t value) { return static_cast<uint8_t>(std::clamp<int32_t>(value, 0, kMaxByte)); }
+
+uint8_t clampedByte(int32_t value, uint8_t most) { return static_cast<uint8_t>(std::clamp<int32_t>(value, 0, most)); }
+
+// The fields POSE_STATE v2 adds to the base pose, each left at 0 when unreadable like the status flags.
+void readExtras(uintptr_t player, pose_wire::Pose& out) {
+    out.x1034 = 0;
+    game::readMemory(player + game::kPlayerX1034Offset, out.x1034);
+    uint32_t hit = 0;
+    game::readMemory(player + game::kPlayerHitAttributesOffset, hit);
+    out.hitAttr = static_cast<uint16_t>(hit & pose_wire::kHitAttributeMask);
+    float pitch = 0.0f;
+    game::readMemory(player + game::kPlayerManualPitchOffset, pitch);
+    out.manualPitch = std::isfinite(pitch) ? pitch : 0.0f;
+    int32_t tier = 0;
+    game::readMemory(player + game::kPlayerAimTierOffset, tier);
+    out.aimTier = clampedByte(tier, pose_wire::kMaxAimTier);
+}
 
 bool readThinkByte(uintptr_t think, uintptr_t offset, uint8_t& out) {
     int32_t value = 0;
@@ -89,13 +112,26 @@ uintptr_t modeFlagsAddress() {
 
 namespace pose_game {
 
-bool installAnimHook(SetObserver observer) {
-    g_observer = observer;
-    return hooks::install("cAnimControl::set", game::kAnimControlSetFunction, reinterpret_cast<void*>(&setDetour),
-                          reinterpret_cast<void**>(&g_originalSet));
+bool addAnimObserver(SetObserver observer) {
+    if (!g_hookInstalled &&
+        !hooks::install("cAnimControl::set", game::kAnimControlSetFunction, reinterpret_cast<void*>(&setDetour),
+                        reinterpret_cast<void**>(&g_originalSet))) {
+        return false;
+    }
+    g_hookInstalled = true;
+    const size_t count = g_observerCount.load();
+    if (count >= kMaxAnimObservers) return false;
+    g_observers[count] = observer;
+    g_observerCount.store(count + 1, std::memory_order_release);
+    return true;
 }
 
-void uninstallAnimHook() { hooks::remove(game::kAnimControlSetFunction); }
+void uninstallAnimHook() {
+    if (!g_hookInstalled) return;
+    hooks::remove(game::kAnimControlSetFunction);
+    g_hookInstalled = false;
+    g_observerCount = 0;
+}
 
 bool readPose(uintptr_t player, pose_wire::Pose& out) {
     if (!game::readTransform(player, out.pos, out.quat) || !readLayer(player, 0, out.layer[0]) ||
@@ -104,10 +140,12 @@ bool readPose(uintptr_t player, pose_wire::Pose& out) {
     }
     int32_t weapon = 0;
     game::readMemory(player + game::kPlayerWeaponTypeOffset, weapon);
-    out.weapon = asByte(weapon);
+    out.weapon = clampedByte(weapon, pose_wire::kMaxWeaponType);
     out.status = 0;
     game::readMemory(player + game::kPlayerStatusFlagsOffset, out.status);
+    readExtras(player, out);
     if (!readThink(player, out)) out.group = out.state = out.phase = 0;
+    out.group = std::min(out.group, pose_wire::kMaxThinkGroup);
     return true;
 }
 

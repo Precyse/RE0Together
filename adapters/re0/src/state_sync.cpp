@@ -35,10 +35,12 @@
 #include "party_mode.h"
 #include "phase_watch.h"
 #include "player_damage.h"
+#include "pose_capture.h"
 #include "resync.h"
 #include "session_slot.h"
 #include "scene.h"
 #include "state_correction.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -221,6 +223,7 @@ void tick(NetClient& net) {
     session_slot::onNetTick(net);
     auto_join::onNetTick();
     resync::onNetTick();
+    if (state_mode::on()) pose_capture::onNetTick();
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 
 #include "game.h"
@@ -22,15 +23,18 @@ struct MotionRequest {
 // Called on the game thread after the engine ran a motion request on the character whose anim control is `animControl`.
 using SetObserver = void (*)(uintptr_t animControl, const MotionRequest& request);
 
-// Hooks cAnimControl::set; `observer` sees every request the engine makes (not those of `replay`). Call once, after the
-// game code is decrypted.
-bool installAnimHook(SetObserver observer);
+// Hooks cAnimControl::set on the first call (one MinHook for all) and adds `observer`, which sees every request the
+// engine makes (not those of `replay`). At most kMaxAnimObservers; call after the game code is decrypted. False when the
+// hook could not be installed or the list is full.
+constexpr size_t kMaxAnimObservers = 4;
+bool addAnimObserver(SetObserver observer);
 void uninstallAnimHook();
 
 // The anim control of a character object.
 inline uintptr_t animControlOf(uintptr_t player) { return player + game::kAnimControlOffset; }
 
-// The character's current pose (position, rotation, both layers, think, weapon, status); the caller adds time, number and room.
+// The character's current pose (position, rotation, both layers, think, weapon, status, +0x1034, hit attributes, aim
+// pitch and tier); the caller adds time, number, room and load serial.
 bool readPose(uintptr_t player, pose_wire::Pose& out);
 
 // The character's think group, state and phase into `out`; false unless its think is a cPlayerThink.

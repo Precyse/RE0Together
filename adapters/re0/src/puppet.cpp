@@ -20,6 +20,7 @@
 #include "puppet_rule.h"
 #include "room_phase.h"
 #include "scene.h"
+#include "stream_clock.h"
 
 namespace {
 
@@ -28,6 +29,7 @@ using debug_stats::Counter;
 
 constexpr uint32_t kLogIntervalMs = 1000;
 constexpr int kNoSlot = -1;
+constexpr size_t kMaxPeerSlots = 8;
 constexpr float kNoSeekInterp = 0.0f;  // a seek restarts the motion at the owner's frame without blending
 
 using DamageEntryFunction = uint32_t(__fastcall*)(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e);
@@ -39,6 +41,7 @@ std::atomic<bool> g_hasPose{false};  // a pose from the driving peer arrived
 std::mutex g_mutex;
 pose_timeline::Timeline g_timeline;  // guarded by g_mutex
 int g_sourceSlot = kNoSlot;          // guarded by g_mutex
+std::array<stream_clock::StreamClock, kMaxPeerSlots> g_clocks;  // one per peer slot, guarded by g_mutex
 
 // Game thread only.
 std::array<bool, character_owner::kCharacterCount> g_puppeted{};
@@ -51,10 +54,13 @@ uint32_t g_flagsDuring = 0;
 uint32_t g_flagsAfter = 0;
 uint32_t g_nextLogMs = 0;
 bool g_logStarted = false;
+bool g_stale = false;
+uint32_t g_staleSinceMs = 0;
 
 void discardStream() {
     std::lock_guard lock(g_mutex);
     g_timeline.clear();
+    if (g_sourceSlot != kNoSlot) g_clocks[static_cast<size_t>(g_sourceSlot)].clear();
     g_sourceSlot = kNoSlot;
     g_hasPose = false;
 }
@@ -70,11 +76,13 @@ void countMiss(Character character, uint16_t motionNo) {
 
 // Runs one owner request on the puppet; skipped and counted when the puppet's banks lack the motion.
 void replayEvent(uintptr_t player, Character character, const pose_wire::MotionEvent& event) {
-    const pose_game::MotionRequest request{event.layer, event.motionNo, puppet_rule::replayFlags(event.layer, event.flags),
-                                           event.interp, event.start};
+    if (pose_wire::targetOf(event.layer) != pose_wire::kBodyTarget) return;  // weapon sub-controls: phase 4
+    const uint32_t layer = pose_wire::layerOf(event.layer);
+    const pose_game::MotionRequest request{layer, event.motionNo, puppet_rule::replayFlags(layer, event.flags), event.interp,
+                                           event.start};
     if (!available(player, event.motionNo)) {
         countMiss(character, event.motionNo);
-    } else if (pose_game::replay(player, request) && event.layer == 0) {
+    } else if (pose_game::replay(player, request) && layer == 0) {
         g_layer0Flags = request.flags;
     }
 }
@@ -94,9 +102,9 @@ void followLayer0(uintptr_t player, Character character, const pose_wire::Pose& 
 }
 
 // Once a second: what the puppet shows against what the owner sent, and the pause bit around its move.
-void logState(uintptr_t player, Character character, const pose_wire::Pose& pose) {
+void logState(uintptr_t player, Character character, const pose_wire::Pose& pose, const pose_timeline::Result& shown) {
     const uint32_t now = pose_wire::clockMs();
-    if (g_logStarted && pose_timeline::after(g_nextLogMs, now)) return;
+    if (g_logStarted && stream_clock::after(g_nextLogMs, now)) return;
     g_logStarted = true;
     g_nextLogMs = now + kLogIntervalMs;
     puppet_rule::Layer0 own{};
@@ -106,11 +114,12 @@ void logState(uintptr_t player, Character character, const pose_wire::Pose& pose
     const debug_stats::Snapshot stats = debug_stats::snapshot();
     logger::write(
         "puppet: %s motion 0x%04x (owner 0x%04x) frame %.1f (owner %.1f) think %u/%u/%u (owner %u/%u/%u) "
-        "mode flags %08x -> %08x -> %08x, events in %u, misses %u, seeks %u",
+        "mode flags %08x -> %08x -> %08x, events in %u, misses %u, seeks %u, delay %dms, poses buffered %zu",
         character_owner::name(character), own.motion, pose.layer[0].motion, own.frame, pose.layer[0].frame, think.group,
         think.state, think.phase, pose.group, pose.state, pose.phase, g_flagsBefore, g_flagsDuring, g_flagsAfter,
         stats.total[static_cast<size_t>(Counter::MotionEventsReceived)],
-        stats.total[static_cast<size_t>(Counter::PuppetMotionMisses)], stats.total[static_cast<size_t>(Counter::PuppetSeeks)]);
+        stats.total[static_cast<size_t>(Counter::PuppetMotionMisses)], stats.total[static_cast<size_t>(Counter::PuppetSeeks)],
+        shown.behindMs, shown.buffered);
 }
 
 // A door, a cutscene or another room: the engine or the room scripts move the character, the stream waits.
@@ -119,26 +128,49 @@ bool suspended(uintptr_t player, const pose_wire::Pose& pose) {
            !game_state::inCurrentRoom(player);
 }
 
+// The freshness of the owner's stream: the puppet holds while it is lost and says so once.
+void trackFreshness(Character character, bool stale) {
+    const uint32_t now = pose_wire::clockMs();
+    if (stale && !g_stale) {
+        g_stale = true;
+        g_staleSinceMs = now;
+        logger::write("puppet: %s stale, holding", character_owner::name(character));
+    } else if (!stale && g_stale) {
+        g_stale = false;
+        logger::write("puppet: %s fresh again after %u ms", character_owner::name(character), now - g_staleSinceMs);
+    }
+}
+
+void noteReset(Character character, pose_timeline::Reset reason) {
+    logger::write("puppet: %s timeline reset (%s)", character_owner::name(character), pose_timeline::name(reason));
+    g_seek.requestSeek();
+}
+
 void drive(uintptr_t player, Character character) {
     pose_wire::Pose pose;
     pose_timeline::Result result;
     g_due.clear();
     {
         std::lock_guard lock(g_mutex);
-        result = g_timeline.render(pose_wire::clockMs(), pose, g_due);
+        if (g_sourceSlot == kNoSlot) return;
+        result = g_timeline.render(g_clocks[static_cast<size_t>(g_sourceSlot)], pose_wire::clockMs(), pose, g_due);
     }
-    if (!result.valid || suspended(player, pose)) return;
+    trackFreshness(character, result.stale);
+    if (!result.valid) return;
+    if (result.reset != pose_timeline::Reset::None) noteReset(character, result.reset);
+    if (suspended(player, pose)) return;
     if (result.staleDropped > 0) logger::writeUnlessRepeated("puppet: %u stale motion events dropped", result.staleDropped);
     pose_game::writePose(player, pose);
     for (const pose_wire::MotionEvent& event : g_due) replayEvent(player, character, event);
     followLayer0(player, character, pose);
-    logState(player, character, pose);
+    logState(player, character, pose, result);
 }
 
 void release(uintptr_t player, Character character) {
     const bool reset = pose_game::resetPlayer(player);
     g_seek.reset();
     g_layer0Flags = 0;
+    g_stale = false;
     logger::write("puppet: %s released%s", character_owner::name(character), reset ? "" : " (reset faulted)");
 }
 
@@ -206,28 +238,37 @@ void uninstall() {
 bool active(uintptr_t player) {
     if (!g_enabled.load(std::memory_order_relaxed)) return false;
     const Character character = character_owner::identify(player);
-    return character != Character::Unknown && g_hasPose.load() &&
+    return character != Character::Unknown && net_pad::active() &&
            character_owner::controlOf(character) == character_owner::Control::Remote;
 }
 
 void onFrame(const GameFrame& frame) {
-    if (!g_enabled || static_cast<int>(frame.slot) != net_pad::peerSlot()) return;
+    if (!g_enabled || static_cast<int>(frame.slot) != net_pad::peerSlot() || frame.slot >= kMaxPeerSlots) return;
     const uint32_t arrival = pose_wire::clockMs();
     std::lock_guard lock(g_mutex);
     if (static_cast<int>(frame.slot) != g_sourceSlot) {
         g_timeline.clear();
+        g_clocks[frame.slot].clear();
         g_sourceSlot = frame.slot;
     }
+    stream_clock::StreamClock& clock = g_clocks[frame.slot];
     if (frame.type == pose_wire::kMsgPoseState) {
         const auto pose = pose_wire::decodePose(frame.payload);
         if (!pose) return;
-        g_timeline.addPose(*pose, arrival);
+        g_timeline.addPose(clock, *pose, arrival);
         g_hasPose = true;
         debug_stats::count(Counter::PosesReceived);
     } else if (const auto event = pose_wire::decodeEvent(frame.payload)) {
-        g_timeline.addEvent(*event, arrival);
+        g_timeline.addEvent(clock, *event, arrival);
         debug_stats::count(Counter::MotionEventsReceived);
     }
+}
+
+std::optional<stream_clock::StreamClock> clockFor(uint8_t slot) {
+    if (slot >= kMaxPeerSlots) return std::nullopt;
+    std::lock_guard lock(g_mutex);
+    if (!g_clocks[slot].ready()) return std::nullopt;
+    return g_clocks[slot];
 }
 
 }  // namespace puppet
