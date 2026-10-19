@@ -16,6 +16,7 @@ The story mission scripts name exactly one partner (`REMOTE_PLAYER` = `"#PLAYER2
 |---|---|
 | `coop_helpers.lua` | `coop_remote_players()` (the other names in `player_names_get_all()`; `REMOTE_PLAYER` when alone, so one or two players behave exactly like the original), `coop_is_remote_player`, any/all/near helpers (M7) |
 | `coop_missions.lua` | `coop_player_table(local_value, remote_value)` (a name-keyed table with an entry, and a default on first read, for every remote), `coop_all_players_in`, `coop_any_remote(fn, args)` and the like (the call as written, `REMOTE_PLAYER` replaced by each remote), `coop_each_remote`, `coop_nearest_remote`, `coop_farthest_remote_dist`, `coop_expand_remote`, `coop_stop_remote_vehicles` |
+| `coop_outfit_sync.lua` | `coop_sync_for(sync_table, player)`: a per-player sync mask (`PLAYER_SYNC[x]`) with the number of that player above its two bits (`mask = base + 16 * n`) while there is more than one remote player; the adapter's outfit sync sites read it (docs/SR2_NOTES.md, "Outfits, items and weapon slots (M16 W1)") |
 | `coop_wrappers.lua` | `coop_wrap(name, rule)`: the global is replaced by a wrapper; with `REMOTE_PLAYER` among the arguments and more than one remote it applies the rule, else it makes the original call |
 | `coop_rules.lua` | which function follows which rule |
 
@@ -25,7 +26,11 @@ Verified by `tools/sr2/lua_library_test.py` (lupa, mock natives): with 2 players
 
 ## ML2 to ML53: the story scripts
 
-Generic rules (`lua_patches/generic.py`) rewrite what always changes the same way: `x == REMOTE_PLAYER` and `~=` become `coop_is_remote_player(x)`, `{[LOCAL_PLAYER] = a, [REMOTE_PLAYER] = b}` becomes `coop_player_table(a, b)`, `T[LOCAL_PLAYER] and/or T[REMOTE_PLAYER]` become `coop_all_players_in(T)` / `coop_any_player_in(T)`. Per-script patches (`missions_*.py`) do the rest: reads of `T[REMOTE_PLAYER]` become all/any over the remotes, calls of mission-local helpers become `coop_each_remote(f, ...)`, per-player threads and cleanup loops run for every remote, and the 62 `UG?` sites whose default was wrong use `coop_any_remote(...)`, `coop_all_remotes(...)` or a farthest/any-far test.
+Generic rules (`lua_patches/generic.py`) rewrite what always changes the same way: `x == REMOTE_PLAYER` and `~=` become `coop_is_remote_player(x)`, `{[LOCAL_PLAYER] = a, [REMOTE_PLAYER] = b}` becomes `coop_player_table(a, b)`, `T[LOCAL_PLAYER] and/or T[REMOTE_PLAYER]` become `coop_all_players_in(T)` / `coop_any_player_in(T)`. Per-script patches (`missions_*.py`) do the rest: reads of `T[REMOTE_PLAYER]` become all/any over the remotes, calls of mission-local helpers become `coop_each_remote(f, ...)`, per-player threads and cleanup loops run for every remote, and the 63 `UG?` sites whose default was wrong use `coop_any_remote(...)`, `coop_all_remotes(...)` or a farthest/any-far test.
+
+## Outfit, item and weapon-slot masks (M16 W1)
+
+The generic rule `customization_item_wear(..., PLAYER_SYNC[x])` and `inv_weapon_enable_or_disable_all_slots(..., PLAYER_SYNC[x])` becomes `coop_sync_for(PLAYER_SYNC, x)`. It matches 5 places: rn02 897 (the clothing dealer), ep02 460 and 482 and rn08 1302 and 1336 (the bomb plant). rn02 934 to 936 is a block edit: the gun is equipped for each remote that is not in a driver seat, with `COOP_NATIVE` calls so the wrappers do not widen them again.
 
 ## Coverage of the uses
 
@@ -35,7 +40,7 @@ Generic rules (`lua_patches/generic.py`) rewrite what always changes the same wa
 |---|---|---|
 | UG, wrapper | 319 | answered by the library (fanout, callbacks, thread starts) |
 | UG, keep | 12 | stay on the default partner (`party_add`, `cutscene_play`, ...) |
-| UG? | 160 | default rule, 62 of them patched where the default was wrong |
+| UG? | 160 | default rule, 63 of them patched where the default was wrong |
 | FILE, generic rule | 215 | name tests, tables, and/or pairs |
 | FILE, patched | 127 | per-script edits |
 | FILE, kept | 54 | see below |

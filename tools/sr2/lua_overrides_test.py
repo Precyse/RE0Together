@@ -64,6 +64,12 @@ def test_generic_rules():
     check(rewrite("if A[LOCAL_PLAYER] and A[REMOTE_PLAYER] then") == "if coop_all_players_in(A) then", "both players")
     check(rewrite("if A[LOCAL_PLAYER] or\n A[REMOTE_PLAYER] then") == "if coop_any_player_in(A) then", "either player")
     check(rewrite("teleport(REMOTE_PLAYER, nav)") == "teleport(REMOTE_PLAYER, nav)", "a call is left to the wrappers")
+    wear = "customization_item_wear(NAME,OPTION,VARIANT, PLAYER_SYNC[player])"
+    check(rewrite(wear) == "customization_item_wear(NAME,OPTION,VARIANT, coop_sync_for(PLAYER_SYNC, player))", "item wear takes a targeted mask")
+    slots = "inv_weapon_enable_or_disable_all_slots(false, PLAYER_SYNC[placer])"
+    check(rewrite(slots) == "inv_weapon_enable_or_disable_all_slots(false, coop_sync_for(PLAYER_SYNC, placer))", "weapon slots take a targeted mask")
+    check(rewrite("mission_help_table(a, PLAYER_SYNC[p])") == "mission_help_table(a, PLAYER_SYNC[p])", "a help text mask is left alone")
+    check(rewrite("local sync = PLAYER_SYNC[p]") == "local sync = PLAYER_SYNC[p]", "a stored mask is left alone")
 
 
 def test_lua_check():
@@ -135,6 +141,10 @@ def test_real_scripts():
         written = lua_overrides.build(Path(source), Path(fixes), out)
         check(sorted(written) == sorted(PATCHES), f"all {len(PATCHES)} real overrides are written")
         problems = lua_check.check_dir(out, Path(source))
+        sync_calls = sum((Path(temporary) / name).read_bytes().decode("latin-1").count("coop_sync_for(") for name in ("rn02.lua", "ep02.lua", "rn08.lua"))
+        check(sync_calls == 5, f"rn02, ep02 and rn08 hold the 5 targeted sync masks (found {sync_calls})")
+        rn02 = (Path(temporary) / "rn02.lua").read_bytes().decode("latin-1")
+        check(rn02.count("COOP_NATIVE.inv_item_equip(FREE_WEAPON_GUN, p)") == 1, "rn02 equips the gun per remote")
         check(problems == [], "every real override parses and adds only Lua 5.0 code" + ("" if not problems else ": " + "; ".join(problems[:3])))
 
 

@@ -11,7 +11,7 @@ from pathlib import Path
 import lupa.lua51
 
 LUA_DIR = Path(__file__).with_name("lua")
-LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_wrappers.lua")
+LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua")
 RULES_FILE = "coop_rules.lua"
 LOCAL = "#PLAYER1#"
 PLAYERS = ["#PLAYER1#", "#PLAYER2#", "#PLAYER3#", "#PLAYER4#"]
@@ -19,6 +19,9 @@ PLAYERS = ["#PLAYER1#", "#PLAYER2#", "#PLAYER3#", "#PLAYER4#"]
 PRELUDE = """
 LOCAL_PLAYER = "#PLAYER1#"
 REMOTE_PLAYER = "#PLAYER2#"
+SYNC_LOCAL = 1
+SYNC_REMOTE = 2
+SYNC_ALL = 3
 function log_reset() LOG = {}; LOG_SIZE = 0 end
 log_reset()
 RESULT = {}
@@ -193,6 +196,27 @@ def test_sr2_runtime():
         check(len(log) == 1, f"{count} players: a group wrapper makes one call")
 
 
+def test_sync_targets():
+    """coop_sync_for narrows the remote part of a sync mask to one player number (16 * n above the two shipped bits)."""
+    lua = new_runtime(2)
+    lua.execute("S = coop_player_table(SYNC_LOCAL, SYNC_REMOTE)")
+    check(lua.eval("coop_sync_for(S, '#PLAYER1#')") == 1 and lua.eval("coop_sync_for(S, '#PLAYER2#')") == 2,
+          "sync: with 2 players a mask is the table value")
+    lua = new_runtime(3)
+    lua.execute("S = coop_player_table(SYNC_LOCAL, SYNC_REMOTE); A = coop_player_table(SYNC_LOCAL, SYNC_ALL); L = coop_player_table(SYNC_LOCAL, SYNC_LOCAL)")
+    check(lua.eval("coop_sync_for(S, '#PLAYER1#')") == 1, "sync: the local player keeps SYNC_LOCAL")
+    check(lua.eval("coop_sync_for(S, '#PLAYER2#')") == 34 and lua.eval("coop_sync_for(S, '#PLAYER3#')") == 50,
+          "sync: with 3 players a remote mask carries its player number")
+    check(lua.eval("coop_sync_for(A, '#PLAYER3#')") == 51, "sync: SYNC_ALL keeps both bits under the number")
+    check(lua.eval("coop_sync_for(L, '#PLAYER3#')") == 1, "sync: a remote entry without the remote bit is not narrowed")
+    check(lua.eval("coop_sync_for(S, '#PLAYER9#')") is None, "sync: a name that is not in the game gives the table value")
+    set_players(lua, 4)
+    check(lua.eval("coop_sync_for(S, '#PLAYER4#')") == 66, "sync: with 4 players the fourth player is 2 + 16 * 4")
+    lua = new_runtime(1)
+    lua.execute("S = coop_player_table(SYNC_LOCAL, SYNC_REMOTE)")
+    check(lua.eval("coop_sync_for(S, '#PLAYER2#')") == 2, "sync: alone the mask is the two-player mask")
+
+
 def test_wrapping_twice():
     lua = new_runtime(3)
     lua.execute((LUA_DIR / RULES_FILE).read_text(encoding="utf-8"))
@@ -201,7 +225,7 @@ def test_wrapping_twice():
 
 
 def main():
-    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_wrapping_twice):
+    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_wrapping_twice):
         test()
     return 1 if failures else 0
 

@@ -344,7 +344,7 @@ rn02.lua	651	thread	thread_new		FILE	patched
 rn02.lua	823	local	rn02_update_player_prompts		FILE	patched
 rn02.lua	932	action	inv_weapon_add_temporary	fanout	UG	wrapper
 rn02.lua	933	action	inv_weapon_add_temporary	fanout	UG	wrapper
-rn02.lua	934	query	character_is_in_a_driver_seat	all	UG?	default: all
+rn02.lua	934	query	character_is_in_a_driver_seat	all	UG?	patched: per remote
 rn02.lua	935	action	inv_item_equip	fanout	UG	wrapper
 rn02.lua	1017	action	vehicle_enter_teleport	seats	UG?	default: seats
 rn02.lua	1024	local	rn02_wait_for_vehicle_entry		FILE	patched

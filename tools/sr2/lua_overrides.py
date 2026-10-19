@@ -17,7 +17,7 @@ from lua_patches import GENERIC_RULES, PATCHES  # noqa: E402
 
 LUA_DIR = Path(__file__).with_name("lua")
 LIBRARY_FILE = "ug_lib.lua"
-LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_wrappers.lua", "coop_rules.lua")
+LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua", "coop_rules.lua")
 FIXED_FILES = ("em01.lua", "rn07.lua")
 
 

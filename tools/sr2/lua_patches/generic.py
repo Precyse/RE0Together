@@ -19,4 +19,9 @@ RULES = [
     # state[LOCAL_PLAYER] and state[REMOTE_PLAYER], state[LOCAL_PLAYER] or state[REMOTE_PLAYER]
     (rf"\b({NAME})\[LOCAL_PLAYER\]\s+and\s+\1\[REMOTE_PLAYER\]", r"coop_all_players_in(\1)"),
     (rf"\b({NAME})\[LOCAL_PLAYER\]\s+or\s+\1\[REMOTE_PLAYER\]", r"coop_any_player_in(\1)"),
+    # a per-player sync table read for a native the adapter can target (coop_outfit_sync.lua)
+    (
+        rf"\b(customization_item_wear|inv_weapon_enable_or_disable_all_slots)\s*\(([^()]*?),\s*PLAYER_SYNC\[({NAME})\]\s*\)",
+        r"\1(\2, coop_sync_for(PLAYER_SYNC, \3))",
+    ),
 ]

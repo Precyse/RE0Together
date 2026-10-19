@@ -47,6 +47,14 @@ PATCHES = {
                 "\tend\n"
                 "end",
             ),
+            (
+                934, 936, "character_is_in_a_driver_seat(REMOTE_PLAYER)",
+                "for i, p in pairs( coop_remote_players() ) do\n"
+                "\tif (not COOP_NATIVE.character_is_in_a_driver_seat(p)) then\n"
+                "\t\tCOOP_NATIVE.inv_item_equip(FREE_WEAPON_GUN, p)\n"
+                "\tend\n"
+                "end",
+            ),
         ],
         each=("rn02_update_player_prompts",),
     ),
