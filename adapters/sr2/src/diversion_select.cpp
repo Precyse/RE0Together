@@ -21,6 +21,7 @@ using partner_sites::Thunk;
 rate_limit::OncePerKey g_towSeen;
 rate_limit::OncePerKey g_dealerSeen;
 rate_limit::OncePerKey g_districtSeen;
+rate_limit::OncePerKey g_fraudDistrictSeen;
 rate_limit::RateLimit g_nearestHoLimit;
 rate_limit::RateLimit g_destructionLimit;
 rate_limit::RateLimit g_ownerLimit;
@@ -72,7 +73,21 @@ uintptr_t __cdecl anyRemoteWithFraudZone() {
     return anyRemote([](uintptr_t human) { return guest_call::call(sr2::kFraudZoneOfHuman, {}, {static_cast<uint32_t>(human)}) != 0; });
 }
 
-// DVF14, DVF15: the remote that owns the ragdoll (the object in esi), else the default partner.
+// DWF4: the remote that stands in the district Fraud started in (the game's table entry for its target index).
+uintptr_t __cdecl anyRemoteInFraudDistrict() {
+    const uint32_t district = readDword(sr2::kFraudDistrictTable + readDword(sr2::kFraudTargetDistrictIndex) * sizeof(uint32_t));
+    bool inside = false;
+    const uintptr_t human = anyRemote([&](uintptr_t candidate) {
+        inside = (guest_call::call(sr2::kPointInDistrict, {}, {static_cast<uint32_t>(candidate + sr2::kObjectPositionOffset), district}) & 0xFF) != 0;
+        return inside;
+    });
+    if (inside && diversion_trace::firstTime(g_fraudDistrictSeen, human ^ (static_cast<uint64_t>(district) << 32))) {
+        logger::write("trace: fraud: remote 0x%X in the target district 0x%X", static_cast<unsigned>(human), district);
+    }
+    return human;
+}
+
+// DVF14, DVF15, DWF7: the remote that owns the ragdoll (the object in esi), else the default partner.
 uintptr_t __cdecl ownerRemote(uintptr_t object) {
     if (remote_players::isRemotePlayerHuman(object)) return object;
     const uintptr_t record = object ? readDword(object + sr2::kObjectNetRecordOffset) : 0;
@@ -170,6 +185,7 @@ uintptr_t __cdecl remoteInDistrictObjective() { return remoteInDistrict(readDwor
 PARTNER_REG_STUB(anyRemoteInVehicleEsiStub, esi, anyRemoteInVehicleOf)
 PARTNER_REG_STUB(anyRemoteInFraudZoneEbpStub, ebp, anyRemoteInFraudZoneOf)
 PARTNER_REG_STUB(ownerRemoteEsiStub, esi, ownerRemote)
+PARTNER_REG_STUB(ownerRemoteEdiStub, edi, ownerRemote)
 PARTNER_REG_STUB(nearestToHoCarEsiStub, esi, nearestToHoCar)
 PARTNER_REG_STUB(nearestToHoHomeEbxStub, ebx, nearestToHoHome)
 PARTNER_REG_STUB(remoteLeadingDealerEbxStub, ebx, remoteLeadingDealer)
@@ -189,6 +205,8 @@ partner_thunks::Binding bindSelect(Thunk thunk) {
         case Thunk::AnyRemoteInFraudArea: return {reinterpret_cast<void*>(&anyRemoteInFraudArea), nullptr};
         case Thunk::AnyRemoteWithFraudZone: return {reinterpret_cast<void*>(&anyRemoteWithFraudZone), nullptr};
         case Thunk::OwnerRemoteEsi: return {reinterpret_cast<void*>(&ownerRemoteEsiStub), nullptr};
+        case Thunk::OwnerRemoteEdi: return {reinterpret_cast<void*>(&ownerRemoteEdiStub), nullptr};
+        case Thunk::AnyRemoteInFraudDistrict: return {reinterpret_cast<void*>(&anyRemoteInFraudDistrict), nullptr};
         case Thunk::NearestRemoteToEsi8C: return {reinterpret_cast<void*>(&nearestToHoCarEsiStub), nullptr};
         case Thunk::AnyRemoteInVehicle: return {reinterpret_cast<void*>(&anyRemoteInVehicle), nullptr};
         case Thunk::NearestRemoteToHoHome: return {reinterpret_cast<void*>(&nearestToHoHomeEbxStub), nullptr};

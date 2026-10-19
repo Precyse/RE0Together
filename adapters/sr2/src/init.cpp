@@ -40,6 +40,7 @@
 #include "vehicle_pool_rules.h"
 #include "vehicle_seating.h"
 #include "version_gate.h"
+#include "walk_patches.h"
 #include "world_walks.h"
 #include "zombie_uprising.h"
 
@@ -73,6 +74,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (activities && !fuzz) logger::write("fuzz: sites differ, the FUZZ logic is not installed");
         const bool crowdControl = activities && crowd_control_patches::sitesMatch();
         if (activities && !crowdControl) logger::write("crowd control: sites differ, the crowd control logic is not installed");
+        const bool walks = activities && walk_patches::sitesMatch();
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
         const bool animStreaming = crowd && anim_stream::sitesMatch();
@@ -111,6 +113,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (fuzz) fuzz_patches::install(config.trace);
         if (crowdControl) crowd_control_patches::install(config.trace);
         if (activities) trail_blazing::install(config.trace);
+        if (walks) walk_patches::install(config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (partnering) hud_patches::install(config.trace);
         if (crowd) revive_patches::install(config.trace);
