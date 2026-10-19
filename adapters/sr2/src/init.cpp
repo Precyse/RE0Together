@@ -19,6 +19,7 @@
 #include "multiplayer_patches.h"
 #include "outfit_sync.h"
 #include "partner_patches.h"
+#include "party_ai_patches.h"
 #include "player_cap.h"
 #include "player_name.h"
 #include "player_visuals.h"
@@ -90,6 +91,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) outfit_sync::install(config.trace);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
+        if (partnering) party_ai_patches::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);

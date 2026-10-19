@@ -582,6 +582,43 @@ constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall
 constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
 constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
 
+// Milestone 16 wave 2: followers and NPC AI (docs/SR2_NOTES.md, "Homies, followers and NPC AI (milestone 16 wave 2)"). The functions the
+// thunks call, the NPC list and the fields of a human they read; a player human has kind 1 at +0x3CC, an NPC human kind 2.
+constexpr uintptr_t kRayBlocked = 0x4294C0;            // eax = player, edi = NPC; stack (point), the caller pops; AL = 1 when the ray is blocked, a null player counts as blocked
+constexpr uintptr_t kInView = 0x451000;                // esi = player, edi = NPC; AL = the facing or range test
+constexpr uintptr_t kSquaredDistance = 0xBDEA30;       // eax, ecx = two vec3 pointers; ST0 = the squared distance rounded to a float
+constexpr uintptr_t kSquaredDistanceTeam = 0x404A20;   // the same function, byte for byte
+constexpr uintptr_t kEffectiveLeader = 0x98E750;       // edx = human: its second leader when valid and alive, else its leader, else itself
+constexpr uintptr_t kNpcTargetOf = 0x43A620;           // eax = NPC: the human it targets, 0 for none
+constexpr uintptr_t kNpcHostileTest = 0x43A190;        // eax = NPC; cdecl(target, 0), the caller pops; AL
+constexpr uintptr_t kNpcArmedTest = 0x55AE30;          // stdcall(NPC + kNpcArmedStateOffset, 1, 0, 0, 0), pops 0x14
+constexpr uintptr_t kDismissFollowers = 0x98F460;      // edi = human; cdecl(flag), the caller pops: dismisses its followers, a remote human's owner is told
+constexpr uintptr_t kUnlinkAttachment = 0x56BEE0;      // eax = attachment: unlinks it from the list 0x140A1F8
+constexpr uintptr_t kSameLeaderTeam = 0x421740;        // eax = human; cdecl(other), the caller pops; AL = both have the same team leader
+constexpr uintptr_t kNpcListHead = 0x215FFC0;          // the NPC humans, circular through kNpcHumanLinkOffset
+constexpr uintptr_t kGameplayModeType = 0xE987EC;      // dword: the type id the mode enter 0x53B480 stored
+constexpr uint32_t kFollowerHandOverReturn = 0x98F7C0; // the return address of the follower tick's hand-over call of 0x98EC10
+constexpr uint32_t kDerbyEnterResume = 0x53B744;       // where the derby block of the mode enter goes on
+constexpr uint32_t kSepticEnterResume = 0x53B68E;      // where the Septic Avenger block of the mode enter goes on
+constexpr int32_t kModeTypeSepticAvenger = 0xC;
+constexpr uintptr_t kHumanLeaderOffset = 0x2A4;        // dword: the handle of the human's leader
+constexpr uintptr_t kHumanFollowerCountOffset = 0xC3C; // dword
+constexpr uintptr_t kHumanFollowerSlotsOffset = 0xC40; // the handles of the followers, one every kHumanFollowerStride
+constexpr uintptr_t kHumanFollowerStride = 0x18;
+constexpr uintptr_t kHumanAttachmentOffset = 0x338;    // pointer to the attachment the human carries
+constexpr uintptr_t kAttachmentFlagOffset = 0x24;      // byte
+constexpr uintptr_t kAttachmentLinkOffset = 0x10;      // dword
+constexpr uintptr_t kHumanKindOffset = 0x3CC;          // byte
+constexpr uint8_t kHumanKindPlayer = 1;
+constexpr uint8_t kHumanKindNpc = 2;
+constexpr uintptr_t kHumanTeamByteOffset = 0x3CE;      // byte: compared with the team nibble of a spawn record
+constexpr uintptr_t kSpawnRecordTeamOffset = 0xA;      // byte of a spawn record; the low nibble, signed, is the team
+constexpr uintptr_t kNpcArmedStateOffset = 0x10C4;
+constexpr uint32_t kObjectTypeHuman = 1;
+constexpr uint32_t kHumanInactiveFlags = 0x0B;         // +0x80 & this is 0 for a human that is in play
+constexpr uint32_t kHumanHiddenBit = 0x10;
+constexpr float kTeamOddsRangeSquared = 400.0f;        // 20 m: the team odds count the other player and its followers inside this
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

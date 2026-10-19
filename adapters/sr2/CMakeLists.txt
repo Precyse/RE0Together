@@ -83,6 +83,11 @@ add_library(sr2_adapter SHARED
     src/leave_path.cpp
     src/multiplayer_patches.cpp
     src/session_kick.cpp
+    src/party_ai_patches.cpp
+    src/party_thunks.cpp
+    src/npc_ai_thunks.cpp
+    src/npc_team_odds.cpp
+    src/squared_distance.cpp
     src/multiplayer_thunks.cpp
     src/sender_scope.cpp
     src/join_admission.cpp
@@ -126,6 +131,8 @@ set_source_files_properties(
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
+# The follower and NPC AI thunks of milestone 16 wave 2 run inside x87 game code; squared_distance.cpp hands back a float in ST0.
+set_source_files_properties(src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
 # Unit tests that run without the game, run by ctest: tests/<name>.cpp plus the listed sources.
 enable_testing()
@@ -204,6 +211,10 @@ add_unit_test(outfit_sync_rules_test)
 add_unit_test(outfit_sync_sites_test)
 add_unit_test(session_kick_rules_test)
 add_unit_test(session_kick_sites_test)
+add_unit_test(party_ai_rules_test)
+add_unit_test(party_ai_sites_test src/party_thunks.cpp src/npc_ai_thunks.cpp src/npc_team_odds.cpp src/squared_distance.cpp src/partner_identity.cpp
+    src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp
+    src/activity_state.cpp)
 add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)

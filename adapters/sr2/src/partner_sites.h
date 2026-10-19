@@ -186,6 +186,20 @@ enum class Thunk : uint8_t {
     KickTargetNamed,
     KickTargetTaken,
     RemoveEveryRemoteMember,
+    // Milestone 16 wave 2 (party_ai_sites.h): homies, followers and NPC AI.
+    SecondLeaderShare,
+    DismissEachRemoteFollowers,
+    ClearEachRemoteAttachment,
+    TraceFollowerAdd,
+    EveryRemoteRayBlocked,
+    ScopedOrNearestRemoteEdi14,
+    NearestRemoteEbp14,
+    AnyRemoteInView,
+    NearestRemoteSquaredDistance,
+    RemoteOfRecordTeamEsi,
+    RemoteOnTeamOfEbp,
+    RemoteLeaderOfEsi,
+    TeamOddsEveryPlayer,
 };
 
 struct Site {
