@@ -19,15 +19,18 @@ PLAYERS = ["#PLAYER1#", "#PLAYER2#", "#PLAYER3#", "#PLAYER4#"]
 PRELUDE = """
 LOCAL_PLAYER = "#PLAYER1#"
 REMOTE_PLAYER = "#PLAYER2#"
-LOG = {}
+function log_reset() LOG = {}; LOG_SIZE = 0 end
+log_reset()
 RESULT = {}
 PLAYERS = {}
 function player_names_get_all() return PLAYERS end
 function rand_int(low, high) return low end
+local concat = table.concat
 local function show(name, args)
 	local parts = {}
 	for i = 1, args.n do parts[i] = tostring(args[i]) end
-	LOG[table.getn(LOG) + 1] = name .. "(" .. table.concat(parts, ",") .. ")"
+	LOG_SIZE = LOG_SIZE + 1
+	LOG[LOG_SIZE] = name .. "(" .. concat(parts, ",") .. ")"
 end
 function mock(name)
 	_G[name] = function(...)
@@ -38,6 +41,9 @@ function mock(name)
 	end
 end
 """
+
+# The game registers the base library of Lua 5.0 only: no table, string, math or os, and no select.
+ABSENT_LIBRARIES = "table = nil; string = nil; math = nil; os = nil; io = nil; debug = nil; package = nil; select = nil"
 
 failures = 0
 
@@ -53,6 +59,7 @@ def new_runtime(player_count):
     """A Lua state with the library loaded over mock natives, `player_count` players in the game."""
     lua = lupa.lua51.LuaRuntime()
     lua.execute(PRELUDE)
+    lua.execute(ABSENT_LIBRARIES)
     names = re.findall(r'"([a-z_0-9]+)"', (LUA_DIR / RULES_FILE).read_text(encoding="utf-8"))
     dist_aliases = {"get_dist_char_to_nav", "get_dist_char_to_char", "get_dist_char_to_vehicle"}
     for name in names:
@@ -73,7 +80,7 @@ def set_players(lua, count):
 
 def call(lua, code):
     """The log of the natives reached by running `code` (a fresh log), and the value of the last expression."""
-    lua.execute("LOG = {}")
+    lua.execute("log_reset()")
     value = lua.eval(f"(function() return {code} end)()")
     log = list(lua.eval("LOG").values())
     return log, value
@@ -169,6 +176,23 @@ def test_tables_and_state():
     check(lua.eval("coop_all_remotes_equal(S, 7)") is True, "tables: coop_set_remotes sets every remote")
 
 
+def test_sr2_runtime():
+    """The runtime is the game's: base library only; the library, a fanout, a target and a group wrapper still work."""
+    for count in (2, 3):
+        lua = new_runtime(count)
+        check(all(lua.eval(f"{name} == nil") for name in ("table", "string", "math", "select")), f"{count} players: the runtime has no table, string, math or select")
+        check(lua.eval("coop_count(coop_remote_players())") == count - 1, f"{count} players: coop_count counts the remotes")
+        check(lua.eval("coop_count({})") == 0 and lua.eval("coop_count({1, 2, nil, 4})") == 2, f"{count} players: coop_count stops at the first nil")
+        check(lua.eval("coop_random_remote()") == "#PLAYER2#", f"{count} players: coop_random_remote picks a remote")
+        check(list(lua.eval("coop_all_players()").values()) == PLAYERS[:count], f"{count} players: coop_all_players lists the local player then every remote")
+        log, _ = call(lua, 'teleport(REMOTE_PLAYER, "nav")')
+        check(len(log) == count - 1, f"{count} players: a fanout wrapper makes one call per remote")
+        log, _ = call(lua, 'attack("npc", REMOTE_PLAYER)')
+        check(len(log) >= 1 and log[-1].startswith("attack(npc,#PLAYER"), f"{count} players: a target wrapper makes its call")
+        log, _ = call(lua, 'vehicle_enter_group_teleport(REMOTE_PLAYER, LOCAL_PLAYER, "veh")')
+        check(len(log) == 1, f"{count} players: a group wrapper makes one call")
+
+
 def test_wrapping_twice():
     lua = new_runtime(3)
     lua.execute((LUA_DIR / RULES_FILE).read_text(encoding="utf-8"))
@@ -177,7 +201,7 @@ def test_wrapping_twice():
 
 
 def main():
-    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_wrapping_twice):
+    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_wrapping_twice):
         test()
     return 1 if failures else 0
 

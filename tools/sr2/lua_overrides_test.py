@@ -69,6 +69,11 @@ def test_generic_rules():
 def test_lua_check():
     check(lua_check.style_problems("local n = #list") != [], "the length operator is Lua 5.1 only")
     check(lua_check.style_problems("x = select(2, a)") != [], "select is Lua 5.1 only")
+    check(lua_check.style_problems("n = table.getn(list)") != [], "table is not in SR2 Lua")
+    check(lua_check.style_problems("s = string.format(a)") != [], "string is not in SR2 Lua")
+    check(lua_check.style_problems("m = math.floor(a)") != [], "math is not in SR2 Lua")
+    check(lua_check.style_problems('x = {} -- table.getn\ny = "math.floor"') == [], "library names in comments and strings are fine")
+    check(lua_check.style_problems("a = my_table.n + b.table.x") == [], "library names inside longer names are fine")
     check(lua_check.style_problems("function f(...) return arg end") == [], "... in a parameter list is Lua 5.0")
     check(lua_check.style_problems("function f() return ... end") != [], "... in a body is Lua 5.1 only")
     check(lua_check.style_problems('-- #list\nx = "#a" .. \'#b\'') == [], "comments and strings are ignored")

@@ -171,14 +171,14 @@ end
 -- A random remote player.
 function coop_random_remote()
 	local remotes = coop_remote_players()
-	return remotes[rand_int(1, table.getn(remotes))]
+	return remotes[rand_int(1, coop_count(remotes))]
 end
 
 -- The names of all players: the local player, then every remote player.
 function coop_all_players()
 	local players = { LOCAL_PLAYER }
 	for i, p in pairs(coop_remote_players()) do
-		table.insert(players, p)
+		players[coop_count(players) + 1] = p
 	end
 	return players
 end
@@ -202,10 +202,10 @@ function coop_expand_remote(names)
 	for i, name in ipairs(names) do
 		if name == REMOTE_PLAYER then
 			for k, p in ipairs(coop_remote_players()) do
-				table.insert(expanded, p)
+				expanded[coop_count(expanded) + 1] = p
 			end
 		else
-			table.insert(expanded, name)
+			expanded[coop_count(expanded) + 1] = name
 		end
 	end
 	return expanded

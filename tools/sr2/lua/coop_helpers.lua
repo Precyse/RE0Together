@@ -4,6 +4,16 @@
 
 COOP_FAR_DISTANCE = 1000000
 
+-- The number of entries of list from index 1 up to the first nil. SR2 runs Lua 5.0 with the base library only,
+-- so there is no getn; this is the one counter of the library.
+function coop_count(list)
+	local count = 0
+	while list[count + 1] ~= nil do
+		count = count + 1
+	end
+	return count
+end
+
 -- The names of the players other than the local one, in a table indexed from 1.
 -- Without any other player the list holds REMOTE_PLAYER, so everything built on it behaves like the two-player script.
 function coop_remote_players()

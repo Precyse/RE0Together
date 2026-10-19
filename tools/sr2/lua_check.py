@@ -1,4 +1,4 @@
-"""Checks Lua scripts for the Saints Row 2 interpreter (Lua 5.0): they must parse, and the code the mod adds must stay 5.0.
+"""Checks Lua scripts for the Saints Row 2 interpreter (Lua 5.0, base library only): they must parse, and the code the mod adds must stay 5.0.
 
 usage: python tools/sr2/lua_check.py <dir of generated scripts> [<dir of the original scripts>]
 
@@ -11,12 +11,13 @@ import sys
 from pathlib import Path
 
 STRIP = re.compile(r"--\[\[.*?\]\]|--[^\n]*|\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'", re.S)
-# What Lua 5.1 has and 5.0 does not: the length operator, `...` in a function body, select, string.gmatch, table.unpack
+# What SR2 Lua lacks: the length operator, `...` in a function body, select, gmatch and the table, string, math, os, io
+# and debug libraries (the game registers the base library only)
 NOT_IN_LUA_50 = [
     (re.compile(r"(?<![\w\)\]\"'])#\s*[\w(]|[\w\)\]]\s*#\w"), "length operator #"),
     (re.compile(r"\bselect\s*\("), "select"),
-    (re.compile(r"\bstring\.gmatch\b|:gmatch\b"), "gmatch"),
-    (re.compile(r"\btable\.unpack\b"), "table.unpack"),
+    (re.compile(r":gmatch\b"), "gmatch"),
+    (re.compile(r"(?<![\w.])(?:table|string|math|os|io|debug)\s*\.\s*[A-Za-z_]"), "library not in SR2 Lua"),
     (re.compile(r"\.\.\.(?!\s*\))(?!\s*,)"), "... outside a parameter list"),
 ]
 

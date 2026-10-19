@@ -6,6 +6,7 @@ The story mission scripts name exactly one partner (`REMOTE_PLAYER` = `"#PLAYER2
 
 - `python tools/sr2/lua_overrides.py <extracted scripts> <Juiced TU3 Mission Fixes folder> <out>`; `adapters/sr2/rebuild.cmd` runs it into `build\coop\scripts` when `SR2_LUA_SOURCE` and `SR2_LUA_FIXES` are set. Copy the folder into the host's `<game>\coop` (only the host runs missions). All of it is needed together: the mission files call the library added to `ug_lib.lua`.
 - The game's scripts are never in the repo. The repo holds the generator, the Lua library (`tools/sr2/lua`) and the patch data (`tools/sr2/lua_patches`), applied to copies extracted read-only (`vpp.py extract patch.vpp_pc <dir> lua`). `em01.lua` and `rn07.lua` start from Juiced's copies.
+- SR2 runs Lua 5.0 with the base library only (no table, string or math), so the library and the patches use plain Lua: `coop_count(list)` counts entries, appends are `list[coop_count(list) + 1] = value`. `lua_check.py` rejects `table.`, `string.`, `math.`, `os.`, `io.` and `debug.` in added code, and `lua_library_test.py` runs with those libraries removed.
 - Every patch must find its text (line number plus expected text, or an expected count) or nothing is written.
 - 48 scripts are generated: `ug_lib.lua`, 6 strongholds (M7) and 41 story scripts. All parse (Lua 5.1 parser) and the added code is Lua 5.0 style (`tools/sr2/lua_check.py`).
 

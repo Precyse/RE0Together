@@ -147,7 +147,7 @@ function coop_wrap(name, rule, native)
 			return native(unpack(arg, 1, arg.n))
 		end
 		local remotes = coop_remote_players()
-		if table.getn(remotes) < 2 or (rule == "group" and type(arg[1]) == "table") then
+		if coop_count(remotes) < 2 or (rule == "group" and type(arg[1]) == "table") then
 			return native(unpack(arg, 1, arg.n))
 		end
 		return handler(native, arg, at, remotes, name)
