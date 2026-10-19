@@ -275,12 +275,12 @@ void drainMotions() {
 
 // Runs one simulator request on the enemy; skipped and counted when its motion banks lack the motion.
 void replayMotion(size_t index, uintptr_t enemy, Slot& slot, const rule::MotionItem& item) {
-    if (item.motionNo != pose_wire::kNoMotion && !pose_game::motionAvailable(enemy, item.motionNo)) {
+    if (item.motionNo != pose_wire::kNoMotion && !pose_game::motionAvailable(enemy, pose_wire::kBodyTarget, item.motionNo)) {
         debug_stats::count(Counter::EnemyObserverMisses);
         logger::writeUnlessRepeated("enemy_observer: slot %zu has no motion 0x%04x loaded", index, item.motionNo);
         return;
     }
-    if (!pose_game::replay(enemy, {item.layer, item.motionNo, item.flags, item.interp, item.start})) return;
+    if (!pose_game::replay(enemy, pose_wire::kBodyTarget, {item.layer, item.motionNo, item.flags, item.interp, item.start})) return;
     debug_stats::count(Counter::EnemyObserverMotions);
     if (item.layer == 0) slot.layer0Flags = item.flags;
 }
@@ -291,12 +291,12 @@ void followBody(size_t index, uintptr_t enemy, Slot& slot, const rule::Sample& s
     puppet_rule::Layer0 own;
     const pose_wire::Layer owner{shown.motion0, shown.frame0};
     if (!pose_game::readLayer0(enemy, own) || slot.seek.update(own, owner) != puppet_rule::Verdict::Seek) return;
-    if (owner.motion != pose_wire::kNoMotion && !pose_game::motionAvailable(enemy, owner.motion)) {
+    if (owner.motion != pose_wire::kNoMotion && !pose_game::motionAvailable(enemy, pose_wire::kBodyTarget, owner.motion)) {
         debug_stats::count(Counter::EnemyObserverMisses);
         logger::writeUnlessRepeated("enemy_observer: slot %zu has no motion 0x%04x loaded", index, owner.motion);
         return;
     }
-    if (pose_game::replay(enemy, {0, owner.motion, slot.layer0Flags, kNoSeekInterp, owner.frame})) {
+    if (pose_game::replay(enemy, pose_wire::kBodyTarget, {0, owner.motion, slot.layer0Flags, kNoSeekInterp, owner.frame})) {
         debug_stats::count(Counter::EnemyObserverSeeks);
     }
 }
