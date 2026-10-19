@@ -10,10 +10,12 @@
 #include "room_authority.h"
 #include "scene.h"
 #include "state_net.h"
+#include "weapon_fx_capture.h"
+#include "weapon_fx_replay.h"
 
 namespace {
 
-constexpr unsigned kModuleCount = 5;  // load serial observer, pose capture, puppet, room authority, flag sequencer
+constexpr unsigned kModuleCount = 7;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay
 
 std::atomic<bool> g_on{false};
 
@@ -37,6 +39,8 @@ void enableAll(NetClient& net) {
     room_authority::enable();
     ++enabled;
     if (flag_sequencer::enable()) ++enabled;
+    if (weapon_fx_capture::enable()) ++enabled;
+    if (weapon_fx_replay::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

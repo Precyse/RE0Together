@@ -1,7 +1,7 @@
 """Echo peer for one-PC tests: connects to a launcher as a fake adapter and sends every received
-PLAYER_STATE (0x0100), PAD_FRAME (0x0101), POSE_STATE (0x0140) and MOTION_EVENT (0x0141) game frame back to its sender
-after a delay. --offset-x shifts the echoed PLAYER_STATE and POSE_STATE position so the ghost stands beside the sender
-instead of colliding with it.
+PLAYER_STATE (0x0100), PAD_FRAME (0x0101), POSE_STATE (0x0140), MOTION_EVENT (0x0141) and WEAPON_FX (0x0142) game frame
+back to its sender after a delay. --offset-x shifts the echoed PLAYER_STATE and POSE_STATE position, and the positions
+inside WEAPON_FX entries, so the ghost and its effects appear beside the sender instead of on top of it.
 
 Usage: python echo_peer.py --port 27961 [--game re0] [--delay 1.0] [--offset-x 0]
 """
@@ -17,9 +17,19 @@ HELLO = 0x0001
 HEARTBEAT = 0x0020
 PLAYER_STATE = 0x0100
 POSE_STATE = 0x0140
-ECHOED_TYPES = (PLAYER_STATE, 0x0101, POSE_STATE, 0x0141)
+WEAPON_FX = 0x0142
+ECHOED_TYPES = (PLAYER_STATE, 0x0101, POSE_STATE, 0x0141, WEAPON_FX)
 # Byte offset of pos[0] in the payload: PLAYER_STATE is u32 seq, f32 pos[3], ...; POSE_STATE v2 is u32 sender ms, u32 seq, f32 pos[3], ...
 POS_X_OFFSETS = {PLAYER_STATE: 4, POSE_STATE: 8}
+# WEAPON_FX: a 12 byte header (u32 sender ms, u32 seq, u8 character, u8 count, u16 pad), then count entries that start with
+# their op. op -> (entry size, offset of the first position float or None). Op 3 (shoot) is 4 bytes for a casing or
+# magazine and 44 for a projectile (kind byte at +2 is 0).
+WEAPON_FX_HEADER = 12
+WEAPON_FX_COUNT_OFFSET = 9
+WEAPON_FX_SHOOT = 3
+WEAPON_FX_PROJECTILE_SIZE = 44
+WEAPON_FX_ENTRIES = {1: (8, None), 2: (8, None), 4: (32, 8), 5: (16, 4), 6: (4, None), 7: (4, None)}
+WEAPON_FX_SHOOT_POS = 4
 FLAG_RELIABLE = 1
 HEARTBEAT_S = 1.0
 IDLE_POLL_S = 0.005
@@ -37,6 +47,24 @@ def read_exact(sock, n):
             raise ConnectionError("closed")
         buf += chunk
     return buf
+
+
+def shift_weapon_fx(payload, offset_x):
+    """Adds offset_x to the x of every position inside a WEAPON_FX payload (in place); stops at an unknown entry."""
+    at = WEAPON_FX_HEADER
+    for _ in range(payload[WEAPON_FX_COUNT_OFFSET]):
+        op = payload[at]
+        if op == WEAPON_FX_SHOOT:
+            projectile = payload[at + 2] == 0
+            size, pos = (WEAPON_FX_PROJECTILE_SIZE, WEAPON_FX_SHOOT_POS) if projectile else (4, None)
+        elif op in WEAPON_FX_ENTRIES:
+            size, pos = WEAPON_FX_ENTRIES[op]
+        else:
+            return
+        if pos is not None:
+            (x,) = struct.unpack_from("<f", payload, at + pos)
+            struct.pack_into("<f", payload, at + pos, x + offset_x)
+        at += size
 
 
 class Echo:
@@ -65,6 +93,8 @@ class Echo:
                     offset = POS_X_OFFSETS[msg_type]
                     (x,) = struct.unpack_from("<f", payload, offset)
                     struct.pack_into("<f", payload, offset, x + self.offset_x)
+                if msg_type == WEAPON_FX and self.offset_x:
+                    shift_weapon_fx(payload, self.offset_x)
                 frame = encode(msg_type, flags, slot, bytes(payload))
                 with self.lock:
                     self.order += 1

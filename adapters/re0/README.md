@@ -45,10 +45,13 @@ The host plays Rebecca; the fake peer owns Billy, so Billy is the puppet and rep
 | line | meaning |
 |---|---|
 | `config: partner_mode=state` | the mode is on; `adapter: state mode unavailable` instead means a hook failed (the game runs as in `input`, no puppet) |
-| `state_mode: on, 5 modules enabled` | the state modules came up; `scene: load serial N (scene 0x..)` appears once per room change; F8 `state refused` and `router dropped` stay 0 and `pad sent/s` stays 0 (no PAD_FRAME in this mode); `state_net: refused` or `router: dropped` lines are failures |
+| `state_mode: on, 7 modules enabled` | the state modules came up; `scene: load serial N (scene 0x..)` appears once per room change; F8 `state refused` and `router dropped` stay 0 and `pad sent/s` stays 0 (no PAD_FRAME in this mode); `state_net: refused` or `router: dropped` lines are failures |
 | `puppet: Billy is shown from the owner's pose` | the puppet took over; `puppet: Billy released` when it ends (peer left, or the owner left the room) |
 | `puppet: Billy motion 0x.... (owner 0x....) frame f (owner f) think g/s/p (owner g/s/p) mode flags A -> B -> C, events in N, misses M, seeks S, delay Dms, poses buffered P`, once a second | pass: motion and frame follow the owner's within a few frames, B has bit 0x2 set and A == C (the pause bit is back as it was), N grows with your actions, S stays small while you move calmly, D stays near 100 |
 | `puppet: Billy timeline reset (serial)` | once per door or room change (`room`, `gap`, `lead`, `depth`, `clock` are rarer; `teleport` in plain running is a failure: send the log) |
 | `puppet: Billy stale, holding` / `puppet: Billy fresh again after N ms` | the owner sent nothing for 2 s (stop and restart `echo_peer.py` to see it); not expected while a menu is open (held poses keep it fresh, F8 `puppet poses in/s` about 4) |
 | `puppet: Billy has no motion 0x.... loaded` | a miss: that request was skipped |
+| `weapon_fx: sent N entries (M unlisted calls skipped)`, once a second while you fire | pass: N grows with your shots; M stays small and steady (footsteps and other effects of your character count there); a burst of M while firing names a call site missing from `weapon_fx_sites.h` |
+| `weapon_fx: Billy replayed sound site N` (and `muzzle flash`, `shoot`, `effect`, `stow`, `wick`, `ripple`), once per site | the puppet showed that part of a shot; `weapon_fx: Billy ... site N failed` or `projectile of weapon A, puppet holds B` is a miss: send the log |
+| F8 `fx out`, `fx in`, `fx unlisted` | in the echo test `fx in` equals `fx out` (entries sent and received); `fx unlisted` counts calls of your character that no listed site carries |
 | `game_tick: 'pose_capture' disabled`, a `pose_game:` line with an exception code, `(reset faulted)`, a "Sync stopped" toast, a `crash-*.dmp` | fail: send the log and the dump |

@@ -116,6 +116,11 @@ Character localCharacter() {
     return Character::Unknown;
 }
 
+uintptr_t localPlayer() {
+    const Character owned = localCharacter();
+    return owned == Character::Unknown ? 0 : find(owned);
+}
+
 Character plannedLocalCharacter() {
     const Character owned = localCharacter();
     return owned == Character::Unknown && isHost() ? g_hostCharacter : owned;

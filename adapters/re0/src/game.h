@@ -427,6 +427,25 @@ constexpr uintptr_t kPlayerHitAttributesOffset = 0x16ec;  // u32, low 10 bits ar
 constexpr uintptr_t kPlayerAimTierOffset = 0x6954;     // i32, 0..2: the vertical aim band
 constexpr uintptr_t kPlayerManualPitchOffset = 0x695c; // f32, radians: the analog up/down pitch while aiming
 
+// state mode: phase 5 (weapon effect replay; docs/RE0_NOTES.md "State mode: weapon effects", read in the decrypted image)
+constexpr uintptr_t kWeaponGlobal = 0xdce0a4;                // sWeapon*
+constexpr uintptr_t kEffectGlobal = 0xe2da7c;                // sEffect*
+constexpr uintptr_t kEffectFlagsGlobal = 0xdc20dc;           // u32: first dword of the {flags, 0x10} pair every listed effect call passes
+constexpr uint32_t kEffectFlagsSecond = 0x10;
+constexpr uintptr_t kWeaponPlaySeFunction = 0x532bb0;        // thiscall(sWeapon; chara, soundId, f32 volume) ret 0xc
+constexpr uintptr_t kWeaponGenericSeFunction = 0x532ce0;     // stdcall(chara, soundId, f32 volume), Wesker's attack
+constexpr uintptr_t kWeaponShootFunction = 0x530ec0;         // thiscall(sWeapon; player, mat4*, kind) ret 0xc
+constexpr uintptr_t kMuzzleFlashFunction = 0x50cb40;         // thiscall(player; index, f32 scale) ret 8
+constexpr uintptr_t kEffectCreateFunction = 0x55a6d0;        // thiscall(sEffect; out*, owner, set, index, attach, joint, pos*, rot*, flags*, extra) ret 0x28
+constexpr uintptr_t kStowThrowableFunction = 0x50f8b0;       // thiscall(player), molotov stow
+constexpr uintptr_t kLightWickFunction = 0x50d6e0;           // thiscall(player), molotov wick
+constexpr uintptr_t kWaterRippleFunction = 0x532880;         // stdcall(chara, sub, vec3*)
+constexpr uintptr_t kMuzzleMatrixFunction = 0x50e490;        // thiscall(player; mat4*, muzzle) ret 8
+constexpr uintptr_t kPlayerWeaponUnitOffset = 0x6838;        // uWeapon* held in sub-unit slot 3
+constexpr uintptr_t kEffectSetOffset = 0x6790;               // effect set pointer of a character or weapon unit (0x522d20)
+constexpr uintptr_t kPlayerAutoPitchOffset = 0x68ec;         // f32: auto-aim pitch, read by the projectile launch
+constexpr size_t kEffectHandleBytes = 16;                    // room for the handle sEffect::create writes (two dwords)
+
 // sGamePad
 constexpr uintptr_t kGetPadFunction = 0x600630;  // thiscall, 1 stack arg, i < 2
 constexpr uintptr_t kPadTableOffset = 0xc24;
