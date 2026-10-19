@@ -24,3 +24,12 @@ inline uint32_t readDword(uintptr_t address) {
     readMemory(address, &value, sizeof(value));
     return value;
 }
+
+// The NUL-terminated text at `address` copied into `out`, up to `capacity` - 1 characters, then a NUL; the number of characters
+// copied. Stops early at an unreadable byte.
+inline size_t readCString(uintptr_t address, char* out, size_t capacity) {
+    size_t length = 0;
+    while (length + 1 < capacity && readMemory(address + length, &out[length], 1) && out[length] != '\0') ++length;
+    out[length] = '\0';
+    return length;
+}

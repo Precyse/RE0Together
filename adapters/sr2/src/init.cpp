@@ -16,6 +16,7 @@
 #include "lan_address.h"
 #include "log.h"
 #include "multiplayer_patches.h"
+#include "outfit_sync.h"
 #include "partner_patches.h"
 #include "player_cap.h"
 #include "player_name.h"
@@ -84,6 +85,7 @@ DWORD WINAPI initThread(LPVOID) {
         force_join::install(config.trace, transport);
         player_name::install(config.trace);
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
+        if (partnering) outfit_sync::install(config.trace);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);

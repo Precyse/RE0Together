@@ -530,6 +530,11 @@ constexpr uintptr_t kStreamRelease = 0xA79240;             // edx = set; cdecl(c
 constexpr uintptr_t kPresetSetOffset = 8;
 constexpr uintptr_t kPresetSetIdOffset = 0x68;
 
+// Outfits, items and weapon slots (milestone 16 W1): the natives' appliers and the name of a player human.
+constexpr uintptr_t kItemApply = 0x53FBB0;           // ECX = item name; cdecl(human, option, variant); applies on this machine or sends act 0xC
+constexpr uintptr_t kWeaponSlotsApply = 0x796330;    // cdecl(enable, mask); mask bit 1 sends hud 0x17, bit 0 applies here
+constexpr uintptr_t kHumanScriptNameOffset = 0x18B0;  // pointer to the text "#PLAYERn#" that scripts name the player by
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

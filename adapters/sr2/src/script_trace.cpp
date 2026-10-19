@@ -33,14 +33,6 @@ std::mutex g_errorMutex;
 script_trace_rules::NamedRateLimit g_errorLimit;
 script_trace_rules::FadeWatch g_fadeWatch;
 
-// The NUL-terminated text at `address`, up to `capacity` - 1 characters; the number of characters read.
-size_t readCString(uintptr_t address, char* out, size_t capacity) {
-    size_t length = 0;
-    while (length + 1 < capacity && readMemory(address + length, &out[length], 1) && out[length] != '\0') ++length;
-    out[length] = '\0';
-    return length;
-}
-
 // lua_tostring(L, -1): after a failed resume or load the error object is on top of the stack.
 std::string errorMessage(uint32_t lua) {
     guest_call::Regs regs{};
