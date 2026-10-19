@@ -4,6 +4,7 @@
 
 #include "flag_sequencer.h"
 #include "game_tick.h"
+#include "item_ledger.h"
 #include "log.h"
 #include "pose_capture.h"
 #include "puppet.h"
@@ -13,7 +14,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 5;  // load serial observer, pose capture, puppet, room authority, flag sequencer
+constexpr unsigned kModuleCount = 6;  // load serial observer, pose capture, puppet, room authority, flag sequencer, item ledger
 
 std::atomic<bool> g_on{false};
 
@@ -37,6 +38,7 @@ void enableAll(NetClient& net) {
     room_authority::enable();
     ++enabled;
     if (flag_sequencer::enable()) ++enabled;
+    if (item_ledger::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

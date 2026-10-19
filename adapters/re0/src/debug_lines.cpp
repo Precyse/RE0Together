@@ -103,6 +103,8 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"floor pending", format(L"%d", gauge(s, Gauge::FloorPending)), false});
     lines.push_back({L"floor pend appl/drop", format(L"%u / %u", total(s, Counter::FloorPendingApplied), total(s, Counter::FloorPendingDropped)), false});
     lines.push_back({L"floor take misses", format(L"%u", total(s, Counter::FloorTakeMisses)), false});
+    lines.push_back({L"item takes granted/refused", format(L"%u / %u", total(s, Counter::TakesGranted), total(s, Counter::TakesRefused)), false});
+    lines.push_back({L"pickup holds", format(L"%u", total(s, Counter::PickupsHeld)), false});
     lines.push_back({L"room desyncs", format(L"%u", total(s, Counter::RoomDesyncs)), false});
     lines.push_back({L"doors sent/run/blocked", format(L"%u / %u / %u", total(s, Counter::DoorsSent), total(s, Counter::DoorsApplied), total(s, Counter::DoorsSuppressed)), false});
     lines.push_back({L"pad sent/s", format(L"%u", rate(s, Counter::PadSent)), false});
