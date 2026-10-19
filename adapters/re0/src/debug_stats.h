@@ -110,6 +110,10 @@ void setError(const char* format, ...);
 void setPartnerLine(const std::string& line);
 std::string partnerLine();
 
+// The loaded room's enemy authority as the overlay shows it, "here e3" / "peer e3" / "none e3" (empty: not tracked).
+void setRoomAuthorityLine(const std::string& line);
+std::string roomAuthorityLine();
+
 void setLastCommand(const char* text);
 void setLastDecision(const char* text);
 

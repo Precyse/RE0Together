@@ -6,6 +6,7 @@
 #include "log.h"
 #include "pose_capture.h"
 #include "puppet.h"
+#include "room_authority.h"
 #include "scene.h"
 #include "state_net.h"
 
@@ -32,6 +33,7 @@ void enableAll(NetClient& net) {
         ++enabled;
         if (puppet::enable()) ++enabled;
     }
+    room_authority::enable();
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

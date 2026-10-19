@@ -41,6 +41,7 @@ Clock::time_point g_commandTime;
 std::string g_lastDecision;
 Clock::time_point g_decisionTime;
 std::string g_partnerLine;
+std::string g_roomAuthorityLine;
 Clock::time_point g_windowStart = Clock::now();
 std::array<uint32_t, kCounterCount> g_windowBase{};
 std::array<uint32_t, kCounterCount> g_rate{};
@@ -109,6 +110,16 @@ void setPartnerLine(const std::string& line) {
 std::string partnerLine() {
     std::lock_guard lock(g_mutex);
     return g_partnerLine;
+}
+
+void setRoomAuthorityLine(const std::string& line) {
+    std::lock_guard lock(g_mutex);
+    g_roomAuthorityLine = line;
+}
+
+std::string roomAuthorityLine() {
+    std::lock_guard lock(g_mutex);
+    return g_roomAuthorityLine;
 }
 
 Snapshot snapshot() {

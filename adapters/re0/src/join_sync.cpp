@@ -15,7 +15,9 @@
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "room_authority.h"
 #include "scene.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -65,6 +67,7 @@ void answer() {
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;
     floor_items_sync::sendJournal();
     game_tick::rearmAfterResync();
+    if (state_mode::on()) room_authority::resendClaims();
     logger::write("join_sync: snapshot sent (Billy scene 0x%02x, Rebecca scene 0x%02x)",
                   placeOf(snapshot, Character::Billy).scene, placeOf(snapshot, Character::Rebecca).scene);
 }
@@ -82,6 +85,7 @@ void finish(const JoinSnapshot& snapshot) {
     game::writeTransform(character_owner::find(own), ownPlace.pos, ownPlace.quat);
     g_caughtUp = true;
     game_tick::rearmAfterResync();
+    if (state_mode::on()) room_authority::resendClaims();
     logger::write("join_sync: caught up in scene 0x%02x", scene::current());
 }
 

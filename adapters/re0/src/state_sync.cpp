@@ -36,9 +36,11 @@
 #include "phase_watch.h"
 #include "player_damage.h"
 #include "resync.h"
+#include "room_authority.h"
 #include "session_slot.h"
 #include "scene.h"
 #include "state_correction.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -212,6 +214,7 @@ void tick(NetClient& net) {
     debug_stats::setSession(session);
     announcePeerChanges(session);
     net_pad::onSession(session);
+    if (state_mode::on()) room_authority::onSession(session);
     character_owner::onSession(session);
     partner_hud::onNetTick(session);
     menu_mirror::onNetTick(net);
