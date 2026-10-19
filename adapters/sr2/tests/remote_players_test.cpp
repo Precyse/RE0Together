@@ -19,6 +19,9 @@ namespace {
 
 constexpr uintptr_t kPlayerPage = 0x2170000;
 constexpr uintptr_t kSessionPage = 0x2528000;
+constexpr uintptr_t kObjectTablePage = 0x2149000;  // the object table: a handle names a human by its index
+constexpr uintptr_t kMissionPage = 0x27B3000;      // the running mission pointer
+constexpr uintptr_t kActivityPage = 0x2527000;     // the co-op race flag and the mission participants: one range with the session page
 constexpr size_t kPageBytes = 0x2000;
 constexpr size_t kPlayers = 3;
 constexpr size_t kHumanBytes = 0x1400;
@@ -26,6 +29,7 @@ constexpr size_t kMemberBytes = 0x2400;
 constexpr size_t kSessionBytes = 0x1000;
 constexpr size_t kRecordBytes = 0x20;
 constexpr uintptr_t kFakeOriginal = 0x77;
+constexpr uint32_t kFirstHandle = 0x10;  // the handle of the human of slot n is kFirstHandle + n
 
 int g_failures = 0;
 
@@ -95,7 +99,10 @@ GetterFn memberGetter() {
 
 bool mapPages() {
     return VirtualAlloc(reinterpret_cast<void*>(kPlayerPage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) &&
-           VirtualAlloc(reinterpret_cast<void*>(kSessionPage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+           VirtualAlloc(reinterpret_cast<void*>(kActivityPage), kSessionPage + kPageBytes - kActivityPage, MEM_RESERVE | MEM_COMMIT,
+                        PAGE_READWRITE) &&
+           VirtualAlloc(reinterpret_cast<void*>(kObjectTablePage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) &&
+           VirtualAlloc(reinterpret_cast<void*>(kMissionPage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 }
 
 void hostPicksTheLowestSlot() {
@@ -342,6 +349,49 @@ void activityStateReadsTheSession() {
           "the race peer is taken once");
 }
 
+// Milestone 16 wave 2, rule PIN: in a 2+S activity the default partner is the other participant. The co-op race diversion is
+// 2+S whatever the mission, so its flag and the pair of participant handles are enough to try the rule.
+void theOtherParticipantIsTheDefaultPartner() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    for (size_t slot = 0; slot < kPlayers; ++slot) {
+        const uint32_t handle = kFirstHandle + static_cast<uint32_t>(slot);
+        at(world.humans[slot].data(), sr2::kObjectHandleOffset) = handle;
+        word(sr2::kObjectTable + handle * sr2::kObjectTableStride) = world.human(slot);
+    }
+    uint8_t& raceFlag = *reinterpret_cast<uint8_t*>(sr2::kCoopRaceFlag);
+    raceFlag = 0;
+    word(sr2::kMissionOwnerHandle) = kFirstHandle;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle + 2;
+    check(humanGetter()() == world.human(1), "no 2+S activity: the lowest slot is the partner");
+    raceFlag = 1;
+    check(humanGetter()() == world.human(2) && memberGetter()() == world.member(2),
+          "the host races the player of slot 2: both getters answer that player, not slot 1");
+    word(sr2::kMissionOwnerHandle) = kFirstHandle + 1;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle + 2;
+    check(humanGetter()() == world.human(1), "the host is a spectator: the shipped answer");
+    word(sr2::kMissionOwnerHandle) = kFirstHandle + 2;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle;
+    check(humanGetter()() == world.human(2), "the pair may be either way round");
+    {
+        partner_scope::Override turn({world.human(1), world.member(1)});
+        check(humanGetter()() == world.human(1), "an override still wins over the pin");
+    }
+    world.place(order, order, 1);
+    word(sr2::kMissionOwnerHandle) = kFirstHandle + 1;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle + 2;
+    check(humanGetter()() == world.human(2), "a guest racing a guest: the other guest, not the host");
+    raceFlag = 0;
+    check(humanGetter()() == world.human(0), "the race over: the host again");
+    world.place(order, order, 0);
+    at(world.humans[1].data(), sr2::kHumanNextOffset) = 0;  // the host and the player of slot 1 only
+    at(world.members[1].data(), sr2::kMemberNextOffset) = world.member(0);
+    raceFlag = 1;
+    check(humanGetter()() == world.human(1), "with one remote the pin changes nothing");
+    raceFlag = 0;
+}
+
 }  // namespace
 
 int main() {
@@ -362,5 +412,6 @@ int main() {
     membersAndHumansMapToEachOther();
     aMessageIsAnsweredForItsSender();
     activityStateReadsTheSession();
+    theOtherParticipantIsTheDefaultPartner();
     return g_failures == 0 ? 0 : 1;
 }

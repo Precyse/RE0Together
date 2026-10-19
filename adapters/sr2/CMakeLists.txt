@@ -54,6 +54,13 @@ add_library(sr2_adapter SHARED
     src/activity_credit.cpp
     src/activity_games.cpp
     src/activity_patches.cpp
+    src/activity_participants.cpp
+    src/diversion_select.cpp
+    src/diversion_each.cpp
+    src/diversion_fraud.cpp
+    src/diversion_snatch.cpp
+    src/diversion_streak.cpp
+    src/diversion_patches.cpp
     src/script_override.cpp
     src/content_hash.cpp
     src/browser_tag.cpp
@@ -124,6 +131,7 @@ set_source_files_properties(
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/session_kick.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
+    src/activity_participants.cpp src/diversion_select.cpp src/diversion_each.cpp src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 
@@ -166,6 +174,8 @@ add_unit_test(content_hash_rules_test)
 add_unit_test(version_gate_sites_test)
 add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)
+add_unit_test(diversion_rules_test)
+add_unit_test(diversion_sites_test)
 add_unit_test(script_override_rules_test)
 add_unit_test(join_file_test src/join_file.cpp)
 add_unit_test(player_name_rules_test)
@@ -178,8 +188,9 @@ add_unit_test(guest_join_rules_test)
 add_unit_test(force_join_sites_test)
 add_unit_test(guest_call_test src/guest_call.cpp)
 add_unit_test(remote_players_test src/remote_players.cpp src/partner_scope.cpp src/member_slots.cpp src/replication_switch.cpp
-    src/code_patch.cpp src/memory.cpp src/activity_state.cpp src/guest_call.cpp)
+    src/code_patch.cpp src/memory.cpp src/activity_state.cpp src/activity_participants.cpp src/guest_call.cpp)
 add_unit_test(activity_bindings_test src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp src/activity_state.cpp
+    src/activity_participants.cpp src/diversion_select.cpp src/diversion_each.cpp src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp src/sender_scope.cpp
     src/partner_identity.cpp src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
     src/memory.cpp src/guest_call.cpp src/script_override.cpp ${SHARED_DIR}/paths.cpp)
@@ -208,12 +219,12 @@ add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)
 add_unit_test(multiplayer_sites_test)
-add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
+add_unit_test(multiplayer_bindings_test src/activity_participants.cpp src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp src/vehicle_trace.cpp
     src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp
     src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/site_installer.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)
-add_unit_test(outfit_sync_bindings_test src/outfit_sync.cpp src/outfit_sync_trace.cpp src/site_installer.cpp src/partner_thunks_calls.cpp
+add_unit_test(outfit_sync_bindings_test src/activity_participants.cpp src/outfit_sync.cpp src/outfit_sync_trace.cpp src/site_installer.cpp src/partner_thunks_calls.cpp
     src/partner_identity.cpp src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
     src/memory.cpp src/guest_call.cpp src/activity_state.cpp ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(outfit_sync_bindings_test PRIVATE minhook)

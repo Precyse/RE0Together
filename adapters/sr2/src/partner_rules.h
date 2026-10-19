@@ -76,8 +76,14 @@ inline void pair(const HumanEntry* humans, size_t humanCount, const MemberEntry*
 }
 
 // The remote every machine treats as the partner: on a guest the host's player, on the host the remote with the
-// lowest slot. kNone without a remote human. With one remote it is that remote, as in the shipped game.
-inline size_t pickDefault(const Pairing& pairing, uintptr_t hostMember, bool localIsHost) {
+// lowest slot. kNone without a remote human. With one remote it is that remote, as in the shipped game. While an activity
+// has two participants, `pinnedHuman` (0 for none) is the remote that is the other participant: in a trusted pairing it wins.
+inline size_t pickDefault(const Pairing& pairing, uintptr_t hostMember, bool localIsHost, uintptr_t pinnedHuman = 0) {
+    if (pinnedHuman && pairing.trusted) {
+        for (size_t i = 0; i < pairing.count; ++i) {
+            if (pairing.items[i].human == pinnedHuman) return i;
+        }
+    }
     size_t first = kNone;
     for (size_t i = 0; i < pairing.count; ++i) {
         if (!pairing.items[i].human) continue;

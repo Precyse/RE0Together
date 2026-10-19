@@ -7,6 +7,7 @@
 #include "config.h"
 #include "content_hash.h"
 #include "coop_limits.h"
+#include "diversion_patches.h"
 #include "force_join.h"
 #include "game_port.h"
 #include "game_port_rules.h"
@@ -55,6 +56,8 @@ DWORD WINAPI initThread(LPVOID) {
         if (replicating && !partnering) logger::write("partner: sites differ, the partner logic is not installed");
         const bool activities = partnering && activity_patches::sitesMatch();
         if (partnering && !activities) logger::write("activities: sites differ, the activity logic is not installed");
+        const bool diversions = activities && diversion_patches::sitesMatch();
+        if (activities && !diversions) logger::write("diversions: sites differ, the diversion logic is not installed");
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
         const bool animStreaming = crowd && anim_stream::sitesMatch();
@@ -89,6 +92,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (partnering) outfit_sync::install(config.trace);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
+        if (diversions) diversion_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
