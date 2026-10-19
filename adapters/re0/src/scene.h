@@ -13,6 +13,10 @@ uint16_t of(uintptr_t player);
 // Scene id of the loaded room, or kNone.
 uint16_t current();
 
+// The loaded room's record (0 while none is loaded): the identity of one room load, and the room record the engine's
+// enemy creation takes as its first argument.
+uintptr_t loadedRecord();
+
 // The load serial (load_serial.h): +1 whenever the loaded room record or its scene id changes, never 0. Any thread.
 // Advances only while observeLoad runs (state mode registers it as a game tick callback).
 uint16_t loadSerial();

@@ -149,6 +149,15 @@ static_assert(sizeof(ItemPutRecord) == 0x24);
 constexpr uintptr_t kItemRecordIdOffset = 0x4;
 constexpr uintptr_t kItemRecordCountOffset = 0x8;
 
+// state mode: phase 8 (enemy hand-over and creation on demand; docs/RE0_NOTES.md "State mode: enemy hits and hand-over")
+// The create 0x410bb0 is thiscall on the spawn table (ECX, kept from the caller) with (room record, spawn record index,
+// flags) and ret 0xc: the room load (0x61b240 -> 0x4109d0) and the flag setter's spawns (0x4109f0) pass the room's
+// record and read the flags from the global below. The caller then moves the new enemy by the record's origin and
+// assigns it to the record (kSceneAssignFunction).
+constexpr uintptr_t kEnemyCreateFlagsGlobal = 0xdcf2e4;  // u32, the create's third argument
+constexpr uintptr_t kSceneRecordOriginOffset = 0x20;     // vec3 added to a created enemy's position
+constexpr uintptr_t kUnitPositionWOffset = 0x4c;         // u32, cleared after the origin is added
+
 // Rooms, doors and menus (single-byte reads are enough for every value below except the door phase, an i32)
 constexpr uintptr_t kGameInfoStageOffset = 0x2a80;
 constexpr uintptr_t kGameInfoRoomOffset = 0x2a84;

@@ -10,6 +10,7 @@
 #include "enemy_damage_hook.h"
 #include "enemy_hit_wire.h"
 #include "enemy_observer.h"
+#include "enemy_observer_rule.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
 #include "enemy_target.h"
@@ -155,6 +156,34 @@ bool validAttacker(const Hit& hit) {
     return hit.type == enemy_protocol::kMsgHitApplied && id == enemy_protocol::kNoAttacker;
 }
 
+bool sendHitRequest(uint8_t destination, const HitPayload& hit) {
+    const bool sent = g_net->send(enemy_protocol::kMsgHitRequest, true, destination, proto::bytesOf(hit));
+    if (sent) debug_stats::count(Counter::HitRequestSent);
+    return sent;
+}
+
+// state mode: a HIT_REQUEST is applied only by the machine that simulates the enemy. One that reaches a machine that no
+// longer does (a hand-over or a lease was in flight) is sent on once to the machine that does; a second miss drops it.
+bool takesRequest(const HitPayload& hit) {
+    const enemy_observer_rule::Simulator simulator = enemy_observer::simulatorOf(hit.slot);
+    switch (enemy_observer_rule::fateOfRequest(simulator, hit.forwarded != 0)) {
+        case enemy_observer_rule::Fate::Apply: return true;
+        case enemy_observer_rule::Fate::Forward: {
+            HitPayload sentOn = hit;
+            sentOn.forwarded = 1;
+            if (sendHitRequest(simulator.slot, sentOn)) {
+                debug_stats::count(Counter::EnemyHitsForwarded);
+                logger::write("enemy_net: hit for slot %u forwarded to slot %d", hit.slot, simulator.slot);
+            }
+            return false;
+        }
+        case enemy_observer_rule::Fate::Drop: break;
+    }
+    debug_stats::count(Counter::EnemyHitsUnrouted);
+    logger::write("enemy_net: hit for slot %u dropped (%s)", hit.slot, hit.forwarded ? "forwarded twice" : "nobody simulates it");
+    return false;
+}
+
 // A request is applied as the owner; an applied hit is replayed. A hit queued across a room load is dropped: its
 // slot now names an enemy of the new room.
 void applyHit(const Hit& event) {
@@ -172,6 +201,7 @@ void applyHit(const Hit& event) {
     }
     // An observed enemy's HP, reaction and death come from the simulator's stream, not from a replayed damage function.
     if (event.type == enemy_protocol::kMsgHitApplied && state_mode::on() && enemy_observer::observes(enemy)) return;
+    if (event.type == enemy_protocol::kMsgHitRequest && state_mode::on() && !takesRequest(hit)) return;
     if (hit.attackerCharacterId == enemy_protocol::kNoAttacker) return applyOutcome(enemy, hit);
     const uintptr_t attacker = character_owner::find(static_cast<Character>(hit.attackerCharacterId));
     if (!attacker) {
@@ -232,10 +262,25 @@ void applyAsOwner(uintptr_t enemy, uint8_t attackerId, uintptr_t attackerObject,
 bool requestHit(uintptr_t enemy, Character attacker, const game::HitPoint& point, const game::HitInfo& info) {
     HitPayload hit;
     if (!encode(enemy, static_cast<uint8_t>(attacker), point, info, hit)) return false;
-    const bool sent = g_net->send(enemy_protocol::kMsgHitRequest, true, static_cast<uint8_t>(net_pad::peerSlot()),
-                                  proto::bytesOf(hit));
-    if (sent) debug_stats::count(Counter::HitRequestSent);
-    return sent;
+    return sendHitRequest(static_cast<uint8_t>(net_pad::peerSlot()), hit);
+}
+
+bool routeOwnHit(uintptr_t enemy, Character shooter, uintptr_t attackerObject, const game::HitPoint& point,
+                 const game::HitInfo& info) {
+    HitPayload hit;
+    const bool encoded = encode(enemy, static_cast<uint8_t>(shooter), point, info, hit);
+    const enemy_observer_rule::Simulator simulator = enemy_observer::simulatorOf(encoded ? hit.slot : UINT8_MAX);
+    switch (enemy_observer_rule::routeOfOwnHit(simulator)) {
+        case enemy_observer_rule::Route::Apply:
+            applyAsOwner(enemy, static_cast<uint8_t>(shooter), attackerObject, point, info);
+            return true;
+        case enemy_observer_rule::Route::Send:
+            if (!sendHitRequest(simulator.slot, hit)) return false;
+            logger::write("enemy_net: hit for slot %u sent to slot %d", hit.slot, simulator.slot);
+            return true;
+        case enemy_observer_rule::Route::Local: break;
+    }
+    return false;
 }
 
 void sendDecision(uint8_t slot, const enemy_follow_rule::Decision& decision) {

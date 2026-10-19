@@ -34,13 +34,18 @@ uintptr_t originalFor(uintptr_t vtable) {
     return 0;
 }
 
-// Hit by a player character: the shooter's machine reports it, and the room's enemy owner applies it for everyone.
+// Hit by a player character: the shooter's machine reports it, and the room's enemy owner applies it for everyone (in
+// state mode the enemy's simulator: enemy_net::routeOwnHit).
 void onPlayerHit(Character shooter, void* enemy, void* attacker, game::HitPoint* point, game::HitInfo* info,
                  uintptr_t original) {
     const uintptr_t enemyAddress = reinterpret_cast<uintptr_t>(enemy);
     if (character_owner::isRemoteOwned(shooter)) return;
     if (!character_owner::isLocalOwned(shooter)) {
         damage_thunk::callOriginal(original, enemy, attacker, point, info);
+    } else if (state_mode::on()) {
+        if (!enemy_net::routeOwnHit(enemyAddress, shooter, reinterpret_cast<uintptr_t>(attacker), *point, *info)) {
+            damage_thunk::callOriginal(original, enemy, attacker, point, info);
+        }
     } else if (split_rooms::localEnemyAuthority()) {
         enemy_net::applyAsOwner(enemyAddress, static_cast<uint8_t>(shooter), reinterpret_cast<uintptr_t>(attacker), *point,
                                 *info);

@@ -81,6 +81,10 @@ enum class Counter : size_t {
     EnemyObserverStale,
     EnemyObserverRefused,
     EnemyObserverSent,
+    EnemyHandOvers,
+    EnemyCreatedOnDemand,
+    EnemyHitsForwarded,
+    EnemyHitsUnrouted,
     Count
 };
 

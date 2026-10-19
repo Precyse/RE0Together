@@ -1,6 +1,7 @@
 // Checks the enemy observers' pure rules (no game): the construction gate, which enemies are observed and scoped, which
 // stream entries apply to which local enemy, request number extension, and one enemy's timeline of samples (render
-// delay, interpolation, hold, hard resets, stale). Exit 0 when every check passes.
+// delay, interpolation, hold, hard resets, stale), and the phase 8 rules: role changes and hand-over starts, hit routing and
+// request fate, creation on demand and its pacing. Exit 0 when every check passes.
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -214,6 +215,95 @@ void testBufferIsBounded() {
     check(shown.valid && shown.buffered == rule::kMaxSamples, "no more than kMaxSamples are kept, the oldest go first");
 }
 
+
+rule::Role roleOf(bool observing, bool simulating, uint16_t scene, uint8_t holder, uint32_t epoch) {
+    return {observing, simulating, scene, holder, epoch};
+}
+
+void testRoleChange() {
+    const rule::Role observing = roleOf(true, false, 0x12, 1, 3);
+    const rule::Role simulating = roleOf(false, true, 0x12, 0, 4);
+    const rule::Role nobody = roleOf(false, false, 0x12, 1, 3);
+    check(rule::roleChange(observing, observing, 0) == rule::RoleChange::None, "no change is no change");
+    check(rule::roleChange(observing, simulating, 0) == rule::RoleChange::HandOver,
+          "the room we were observing is now ours: a hand-over");
+    check(rule::roleChange(observing, nobody, 0) == rule::RoleChange::Wait,
+          "the simulator is gone and nobody holds the room yet: wait");
+    check(rule::roleChange(observing, nobody, rule::kHandOverWaitMs - 1) == rule::RoleChange::Wait, "still waiting just before the limit");
+    check(rule::roleChange(observing, nobody, rule::kHandOverWaitMs) == rule::RoleChange::Restart, "the wait runs out: start over");
+    check(rule::roleChange(observing, roleOf(true, false, 0x12, 1, 4), 0) == rule::RoleChange::Restart, "a new epoch of the same holder is a new stream");
+    check(rule::roleChange(observing, roleOf(false, true, 0x13, 0, 1), 0) == rule::RoleChange::Restart,
+          "another room is never a hand-over of this one");
+    check(rule::roleChange(nobody, simulating, 0) == rule::RoleChange::Restart, "a room that was not observed has nothing to hand over");
+    check(rule::roleChange(simulating, nobody, 0) == rule::RoleChange::Restart, "losing the room starts over");
+}
+
+void testHandOverStart() {
+    const enemy_follow_rule::Action action = {{1, 8, 3, 1}};
+    const enemy_follow_rule::Action think = {{enemy_follow_rule::kThinkState, 0, 0, 0}};
+    const enemy_follow_rule::Action setup = {{enemy_follow_rule::kSetupState, 0, 0, 0}};
+    check(rule::handOverStart(80, action) == rule::Start::Resume, "a living enemy in an action starts it again at step 0");
+    check(rule::handOverStart(80, think) == rule::Start::Think, "an enemy in its think state lets its own think pick");
+    check(rule::handOverStart(80, setup) == rule::Start::Think, "an enemy still in setup is left to its setup");
+    check(rule::handOverStart(0, action) == rule::Start::Corpse, "a dead enemy is not restarted");
+    check(rule::handOverStart(-1, action) == rule::Start::Corpse, "HP -1 is dead");
+    check(enemy_follow_rule::startOf(action).word[2] == 0, "the action restarts at its first step");
+}
+
+void testHitRouting() {
+    const rule::Simulator here{true, true, 0};
+    const rule::Simulator peer{true, false, 1};
+    const rule::Simulator nobody{};
+    check(rule::routeOfOwnHit(here) == rule::Route::Apply, "a hit on an enemy simulated here runs here");
+    check(rule::routeOfOwnHit(peer) == rule::Route::Send, "a hit on an enemy simulated by the peer goes to it");
+    check(rule::routeOfOwnHit(nobody) == rule::Route::Local, "with nobody simulating the room the hit stays local");
+    check(rule::fateOfRequest(here, false) == rule::Fate::Apply, "a request for an enemy simulated here is applied");
+    check(rule::fateOfRequest(here, true) == rule::Fate::Apply, "a forwarded request that lands on the simulator is applied");
+    check(rule::fateOfRequest(peer, false) == rule::Fate::Forward, "a request for an enemy simulated elsewhere is sent on once");
+    check(rule::fateOfRequest(peer, true) == rule::Fate::Drop, "a request already sent on is dropped");
+    check(rule::fateOfRequest(nobody, false) == rule::Fate::Drop, "a request nobody can take is dropped");
+}
+
+size_t classWithPolicy(Policy policy) {
+    for (size_t i = 0; i < enemy_policy::kClassCount; ++i) {
+        if (enemy_policy::kClasses[i].policy == policy) return i;
+    }
+    return enemy_policy::kClassCount;
+}
+
+void testCreateWanted() {
+    wire::PoseEntry entry{};
+    entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Observer));
+    entry.flags = wire::kFlagAlive;
+    check(rule::createWanted(true, entry), "a living Observer enemy in an empty slot is created");
+    check(!rule::createWanted(false, entry), "a slot with an enemy is not");
+    entry.flags = wire::kFlagAlive | wire::kFlagLeased;
+    check(rule::createWanted(true, entry), "a leased enemy is still living");
+    entry.flags = wire::kFlagTerminal;
+    check(!rule::createWanted(true, entry), "a corpse is not created");
+    entry.flags = wire::kFlagRemoved;
+    check(!rule::createWanted(true, entry), "a removed enemy is not created");
+    entry.flags = wire::kFlagAlive;
+    entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Legacy));
+    check(!rule::createWanted(true, entry), "a Legacy class keeps its own spawn");
+}
+
+void testCreatePacer() {
+    rule::CreatePacer pacer;
+    pacer.beginFrame();
+    for (size_t slot = 0; slot < rule::kMaxCreatesPerFrame; ++slot) check(pacer.allow(slot, 1000), "four creations fit one frame");
+    check(!pacer.allow(10, 1000), "the fifth waits for the next frame");
+    pacer.beginFrame();
+    check(pacer.allow(10, 1016), "the next frame has room again");
+    check(!pacer.allow(0, 1016), "a slot created a moment ago waits");
+    check(!pacer.allow(0, 1000 + rule::kCreateSlotIntervalMs - 1), "a slot waits the full second");
+    check(pacer.allow(0, 1000 + rule::kCreateSlotIntervalMs), "a second later it may be created again");
+    check(!pacer.allow(200, 5000), "a slot beyond the table is refused");
+    pacer.clear();
+    pacer.beginFrame();
+    check(pacer.allow(0, 1000), "a new room starts the pacing over");
+}
+
 }  // namespace
 
 int main() {
@@ -230,6 +320,11 @@ int main() {
     testDeadEnemyIsSampledRarely();
     testStale();
     testBufferIsBounded();
+    testRoleChange();
+    testHandOverStart();
+    testHitRouting();
+    testCreateWanted();
+    testCreatePacer();
     if (g_failures == 0) std::printf("enemy_observer_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

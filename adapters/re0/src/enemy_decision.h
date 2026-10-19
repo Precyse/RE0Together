@@ -37,4 +37,7 @@ void forgetSlot(uint8_t slot);
 // this enemy does not show the same action, the owner's reaction is started through the class's own setAction.
 void onOwnerOutcome(uintptr_t enemy, uint8_t slot, bool reacted, const enemy_follow_rule::Action& reaction);
 
+// Game thread: starts `action` on `enemy` through the class's own setAction (vtable slot 63).
+void startAction(uintptr_t enemy, const enemy_follow_rule::Action& action);
+
 }  // namespace enemy_decision

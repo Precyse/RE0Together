@@ -1,5 +1,9 @@
 #pragma once
 #include <cstdint>
+#include <optional>
+
+#include "enemy_observer_rule.h"
+#include "enemy_observer_wire.h"
 
 // Receiver side of the enemy observers (partner_mode=state, docs/RE0_NOTES.md "State mode: enemy observers"): when the
 // other machine runs the loaded room, this machine shows that room's Observer-class enemies from its streams
@@ -21,5 +25,23 @@ void uninstall();
 // is an Observer class), whether or not its construction is over. The decision, alignment and hit replay paths of the
 // input-mode design skip such an enemy.
 bool observes(uintptr_t enemy);
+
+// Any thread: the machine that simulates the enemy in pool slot `slot` of the loaded room right now, as this machine
+// sees it: the room authority (a lease holder takes over from it in phase 9). Unknown while the room is unowned or no
+// session is linked.
+enemy_observer_rule::Simulator simulatorOf(uint8_t slot);
+
+// Game thread, for the boss hand-over (phase 15): holds the enemy in pool slot `slot` under the CharPause scope whoever
+// simulates it, so its class update stops while its motion, joints and hit shapes go on. False when the slot is empty.
+// The hold ends with `startAt`, or when the room's role changes.
+bool freeze(int slot);
+
+// Game thread: the pose entry (class, spawn, HP, pose, record) of the enemy in pool slot `slot`, flagged alive or
+// terminal, or nothing when the slot holds no Observer-class enemy created through the spawn hook.
+std::optional<enemy_observer_wire::PoseEntry> snapshot(int slot);
+
+// Game thread: ends the freeze of pool slot `slot` and carries the enemy on from `record` the way a hand-over does (the
+// class's own setAction at step 0 when the record is an action). False when the slot is empty or unreadable.
+bool startAt(int slot, const int32_t (&record)[4]);
 
 }  // namespace enemy_observer

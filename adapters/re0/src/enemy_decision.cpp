@@ -203,4 +203,6 @@ void onOwnerOutcome(uintptr_t enemy, uint8_t slot, bool reacted, const Action& r
                   reaction.word[1], local.word[0], local.word[1]);
 }
 
+void startAction(uintptr_t enemy, const Action& action) { setAction(reinterpret_cast<void*>(enemy), action); }
+
 }  // namespace enemy_decision
