@@ -1,9 +1,11 @@
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
+#include "enemy_follow_rule.h"
 #include "enemy_observer_wire.h"
 #include "enemy_policy.h"
 #include "pose_timeline.h"
@@ -90,6 +92,114 @@ constexpr Life lifeOf(uint8_t flags) {
     if ((flags & enemy_observer_wire::kFlagRemoved) != 0) return Life::Gone;
     return (flags & enemy_observer_wire::kFlagTerminal) != 0 ? Life::Dead : Life::Alive;
 }
+
+// ---- Authority change --------------------------------------------------------------------------------------------
+
+constexpr uint32_t kHandOverWaitMs = 2000;  // the old simulator is gone but nobody has claimed the room yet: hold this long
+
+// How the loaded room stands for this machine: whose stream it shows, or that it runs the room itself.
+struct Role {
+    bool observing = false;
+    bool simulating = false;
+    uint16_t scene = 0xffff;
+    uint8_t holderSlot = 0;
+    uint32_t epoch = 0;
+
+    bool operator==(const Role&) const = default;
+};
+
+enum class RoleChange : uint8_t {
+    None,      // nothing changed
+    Restart,   // another stream or room: every slot starts over
+    Wait,      // the room we were observing lost its simulator and nobody holds it yet: keep the enemies held
+    HandOver,  // this machine now runs the room it was observing: its enemies carry on from where they were shown
+};
+
+// What a role change means. `waitedMs` is how long the room has been waiting for a simulator (0 when it has not).
+constexpr RoleChange roleChange(const Role& before, const Role& now, uint32_t waitedMs) {
+    if (before == now) return RoleChange::None;
+    if (before.observing && now.scene == before.scene) {
+        if (now.simulating) return RoleChange::HandOver;
+        if (!now.observing && waitedMs < kHandOverWaitMs) return RoleChange::Wait;
+    }
+    return RoleChange::Restart;
+}
+
+enum class Start : uint8_t {
+    Corpse,  // dead: its own update plays it out from the record the stream left
+    Think,   // in its think (or setup) state: its own think picks the next action
+    Resume,  // in an action: the class's setAction starts that action again at step 0
+};
+
+// How an enemy that was shown from the stream carries on when this machine simulates it. Slot 41 never resumes with a
+// motion its state machine did not pick, so an action is started again from its first step (enemy_follow_rule::startOf).
+constexpr Start handOverStart(int16_t hp, const enemy_follow_rule::Action& record) {
+    if (hp <= 0) return Start::Corpse;
+    return enemy_follow_rule::seedable(record) ? Start::Resume : Start::Think;
+}
+
+// ---- Hits --------------------------------------------------------------------------------------------------------
+
+// The machine that simulates an enemy right now (the lease holder, else the room authority), as this machine sees it.
+struct Simulator {
+    bool known = false;  // false while the room is unowned or there is no linked session
+    bool here = false;
+    uint8_t slot = 0;
+};
+
+enum class Route : uint8_t { Apply, Send, Local };
+
+// Where a hit by this machine's player goes: run here when this machine simulates the enemy, otherwise to the
+// simulator as HIT_REQUEST, and on this machine alone while nobody simulates it.
+constexpr Route routeOfOwnHit(const Simulator& simulator) {
+    if (simulator.here) return Route::Apply;
+    return simulator.known ? Route::Send : Route::Local;
+}
+
+enum class Fate : uint8_t { Apply, Forward, Drop };
+
+// A HIT_REQUEST that reaches this machine: applied when it simulates the enemy, otherwise sent on once to the machine
+// that does (the sender's tables were a step behind a hand-over or a lease); one that was already sent on is dropped.
+constexpr Fate fateOfRequest(const Simulator& simulator, bool alreadyForwarded) {
+    if (simulator.here) return Fate::Apply;
+    return simulator.known && !alreadyForwarded ? Fate::Forward : Fate::Drop;
+}
+
+// ---- Creation on demand ------------------------------------------------------------------------------------------
+
+constexpr size_t kMaxCreatesPerFrame = 4;
+constexpr uint32_t kCreateSlotIntervalMs = 1000;
+
+// A living Observer-class enemy of the stream whose pool slot holds no enemy here (a script spawn this machine has not
+// run, a late arrival) is created natively from its spawn record.
+inline bool createWanted(bool slotEmpty, const PoseEntry& entry) {
+    constexpr uint8_t kLifeFlags = enemy_observer_wire::kFlagAlive | enemy_observer_wire::kFlagTerminal | enemy_observer_wire::kFlagRemoved;
+    return slotEmpty && (entry.flags & kLifeFlags) == enemy_observer_wire::kFlagAlive &&
+           enemy_policy::kClasses[entry.classIndex].policy == Policy::Observer;
+}
+
+// At most kMaxCreatesPerFrame creations a frame and one a second per slot.
+class CreatePacer {
+public:
+    void beginFrame() { used_ = 0; }
+
+    bool allow(size_t slot, uint32_t nowMs) {
+        if (used_ >= kMaxCreatesPerFrame || slot >= lastMs_.size()) return false;
+        if (seen_[slot] && nowMs - lastMs_[slot] < kCreateSlotIntervalMs) return false;
+        seen_[slot] = true;
+        lastMs_[slot] = nowMs;
+        ++used_;
+        return true;
+    }
+
+    void clear() { *this = CreatePacer{}; }
+
+private:
+    static constexpr size_t kSlots = 64;  // above the 37 pool slots
+    std::array<uint32_t, kSlots> lastMs_{};
+    std::array<bool, kSlots> seen_{};
+    size_t used_ = 0;
+};
 
 // ---- Sequences ---------------------------------------------------------------------------------------------------
 

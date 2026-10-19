@@ -26,4 +26,12 @@ bool install();
 // created through the hook (the slot may have been reused by a creation that bypassed it).
 std::optional<Origin> originOf(int slot, uintptr_t enemy);
 
+// State mode, game thread: creates the enemy of spawn record `record` (spawn id `spawnId`) that the simulator has in pool
+// slot `streamSlot` and this machine lacks, the way the room load does: the seeded create, the room origin added to its
+// position, assigned to the loaded room's record. The engine's own checks apply (a record whose kill flag is set creates
+// nothing). Returns the pool slot the enemy took (the engine picks it, normally `streamSlot`), or enemy_registry::kNoSlot
+// when nothing was created: no create has been seen in this room yet (the spawn table is learned from the room load's),
+// the record is not that spawn here, or an enemy of the record already stands.
+int createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId);
+
 }  // namespace enemy_spawn

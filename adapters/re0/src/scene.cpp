@@ -88,6 +88,8 @@ uint16_t of(uintptr_t player) { return idOf(recordOf(player)); }
 
 uint16_t current() { return idOf(currentRecord()); }
 
+uintptr_t loadedRecord() { return currentRecord(); }
+
 uint16_t loadSerial() { return g_loadSerial.load(std::memory_order_relaxed); }
 
 void observeLoad() {

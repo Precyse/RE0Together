@@ -86,24 +86,6 @@ void flushMotions(uint32_t nowMs) {
     sendBatches<wire::MotionEntry>(wire::kMsgEnemyMotion, true, nowMs, entries);
 }
 
-// The pose entry of the Observer-class enemy standing in `slot`, or false when the slot holds none.
-bool buildEntry(int slot, uintptr_t enemy, wire::PoseEntry& entry) {
-    const std::optional<enemy_spawn::Origin> origin = enemy ? enemy_spawn::originOf(slot, enemy) : std::nullopt;
-    const int classIndex = enemy ? enemy_policy::classIndexOf(game::readPointer(enemy)) : enemy_policy::kNoClass;
-    if (!origin || classIndex == enemy_policy::kNoClass ||
-        enemy_policy::kClasses[static_cast<size_t>(classIndex)].policy != enemy_policy::Policy::Observer) {
-        return false;
-    }
-    entry = {};
-    if (!enemy_observer_game::read(enemy, entry)) return false;
-    entry.slot = static_cast<uint8_t>(slot);
-    entry.classIndex = static_cast<uint8_t>(classIndex);
-    entry.target = enemy_target::read(enemy);
-    entry.spawnId = origin->spawnId;
-    entry.spawnRecord = origin->record;
-    return true;
-}
-
 // One pose round over the pool: living enemies and repeated corpses go unreliably, deaths and removals once, reliably.
 void sendRound(uint32_t nowMs) {
     std::vector<wire::PoseEntry> unreliable;
@@ -112,7 +94,7 @@ void sendRound(uint32_t nowMs) {
     for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
         const uintptr_t enemy = enemy_registry::enemyAt(slot);
         wire::PoseEntry entry{};
-        const bool present = buildEntry(slot, enemy, entry);
+        const bool present = enemy_observer_capture::entryFor(slot, enemy, entry);
         const bool alive = present && entry.hp > 0;
         const send_rule::Action action = g_planner.next(static_cast<uint8_t>(slot), present, alive, static_cast<uint32_t>(enemy));
         wire::PoseEntry& last = g_last[static_cast<size_t>(slot)];
@@ -162,6 +144,23 @@ void logOncePerSecond(uint32_t nowMs) {
 }  // namespace
 
 namespace enemy_observer_capture {
+
+bool entryFor(int slot, uintptr_t enemy, wire::PoseEntry& entry) {
+    const std::optional<enemy_spawn::Origin> origin = enemy ? enemy_spawn::originOf(slot, enemy) : std::nullopt;
+    const int classIndex = enemy ? enemy_policy::classIndexOf(game::readPointer(enemy)) : enemy_policy::kNoClass;
+    if (!origin || classIndex == enemy_policy::kNoClass ||
+        enemy_policy::kClasses[static_cast<size_t>(classIndex)].policy != enemy_policy::Policy::Observer) {
+        return false;
+    }
+    entry = {};
+    if (!enemy_observer_game::read(enemy, entry)) return false;
+    entry.slot = static_cast<uint8_t>(slot);
+    entry.classIndex = static_cast<uint8_t>(classIndex);
+    entry.target = enemy_target::read(enemy);
+    entry.spawnId = origin->spawnId;
+    entry.spawnRecord = origin->record;
+    return true;
+}
 
 bool enable() { return pose_game::addAnimObserver(onMotionRequest); }
 

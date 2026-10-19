@@ -2,6 +2,7 @@
 
 #include <array>
 
+#include "debug_stats.h"
 #include "enemy_decision.h"
 #include "enemy_registry.h"
 #include "enemy_state.h"
@@ -82,11 +83,74 @@ void noteOrigin(void* self, uint32_t index, void* enemy) {
                       {static_cast<uint16_t>(record), static_cast<uint16_t>(spawnId & kSpawnIdMask)}};
 }
 
-void* __fastcall createDetour(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b) {
+// state mode, game thread: the spawn table (the create's ECX) and room record of the newest create. A create on demand
+// reuses them while that room record is still the loaded one.
+struct Context {
+    void* table = nullptr;
+    uintptr_t record = 0;
+};
+Context g_context;
+
+// A create plus the bookkeeping every created enemy gets.
+void* createTracked(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b) {
     void* const enemy = createSeeded(self, edx, a, index, b);
     if (enemy) forgetPreviousOccupant(enemy);
-    if (enemy && state_mode::on()) noteOrigin(self, index, enemy);
+    if (enemy && state_mode::on()) {
+        noteOrigin(self, index, enemy);
+        g_context = {self, a};
+    }
     return enemy;
+}
+
+void* __fastcall createDetour(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b) {
+    return createTracked(self, edx, a, index, b);
+}
+
+// What the room load does with each enemy it created (0x61b240): the room's origin is added to the position and the
+// enemy is assigned to the room record.
+void placeInRoom(uintptr_t enemy, uintptr_t record) {
+    float origin[3];
+    float position[3];
+    if (!game::readMemory(record + game::kSceneRecordOriginOffset, origin) ||
+        !game::readMemory(enemy + game::kUnitPositionOffset, position)) {
+        return;
+    }
+    for (int axis = 0; axis < 3; ++axis) position[axis] += origin[axis];
+    game::writeMemory(enemy + game::kUnitPositionOffset, position);
+    game::writeMemory(enemy + game::kUnitPositionWOffset, uint32_t{0});
+    void* const info = reinterpret_cast<void*>(game::readPointer(game::kSceneInfoGlobal));
+    if (info) game::callThiscall<void>(game::kSceneAssignFunction, info, reinterpret_cast<void*>(record), reinterpret_cast<void*>(enemy));
+}
+
+// The create for the loaded room and its placement; the enemy, or null when the create refused or the engine faulted.
+void* createGuarded(const Context& context, uint32_t index) {
+    __try {
+        void* const enemy = createTracked(context.table, nullptr, static_cast<uint32_t>(context.record), index,
+                                          game::readPointer(game::kEnemyCreateFlagsGlobal));
+        if (enemy) placeInRoom(reinterpret_cast<uintptr_t>(enemy), context.record);
+        return enemy;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+// True when an enemy of the pool was created from the record (the create would hand that one back, and placing it
+// again would add the room origin twice).
+bool alreadyCreated(uint16_t record) {
+    for (const std::optional<Created>& created : g_created) {
+        if (created && created->origin.record == record) return true;
+    }
+    return false;
+}
+
+// The spawn id the record carries (low word), or false when the record is unreadable.
+bool spawnIdOf(const Context& context, uint16_t record, uint16_t& out) {
+    uint32_t id = 0;
+    const uintptr_t address = reinterpret_cast<uintptr_t>(context.table) + game::kSpawnTableOffset +
+                              record * game::kSpawnRecordSize + game::kSpawnRecordIdOffset;
+    if (!game::readMemory(address, id)) return false;
+    out = static_cast<uint16_t>(id & kSpawnIdMask);
+    return true;
 }
 
 }  // namespace
@@ -103,6 +167,33 @@ std::optional<Origin> originOf(int slot, uintptr_t enemy) {
     const std::optional<Created>& created = g_created[static_cast<size_t>(slot)];
     if (!created || created->enemy != enemy) return std::nullopt;
     return created->origin;
+}
+
+int createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId) {
+    const uintptr_t loaded = scene::loadedRecord();
+    if (!loaded || g_context.record != loaded || !g_context.table) {
+        logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (no create seen in this room yet)", streamSlot);
+        return enemy_registry::kNoSlot;
+    }
+    uint16_t localSpawnId = 0;
+    if (record >= game::kSpawnRecordCount || !spawnIdOf(g_context, record, localSpawnId) || localSpawnId != spawnId) {
+        logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (record %u is not spawn %u here)", streamSlot, record, spawnId);
+        return enemy_registry::kNoSlot;
+    }
+    if (alreadyCreated(record)) return enemy_registry::kNoSlot;
+    void* const enemy = createGuarded(g_context, record);
+    const int slot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy));
+    if (!enemy || slot == enemy_registry::kNoSlot) {
+        logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (record %u refused)", streamSlot, record);
+        return enemy_registry::kNoSlot;
+    }
+    debug_stats::count(debug_stats::Counter::EnemyCreatedOnDemand);
+    if (slot == streamSlot) {
+        logger::write("enemy_spawn: slot %u created on demand (record %u)", streamSlot, record);
+    } else {
+        logger::write("enemy_spawn: slot %u created on demand in pool slot %d (record %u)", streamSlot, slot, record);
+    }
+    return slot;
 }
 
 }  // namespace enemy_spawn

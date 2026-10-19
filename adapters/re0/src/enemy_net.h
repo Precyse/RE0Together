@@ -23,6 +23,12 @@ void applyAsOwner(uintptr_t enemy, uint8_t attackerId, uintptr_t attackerObject,
 bool requestHit(uintptr_t enemy, character_owner::Character attacker, const game::HitPoint& point,
                 const game::HitInfo& info);
 
+// state mode, game thread: a hit by a local player on `enemy`, sent where the enemy is simulated: run here when this
+// machine simulates it, otherwise to its simulator (the lease holder, else the room authority). False when nobody
+// simulates it or it cannot be sent: the caller runs the hit on this machine alone.
+bool routeOwnHit(uintptr_t enemy, character_owner::Character shooter, uintptr_t attackerObject, const game::HitPoint& point,
+                 const game::HitInfo& info);
+
 // Game thread, the owner: sends a decision of the enemy in `slot`.
 void sendDecision(uint8_t slot, const enemy_follow_rule::Decision& decision);
 

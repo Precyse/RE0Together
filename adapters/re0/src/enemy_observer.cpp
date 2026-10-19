@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "debug_stats.h"
+#include "enemy_decision.h"
+#include "enemy_follow_rule.h"
 #include "enemy_observer_capture.h"
 #include "enemy_observer_game.h"
 #include "enemy_observer_rule.h"
@@ -96,6 +98,7 @@ struct Slot {
     rule::LocalEnemy local;
     rule::ConstructionGate gate;
     bool released = false;         // the simulator removed the unit: its own code takes it out
+    uintptr_t frozenEnemy = 0;     // freeze() holds this enemy under the CharPause scope whoever simulates it
     bool announced = false;
     bool terminalLogged = false;
     bool bindingRefused = false;   // a stream entry for this slot named another class or spawn
@@ -112,6 +115,9 @@ bool g_motionSeqKnown = false;
 uint32_t g_nextLogMs = 0;
 bool g_logStarted = false;
 std::vector<rule::MotionItem> g_due;
+rule::CreatePacer g_pacer;
+bool g_waiting = false;  // the observed room lost its simulator and nobody holds it yet
+uint32_t g_waitSinceMs = 0;
 
 void noteHold(size_t index, Slot& slot, Hold hold) {
     if (slot.hold == hold) return;
@@ -159,10 +165,11 @@ void dropPending() {
 void resetStreams() {
     for (Slot& slot : g_slots) slot = Slot{};
     g_motionSeqKnown = false;
+    g_pacer.clear();
     dropPending();
 }
 
-void refreshWorld() {
+World readWorld() {
     World next;
     next.scene = scene::current();
     next.nowMs = pose_wire::clockMs();
@@ -180,15 +187,87 @@ void refreshWorld() {
         if (next.clock) next.targetMs = next.clock->target(next.nowMs);
     }
     for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) next.pool[static_cast<size_t>(slot)] = enemy_registry::enemyAt(slot);
-    const bool sameStream = next.observing == g_world.observing && next.scene == g_world.scene &&
-                            next.holderSlot == g_world.holderSlot && next.epoch == g_world.epoch;
-    if (!sameStream) {
-        resetStreams();
-        if (next.observing) {
-            logger::write("enemy_observer: showing scene 0x%02x from slot %u e%u", static_cast<unsigned>(next.scene), next.holderSlot, next.epoch);
-        } else if (g_world.observing) {
-            logger::write("enemy_observer: stopped showing scene 0x%02x", static_cast<unsigned>(g_world.scene));
+    return next;
+}
+
+rule::Role roleOf(const World& world) {
+    return {world.observing, world.simulating, world.scene, world.holderSlot, world.epoch};
+}
+
+// Carries an enemy that was shown from the stream on as this machine's own, from the record in `state`: a living one in
+// an action starts that action again at step 0 through the class's own setAction, one in its think state lets its own
+// think pick the next, a dead one plays out.
+rule::Start carryOn(uintptr_t enemy, const wire::PoseEntry& state) {
+    enemy_follow_rule::Action record;
+    std::copy(std::begin(state.record), std::end(state.record), std::begin(record.word));
+    const rule::Start start = rule::handOverStart(state.hp, record);
+    if (start == rule::Start::Resume) enemy_decision::startAction(enemy, enemy_follow_rule::startOf(record));
+    return start;
+}
+
+// This machine now runs the room it was observing. Every scoped enemy leaves the CharPause path (the new world no
+// longer observes) and carries on from the record it was shown in.
+void handOver(const World& next) {
+    unsigned resumed = 0;
+    unsigned atStepZero = 0;
+    for (size_t index = 0; index < g_slots.size(); ++index) {
+        const Slot& slot = g_slots[index];
+        const uintptr_t enemy = next.pool[index];
+        wire::PoseEntry state{};
+        if (slot.enemy != enemy || !rule::scoped(slot.observer, slot.gate.open(), slot.released) ||
+            !enemy_observer_game::read(enemy, state)) {
+            continue;
         }
+        ++resumed;
+        if (carryOn(enemy, state) == rule::Start::Resume) ++atStepZero;
+    }
+    debug_stats::count(Counter::EnemyHandOvers, resumed);
+    logger::write("enemy_observer: authority -> here (scene 0x%02x e%u), %u enemies resumed (%u at step 0)",
+                  static_cast<unsigned>(next.scene), next.epoch, resumed, atStepZero);
+}
+
+// The room lost its simulator and nobody holds it yet: the world stays as it was, so the observed enemies keep their
+// scope and hold their last motion until the claim arrives (or the wait runs out).
+World heldWorld(World next) {
+    if (!g_waiting) {
+        g_waiting = true;
+        g_waitSinceMs = next.nowMs;
+        logger::write("enemy_observer: scene 0x%02x lost its simulator, holding", static_cast<unsigned>(g_world.scene));
+    }
+    next.observing = g_world.observing;
+    next.simulating = false;
+    next.scene = g_world.scene;
+    next.holderSlot = g_world.holderSlot;
+    next.epoch = g_world.epoch;
+    next.clock = g_world.clock;
+    next.targetMs = next.clock ? next.clock->target(next.nowMs) : 0;
+    return next;
+}
+
+void refreshWorld() {
+    World next = readWorld();
+    const uint32_t waitedMs = g_waiting ? next.nowMs - g_waitSinceMs : 0;
+    switch (rule::roleChange(roleOf(g_world), roleOf(next), waitedMs)) {
+        case rule::RoleChange::None:
+            g_waiting = false;
+            break;
+        case rule::RoleChange::Wait:
+            next = heldWorld(std::move(next));
+            break;
+        case rule::RoleChange::HandOver:
+            g_waiting = false;
+            handOver(next);
+            resetStreams();
+            break;
+        case rule::RoleChange::Restart:
+            g_waiting = false;
+            resetStreams();
+            if (next.observing) {
+                logger::write("enemy_observer: showing scene 0x%02x from slot %u e%u", static_cast<unsigned>(next.scene), next.holderSlot, next.epoch);
+            } else if (g_world.observing) {
+                logger::write("enemy_observer: stopped showing scene 0x%02x", static_cast<unsigned>(g_world.scene));
+            }
+            break;
     }
     g_world = std::move(next);
 }
@@ -222,8 +301,15 @@ bool accepted(const wire::Header& header, uint8_t sender) {
     return false;
 }
 
+// A living enemy of the stream whose pool slot is empty here is created natively from its spawn record; the stream's
+// entries apply from the frame after, once the refreshed slot binds the new enemy.
+void createOnDemand(const wire::PoseEntry& entry) {
+    if (g_pacer.allow(entry.slot, g_world.nowMs)) enemy_spawn::createOnDemand(entry.slot, entry.spawnRecord, entry.spawnId);
+}
+
 void takePose(const wire::Header& header, const wire::PoseEntry& entry, uint32_t arrivalMs) {
     Slot& slot = g_slots[entry.slot];
+    if (rule::createWanted(g_world.pool[entry.slot] == 0, entry)) return createOnDemand(entry);
     if (!slot.observer || !rule::bound(slot.local, entry)) {
         if (!slot.bindingRefused) {
             logger::write("enemy_observer: slot %u entry refused, stream %s/%u, here %s/%u", entry.slot,
@@ -354,12 +440,14 @@ int poolIndexOf(uintptr_t unit) {
     return found == g_world.pool.end() ? kNoIndex : static_cast<int>(found - g_world.pool.begin());
 }
 
-// Index of the pool slot whose observed enemy is `unit` and whose engine update is replaced now, or kNoIndex.
+// Index of the pool slot whose engine update is replaced for `unit` now (an observed enemy past construction, or one
+// that freeze() holds), or kNoIndex.
 int scopedSlot(uintptr_t unit) {
-    if (!g_world.observing) return kNoIndex;
     const int index = poolIndexOf(unit);
     if (index == kNoIndex) return kNoIndex;
     Slot& slot = g_slots[static_cast<size_t>(index)];
+    if (slot.frozenEnemy == unit) return index;
+    if (!g_world.observing) return kNoIndex;
     int32_t state = rule::kSetupState;
     if (!slot.observer || !enemy_observer_game::recordState(unit, state)) return kNoIndex;
     slot.gate.note(state);
@@ -368,13 +456,15 @@ int scopedSlot(uintptr_t unit) {
     return kNoIndex;
 }
 
-// Slot 8 of every unit. A pass-through for players and for every enemy that is not observed; an observed enemy gets the
-// stream's state and then runs its move with the CharPause bit held, restored as found.
+// Slot 8 of every unit. A pass-through for players and for every enemy that is not observed or frozen; an observed
+// enemy gets the stream's state and then runs its move with the CharPause bit held, restored as found; a frozen one runs
+// its move with the bit held and nothing written.
 void __fastcall unitMoveDetour(void* unit, void* edx) {
     const uintptr_t enemy = reinterpret_cast<uintptr_t>(unit);
     const int index = scopedSlot(enemy);
     if (index == kNoIndex) return g_originalUnitMove(unit, edx);
-    if (!drive(static_cast<size_t>(index), enemy, g_slots[static_cast<size_t>(index)])) return g_originalUnitMove(unit, edx);
+    Slot& slot = g_slots[static_cast<size_t>(index)];
+    if (slot.frozenEnemy != enemy && !drive(static_cast<size_t>(index), enemy, slot)) return g_originalUnitMove(unit, edx);
     enemy_observer_game::CharPause held;
     enemy_observer_game::holdCharPause(held);
     g_originalUnitMove(unit, edx);
@@ -407,6 +497,7 @@ void onTick() {
     }
     if (!g_world.observing) return dropPending();
     refreshSlots();
+    g_pacer.beginFrame();
     drainPoses();
     drainMotions();
     logOncePerSecond();
@@ -433,6 +524,38 @@ bool enable() {
 
 void uninstall() {
     if (g_enabled.exchange(false)) hooks::remove(game::kUnitMoveFunction);
+}
+
+rule::Simulator simulatorOf(uint8_t slot) {
+    if (slot >= game::kEnemyPoolSlots) return {};
+    const std::optional<room_authority::Holder> holder = room_authority::holderOf(scene::current());
+    if (!holder) return {};
+    return {true, holder->here, holder->slot};
+}
+
+bool freeze(int slot) {
+    if (slot < 0 || slot >= game::kEnemyPoolSlots || !g_world.pool[static_cast<size_t>(slot)]) return false;
+    g_slots[static_cast<size_t>(slot)].frozenEnemy = g_world.pool[static_cast<size_t>(slot)];
+    return true;
+}
+
+std::optional<wire::PoseEntry> snapshot(int slot) {
+    if (slot < 0 || slot >= game::kEnemyPoolSlots) return std::nullopt;
+    wire::PoseEntry entry{};
+    if (!enemy_observer_capture::entryFor(slot, g_world.pool[static_cast<size_t>(slot)], entry)) return std::nullopt;
+    entry.flags = entry.hp > 0 ? wire::kFlagAlive : wire::kFlagTerminal;
+    return entry;
+}
+
+bool startAt(int slot, const int32_t (&record)[4]) {
+    if (slot < 0 || slot >= game::kEnemyPoolSlots) return false;
+    const uintptr_t enemy = g_world.pool[static_cast<size_t>(slot)];
+    wire::PoseEntry state{};
+    if (!enemy || !enemy_observer_game::read(enemy, state)) return false;
+    g_slots[static_cast<size_t>(slot)].frozenEnemy = 0;
+    std::copy(std::begin(record), std::end(record), std::begin(state.record));
+    carryOn(enemy, state);
+    return true;
 }
 
 bool observes(uintptr_t enemy) {

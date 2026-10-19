@@ -1,11 +1,17 @@
 #pragma once
 #include <cstdint>
 
+#include "enemy_observer_wire.h"
+
 // Simulator side of the enemy observers (partner_mode=state): the machine that runs a room's enemies sends the other
 // machine what it needs to show them. ENEMY_MOTION: every cAnimControl::set call an Observer-class pool enemy makes,
 // batched once a frame. ENEMY_POSE: every such enemy at 20 Hz, a dead one once more reliably (`terminal`) and a unit
 // that left the pool once (`removed`).
 namespace enemy_observer_capture {
+
+// The pose entry of the Observer-class enemy `enemy` standing in pool slot `slot`: engine fields, class, target and spawn
+// (the flags are the caller's). False when the slot holds no such enemy created through the spawn hook, or it is unreadable.
+bool entryFor(int slot, uintptr_t enemy, enemy_observer_wire::PoseEntry& entry);
 
 // Adds the cAnimControl::set observer (pose_game installs its one hook at the first observer). False when the hook could
 // not be installed or the observer list is full.

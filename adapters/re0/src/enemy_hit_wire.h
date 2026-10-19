@@ -27,6 +27,7 @@ inline enemy_protocol::HitPayload encode(uint8_t slot, uint8_t attackerCharacter
             {},
             vtable,
             0,
+            0,
             {},
             {}};
 }
