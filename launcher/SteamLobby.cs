@@ -48,9 +48,9 @@ public sealed class SteamLobby : ILobby
     public ulong OwnerId => IsReady ? SteamMatchmaking.GetLobbyOwner(_lobby).m_SteamID : 0;
 
     public IReadOnlyDictionary<string, string> HostOptions =>
-        _lobby.IsValid() ? GameOptions.Decode(SteamMatchmaking.GetLobbyData(_lobby, KeyHostOptions)) : new Dictionary<string, string>();
+        _lobby.IsValid() ? GameOptions.Decode(Text(SteamMatchmaking.GetLobbyData(_lobby, KeyHostOptions))) : new Dictionary<string, string>();
 
-    public string JoinSecret => _lobby.IsValid() ? SteamMatchmaking.GetLobbyData(_lobby, KeyJoinSecret) : string.Empty;
+    public string JoinSecret => _lobby.IsValid() ? Text(SteamMatchmaking.GetLobbyData(_lobby, KeyJoinSecret)) : string.Empty;
 
     public IReadOnlyList<LobbyMember> Members => _members;
 
@@ -98,7 +98,7 @@ public sealed class SteamLobby : ILobby
     }
 
     public string MemberStatus(LobbyMember member) =>
-        _lobby.IsValid() ? SteamMatchmaking.GetLobbyMemberData(_lobby, new CSteamID(member.Id), KeyStatus) : string.Empty;
+        _lobby.IsValid() ? Text(SteamMatchmaking.GetLobbyMemberData(_lobby, new CSteamID(member.Id), KeyStatus)) : string.Empty;
 
     private void Track<T>(CallResult<T> result, SteamAPICall_t call) where T : struct
     {
@@ -133,8 +133,8 @@ public sealed class SteamLobby : ILobby
             return;
         }
         _lobby = new CSteamID(result.m_ulSteamIDLobby);
-        GameId = SteamMatchmaking.GetLobbyData(_lobby, KeyGame);
-        var proto = SteamMatchmaking.GetLobbyData(_lobby, KeyProto);
+        GameId = Text(SteamMatchmaking.GetLobbyData(_lobby, KeyGame));
+        var proto = Text(SteamMatchmaking.GetLobbyData(_lobby, KeyProto));
         if (string.IsNullOrEmpty(GameId) || proto != Framing.ProtocolVersion.ToString())
         {
             Failure = $"lobby is not a compatible co-op lobby (game '{GameId}', proto '{proto}')";
@@ -163,7 +163,7 @@ public sealed class SteamLobby : ILobby
         {
             var id = SteamMatchmaking.GetLobbyMemberByIndex(_lobby, i);
             if (id != self && !IsCompatible(id)) continue;
-            members.Add(new LobbyMember(id.m_SteamID, SteamFriends.GetFriendPersonaName(id)));
+            members.Add(new LobbyMember(id.m_SteamID, Text(SteamFriends.GetFriendPersonaName(id))));
         }
         _members = members;
         Revision++;
@@ -172,6 +172,10 @@ public sealed class SteamLobby : ILobby
     }
 
     private bool IsCompatible(CSteamID member) =>
-        SteamMatchmaking.GetLobbyMemberData(_lobby, member, KeyGame) == GameId &&
-        SteamMatchmaking.GetLobbyMemberData(_lobby, member, KeyProto) == Framing.ProtocolVersion.ToString();
+        Text(SteamMatchmaking.GetLobbyMemberData(_lobby, member, KeyGame)) == GameId &&
+        Text(SteamMatchmaking.GetLobbyMemberData(_lobby, member, KeyProto)) == Framing.ProtocolVersion.ToString();
+
+    /// <summary>Steamworks.NET returns null when Steam hands back no string (a member that just left, data not yet
+    /// delivered, a persona not yet loaded). Everything above this class reads such a value as empty.</summary>
+    private static string Text(string? steamString) => steamString ?? string.Empty;
 }

@@ -1,0 +1,154 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using CoopLauncher;
+
+const ulong HostId = 10;
+const ulong GuestA = 20;
+const ulong GuestB = 30;
+const ushort GameDatagram = 0x0120;
+const int BridgePort = 27991;
+const int WaitMs = 3000;
+
+var failures = 0;
+
+void Check(bool ok, string what)
+{
+    Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}");
+    if (!ok) failures++;
+}
+
+var profile = GameProfile.Load("sr2");
+var lobby = new ScriptedLobby(HostId, [new(HostId, "Host"), new(GuestA, "Alice"), new(GuestB, string.Empty)]);
+var transport = new RecordingTransport(HostId);
+using var bridge = new LoopbackBridge(profile, BridgePort);
+using var session = new Session(profile, lobby, transport, bridge);
+using var adapter = new StandInAdapter(BridgePort, profile.Id);
+
+Pump(() => bridge.IsReady && adapter.Count(Msg.PeerUp) >= 2);
+Check(adapter.Count(Msg.Welcome) == 1, "the adapter gets WELCOME");
+Check(adapter.Slots(Msg.PeerUp).Order().SequenceEqual([(byte)1, (byte)2]), "PEER_UP for slots 1 and 2 (a member with an empty name too)");
+
+adapter.Send(Datagram(slot: 1));
+adapter.Send(Datagram(slot: Framing.SlotAll));
+Pump(() => transport.SentTo(GuestA) == 2 && transport.SentTo(GuestB) == 1);
+Check(transport.SentTo(GuestA) == 2 && transport.SentTo(GuestB) == 1, "unicast to slot 1 and a broadcast reach the right members");
+
+lobby.SetMembers([new(HostId, "Host"), new(GuestB, string.Empty)]);
+Pump(() => adapter.Count(Msg.PeerUp) >= 3);
+Check(adapter.Slots(Msg.PeerDown).Contains(1) && adapter.Slots(Msg.PeerDown).Contains(2), "PEER_DOWN for the member that left and the one that moved");
+Check(adapter.Slots(Msg.PeerUp).Last() == 1, "PEER_UP for the member that moved to slot 1");
+var toGuestA = transport.SentTo(GuestA);
+var toGuestB = transport.SentTo(GuestB);
+adapter.Send(Datagram(slot: 2));
+adapter.Send(Datagram(slot: 1));
+Pump(() => transport.SentTo(GuestB) == toGuestB + 1);
+Check(transport.SentTo(GuestB) == toGuestB + 1 && transport.SentTo(GuestA) == toGuestA,
+    "after the re-slot a datagram for the old slot 2 is dropped, one for slot 1 reaches the moved member, none reaches the one that left");
+
+transport.Receive(GuestA, new Frame(GameDatagram, 0, 0, [1]));
+transport.Receive(GuestB, new Frame(GameDatagram, 0, 0, [2]));
+Pump(() => adapter.Count(GameDatagram) == 1);
+Check(adapter.Count(GameDatagram) == 1 && adapter.Slots(GameDatagram).Single() == 1, "a late frame from the member that left is dropped, the moved member's arrives with slot 1");
+
+lobby.SetMembers([new(HostId, "Host")]);
+Pump(() => !session.PeerConnected);
+Check(!session.PeerConnected && !session.Ended, "the last guest leaving keeps the session open");
+
+lobby.SetMembers([new(GuestB, "Bob")]);
+Pump(() => session.Ended);
+Check(session.Ended, "the host leaving ends the session");
+
+return failures == 0 ? 0 : 1;
+
+Frame Datagram(byte slot) => new(GameDatagram, 0, slot, [0, 0, 0, 0, 7]);
+
+void Pump(Func<bool> done)
+{
+    var deadline = Environment.TickCount64 + WaitMs;
+    while (Environment.TickCount64 < deadline)
+    {
+        bridge.Pump();
+        session.Pump();
+        if (done()) return;
+        Thread.Sleep(5);
+    }
+}
+
+sealed class ScriptedLobby(ulong ownerId, List<LobbyMember> members) : ILobby
+{
+    public bool IsReady => true;
+    public string? Failure => null;
+    public string? GameId => "sr2";
+    public ulong Id => 1;
+    public ulong OwnerId { get; private set; } = ownerId;
+    public IReadOnlyDictionary<string, string> HostOptions { get; } = new Dictionary<string, string>();
+    public string JoinSecret => string.Empty;
+    public IReadOnlyList<LobbyMember> Members { get; private set; } = members;
+    public int Revision { get; private set; }
+
+    public void SetMembers(List<LobbyMember> next)
+    {
+        Members = next;
+        Revision++;
+    }
+
+    public void SetMemberStatus(string status) { }
+    public string MemberStatus(LobbyMember member) => string.Empty;
+    public void Pump() { }
+    public void Dispose() { }
+}
+
+sealed class RecordingTransport(ulong localId) : ITransport
+{
+    private readonly ConcurrentDictionary<ulong, int> _sent = new();
+
+    public ulong LocalId { get; } = localId;
+    public int MaxChunkBytes => 1024;
+    public event Action<ulong, Frame>? FrameReceived;
+
+    public bool Send(ulong peerId, Frame frame)
+    {
+        if (frame.Type >= Msg.FirstGameType) _sent.AddOrUpdate(peerId, 1, (_, n) => n + 1);  // pings and the like are not counted
+        return true;
+    }
+
+    public int SentTo(ulong peerId) => _sent.GetValueOrDefault(peerId);
+    public void Receive(ulong sender, Frame frame) => FrameReceived?.Invoke(sender, frame);
+    public void Pump() { }
+    public void Dispose() { }
+}
+
+sealed class StandInAdapter : IDisposable
+{
+    private readonly TcpClient _client = new();
+    private readonly ConcurrentQueue<Frame> _frames = new();
+
+    public StandInAdapter(int port, string gameId)
+    {
+        _client.Connect(IPAddress.Loopback, port);
+        var id = System.Text.Encoding.ASCII.GetBytes(gameId);
+        var hello = new byte[3 + id.Length];
+        BitConverter.GetBytes(Framing.ProtocolVersion).CopyTo(hello, 0);
+        hello[2] = (byte)id.Length;
+        id.CopyTo(hello, 3);
+        Send(new Frame(Msg.Hello, Framing.FlagReliable, 0, hello));
+        new Thread(ReadLoop) { IsBackground = true }.Start();
+    }
+
+    public void Send(Frame frame) => _client.GetStream().Write(Framing.EncodeLoopback(frame));
+
+    public int Count(ushort type) => _frames.Count(f => f.Type == type);
+
+    public List<byte> Slots(ushort type) =>
+        _frames.Where(f => f.Type == type).Select(f => type is Msg.PeerUp or Msg.PeerDown ? f.Payload[0] : f.Slot).ToList();
+
+    public void Dispose() => _client.Close();
+
+    private void ReadLoop()
+    {
+        var stream = _client.GetStream();
+        while (Framing.TryReadLoopback(stream, out var frame))
+            if (frame.Type != Msg.Heartbeat) _frames.Enqueue(frame);
+    }
+}
