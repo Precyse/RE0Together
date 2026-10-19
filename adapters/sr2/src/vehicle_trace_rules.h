@@ -12,19 +12,32 @@ namespace vehicle_trace_rules {
 
 constexpr size_t kMaxTrackedIds = 256;  // the game's object_create_data records
 
-enum class Failure { CreationData, Pool, Other };
+enum class Failure { CreationData, Pool, Category, Other };
 
-// The create asks for the creation data first, so a missing record is the reason before an empty pool; anything else is a
-// category slot or the streaming. The arguments are the two free list heads (0 = empty).
-inline Failure classify(uint32_t creationDataHead, uint32_t poolHead) {
-    if (creationDataHead == 0) return Failure::CreationData;
-    return poolHead == 0 ? Failure::Pool : Failure::Other;
+// What the create reads to say why it failed: the two free list heads (0 = empty) and the vehicle category (class 1) in use, its
+// limit and its free node count.
+struct CreateState {
+    uint32_t creationDataHead;
+    uint32_t poolHead;
+    uint32_t class1Count;
+    uint32_t class1Limit;
+    uint32_t freeNodes;
+};
+
+// The create asks for the creation data first, so a missing record is the reason before an empty pool; then the category slot
+// (class 1 at its limit, or no free category node); anything else is the streaming.
+inline Failure classify(const CreateState& state) {
+    if (state.creationDataHead == 0) return Failure::CreationData;
+    if (state.poolHead == 0) return Failure::Pool;
+    if (state.class1Count >= state.class1Limit || state.freeNodes == 0) return Failure::Category;
+    return Failure::Other;
 }
 
 inline const char* name(Failure failure) {
     switch (failure) {
         case Failure::CreationData: return "creation data";
         case Failure::Pool: return "pool";
+        case Failure::Category: return "category";
         default: return "other";
     }
 }
@@ -35,7 +48,9 @@ struct Totals {
     uint32_t failed = 0;
     uint32_t pool = 0;
     uint32_t creationData = 0;
+    uint32_t category = 0;
     uint32_t other = 0;
+    uint32_t droppedAtApply = 0;  // a vehicle received whose object was destroyed again by the apply (its stream container is not loaded)
 
     void record(bool created, Failure failure) {
         ++creates;
@@ -44,9 +59,12 @@ struct Totals {
         switch (failure) {
             case Failure::CreationData: ++creationData; break;
             case Failure::Pool: ++pool; break;
+            case Failure::Category: ++category; break;
             default: ++other; break;
         }
     }
+
+    void recordDropped() { ++droppedAtApply; }
 };
 
 // The failed attempts per net id, for at most kMaxTrackedIds ids (the oldest is forgotten when it is full).

@@ -2,13 +2,19 @@
 
 #include <atomic>
 #include <cstring>
+#include <mutex>
 
 #include "fpu_guard.h"
 #include "guest_call.h"
+#include "log.h"
+#include "memory.h"
 #include "population_rules.h"
 #include "remote_players.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "traffic_list.h"
+#include "traffic_trace_rules.h"
+#include "vehicle_pool.h"
 
 namespace {
 
@@ -22,6 +28,9 @@ constexpr size_t kWideArg = 0;
 void* g_areaBudgetOriginal = nullptr;
 void* g_clusterOriginal = nullptr;
 std::atomic<uint32_t> g_lastAreasHundredths{0};
+bool g_trace = false;
+std::mutex g_quotaMutex;
+population::LastQuota g_lastQuota;  // the quota of the last headroom evaluation, for the census and the change test
 
 Point readPoint(uintptr_t address) {
     Point point{};
@@ -76,7 +85,11 @@ void __cdecl areaBudget(GuestFrame* frame) {
     for (size_t i = 0; i < remotes.count; ++i) cameras[i] = readPoint(remotes.humans[i] + sr2::kHumanCameraOffset);
     const float extra = population_rules::extraAreas(readPoint(sr2::kCameraPosition), cameras, remotes.count, radius);
     g_lastAreasHundredths = population_rules::areasHundredths(extra);
-    frame->regs.eax = population_rules::budget(args[kBaseArg], extra);
+    // The traffic vehicle cap (base 12, 0x93D2B0): with the 64 vehicle pool it grows with the areas, up to the class 1 limit the
+    // quotas share out.
+    const bool trafficCap = frame->returnAddress == sr2::kTrafficCapBudgetReturn;
+    frame->regs.eax = trafficCap && vehicle_pool::installed() ? population_rules::budgetUncapped(args[kBaseArg], extra)
+                                                                  : population_rules::budget(args[kBaseArg], extra);
 }
 
 // W2a: cdecl(char wide); the game's cluster test, 1 = far.
@@ -98,9 +111,39 @@ void __cdecl clusterLeaderFar(GuestFrame* frame) {
 remotes.localIsHost, remotes.localSlot, local, peers, remotes.count, radius) ? 1 : 0;
 }
 
-// W10b: esi = the vehicles still allowed (0x20 less this machine's own), returns it less 4 per remote session member.
-int32_t __cdecl vehicleHeadroom(int32_t free) {
-    return population_rules::vehicleHeadroom(free, remote_players::remoteMemberCount());
+// The traffic quota of this machine now (population_rules::trafficQuota over the players with a human) and the cap it shares.
+population_rules::Quota quotaNow(int32_t& limit) {
+    population_rules::Player players[population_rules::kMaxTrafficPlayers];
+    uint8_t leaders[population_rules::kMaxTrafficPlayers];
+    uint8_t localSlot = 0;
+    const size_t count = traffic_list::players(players, population_rules::kMaxTrafficPlayers, localSlot);
+    limit = static_cast<int32_t>(readDword(sr2::kCategoryClass1Limit));
+    population_rules::trafficLeaders(players, count, readFloat(sr2::kClusterRadius), leaders);
+    return population_rules::trafficQuota(limit, players, leaders, count, localSlot);
+}
+
+// trace=1: the quota line when the quota or the set of players this machine leads changed.
+void traceQuota(const population_rules::Quota& quota, int32_t limit, size_t owned) {
+    if (!g_trace) return;
+    std::lock_guard<std::mutex> lock(g_quotaMutex);
+    const bool changed = !traffic_trace_rules::sameQuota(g_lastQuota.quota, g_lastQuota.limit, quota, limit);
+    g_lastQuota = {quota, limit};
+    if (changed) logger::write("%s", traffic_trace_rules::quotaLine(quota, limit, owned).c_str());
+}
+
+// W10b: the vehicles still allowed, in place of `0x20 - own vehicles` less 4 once: the pool rule (4 off per remote session
+// member), and with 2 or more remote members also what is left of this machine's traffic quota.
+int32_t __cdecl vehicleHeadroom() {
+    const size_t members = remote_players::remoteMemberCount();
+    const int32_t capacity = static_cast<int32_t>(vehicle_pool::capacity());
+    const int32_t inUse = static_cast<int32_t>(readDword(sr2::kVehicleCount));
+    if (members <= 1) return population_rules::vehicleHeadroom(capacity, inUse, members, 0, 0);
+    FpuGuard guard;
+    int32_t limit = 0;
+    const population_rules::Quota quota = quotaNow(limit);
+    const size_t owned = traffic_list::ownedCount();
+    traceQuota(quota, limit, owned);
+    return population_rules::vehicleHeadroom(capacity, inUse, members, quota.quota, static_cast<int32_t>(owned));
 }
 
 PARTNER_WRAP_STUB(areaBudgetStub, areaBudget, 0)
@@ -110,9 +153,7 @@ PARTNER_WRAP_STUB(clusterLeaderFarStub, clusterLeaderFar, 0)
 // `ret` follows after the pop of esi.
 void __declspec(naked) vehicleHeadroomStub() {
     __asm {
-        push esi
         call vehicleHeadroom
-        add esp, 4
         pop esi
         ret
     }
@@ -123,6 +164,13 @@ void __declspec(naked) vehicleHeadroomStub() {
 namespace population {
 
 uint32_t lastAreasHundredths() { return g_lastAreasHundredths; }
+
+LastQuota lastQuota() {
+    std::lock_guard<std::mutex> lock(g_quotaMutex);
+    return g_lastQuota;
+}
+
+void setTrace(bool trace) { g_trace = trace; }
 
 partner_thunks::Binding bind(Thunk thunk) {
     switch (thunk) {

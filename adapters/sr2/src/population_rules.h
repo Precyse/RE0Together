@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 // The pure rules of the ambient population for 3 or more players (milestone 9, unit tested; docs/SR2_NOTES.md,
 // "Population"). 2-player co-op keeps the world at single-player density in two ways: the per-machine budgets are halved
@@ -55,10 +56,12 @@ inline uint32_t areasHundredths(float extra) {
 // the session, so `base`, the shipped maximum for 2 players apart, is also the session total: with three or four areas it
 // is shared out (base/3, base/4 per area), and the pools (150 humans, 32 vehicles) are never asked for more than the game
 // asks for two players.
-inline uint32_t budget(uint32_t base, float extra) {
+inline uint32_t budgetUncapped(uint32_t base, float extra) {
     const uint32_t half = base >> 1;
-    return half + static_cast<uint32_t>(static_cast<float>(half) * std::min(extra, kMostExtraAreas));
+    return half + static_cast<uint32_t>(static_cast<float>(half) * extra);
 }
+
+inline uint32_t budget(uint32_t base, float extra) { return budgetUncapped(base, std::min(extra, kMostExtraAreas)); }
 
 // Another player with the owner slot of its machine, for the cluster rule.
 struct Peer {
@@ -82,11 +85,90 @@ inline bool clusterFar(bool localIsHost, uint8_t localSlot, const Point& local, 
     return true;
 }
 
-// The vehicles this machine may still add: the shipped function takes 4 off while a partner exists, here 4 per remote
-// session member. Members, not humans: a joiner counts the session's members from the join on, so it keeps room for the
-// other players' vehicles from its first spawn, before any remote human exists on it.
-inline int32_t vehicleHeadroom(int32_t free, size_t remoteMembers) {
-    return free - kVehicleHeadroomPerRemote * static_cast<int32_t>(remoteMembers);
+// The vehicles this machine may still add for the pool: 4 are kept per remote session member for the other players' vehicles,
+// the shipped function keeps 4 while a partner exists. Members, not humans: a joiner counts the session's members from the
+// join on, so it keeps room for the other players' vehicles from its first spawn, before any remote human exists on it. The
+// pool is `kShippedVehiclePool` while no remote member exists, whatever its size (the 64 vehicle pool is for sessions).
+constexpr int32_t kShippedVehiclePool = 32;
+
+inline int32_t poolHeadroom(int32_t capacity, int32_t vehiclesInUse, size_t remoteMembers) {
+    const int32_t usable = remoteMembers == 0 ? kShippedVehiclePool : capacity;
+    return usable - vehiclesInUse - kVehicleHeadroomPerRemote * static_cast<int32_t>(remoteMembers);
+}
+
+// A player with a human, for the traffic quotas: the owner slot of its machine and its position.
+struct Player {
+    uint8_t slot;
+    Point position;
+};
+
+constexpr size_t kMaxTrafficPlayers = 12;  // the session is built for 12 players
+
+// The slot that leads each player's cluster: the lowest slot among the players within `radius` of it, itself included (the
+// cluster rule W2a for every player, not only the local one). leaders[i] belongs to players[i].
+inline void trafficLeaders(const Player* players, size_t count, float radius, uint8_t* leaders) {
+    for (size_t i = 0; i < count; ++i) {
+        leaders[i] = players[i].slot;
+        for (size_t j = 0; j < count; ++j) {
+            if (distance(players[i].position, players[j].position) < radius && players[j].slot < leaders[i]) leaders[i] = players[j].slot;
+        }
+    }
+}
+
+// What the local machine may own of the ambient traffic: its share of the vehicle cap `limit`, how many players it leads and
+// of how many there are, and their slots (the local one among them when it leads itself).
+struct Quota {
+    int32_t quota = 0;
+    size_t leads = 0;
+    size_t players = 0;
+    uint8_t led[kMaxTrafficPlayers] = {};
+};
+
+// A leader of k of N players may own floor(limit * k / N) traffic vehicles; the remainder goes one each to the leaders in
+// ascending slot order, so the shares add up to the limit. A non-leader gets 0. With fewer than two players there is nothing to
+// share and the whole limit is the quota.
+inline Quota trafficQuota(int32_t limit, const Player* players, const uint8_t* leaders, size_t count, uint8_t localSlot) {
+    Quota result;
+    result.players = count;
+    uint8_t slots[kMaxTrafficPlayers];
+    size_t led[kMaxTrafficPlayers] = {};
+    size_t leaderCount = 0;
+    for (size_t i = 0; i < count; ++i) {
+        size_t at = 0;
+        while (at < leaderCount && slots[at] != leaders[i]) ++at;
+        if (at == leaderCount) slots[leaderCount++] = leaders[i];
+        ++led[at];
+        if (leaders[i] == localSlot) result.led[result.leads++] = players[i].slot;
+    }
+    if (count < 2) {
+        result.quota = limit;
+        return result;
+    }
+    for (size_t a = 1; a < leaderCount; ++a) {  // ascending slot order
+        for (size_t b = a; b > 0 && slots[b] < slots[b - 1]; --b) {
+            std::swap(slots[b], slots[b - 1]);
+            std::swap(led[b], led[b - 1]);
+        }
+    }
+    int32_t shares[kMaxTrafficPlayers];
+    int32_t given = 0;
+    for (size_t k = 0; k < leaderCount; ++k) {
+        shares[k] = static_cast<int32_t>(static_cast<int64_t>(limit) * static_cast<int64_t>(led[k]) / static_cast<int64_t>(count));
+        given += shares[k];
+    }
+    for (size_t k = 0; k < leaderCount && given < limit; ++k, ++given) ++shares[k];
+    for (size_t k = 0; k < leaderCount; ++k) {
+        if (slots[k] == localSlot) result.quota = shares[k];
+    }
+    return result;
+}
+
+// The vehicles this machine may add: the pool rule, and with two or more remote members also what is left of the traffic quota
+// (owned traffic counts against it). With one remote member or none it is the pool rule alone, which is the shipped function's
+// answer for the shipped pool.
+inline int32_t vehicleHeadroom(int32_t capacity, int32_t vehiclesInUse, size_t remoteMembers, int32_t quota, int32_t ownedTraffic) {
+    const int32_t pool = poolHeadroom(capacity, vehiclesInUse, remoteMembers);
+    return remoteMembers <= 1 ? pool : std::min(pool, quota - ownedTraffic);
 }
 
 }  // namespace population_rules

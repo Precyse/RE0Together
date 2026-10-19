@@ -18,6 +18,9 @@
 #include "spawn_budget_rules.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "traffic_trace.h"
+#include "vehicle_census_rules.h"
+#include "vehicle_pool.h"
 #include "vehicle_trace.h"
 
 namespace {
@@ -137,8 +140,10 @@ void traceCensus() {
                                       freeNodes(sr2::kNpcHumanFreeHead, sr2::kNpcHumanPool, sr2::kNpcHumanLinkOffset),
                                       {},
                                       {},
+                                      vehicle_pool::capacity(),
                                       vehicle_trace::freeVehicles(),
                                       vehicle_trace::freeCreationData(),
+                                      vehicle_census_rules::text(traffic_trace::vehicleCensus()),
                                       vehicle_trace::totals(),
                                       {},
                                       remote_players::remoteHumanCount(),

@@ -14,12 +14,14 @@ namespace {
 struct PoolSpec {
     const char* name;
     uintptr_t address;
-    uint32_t (*newSize)(uint32_t originalSize, uint32_t maxPlayers);
+    uint32_t (*newSize)(uint32_t originalSize, uint32_t maxPlayers, bool vehiclePool);
 };
 
+uint32_t scaledPlayerPool(uint32_t originalSize, uint32_t maxPlayers, bool) { return scaledPoolSize(originalSize, maxPlayers); }
+
 constexpr PoolSpec kPools[] = {
-    {"coop_player cpu", sr2::kCoopPlayerCpuPool, scaledPoolSize},
-    {"coop_player gpu", sr2::kCoopPlayerGpuPool, scaledPoolSize},
+    {"coop_player cpu", sr2::kCoopPlayerCpuPool, scaledPlayerPool},
+    {"coop_player gpu", sr2::kCoopPlayerGpuPool, scaledPlayerPool},
     {"coop_allocators", sr2::kCoopAllocatorsPool, coopAllocatorsPoolSize},
 };
 constexpr size_t kPoolCount = sizeof(kPools) / sizeof(kPools[0]);
@@ -56,7 +58,7 @@ void rebase(uintptr_t pool, void* block, uint32_t size) {
 
 namespace coop_pools {
 
-bool resize(uint32_t maxPlayers) {
+bool resize(uint32_t maxPlayers, bool vehiclePool) {
     if (g_resized) return true;
     if (maxPlayers <= sr2::kCoopDefaultPlayers) return false;
 
@@ -68,7 +70,7 @@ bool resize(uint32_t maxPlayers) {
         ok = looksLikePool(kPools[i]);
         if (!ok) break;
         oldSizes[i] = dwordField(kPools[i].address, sr2::kPoolSizeOffset);
-        newSizes[i] = kPools[i].newSize(oldSizes[i], maxPlayers);
+        newSizes[i] = kPools[i].newSize(oldSizes[i], maxPlayers, vehiclePool);
         blocks[i] = newSizes[i] ? VirtualAlloc(nullptr, newSizes[i], MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) : nullptr;
         if (!blocks[i]) {
             logger::write("pools: %s not resized, %u bytes unavailable", kPools[i].name, newSizes[i]);

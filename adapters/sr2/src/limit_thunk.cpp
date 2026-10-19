@@ -4,6 +4,7 @@
 #include "log.h"
 #include "memory.h"
 #include "sr2_addresses.h"
+#include "vehicle_pool.h"
 
 namespace {
 
@@ -17,6 +18,7 @@ void raiseLimits() {
     dwordField(sr2::kMaxPlayers, 0) = g_maxPlayers;
     logger::write("coop limits: max session players %u -> %u, max players %u -> %u", oldSession, g_maxPlayers,
                   oldPlayers, g_maxPlayers);
+    vehicle_pool::onCoopActivation(g_maxPlayers);
 }
 
 // Stands in for the activation call: every register and the flags survive (edi holds the set name) and the

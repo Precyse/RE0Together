@@ -19,12 +19,20 @@ void check(bool ok, const char* what) {
 int main() {
     using namespace vehicle_trace_rules;
 
-    check(classify(0, 0x1000) == Failure::CreationData, "no creation data record: that is the reason, the create asks for it first");
-    check(classify(0, 0) == Failure::CreationData, "both lists empty: the creation data");
-    check(classify(0x2000, 0) == Failure::Pool, "records free, no vehicle in the pool: the pool");
-    check(classify(0x2000, 0x1000) == Failure::Other, "both free: a category slot or the streaming");
+    constexpr uint32_t kRecord = 0x2000;
+    constexpr uint32_t kVehicle = 0x1000;
+    constexpr uint32_t kRoomForClass1 = 4;
+    constexpr uint32_t kLimit = 12;
+    constexpr uint32_t kNodes = 20;
+    check(classify({0, kVehicle, kRoomForClass1, kLimit, kNodes}) == Failure::CreationData, "no creation data record: that is the reason, the create asks for it first");
+    check(classify({0, 0, kLimit, kLimit, 0}) == Failure::CreationData, "everything empty: the creation data");
+    check(classify({kRecord, 0, kLimit, kLimit, 0}) == Failure::Pool, "records free, no vehicle in the pool: the pool before the category");
+    check(classify({kRecord, kVehicle, kLimit, kLimit, kNodes}) == Failure::Category, "class 1 at its limit: the category");
+    check(classify({kRecord, kVehicle, kLimit + 1, kLimit, kNodes}) == Failure::Category, "class 1 over its limit (owners racing): the category");
+    check(classify({kRecord, kVehicle, kRoomForClass1, kLimit, 0}) == Failure::Category, "no free category node: the category");
+    check(classify({kRecord, kVehicle, kRoomForClass1, kLimit, kNodes}) == Failure::Other, "everything has room: the streaming or something unknown");
     check(std::string(name(Failure::Pool)) == "pool" && std::string(name(Failure::CreationData)) == "creation data" &&
-              std::string(name(Failure::Other)) == "other",
+              std::string(name(Failure::Category)) == "category" && std::string(name(Failure::Other)) == "other",
           "the names the trace line uses");
 
     Totals totals;
@@ -32,9 +40,12 @@ int main() {
     totals.record(false, Failure::Pool);
     totals.record(false, Failure::Pool);
     totals.record(false, Failure::CreationData);
+    totals.record(false, Failure::Category);
     totals.record(false, Failure::Other);
-    check(totals.creates == 5 && totals.failed == 4 && totals.pool == 2 && totals.creationData == 1 && totals.other == 1,
-          "the totals count every create, the failed ones and their reasons; a create that worked adds no reason");
+    totals.recordDropped();
+    check(totals.creates == 6 && totals.failed == 5 && totals.pool == 2 && totals.creationData == 1 && totals.category == 1 &&
+              totals.other == 1 && totals.droppedAtApply == 1,
+          "the totals count every create, the failed ones and their reasons; a create that worked adds no reason; a drop at apply is its own count");
 
     Attempts attempts;
     check(attempts.failed(7) == 1 && attempts.failed(7) == 2 && attempts.failed(8) == 1, "a failed attempt counts per net id, the first is 1");

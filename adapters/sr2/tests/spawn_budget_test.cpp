@@ -100,15 +100,19 @@ void censusRules() {
 
     vehicle_trace_rules::Totals vehicles;
     vehicles.record(false, vehicle_trace_rules::Failure::Pool);
+    vehicles.record(false, vehicle_trace_rules::Failure::Category);
     vehicles.record(true, vehicle_trace_rules::Failure::Other);
-    const spawn_budget_rules::Census census{12, 2399, 2388, 1, 0, groups.describe(), nodes.describe(), 20, 31, vehicles, setups.describe(), 2, 2, 250};
+    vehicles.recordDropped();
+    const spawn_budget_rules::Census census{12, 2399, 2388, 1, 0, groups.describe(), nodes.describe(), 64, 20, 31, "vehicles in use 44/64", vehicles,
+                                            setups.describe(), 2, 2, 250};
     check(spawn_budget_rules::censusLine(census) ==
               "trace: census: free groups 12/2400 (in use 2388), free elements 2399/2400 (in use 1), free npc humans 0/150, "
               "group creates " + groups.describe() + ", chunk nodes took groups/elements " + nodes.describe() +
-              ", vehicles free 20/32 creation data 31/32, remote vehicle creates 2 failed 1 (pool 1, creation data 0, other 0), "
+              ", vehicles free 20/64 creation data 31/32, vehicles in use 44/64, remote vehicle creates 3 failed 2 (pool 1, creation data 0, "
+              "category 1, other 0, dropped at apply 1), "
               "npc setups/without a human by caller 0x6D036C 2/1 0x9CDF5E 0/0, remote humans 2, remote members 2, player areas 2.50",
           "the census line");
-    const spawn_budget_rules::Census none{0, 0, 0, 0, 0, "", "", 0, 0, {}, "", 0, 0, 0};
+    const spawn_budget_rules::Census none{0, 0, 0, 0, 0, "", "", 0, 0, 0, "", {}, "", 0, 0, 0};
     check(spawn_budget_rules::censusLine(none).ends_with("player areas 0.00"), "no area evaluated reads 0.00");
 }
 

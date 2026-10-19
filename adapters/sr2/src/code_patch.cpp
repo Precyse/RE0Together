@@ -23,16 +23,15 @@ bool patchMatches(const CodePatch& patch) {
     return false;
 }
 
-bool writeCode(const CodePatch& patch) {
+bool writeBytes(const CodePatch& patch, const uint8_t* bytes, size_t size) {
     void* target = reinterpret_cast<void*>(patch.address);
-    const size_t size = patch.replacement.size();
     DWORD previous = 0;
     if (!VirtualProtect(target, size, PAGE_EXECUTE_READWRITE, &previous)) {
         logger::write("code patch: %s at 0x%X cannot be made writable", patch.name,
                       static_cast<unsigned>(patch.address));
         return false;
     }
-    memcpy(target, patch.replacement.data(), size);
+    memcpy(target, bytes, size);
     VirtualProtect(target, size, previous, &previous);
     FlushInstructionCache(GetCurrentProcess(), target, size);
     return true;
@@ -48,8 +47,14 @@ bool codeMatches(const std::vector<CodePatch>& patches) {
 
 bool applyCodePatches(const std::vector<CodePatch>& patches) {
     if (!codeMatches(patches)) return false;
-    for (const CodePatch& patch : patches) {
-        if (!patch.replacement.empty() && !writeCode(patch)) return false;
+    for (size_t written = 0; written < patches.size(); ++written) {
+        const CodePatch& patch = patches[written];
+        if (patch.replacement.empty() || writeBytes(patch, patch.replacement.data(), patch.replacement.size())) continue;
+        for (size_t undone = 0; undone < written; ++undone) {  // all or nothing: put back what was written
+            const CodePatch& earlier = patches[undone];
+            if (!earlier.replacement.empty()) writeBytes(earlier, earlier.expected.data(), earlier.replacement.size());
+        }
+        return false;
     }
     return true;
 }

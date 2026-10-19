@@ -50,17 +50,29 @@ constexpr uint32_t kPlayerN8Element = 0x928;
 constexpr uint32_t kPerPlayerOther = 0x16B4 + 0x4C + 0x420 + 0x1FC + 2 * 0x14;
 constexpr uint32_t kMargin = 1u << 20;
 
+// What the 64 vehicle pool (milestone 15) adds to the pool: the vehicle deltacomp set grows from 480 to 960 elements of 0x8D8
+// bytes, the vehicle sim state holds twice the creation record count (64 records, 128 elements of 0x2B08 bytes instead of 64),
+// and the vehicle creation data 32 records more of 0x28C bytes.
+constexpr uint32_t kVehicleDeltacompElement = 0x8D8;
+constexpr uint32_t kVehicleSimStateElement = 0x2B08;
+constexpr uint32_t kVehicleCreationElement = 0x28C;
+constexpr uint32_t kVehiclePoolGrowth = (sr2::kVehicleDeltacompGrown - sr2::kVehicleDeltacompShipped) * kVehicleDeltacompElement +
+                                        (sr2::kVehicleCreationGrown - sr2::kVehicleCreationShipped) * 2 * kVehicleSimStateElement +
+                                        (sr2::kVehicleCreationGrown - sr2::kVehicleCreationShipped) * kVehicleCreationElement;
+
 }  // namespace coop_allocators_size
 
 // Size of the `coop_allocators` pool once co-op uses the N=8 instances for `maxPlayers` (3..8) players, given the
-// shipped size `originalSize`. Returns 0 outside that range or when the result does not fit 32 bits.
-inline uint32_t coopAllocatorsPoolSize(uint32_t originalSize, uint32_t maxPlayers) {
+// shipped size `originalSize`; `vehiclePool` adds the room of the 64 vehicle pool. Returns 0 outside that range or when the
+// result does not fit 32 bits.
+inline uint32_t coopAllocatorsPoolSize(uint32_t originalSize, uint32_t maxPlayers, bool vehiclePool) {
     using namespace coop_allocators_size;
     if (maxPlayers <= sr2::kCoopDefaultPlayers || maxPlayers > sr2::kMaxReplicatedPlayers) return 0;
     const int64_t shippedPlayers = int64_t{kHistoryDepth} * sr2::kCoopDefaultPlayers * kPlayerN1Element;
     const int64_t size = int64_t{originalSize} - static_cast<int64_t>(fixedBytes(false)) - shippedPlayers +
                          static_cast<int64_t>(fixedBytes(true)) +
                          int64_t{kHistoryDepth} * maxPlayers * kPlayerN8Element +
-                         int64_t{maxPlayers - sr2::kCoopDefaultPlayers} * kPerPlayerOther + kMargin;
+                         int64_t{maxPlayers - sr2::kCoopDefaultPlayers} * kPerPlayerOther + kMargin +
+                         (vehiclePool ? int64_t{kVehiclePoolGrowth} : 0);
     return size > UINT32_MAX ? 0 : static_cast<uint32_t>(size);
 }

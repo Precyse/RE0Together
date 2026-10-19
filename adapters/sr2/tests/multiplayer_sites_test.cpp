@@ -138,7 +138,19 @@ int main() {
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
     check(phaseSize("player traces") == 3, "player traces: 3 sites (TF1, TF2, TL2), written with trace=1 only");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
-    check(phaseSize("census trace") == 3, "census trace: 3 sites (NC1, NC2, VT1), written with trace=1 only");
+    check(phaseSize("census trace") == 6, "census trace: 6 sites (NC1, NC2, VT1, TT1, TT2, VT2), written with trace=1 only");
+    const Site* trafficAdd = siteNamed(sites, "TT1");
+    const Site* trafficRemove = siteNamed(sites, "TT2");
+    const Site* vehicleApply = siteNamed(sites, "VT2");
+    check(trafficAdd && trafficAdd->kind == Kind::HookEntry && trafficAdd->address == 0x938C30 &&
+              partner_sites::parseHex(trafficAdd->expected) == std::vector<uint8_t>{0x8B, 0x50, 0x10, 0x83, 0xE1, 0x01, 0x83, 0xE2, 0xFC} &&
+              trafficRemove && trafficRemove->kind == Kind::HookEntry && trafficRemove->address == 0x938CB0 &&
+              partner_sites::parseHex(trafficRemove->expected) == std::vector<uint8_t>{0x39, 0x05, 0x30, 0xDA, 0x15, 0x02, 0x75, 0x16},
+          "TT1 and TT2 hook the traffic list's add 0x938C30 and remove 0x938CB0 with the research bytes (TL1 and TL2 of the spec; TL2 is taken by the player limit trace)");
+    check(vehicleApply && vehicleApply->kind == Kind::PointerSwap && vehicleApply->address == 0xE2BAB4 &&
+              partner_replacement::replacementFor(*vehicleApply, 0x10004000) == std::vector<uint8_t>{0x00, 0x40, 0x00, 0x10} &&
+              partner_sites::parseHex(vehicleApply->expected) == std::vector<uint8_t>{0x90, 0x8A, 0x87, 0x00},
+          "VT2: the vehicle vtable slot +0x48 (0x878A90) becomes the thunk, its address little endian");
     const Site* npcSetup = siteNamed(sites, "NC1");
     check(npcSetup && npcSetup->kind == Kind::HookEntry && npcSetup->address == 0x9D0DE0 && sizeOf(*npcSetup) == 8,
           "NC1 hooks the NPC human setup 0x9D0DE0, 8 checked bytes");

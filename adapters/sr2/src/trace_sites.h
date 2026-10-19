@@ -20,11 +20,15 @@ inline constexpr Site kPlayers[] = {
 
 // The pool census (milestone 11 B6, milestone 12; docs/SR2_NOTES.md, "Pool census"): the NPC human setup, which counts a
 // create that returned nothing (NC1), the chunk node loader, which takes groups and elements outside the group create (NC2),
-// and the vehicle class create, whose failed attempts are named per net id (VT1).
+// and the vehicle class create, whose failed attempts are named per net id (VT1). Milestone 15: the traffic list's add and remove
+// (TT1, TT2: who spawned and despawned for which player) and the vehicle apply (VT2: a received vehicle destroyed at once).
 inline constexpr Site kCensus[] = {
     {"NC1", Kind::HookEntry, Gate::Now, 0x9D0DE0, "51 53 8A 5C 24 0C 84 DB", Thunk::TraceNpcSetup, ""},
     {"NC2", Kind::HookEntry, Gate::Now, 0x9140C0, "81 EC 4C 02 00 00 A1 50 0B E8", Thunk::TraceChunkNodes, ""},
     {"VT1", Kind::PointerSwap, Gate::Now, 0xE2BA78, "30 3F 87 00", Thunk::TraceRemoteVehicle, ""},
+    {"TT1", Kind::HookEntry, Gate::Now, 0x938C30, "8B 50 10 83 E1 01 83 E2 FC", Thunk::TraceTrafficAdd, ""},
+    {"TT2", Kind::HookEntry, Gate::Now, 0x938CB0, "39 05 30 DA 15 02 75 16", Thunk::TraceTrafficRemove, ""},
+    {"VT2", Kind::PointerSwap, Gate::Now, 0xE2BAB4, "90 8A 87 00", Thunk::TraceVehicleApply, ""},
 };
 
 // The cutscene end (milestone 13; docs/SR2_NOTES.md, "Cutscenes"): the stores that start the done wait (CE3), end it by the

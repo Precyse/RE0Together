@@ -46,7 +46,7 @@ bool sitesMatch() {
     return ok;
 }
 
-void enable() {
+void enable(bool vehiclePool) {
     if (g_enabled) return;
     if (!allocatorsLookRight() || !applyCodePatches(replication_patches::replicationPatches())) {
         logger::write("replication: not enabled, co-op keeps the 1-peer code");
@@ -55,6 +55,7 @@ void enable() {
     for (const replication_sites::AllocatorObject& allocator : replication_sites::kN8Allocators) {
         dwordField(allocator.address, sr2::kAllocatorPoolSourceOffset) = static_cast<uint32_t>(sr2::kCurrentDeltacompPool);
     }
+    if (vehiclePool) dwordField(sr2::kVehicleDeltacompCount, 0) = sr2::kVehicleDeltacompGrown;
     g_enabled = true;
     logger::write("replication: %zu entries, %zu branches, 2 set names patched; %zu N=8 allocators follow the co-op pool",
                   replication_sites::kEntryCount, replication_sites::kBranchCount, replication_sites::kAllocatorCount);

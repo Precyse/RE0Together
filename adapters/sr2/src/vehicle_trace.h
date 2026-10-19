@@ -14,11 +14,11 @@ namespace vehicle_trace {
 // The remote vehicle creates seen so far and why they failed, for the pool census.
 vehicle_trace_rules::Totals totals();
 
-// The vehicles still free in the static pool of 32, and the creation data records still free (counted up to 32).
+// The vehicles still free in the static pool (32, or 64 once vehicle_pool moved it), and the creation data records still free (counted up to 32).
 uint32_t freeVehicles();
 uint32_t freeCreationData();
 
-// The code behind VT1; {nullptr, nullptr} for a thunk of another file.
+// The code behind VT1 and VT2 (the vehicle class's apply, which drops a vehicle whose stream container is not loaded); {nullptr, nullptr} for a thunk of another file.
 partner_thunks::Binding bind(partner_sites::Thunk thunk);
 
 }  // namespace vehicle_trace

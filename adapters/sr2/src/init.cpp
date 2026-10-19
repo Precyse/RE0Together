@@ -22,6 +22,8 @@
 #include "script_override.h"
 #include "sr2_addresses.h"
 #include "tunnel.h"
+#include "vehicle_pool.h"
+#include "vehicle_pool_rules.h"
 #include "version_gate.h"
 
 DWORD WINAPI initThread(LPVOID) {
@@ -49,6 +51,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering && !activities) logger::write("activities: sites differ, the activity logic is not installed");
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
+        if (vehicle_pool_rules::requested(config.maxPlayers, config.partnerExperimental, crowd)) vehicle_pool::request();
 
         const bool tunnelled = tunnel::install(config.transport, config.trace);
         const Transport transport = tunnelled ? Transport::Steam : Transport::Native;

@@ -7,6 +7,7 @@
 #include "limit_thunk.h"
 #include "replication_switch.h"
 #include "sr2_addresses.h"
+#include "vehicle_pool.h"
 
 namespace {
 
@@ -17,10 +18,16 @@ uint32_t g_maxPlayers = sr2::kCoopDefaultPlayers;
 std::atomic<int> g_running{0};
 
 void __cdecl detourNetSetMode(int mode) {
-    if (mode == sr2::kNetModeCoop && coop_pools::resize(g_maxPlayers)) replication_switch::enable();
+    if (mode == sr2::kNetModeCoop) {
+        if (coop_pools::resize(g_maxPlayers, vehicle_pool::wanted())) {
+            vehicle_pool::install();
+            replication_switch::enable(vehicle_pool::installed());
+        }
+    }
     ++g_running;
     g_original(mode);
     --g_running;
+    vehicle_pool::onModeSet(mode);
 }
 
 }  // namespace

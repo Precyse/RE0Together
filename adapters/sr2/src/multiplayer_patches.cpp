@@ -8,8 +8,10 @@
 #include "multiplayer_thunks.h"
 #include "net_clock.h"
 #include "pause_mask.h"
+#include "population.h"
 #include "sender_scope.h"
 #include "site_installer.h"
+#include "vehicle_pool.h"
 
 namespace multiplayer_patches {
 
@@ -48,6 +50,8 @@ bool install(bool trace, bool leavePathInstalled, bool experimental) {
     join_admission::setTrace(trace);
     net_clock::setTrace(trace);
     pause_mask::setTrace(trace);
+    population::setTrace(trace);
+    vehicle_pool::setTrace(trace);
 
     bool all = true;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {

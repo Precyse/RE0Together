@@ -2,6 +2,7 @@
 // each reduces to the shipped game's answer with one remote.
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 #include "../src/population_rules.h"
 
@@ -87,13 +88,92 @@ void theBudgetNeverPassesTheShippedMaximum() {
           "the census still reports the uncapped number of areas (2.50 here)");
 }
 
+constexpr int32_t kShippedPool = 32;
+constexpr int32_t kGrownPool = 64;
+constexpr int32_t kClass1Limit = 12;
+constexpr size_t kOneRemote = 1;
+
+// The shipped function 0x93C1D0: 0x20 less the vehicles in use, 4 less while a partner exists.
+int32_t shippedHeadroom(int32_t inUse, size_t remoteMembers) { return kShippedPool - inUse - (remoteMembers > 0 ? 4 : 0); }
+
 void vehicleHeadroomTakesFourPerRemote() {
-    check(population_rules::vehicleHeadroom(20, 0) == 20 && population_rules::vehicleHeadroom(20, 1) == 16,
+    check(population_rules::poolHeadroom(kShippedPool, 12, 0) == 20 && population_rules::poolHeadroom(kShippedPool, 12, 1) == 16,
           "no remote: nothing off; one remote: 4 off, as the shipped function does");
-    check(population_rules::vehicleHeadroom(20, 3) == 8 && population_rules::vehicleHeadroom(2, 3) == -10,
+    check(population_rules::poolHeadroom(kShippedPool, 12, 3) == 8 && population_rules::poolHeadroom(kShippedPool, 30, 3) == -10,
           "three remote members: 12 off (it can go negative, the caller compares)");
-    check(population_rules::vehicleHeadroom(28, 0) == 28 && population_rules::vehicleHeadroom(28, 1) == 24 && population_rules::vehicleHeadroom(28, 2) == 20,
+    check(population_rules::poolHeadroom(kShippedPool, 4, 0) == 28 && population_rules::poolHeadroom(kShippedPool, 4, 1) == 24 &&
+              population_rules::poolHeadroom(kShippedPool, 4, 2) == 20,
           "a joiner with no remote human yet but members in the session: 4 off per member");
+    check(population_rules::poolHeadroom(kGrownPool, 30, 3) == 22 && population_rules::poolHeadroom(kGrownPool, 30, 1) == 30,
+          "the 64 vehicle pool: 64 less 4 per member less the vehicles in use");
+    check(population_rules::poolHeadroom(kGrownPool, 30, 0) == 2, "the 64 vehicle pool with no remote member keeps the shipped 32");
+}
+
+void oneRemoteIsTheShippedHeadroomAtEveryCount() {
+    bool same = true;
+    for (int32_t inUse = 0; inUse <= kShippedPool; ++inUse) {
+        for (const size_t members : {size_t{0}, kOneRemote}) {
+            // The quota arguments are arbitrary: with one remote member or none they are not read.
+            same = same && population_rules::vehicleHeadroom(kShippedPool, inUse, members, 0, 100) == shippedHeadroom(inUse, members);
+        }
+    }
+    check(same, "with no remote member or one the headroom is the shipped function's answer at every vehicle count");
+}
+
+population_rules::Quota quotaOf(const std::vector<population_rules::Player>& players, uint8_t localSlot, int32_t limit = kClass1Limit) {
+    std::vector<uint8_t> leaders(players.size());
+    population_rules::trafficLeaders(players.data(), players.size(), kClusterRadius, leaders.data());
+    return population_rules::trafficQuota(limit, players.data(), leaders.data(), players.size(), localSlot);
+}
+
+void everyoneApartGetsAnEqualShare() {
+    const std::vector<population_rules::Player> apart = {{0, at(0)}, {1, at(1000)}, {2, at(2000)}};
+    check(quotaOf(apart, 0).quota == 4 && quotaOf(apart, 1).quota == 4 && quotaOf(apart, 2).quota == 4, "3 players apart: 4, 4, 4 of 12");
+    check(quotaOf(apart, 1).leads == 1 && quotaOf(apart, 1).players == 3 && quotaOf(apart, 1).led[0] == 1, "each leads itself, of 3 players");
+}
+
+void aClusterIsLedByItsLowestSlot() {
+    const std::vector<population_rules::Player> hostWithP2 = {{0, at(0)}, {1, at(50)}, {2, at(2000)}};
+    const population_rules::Quota host = quotaOf(hostWithP2, 0);
+    check(host.quota == 8 && host.leads == 2 && host.led[0] == 0 && host.led[1] == 1, "the host with P2 near and P3 apart: 8 of 12 for 2 of 3 players");
+    check(quotaOf(hostWithP2, 1).quota == 0 && quotaOf(hostWithP2, 1).leads == 0, "P2 is led by the host: no quota of its own");
+    check(quotaOf(hostWithP2, 2).quota == 4, "P3 apart leads itself: 4");
+    const std::vector<population_rules::Player> guestsTogether = {{0, at(0)}, {1, at(2000)}, {2, at(2050)}};
+    check(quotaOf(guestsTogether, 1).quota == 8 && quotaOf(guestsTogether, 2).quota == 0, "a guest-led cluster far from the host: the lower guest leads it");
+    const std::vector<population_rules::Player> allTogether = {{0, at(0)}, {1, at(30)}, {2, at(60)}};
+    check(quotaOf(allTogether, 0).quota == 12 && quotaOf(allTogether, 0).leads == 3, "all together: the host owns the whole cap, 3 of 3");
+}
+
+void theRemainderGoesToTheLowestLeaders() {
+    const std::vector<population_rules::Player> five = {{0, at(0)}, {1, at(1000)}, {2, at(2000)}, {3, at(3000)}, {4, at(4000)}};
+    int32_t sum = 0;
+    for (uint8_t slot = 0; slot < 5; ++slot) sum += quotaOf(five, slot).quota;
+    check(quotaOf(five, 0).quota == 3 && quotaOf(five, 1).quota == 3 && quotaOf(five, 2).quota == 2 && quotaOf(five, 4).quota == 2,
+          "5 apart: floor(12/5) = 2 each and the remaining 2 to slots 0 and 1");
+    check(sum == kClass1Limit, "the shares always add up to the cap");
+    const std::vector<population_rules::Player> four = {{1, at(0)}, {2, at(1000)}, {5, at(2000)}, {7, at(3000)}};
+    check(quotaOf(four, 1, 6 * 4).quota == 6 && quotaOf(four, 7, 6 * 4).quota == 6, "4 players with the cap grown to 6 per player: 6 each");
+    check(quotaOf(four, 1, 10).quota == 3 && quotaOf(four, 2, 10).quota == 3 && quotaOf(four, 5, 10).quota == 2 && quotaOf(four, 7, 10).quota == 2,
+          "a cap of 10 for 4 players: 3, 3, 2, 2 in slot order (slots 1, 2, 5, 7)");
+    const std::vector<population_rules::Player> alone = {{0, at(0)}};
+    check(quotaOf(alone, 0).quota == kClass1Limit, "a single player has the whole cap (nothing to share)");
+    check(quotaOf({}, 0).quota == kClass1Limit && quotaOf({}, 0).players == 0, "no player known: the cap, not a zero quota");
+}
+
+void ownedTrafficBindsTheHeadroom() {
+    check(population_rules::vehicleHeadroom(kShippedPool, 10, 2, 4, 4) == 0, "2 remote members, owned = quota: nothing more may spawn");
+    check(population_rules::vehicleHeadroom(kShippedPool, 10, 2, 4, 6) == -2, "owned above the quota (clusters changed): negative, the caller compares");
+    check(population_rules::vehicleHeadroom(kShippedPool, 10, 2, 8, 3) == 5 && population_rules::vehicleHeadroom(kShippedPool, 10, 2, 8, 0) == 8,
+          "owned below the quota: what is left of it");
+    check(population_rules::vehicleHeadroom(kShippedPool, 26, 2, 8, 0) == -2, "the pool rule binds when it is smaller (32 - 26 - 8)");
+    check(population_rules::vehicleHeadroom(kGrownPool, 40, 3, 8, 2) == 6 && population_rules::vehicleHeadroom(kGrownPool, 40, 3, 20, 2) == 12,
+          "the 64 pool: the smaller of 64 - 12 - in use and the quota left");
+}
+
+void theTrafficCapCanPassTheBase() {
+    check(population_rules::budgetUncapped(12, 3.0f) == 24 && population_rules::budgetUncapped(12, 1.0f) == 12 && population_rules::budgetUncapped(12, 0.0f) == 6,
+          "the uncapped traffic cap (base 12): 6 per area, 24 for 4 areas apart");
+    check(population_rules::budget(12, 3.0f) == 12, "the capped budget stays at the base");
 }
 
 void theLowestSlotOfAClusterAnswersFar() {
@@ -132,6 +212,12 @@ int main() {
     theBudgetNeverPassesTheShippedMaximum();
     theLowestSlotOfAClusterAnswersFar();
     vehicleHeadroomTakesFourPerRemote();
+    oneRemoteIsTheShippedHeadroomAtEveryCount();
+    everyoneApartGetsAnEqualShare();
+    aClusterIsLedByItsLowestSlot();
+    theRemainderGoesToTheLowestLeaders();
+    ownedTrafficBindsTheHeadroom();
+    theTrafficCapCanPassTheBase();
     areaCountForTheCensus();
     return g_failures == 0 ? 0 : 1;
 }

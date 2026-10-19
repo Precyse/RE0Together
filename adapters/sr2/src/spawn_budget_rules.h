@@ -269,8 +269,10 @@ struct Census {
     uint32_t freeNpcHumans;
     std::string groupCreates;  // GroupCreateCounts::describe
     std::string chunkNodes;    // TakenByCaller::describe of the chunk node loader
+    uint32_t vehicleCapacity;  // 32, or 64 with the vehicle pool of milestone 15
     uint32_t freeVehicles;
     uint32_t freeCreationData;
+    std::string vehicles;  // vehicle_census_rules::text: the vehicles by owner, the traffic, the net records, the side tables
     vehicle_trace_rules::Totals remoteVehicles;
     std::string npcCreates;  // CallerCounts::describe of the NPC human setup: calls/with no human
     size_t remoteHumans;
@@ -279,17 +281,18 @@ struct Census {
 };
 
 inline std::string censusLine(const Census& census) {
-    char line[1536];
+    char line[2560];
     std::snprintf(line, sizeof(line),
                   "trace: census: free groups %u/%zu (in use %u), free elements %u/%zu (in use %u), free npc humans %u/%zu, "
-                  "group creates %s, chunk nodes took groups/elements %s, vehicles free %u/%zu creation data %u/%zu, "
-                  "remote vehicle creates %u failed %u (pool %u, creation data %u, other %u), "
+                  "group creates %s, chunk nodes took groups/elements %s, vehicles free %u/%u creation data %u/%zu, %s, "
+                  "remote vehicle creates %u failed %u (pool %u, creation data %u, category %u, other %u, dropped at apply %u), "
                   "npc setups/without a human by caller %s, remote humans %zu, remote members %zu, player areas %u.%02u",
                   census.freeGroups, sr2::kMaxSpawnGroups, census.groupsInUse, census.freeElements, sr2::kSpawnElementPool,
                   census.elementsInUse, census.freeNpcHumans, sr2::kNpcHumanPool, census.groupCreates.c_str(),
-                  census.chunkNodes.c_str(), census.freeVehicles, sr2::kVehiclePool, census.freeCreationData,
-                  sr2::kVehicleCreationPool, census.remoteVehicles.creates, census.remoteVehicles.failed, census.remoteVehicles.pool,
-                  census.remoteVehicles.creationData, census.remoteVehicles.other, census.npcCreates.c_str(), census.remoteHumans,
+                  census.chunkNodes.c_str(), census.freeVehicles, census.vehicleCapacity, census.freeCreationData,
+                  sr2::kVehicleCreationPool, census.vehicles.c_str(), census.remoteVehicles.creates, census.remoteVehicles.failed,
+                  census.remoteVehicles.pool, census.remoteVehicles.creationData, census.remoteVehicles.category, census.remoteVehicles.other,
+                  census.remoteVehicles.droppedAtApply, census.npcCreates.c_str(), census.remoteHumans,
                   census.remoteMembers, census.areasHundredths / population_rules::kAreaHundredths,
                   census.areasHundredths % population_rules::kAreaHundredths);
     return line;

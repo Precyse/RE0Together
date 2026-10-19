@@ -143,6 +143,12 @@ enum class Thunk : uint8_t {
     TraceFadeIn,
     TraceFadeOut,
     TraceFadeTick,
+    // Milestone 15 (trace_sites.h, vehicle_pool_sites.h): the traffic list, the vehicle apply, the headroom of the 64 vehicle pool.
+    TraceTrafficAdd,
+    TraceTrafficRemove,
+    TraceVehicleApply,
+    VehicleHeadroomEcx,
+    VehicleHeadroomEax,
 
 
 

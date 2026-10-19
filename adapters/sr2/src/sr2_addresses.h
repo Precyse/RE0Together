@@ -386,6 +386,43 @@ constexpr uintptr_t kNpcCreationDataAllocator = 0x2A476F0;  // npc_creation_data
 constexpr uintptr_t kNpcStateDataAllocator = 0x2A47BA0;     // npc_state_data, N=8
 constexpr uintptr_t kNpcSimStateAllocator = 0x2A47C90;      // npc_sim_state
 
+// Vehicles (milestone 15; docs/SR2_NOTES.md, "Vehicle pool (milestone 15)" and "Traffic and the vehicle pool"). The category
+// node pool counts class 1 (the ambient vehicles) against a limit in the table at 0xE889F4; the traffic list holds every
+// machine's traffic (circular, next at +0, the vehicle's handle at +8); a vehicle object is type 5.
+constexpr uintptr_t kTrafficListHead = 0x215DA30;
+constexpr uintptr_t kTrafficEntryNextOffset = 0;
+constexpr uintptr_t kTrafficEntryHandleOffset = 8;
+constexpr size_t kTrafficListWalkLimit = 64;
+constexpr uintptr_t kObjectTypeOffset = 0x4C;  // dword
+constexpr uint32_t kObjectTypeVehicle = 5;
+constexpr uintptr_t kRecordNotOwnedOffset = 0x67C;  // byte: bit 0 set = the record is not this machine's to drive
+constexpr size_t kObjectTableEntries = 0x1000;
+constexpr uintptr_t kCategoryClass1Count = 0x2BA4C64;
+constexpr uintptr_t kCategoryClass1Limit = 0xE88A1C;  // dword: 12 shipped
+constexpr uint32_t kCategoryClass1ShippedLimit = 12;
+constexpr uint32_t kCategoryClass1PerPlayer = 6;
+constexpr uintptr_t kCategoryFreeNodes = 0x2BA4C54;  // dword: free vehicle category nodes
+constexpr uintptr_t kCategoryFreeHead = 0x2BA4C50;
+constexpr uintptr_t kVehicleCreationCount = 0xE8C440;  // dword: the creation data record count (and, doubled, the sim state count)
+constexpr uint32_t kVehicleCreationShipped = 0x20;
+constexpr uint32_t kVehicleCreationGrown = 0x40;
+constexpr uintptr_t kNetRecordsInUse = 0x212BA34;
+constexpr size_t kNetRecordPool = 256;
+constexpr uintptr_t kTrafficCapBudgetReturn = 0x93D307;  // W1a's caller with base 12, the traffic vehicle cap 0x93D2B0: its return address
+constexpr uintptr_t kVehicleDeltacompCount = 0x2A4C3E0;  // the N=8 vehicle deltacomp allocator's count (+0x18)
+constexpr uint32_t kVehicleDeltacompShipped = 480;
+constexpr uint32_t kVehicleDeltacompGrown = 960;
+constexpr uintptr_t kVehicleConstructor = 0xAE1300;         // thiscall(object): the CRT initializer calls it for each pool entry
+constexpr uintptr_t kMempoolConstructor = 0xBF48F0;         // thiscall(object): a customisation mempool object
+constexpr uintptr_t kVectorConstructor = 0x402450;          // stdcall(first, element size, count, element constructor)
+constexpr uintptr_t kT1VectorElementConstructor = 0xAE5720;
+constexpr uint32_t kT1VectorElementSize = 0x10;
+constexpr uint32_t kT1VectorElementCount = 8;
+constexpr uintptr_t kAllocatorFreeHeadOffset = 0x10;
+constexpr uintptr_t kAllocatorDynamicOffset = 0x20;  // byte: sized at activation
+constexpr uintptr_t kAllocatorActiveOffset = 0x21;   // byte: the block exists
+constexpr uintptr_t kAllocatorLockOffset = 0x30;     // the critical section
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
