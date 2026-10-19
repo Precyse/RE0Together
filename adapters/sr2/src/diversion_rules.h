@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #include "activity_rules.h"
 #include "partner_rules.h"
@@ -60,6 +61,9 @@ public:
         if (slot >= kSlots || !entries_[slot].used || entries_[slot].human != human) return nullptr;
         return &entries_[slot].value;
     }
+
+    // The stored value to change in place, nullptr as for the const get.
+    T* get(size_t slot, uintptr_t human) { return const_cast<T*>(std::as_const(*this).get(slot, human)); }
 
     T valueOr(size_t slot, uintptr_t human, const T& fallback) const {
         const T* value = get(slot, human);

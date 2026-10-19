@@ -61,6 +61,9 @@ add_library(sr2_adapter SHARED
     src/diversion_snatch.cpp
     src/diversion_streak.cpp
     src/diversion_patches.cpp
+    src/walk_thunks.cpp
+    src/mayhem_blocks.cpp
+    src/walk_patches.cpp
     src/script_override.cpp
     src/content_hash.cpp
     src/browser_tag.cpp
@@ -155,6 +158,7 @@ set_source_files_properties(
     src/store_sync.cpp src/lua_trace.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     src/activity_participants.cpp src/diversion_select.cpp src/diversion_each.cpp src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp
+    src/walk_thunks.cpp src/mayhem_blocks.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
 # The follower and NPC AI thunks of milestone 16 wave 2 run inside x87 game code; squared_distance.cpp hands back a float in ST0.
@@ -202,6 +206,8 @@ add_unit_test(activity_rules_test)
 add_unit_test(activity_sites_test)
 add_unit_test(diversion_rules_test)
 add_unit_test(diversion_sites_test)
+add_unit_test(walk_rules_test)
+add_unit_test(walk_sites_test)
 add_unit_test(script_override_rules_test)
 add_unit_test(join_file_test src/join_file.cpp)
 add_unit_test(player_name_rules_test)
@@ -216,7 +222,8 @@ add_unit_test(guest_call_test src/guest_call.cpp)
 add_unit_test(remote_players_test src/remote_players.cpp src/partner_scope.cpp src/member_slots.cpp src/replication_switch.cpp
     src/code_patch.cpp src/memory.cpp src/activity_state.cpp src/activity_participants.cpp src/guest_call.cpp)
 add_unit_test(activity_bindings_test src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp src/activity_state.cpp
-    src/activity_participants.cpp src/diversion_select.cpp src/diversion_each.cpp src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp src/sender_scope.cpp
+    src/activity_participants.cpp src/diversion_select.cpp src/diversion_each.cpp src/diversion_fraud.cpp src/diversion_snatch.cpp src/diversion_streak.cpp
+    src/walk_thunks.cpp src/mayhem_blocks.cpp src/sender_scope.cpp
     src/partner_identity.cpp src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp
     src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
     src/memory.cpp src/guest_call.cpp src/script_override.cpp src/revive_state.cpp ${SHARED_DIR}/paths.cpp)

@@ -37,6 +37,7 @@
 #include "vehicle_pool_rules.h"
 #include "vehicle_seating.h"
 #include "version_gate.h"
+#include "walk_patches.h"
 
 DWORD WINAPI initThread(LPVOID) {
     try {
@@ -64,6 +65,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering && !activities) logger::write("activities: sites differ, the activity logic is not installed");
         const bool diversions = activities && diversion_patches::sitesMatch();
         if (activities && !diversions) logger::write("diversions: sites differ, the diversion logic is not installed");
+        const bool walks = activities && walk_patches::sitesMatch();
         const bool crowd = partnering && multiplayer_patches::sitesMatch();
         if (partnering && !crowd) logger::write("players 3 and 4: sites differ, that logic is not installed");
         const bool animStreaming = crowd && anim_stream::sitesMatch();
@@ -99,6 +101,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) outfit_sync::install(config.trace);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (diversions) diversion_patches::install(config.partnerExperimental, config.trace);
+        if (walks) walk_patches::install(config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (partnering) hud_patches::install(config.trace);
         if (crowd) revive_patches::install(config.trace);

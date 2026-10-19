@@ -37,6 +37,13 @@ bool sitesMatch(std::span<const Site> sites) {
     return codeMatches(checks);
 }
 
+uintptr_t firstDifference(std::span<const Site> sites) {
+    for (const Site& site : sites) {
+        if (!sitesMatch(std::span<const Site>(&site, 1))) return site.address;
+    }
+    return 0;
+}
+
 Result install(std::span<const Site> sites, bool experimental, Binder binder) {
     std::vector<CodePatch> patches;
     std::vector<const Site*> hookSites;

@@ -316,6 +316,21 @@ enum class Thunk : uint16_t {
     SnatchWaypointPerRemote,
     MayhemDistrictAllPlayers,
     TraffickingExtraSeats,
+    // Milestone 17 wave 3 (walk_sites.h): inline walks and the Mayhem counter.
+    InlineWalkGetter,
+    FraudStartBlockBegin,
+    FraudStartBlockNext,
+    EachRemoteDamageReset,
+    AnyRemoteInFraudDistrict,
+    EachRemoteRagdollEnd,
+    OwnerRemoteEdi,
+    EachRemoteSnatchCleanup,
+    SnatchStatToDeliverer,
+    SendStatToTarget,
+    MayhemBlocksInit,
+    MayhemCountDestruction,
+    MayhemPayRemotes,
+    MayhemScoreBlock,
 };
 
 struct Site {

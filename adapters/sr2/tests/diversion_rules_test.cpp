@@ -62,6 +62,8 @@ void theSlotTable() {
     table.set(2, 0xA2, 7);
     check(table.get(2, 0xA2) && *table.get(2, 0xA2) == 7, "a stored value is read back");
     check(table.get(2, 0xA9) == nullptr && table.valueOr(2, 0xA9, -1) == -1, "a new human in the slot reads empty");
+    *table.get(2, 0xA2) = 9;
+    check(table.valueOr(2, 0xA2, -1) == 9, "the stored value can be changed in place");
     table.set(8, 0xA8, 1);
     check(table.get(8, 0xA8) == nullptr && table.get(9, 0xA8) == nullptr, "a slot out of range is ignored");
     table.set(3, 0xA3, 4);

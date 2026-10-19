@@ -815,4 +815,40 @@ constexpr uintptr_t kGarageHideResume = 0xA6D03C;       // after the partner re-
 constexpr uintptr_t kLevelChoiceSendReturn = 0x75B676;   // return address of the guest's choice broadcast (0x75B671)
 constexpr uintptr_t kLevelCancelSendReturn = 0x75B749;   // return address of the guest's cancel broadcast (0x75B744)
 
+// Milestone 17 wave 3: inline walks of the first remote and the Mayhem per-player counters (walk_sites.h, docs/SR2_NOTES.md, "Walks
+// and the Mayhem counter (milestone 17 wave 3)"). Where the jump outs go on, the functions the thunks call, and the Mayhem level layout.
+constexpr uintptr_t kFraudStartBlockBody = 0x64CCD9;     // the remote start block of Fraud, after its `cmp [esp+0x10], 0; je`
+constexpr uintptr_t kFraudStartBlockExit = 0x64D359;     // where every exit of that block joins
+constexpr uintptr_t kFraudStartBlockAfter = 0x64D360;    // after the join's `mov edx, [esp+0xA58]`
+constexpr uintptr_t kResumeFraudRagdoll = 0x64E8F6;
+constexpr uintptr_t kResumeSnatchCleanup = 0x656D53;
+constexpr uintptr_t kMayhemBonusLoopTop = 0x66BAF2;
+constexpr uintptr_t kMayhemBonusLoopAfter = 0x66BB96;
+constexpr uintptr_t kHumanDamageMultiplier = 0x968690;   // stdcall(human, &float)
+constexpr uintptr_t kRagdollEnd = 0x9ACC90;              // cdecl(human, 0)
+constexpr uintptr_t kPointInDistrict = 0x4B23F0;         // cdecl(point, district), AL out
+constexpr uintptr_t kRemoteStat = 0x6B4F20;              // ECX = &value, ESI = stat id; broadcasts the stat with kSendBroadcast
+constexpr uintptr_t kMayhemBonus = 0x668030;             // ECX = player, cdecl(id, target, kind, amount)
+constexpr uintptr_t kFraudTargetDistrictIndex = 0xE976C4;  // dword: index into the table below
+constexpr uintptr_t kFraudDistrictTable = 0x140C718;       // dword[]: the district records Fraud waits for
+constexpr uintptr_t kMayhemBonusEpsilon = 0xDD0584;      // float 0.01: how near 1.0 a district multiplier counts as 1.0
+constexpr uint32_t kSnatchCleanupArg = 1;                // 0x9DE310 at the end of Snatch (the start passes kSnatchSetupBothArg)
+constexpr uint32_t kSnatchCleanupLookFlag = 0;           // 0x9E0350 at the end of Snatch (the start passes 1)
+constexpr uintptr_t kFraudBlockHumanSlot = 0x10;         // the Fraud start block's [esp + 0x10]: the remote it is about
+constexpr uintptr_t kSnatchDelivererSlot = 0x8C;         // the delivery's [esp + 0x8C]: the player that delivers
+constexpr uintptr_t kHumanRagdollFlagsOffset = 0x84;     // byte: bit 0 set while the ragdoll is still on
+constexpr uintptr_t kMayhemBlocksOffset = 0xB4;          // level: the first player score block, kMayhemBlockSize bytes each
+constexpr size_t kMayhemBlockSize = 0x240;
+constexpr uintptr_t kMayhemPartnerBlockOffset = 0x2F4;   // level: the second score block (kMayhemBlocksOffset + kMayhemBlockSize)
+constexpr uintptr_t kMayhemBlockTotalOffset = 0xC;       // block: the sum of every kind
+constexpr uintptr_t kMayhemEntriesOffset = 0x538;        // level: the district entry pointers
+constexpr size_t kMayhemEntryCount = 3;
+constexpr uintptr_t kMayhemResetField = 0x570;           // level dword the init clears
+constexpr uintptr_t kMayhemEntryId = 0x00;
+constexpr uintptr_t kMayhemEntryTarget = 0x0C;
+constexpr uintptr_t kMayhemEntryPerUnit = 0x50;          // int: the bonus for one destruction
+constexpr uintptr_t kMayhemEntryMultiplier = 0x54;       // float
+constexpr uintptr_t kMayhemEntryLocalCount = 0x5C;       // int: destructions by the local player
+constexpr uintptr_t kMayhemEntryRemoteCount = 0x60;      // int: destructions by anyone else
+
 }  // namespace sr2
