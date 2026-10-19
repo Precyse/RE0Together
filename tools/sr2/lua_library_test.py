@@ -4,11 +4,16 @@ usage: python tools/sr2/lua_library_test.py        (needs the `lupa` package: pi
 
 With two players every wrapped call must reach the original once, unchanged; with three or four it follows its rule.
 """
+import os
 import re
 import sys
 from pathlib import Path
 
 import lupa.lua51
+
+sys.path.insert(0, str(Path(__file__).parent))
+import lua_patch  # noqa: E402
+from lua_patches import PATCHES  # noqa: E402
 
 LUA_DIR = Path(__file__).with_name("lua")
 LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua", "coop_seats.lua", "coop_waypoints.lua")
@@ -44,6 +49,12 @@ function mock(name)
 	end
 end
 """
+
+# The game's help text target (ug_lib.lua): SYNC_REMOTE for the remote player only, until lua_patches/library.py (M16 W2 SN1).
+SYNC_FROM_PLAYER = (
+    "function sync_from_player(player_name)\n\tif player_name == REMOTE_PLAYER then\n\t\treturn SYNC_REMOTE\n\tend\n"
+    "\tif player_name == LOCAL_PLAYER then\n\t\treturn SYNC_LOCAL\n\tend\n\t\n\treturn SYNC_ALL\nend\n"
+)
 
 # The game registers the base library of Lua 5.0 only: no table, string, math or os, and no select.
 ABSENT_LIBRARIES = "table = nil; string = nil; math = nil; os = nil; io = nil; debug = nil; package = nil; select = nil"
@@ -217,6 +228,33 @@ def test_sync_targets():
     check(lua.eval("coop_sync_for(S, '#PLAYER2#')") == 2, "sync: alone the mask is the two-player mask")
 
 
+def test_sync_from_player():
+    """sync_from_player as the generated ug_lib.lua has it: every remote name is SYNC_REMOTE; with two players it is the game's."""
+    source = os.environ.get("SR2_LUA_SOURCE")
+    if source:
+        original = (Path(source) / "ug_lib.lua").read_bytes().decode("latin-1").replace("\r\n", "\n")
+        check(SYNC_FROM_PLAYER in original, "sync: the function the test patches is the game's own")
+    edits = [edit for edit in PATCHES["ug_lib.lua"].edits if "sync_from_player" in edit[0]]
+    patched = lua_patch.apply_edits("ug_lib.lua", SYNC_FROM_PLAYER, edits)
+    for count in (2, 3, 4):
+        lua = new_runtime(count)
+        lua.execute(patched)
+        check(lua.eval("sync_from_player(REMOTE_PLAYER)") == 2 and lua.eval("sync_from_player(LOCAL_PLAYER)") == 1,
+              f"sync: {count} players: the remote player is SYNC_REMOTE and the local player SYNC_LOCAL")
+        check(lua.eval("sync_from_player('npc')") == 3, f"sync: {count} players: any other name is SYNC_ALL")
+    lua = new_runtime(3)
+    lua.execute(patched)
+    check(lua.eval("sync_from_player('#PLAYER3#')") == 2, "sync: 3 players: player 3 is SYNC_REMOTE, not shown on the host as SYNC_ALL")
+    set_players(lua, 4)
+    check(lua.eval("sync_from_player('#PLAYER4#')") == 2, "sync: 4 players: player 4 is SYNC_REMOTE")
+    lua = new_runtime(2)
+    lua.execute(SYNC_FROM_PLAYER)
+    lua.execute("ORIGINAL = sync_from_player")
+    lua.execute(patched)
+    check(all(lua.eval(f"ORIGINAL({name}) == sync_from_player({name})") for name in ("REMOTE_PLAYER", "LOCAL_PLAYER", "'npc'", "'#PLAYER3#'")),
+          "sync: 2 players: the patched function answers as the game's for every name")
+
+
 def test_wrapping_twice():
     lua = new_runtime(3)
     lua.execute((LUA_DIR / RULES_FILE).read_text(encoding="utf-8"))
@@ -280,7 +318,7 @@ end
 
 
 def main():
-    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_waypoints, test_wrapping_twice):
+    for test in (test_two_players, test_alone, test_three_players, test_tables_and_state, test_sr2_runtime, test_sync_targets, test_waypoints, test_sync_from_player, test_wrapping_twice):
         test()
     return 1 if failures else 0
 

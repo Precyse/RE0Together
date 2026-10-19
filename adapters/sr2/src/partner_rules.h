@@ -114,16 +114,35 @@ inline bool isLastInGame(const Pairing& pairing, uintptr_t leaving, uint32_t inG
     return true;
 }
 
+// The squared distance between two positions.
+inline float distanceSquared(const Vec3& a, const Vec3& b) {
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
+    const float dz = a.z - b.z;
+    return dx * dx + dy * dy + dz * dz;
+}
+
 // The index of the position closest to `point`, kNone without positions. Ties go to the earlier one.
 inline size_t nearestIndex(const Vec3* positions, size_t count, const Vec3& point) {
     size_t best = kNone;
     float bestDistance = 0;
     for (size_t i = 0; i < count; ++i) {
-        const float dx = positions[i].x - point.x;
-        const float dy = positions[i].y - point.y;
-        const float dz = positions[i].z - point.z;
-        const float distance = dx * dx + dy * dy + dz * dz;
+        const float distance = distanceSquared(positions[i], point);
         if (best == kNone || distance < bestDistance) {
+            best = i;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+// The index of the position farthest from `point`, kNone without positions. Ties go to the earlier one.
+inline size_t farthestIndex(const Vec3* positions, size_t count, const Vec3& point) {
+    size_t best = kNone;
+    float bestDistance = 0;
+    for (size_t i = 0; i < count; ++i) {
+        const float distance = distanceSquared(positions[i], point);
+        if (best == kNone || distance > bestDistance) {
             best = i;
             bestDistance = distance;
         }

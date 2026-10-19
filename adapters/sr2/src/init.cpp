@@ -18,6 +18,7 @@
 #include "lan_address.h"
 #include "log.h"
 #include "multiplayer_patches.h"
+#include "net_handlers.h"
 #include "outfit_sync.h"
 #include "partner_patches.h"
 #include "party_ai_patches.h"
@@ -100,6 +101,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) party_ai_patches::install(config.trace);
         if (crowd) store_sync::install(config.trace);
         if (crowd) vehicle_seating::install(config.partnerExperimental, config.trace);
+        if (crowd) net_handlers::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
         if (crowd) session_kick::install(config.trace);

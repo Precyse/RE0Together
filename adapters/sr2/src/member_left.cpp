@@ -2,6 +2,7 @@
 
 #include "cutscene_sync.h"
 #include "mission_flow.h"
+#include "net_handlers.h"
 #include "pause_mask.h"
 #include "sr2_addresses.h"
 
@@ -15,6 +16,7 @@ void __cdecl memberLeft(uintptr_t leaver) {
     pause_mask::afterLeave(leaver);
     cutscene_sync::memberLeft(leaver);
     mission_flow::memberLeft(leaver);
+    net_handlers::memberLeft(leaver);
 }
 
 // Replaces the clear of the pause byte and the resume in the member left callback; ebx is the leaver.

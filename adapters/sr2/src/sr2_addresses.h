@@ -698,6 +698,27 @@ constexpr uintptr_t kVehicleOfHandleChecked = 0xAE28F0;    // ECX = handle: the 
 constexpr uintptr_t kHumanInVehicle = 0x9B8C50;            // ESI = human, EDI = vehicle: AL = 1 when settled in it
 constexpr uintptr_t kReleaseHeld = 0x69DDA0;               // EDX = human: releases the human it holds (+0xEA8)
 constexpr uintptr_t kMissionExitPartnerDone = 0x6A4E85;    // the mission exit after the default partner's stop (SE3 resumes here)
+// Milestone 16 wave 2: net handlers, chat, pause (M16_W2_NET.md).
+constexpr uintptr_t kHumanCashOffset = 0x1114;          // int: the cash of a human
+constexpr uintptr_t kRaceHoldLocal = 0x252981D;         // byte: the local player holds the race resource set
+constexpr uintptr_t kRaceHoldRemote = 0x252981E;        // byte: a remote holds it (a bit per session slot with 3 or more players)
+constexpr uintptr_t kRaceResourceSet = 0x140C818;       // the name of the race resource set (.mms / .ods), esi of the release
+constexpr uintptr_t kRaceResourceRelease = 0xA25760;    // ESI = the set name: unloads it
+constexpr uintptr_t kRaceHoldLoad = 0xA25D33;           // scrpt_02 (RH1): the game loads the set
+constexpr uintptr_t kRaceHoldReturn = 0xA25D4B;         // scrpt_02 (RH1): the handler returns
+constexpr uintptr_t kRaceHoldUnload = 0xA25D7A;         // scrpt_03 (RH2): the game unloads the set
+constexpr uintptr_t kRaceHoldSkip = 0xA25D91;           // scrpt_03 (RH2): the handler returns
+constexpr uintptr_t kConfessLocal = 0x2528778;          // pointer: the confessional object of the local player
+constexpr uintptr_t kConfessLock = 0x252877C;           // pointer: the confessional object a remote is in, 0 when none
+constexpr uintptr_t kConfessDistanceLimit = 0xE5C688;   // double: the squared distance a partner may be from the confessional
+constexpr uintptr_t kPriceToCents = 0x4B2680;           // ESI = out; stdcall(float price): the price in clamped integer cents
+constexpr uint8_t kConfessNoticeFar = 2;                // misc_00 code: a partner is too far away
+constexpr uint8_t kConfessNoticePoor = 6;               // misc_00 code: a partner cannot pay
+constexpr uintptr_t kConfessShowFar = 0x7A94F7;         // misc_00 (CF8): the game shows "you are too far" (code 3)
+constexpr uintptr_t kConfessNotCodeFar = 0x7A950F;      // misc_00 (CF8): the code is not 2
+constexpr uintptr_t kConfessShowPoor = 0x7A956D;        // misc_00 (CF9): the game shows "you can't afford" (code 5)
+constexpr uintptr_t kConfessNotCodePoor = 0x7A9514;     // misc_00 (CF9): the code is not 6
+constexpr uintptr_t kConfessReturn = 0x7A95D7;          // misc_00 (CF8, CF9): the handler returns
 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;

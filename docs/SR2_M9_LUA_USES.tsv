@@ -887,6 +887,6 @@ ug_lib.lua	1189	other			FILE	kept: stays the default partner
 ug_lib.lua	1810	action	player_controls_disable	fanout	UG	wrapper
 ug_lib.lua	1829	action	player_controls_enable	fanout	UG	wrapper
 ug_lib.lua	1843	action	player_controls_enable	fanout	UG	wrapper
-ug_lib.lua	2421	identity			FILE	kept: stays the default partner
+ug_lib.lua	2421	identity			FILE	patched: every remote name is SYNC_REMOTE (M16 W2 SN1)
 ug_lib.lua	2434	action	teleport	fanout	UG	wrapper
 ug_lib.lua	2442	action	teleport_check_done	all	UG?	default: all
