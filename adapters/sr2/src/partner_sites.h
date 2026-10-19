@@ -155,10 +155,13 @@ enum class Thunk : uint8_t {
     TraceStreamingSync,
     TraceAnimUnload,
     TraceAnimDelta,
-
-
-
-
+    // Milestone 16 W1 (outfit_sync_sites.h): the item wear and weapon slot sends go to the named remote, the traces of the receivers.
+    TargetedItemWear,
+    TargetedWeaponSlots,
+    SendToSyncTarget,
+    TraceOutfitReceived,
+    TraceRevertReceived,
+    TraceWeaponSlotsReceived,
 
 
 };

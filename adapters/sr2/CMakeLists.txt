@@ -72,6 +72,8 @@ add_library(sr2_adapter SHARED
     src/vehicle_pool.cpp
     src/player_visuals.cpp
     src/anim_trace.cpp
+    src/outfit_sync.cpp
+    src/outfit_sync_trace.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
     src/multiplayer_patches.cpp
@@ -186,6 +188,8 @@ add_unit_test(handoff_rules_test)
 add_unit_test(cutscene_sync_rules_test)
 add_unit_test(script_trace_rules_test)
 add_unit_test(pause_mask_rules_test)
+add_unit_test(outfit_sync_rules_test)
+add_unit_test(outfit_sync_sites_test)
 add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)
@@ -194,3 +198,7 @@ add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_p
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp src/vehicle_trace.cpp
     src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)
+add_unit_test(outfit_sync_bindings_test src/outfit_sync.cpp src/outfit_sync_trace.cpp src/site_installer.cpp src/partner_thunks_calls.cpp
+    src/partner_identity.cpp src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
+    src/memory.cpp src/guest_call.cpp src/activity_state.cpp ${SHARED_DIR}/hooks.cpp)
+target_link_libraries(outfit_sync_bindings_test PRIVATE minhook)
