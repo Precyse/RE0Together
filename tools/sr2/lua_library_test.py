@@ -11,7 +11,7 @@ from pathlib import Path
 import lupa.lua51
 
 LUA_DIR = Path(__file__).with_name("lua")
-LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua")
+LIBRARY_PARTS = ("coop_helpers.lua", "coop_missions.lua", "coop_outfit_sync.lua", "coop_wrappers.lua", "coop_seats.lua")
 RULES_FILE = "coop_rules.lua"
 LOCAL = "#PLAYER1#"
 PLAYERS = ["#PLAYER1#", "#PLAYER2#", "#PLAYER3#", "#PLAYER4#"]
