@@ -57,6 +57,10 @@ bool isRemoteMember(uintptr_t member);
 // How many remote player humans there are.
 size_t remoteHumanCount();
 
+// The remote player humans in list order (the list walk, not the pairing: a human whose member is not known yet is included), at
+// most `capacity` of them; how many were written to `out`.
+size_t remoteHumans(uintptr_t* out, size_t capacity);
+
 // How many members of the session are not the local one.
 size_t remoteMemberCount();
 

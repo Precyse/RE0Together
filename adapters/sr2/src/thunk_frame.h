@@ -28,6 +28,11 @@ struct GuestFrame {
 #define PARTNER_BLOCK_STUB(name, impl) \
     void __declspec(naked) name() { __asm pushfd __asm pushad __asm call impl __asm popad __asm popfd __asm ret }
 
+// Replacement of a block in the middle of a function, jumped out of: `impl()` runs with all registers saved, then the function goes on
+// at the address held in `resume`. The block's stores are `impl`'s to make; the caller knows that no register or flag it left is live.
+#define PARTNER_RESUME_STUB(name, impl, resume) \
+    void __declspec(naked) name() { __asm pushad __asm call impl __asm popad __asm jmp dword ptr [resume] }
+
 // Entry trace of a game function: `impl(GuestFrame*)` runs with all registers and the flags saved, then the function
 // runs as the game has it. `original` holds the MinHook trampoline.
 #define TRACE_ENTRY_STUB(name, impl, original) \

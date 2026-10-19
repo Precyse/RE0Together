@@ -162,6 +162,14 @@ size_t remoteHumanCount() {
     return snapshot.humanCount;
 }
 
+size_t remoteHumans(uintptr_t* out, size_t capacity) {
+    Snapshot snapshot;
+    take(snapshot);
+    size_t count = 0;
+    for (size_t i = 0; i < snapshot.humanCount && count < capacity; ++i) out[count++] = snapshot.humans[i].human;
+    return count;
+}
+
 size_t remoteMemberCount() {
     Snapshot snapshot;
     takeMembers(snapshot);

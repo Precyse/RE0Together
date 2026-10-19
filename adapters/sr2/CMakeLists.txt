@@ -79,6 +79,7 @@ add_library(sr2_adapter SHARED
     src/anim_stream_triggers.cpp
     src/outfit_sync.cpp
     src/outfit_sync_trace.cpp
+    src/store_sync.cpp
     src/creation_queue.cpp
     src/leave_path.cpp
     src/multiplayer_patches.cpp
@@ -122,7 +123,7 @@ set_source_files_properties(
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
     src/join_net_trace.cpp src/player_name.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/vehicle_trace.cpp src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/leave_path.cpp
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
-    src/session_kick.cpp
+    src/session_kick.cpp src/store_sync.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -204,6 +205,8 @@ add_unit_test(outfit_sync_rules_test)
 add_unit_test(outfit_sync_sites_test)
 add_unit_test(session_kick_rules_test)
 add_unit_test(session_kick_sites_test)
+add_unit_test(store_rules_test)
+add_unit_test(store_sites_test)
 add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)

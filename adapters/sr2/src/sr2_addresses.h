@@ -585,4 +585,13 @@ constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for 
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
+// Store, garage and activity level menus (milestone 16 wave 2).
+constexpr uintptr_t kPointInBox = 0xBE9890;             // ECX = point, EAX = box centre, ESI = orientation; cdecl(two box arguments), AL out
+constexpr uintptr_t kActivityOwnerHuman = 0x6A80C0;     // the human of the activity owner handle (0x2527CA0); reads globals only
+constexpr uintptr_t kStoreEnterHideResume = 0x740243;   // after the partner hide of the store entry (0x74021C)
+constexpr uintptr_t kStoreExitShowResume = 0x7407E1;    // after the partner unhide of the store exit (0x7407BA)
+constexpr uintptr_t kGarageHideResume = 0xA6D03C;       // after the partner re-hide of the host's garage (0xA6D015)
+constexpr uintptr_t kLevelChoiceSendReturn = 0x75B676;   // return address of the guest's choice broadcast (0x75B671)
+constexpr uintptr_t kLevelCancelSendReturn = 0x75B749;   // return address of the guest's cancel broadcast (0x75B744)
+
 }  // namespace sr2
