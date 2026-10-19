@@ -1,6 +1,7 @@
 #pragma once
 #include <span>
 
+#include "mission_flow_sites.h"
 #include "mission_sites.h"
 #include "partner_sites.h"
 #include "player_sites.h"
@@ -43,6 +44,10 @@ inline constexpr Phase kPhases[] = {
     {"upload share", world_sites::kUpload, false},
     {"cutscene visuals", player_sites::kCutsceneVisuals, false},
     {"anim trace", player_sites::kAnimTrace, true},
+    {"mission prompts", mission_flow_sites::kPrompts, false},
+    {"replay prompt", mission_flow_sites::kReplay, false},
+    {"mission rewards", mission_flow_sites::kRewards, false},
+    {"mission flow trace", mission_flow_sites::kTrace, true},
 
 
 

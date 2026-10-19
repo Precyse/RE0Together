@@ -106,6 +106,8 @@ add_library(sr2_adapter SHARED
     src/player_trace.cpp
     src/remote_frustum.cpp
     src/mission_players.cpp
+    src/mission_flow_prompts.cpp
+    src/mission_flow_rewards.cpp
     src/population.cpp
     src/game_socket.cpp
     src/tunnel.cpp
@@ -136,6 +138,7 @@ set_source_files_properties(
     src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/session_kick.cpp src/hud_remotes.cpp src/waypoint_scope.cpp
     src/revive_state.cpp src/revive_thunks.cpp src/notoriety_thunks.cpp src/revive_patches.cpp
+    src/mission_flow_prompts.cpp src/mission_flow_rewards.cpp
     src/partner_identity.cpp src/activity_state.cpp src/activity_framework.cpp src/activity_credit.cpp src/activity_games.cpp
     PROPERTIES COMPILE_OPTIONS /arch:IA32)
 set_source_files_properties(src/char_types.cpp PROPERTIES COMPILE_OPTIONS /arch:IA32)
@@ -232,11 +235,14 @@ add_unit_test(party_ai_sites_test src/party_thunks.cpp src/npc_ai_thunks.cpp src
 add_unit_test(net_clock_rules_test)
 add_unit_test(join_admission_rules_test)
 add_unit_test(creation_queue_rules_test)
+add_unit_test(mission_flow_rules_test)
+add_unit_test(mission_flow_sites_test)
 add_unit_test(multiplayer_sites_test)
 add_unit_test(multiplayer_bindings_test src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp src/vehicle_trace.cpp
     src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp
-    src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/site_installer.cpp)
+    src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/site_installer.cpp
+    src/mission_flow_prompts.cpp src/mission_flow_rewards.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)
 add_unit_test(outfit_sync_bindings_test src/outfit_sync.cpp src/outfit_sync_trace.cpp src/site_installer.cpp src/partner_thunks_calls.cpp
     src/partner_identity.cpp src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp

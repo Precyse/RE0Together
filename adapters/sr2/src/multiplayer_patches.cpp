@@ -4,6 +4,7 @@
 #include "cutscene_sync.h"
 #include "join_admission.h"
 #include "log.h"
+#include "mission_flow.h"
 #include "multiplayer_sites.h"
 #include "multiplayer_thunks.h"
 #include "net_clock.h"
@@ -49,6 +50,7 @@ bool install(bool trace, bool leavePathInstalled, bool experimental) {
     sender_scope::setTrace(trace);
     creation_queue::setTrace(trace);
     join_admission::setTrace(trace);
+    mission_flow::setTrace(trace);
     net_clock::setTrace(trace);
     pause_mask::setTrace(trace);
     population::setTrace(trace);
