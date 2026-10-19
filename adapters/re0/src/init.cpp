@@ -20,6 +20,7 @@
 #include "enemy_target.h"
 #include "enemy_decision.h"
 #include "room_gate.h"
+#include "room_move.h"
 #include "event_place.h"
 #include "event_sync.h"
 #include "flag_sync.h"
@@ -162,6 +163,7 @@ void shutdownAdapter() {
     session_slot::uninstall();
     pickup_guard::uninstall();
     puppet::uninstall();
+    room_move::uninstall();
     pose_capture::uninstall();
     game_tick::uninstall();
     vtable_tracer::uninstall();

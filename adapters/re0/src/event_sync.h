@@ -46,6 +46,9 @@ constexpr size_t kStepsHeaderSize = 4;
 // Net thread: EVENT_START and EVENT_STEPS from the peer.
 void onFrame(const GameFrame& frame);
 
+// Game thread: this machine leads a room script thread that is still running.
+bool leadsAny();
+
 // Hooks the trigger start, the opcode dispatch and the script update.
 bool enable(NetClient& net);
 

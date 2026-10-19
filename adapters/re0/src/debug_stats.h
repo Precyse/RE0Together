@@ -85,6 +85,12 @@ enum class Counter : size_t {
     EnemyCreatedOnDemand,
     EnemyHitsForwarded,
     EnemyHitsUnrouted,
+    RoomMovesSent,
+    RoomMovesApplied,
+    RoomMoveHeals,
+    DoorFollowsSent,
+    DoorFollowsAccepted,
+    DoorFollowsRejected,
     Count
 };
 

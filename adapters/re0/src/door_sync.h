@@ -48,6 +48,10 @@ void queue(const DoorChange& change, bool bothTravel = false);
 // Game thread: starts `change` here (the door's character must already be the camera character).
 void run(const DoorChange& change);
 
+// Game thread, state mode: starts a door a partner's owner asked for (door_follow) for this machine's own character,
+// like a local door: a dormant room that holds only the partner's character is freed first so the door loads it fresh.
+void runFollow(const DoorChange& change);
+
 // Any thread: the door running here is played on both machines (a TEAM door taken together: this machine's, sent while
 // together, or the peer's run here). A join teleport's door is not.
 bool sharedDoor();
