@@ -832,5 +832,14 @@ constexpr uintptr_t kActHandlerTable = 0xE8AA28;        // act message handlers,
 constexpr uint32_t kActAmbulancePoseSub = 0x4B;         // the CPR pose of the Ambulance diversion
 constexpr uintptr_t kMiscHandlerTable = 0xE8AB98;       // misc message handlers, one pointer per sub
 constexpr uint32_t kMiscCompletionSub = 7;              // a client's activity completion masks
+// Zombie Uprising for 3 to 4 players (milestone 17 wave 3; docs/SR2_NOTES.md, "Zombie Uprising for 3 to 4 players (milestone 17 wave 3)").
+constexpr uintptr_t kRecruitSetMode = kSnatchSetupBoth;       // recruit_set_mode's worker: ECX = human, cdecl(mode), 0 none, 1 friendly gang
+constexpr uintptr_t kCharacterDontRegenerate = 0x9694A0;      // EDI = human, stdcall(flag), pops its argument
+constexpr uintptr_t kEvacuateFromVehicles = 0xB076C0;         // EDI = human, cdecl(flag)
+constexpr uintptr_t kZombieStartMarkerOffset = 0x418;         // zombie level: the start marker record
+constexpr uintptr_t kMarkerPositionOffset = 0x1C;             // marker: the vec3 position
+constexpr uintptr_t kMarkerOrientationOffset = 0x28;          // marker: the orientation
+constexpr uintptr_t kZombiePartnerStartOffset = 0xE5BF40;     // double: the x offset of the partner's start spot from the local player's
+constexpr uintptr_t kHumanMaxHealthOffset = 0x1120;           // int32; the health at +0x1124 divided by it is the fraction
 
 }  // namespace sr2
