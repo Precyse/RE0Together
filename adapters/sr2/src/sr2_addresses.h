@@ -466,6 +466,20 @@ constexpr uintptr_t kAnimHeaderFlagsOffset = 5;        // byte: bit 0x40 = the h
 constexpr uint8_t kAnimHeaderOffsetFlag = 0x40;
 constexpr uintptr_t kAnimHeaderOffsetOffset = 0x2C;    // dword
 
+// Kick and session admin (milestone 16 wave 1).
+constexpr uintptr_t kDialogCreate = 0x753080;          // eax = default option; cdecl(title, body, options[], count, priority, confirmation, flag), the caller pops 0x1C; returns the dialog record or 0
+constexpr uintptr_t kDialogCallbackOffset = 0x930;     // record: the callback cdecl(handle, result, action), called by 0x752D70
+constexpr size_t kDialogMaxOptions = 4;                // record +0x514 holds 4 option texts, the count is at +0x914
+constexpr size_t kDialogOptionBytes = 0x100;           // one option text slot of the record
+constexpr uint32_t kDialogPriorityAction = 1;          // edx of the kick confirm (0x7EF64F)
+constexpr int32_t kDialogActionClose = 2;              // Lua DIALOG_ACTION_CLOSE: the dialog was answered
+constexpr uintptr_t kDialogNoTextPointer = 0xE8C46C;   // dword: pointer to L"NO"
+constexpr uintptr_t kLocalizeText = 0x7F49E0;          // esi = text key, edi = 0; returns the localized wide text
+constexpr uintptr_t kKickPlayerTitleKey = 0xE22C54;    // "CONTROL_KICK_PLAYER"
+constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;   // eax = session, stdcall(member): removes a member, a remote one on the host first tells every connected member
+constexpr uintptr_t kMemberNameOffset = 0xCC;          // wide name, written with a 0x40 character cap
+constexpr wchar_t kDialogLiteralMark = 0x01;           // the game's escape for literal text inside a text tag
+
 // PE header TimeDateStamp of the supported exe (Juiced's patched output keeps the original's).
 constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 

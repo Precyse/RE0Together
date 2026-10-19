@@ -21,6 +21,7 @@
 #include "player_visuals.h"
 #include "replication_switch.h"
 #include "script_override.h"
+#include "session_kick.h"
 #include "sr2_addresses.h"
 #include "tunnel.h"
 #include "vehicle_pool.h"
@@ -83,6 +84,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
         if (activities) activity_patches::install(config.partnerExperimental, config.trace);
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
+        if (crowd) session_kick::install(config.trace);
 
         if (config.trace) {
             join_trace::install(config.maxPlayers);

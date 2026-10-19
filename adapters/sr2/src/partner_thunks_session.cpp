@@ -5,9 +5,12 @@
 #include "fpu_guard.h"
 #include "guest_call.h"
 #include "handoff_rules.h"
+#include "log.h"
+#include "memory.h"
 #include "partner_scope.h"
 #include "partner_thunks.h"
 #include "remote_players.h"
+#include "session_kick_rules.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
 
@@ -106,16 +109,19 @@ void __declspec(naked) lastInGameRemoteLeftThunk() {
     }
 }
 
-// L2: Disconnect stops sending to every remote member; the default member is returned for the game to clear.
-uintptr_t __cdecl disconnectOthers() {
-    const uintptr_t keep = partner_scope::partnerMember();
+// L2: the pause overlay's Disconnect drops the remote members that hold the pause, else every remote member (the pause byte has
+// no remote bit when N4 is not installed, or the pause ended while the prompt was open). The session tick removes a member
+// whose send flag is 0. The first target is returned for the game to clear; with no remote member the game's answer stands.
+uintptr_t __cdecl disconnectPausing() {
     remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
-    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
-        const uintptr_t member = snapshot.pairing.items[i].member;
-        if (member && member != keep) *reinterpret_cast<uint8_t*>(member + sr2::kMemberSendEnabledOffset) = 0;
-    }
-    return keep;
+    remote_players::takeMembers(snapshot);
+    const uint8_t mask = readByte(sr2::kPartnerPaused);
+    const session_kick_rules::Targets targets = session_kick_rules::disconnectTargets(mask, snapshot.members, snapshot.memberCount);
+    if (targets.count == 0) return partner_scope::partnerMember();
+    for (size_t i = 1; i < targets.count; ++i) byteField(targets.entries[i].member, sr2::kMemberSendEnabledOffset) = 0;
+    logger::write("disconnect: pause mask 0x%02X, slots %s disconnected (%s)", mask,
+                  session_kick_rules::slotsText(targets.entries, targets.count).c_str(), targets.pausing ? "pausing" : "every remote");
+    return targets.entries[0].member;
 }
 
 bool memberKnows(uintptr_t member, uint32_t handle) {
@@ -239,7 +245,7 @@ Binding bindSession(Thunk thunk) {
         case Thunk::AllRemotesReady: return {reinterpret_cast<void*>(&allRemotesReady), nullptr};
         case Thunk::FirstJoiningMember: return {reinterpret_cast<void*>(&firstJoiningMember), nullptr};
         case Thunk::LastInGameRemoteLeft: return {reinterpret_cast<void*>(&lastInGameRemoteLeftThunk), nullptr};
-        case Thunk::DisconnectOthersReturnPartner: return {reinterpret_cast<void*>(&disconnectOthers), nullptr};
+        case Thunk::DisconnectOthersReturnPartner: return {reinterpret_cast<void*>(&disconnectPausing), nullptr};
         case Thunk::AnyRemoteMemberKnows: return {reinterpret_cast<void*>(&knownByAnyRemoteStub), nullptr};
         case Thunk::MemberKnowingHandleEdi: return {reinterpret_cast<void*>(&memberKnowingStub), nullptr};
         case Thunk::SendToPartnerMember: return {reinterpret_cast<void*>(&sendToPartnerStub), nullptr};

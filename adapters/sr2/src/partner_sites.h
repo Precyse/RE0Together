@@ -155,6 +155,11 @@ enum class Thunk : uint8_t {
     TraceStreamingSync,
     TraceAnimUnload,
     TraceAnimDelta,
+    // Milestone 16 wave 1 (session_kick_sites.h): kick and session admin.
+    KickPickerOrConfirm,
+    KickTargetNamed,
+    KickTargetTaken,
+    RemoveEveryRemoteMember,
 
 
 
