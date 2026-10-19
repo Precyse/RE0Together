@@ -24,6 +24,7 @@
 #include "player_visuals.h"
 #include "replication_switch.h"
 #include "script_override.h"
+#include "session_kick.h"
 #include "sr2_addresses.h"
 #include "tunnel.h"
 #include "vehicle_pool.h"
@@ -91,6 +92,7 @@ DWORD WINAPI initThread(LPVOID) {
         if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);
+        if (crowd) session_kick::install(config.trace);
 
         if (config.trace) {
             join_trace::install(config.maxPlayers);

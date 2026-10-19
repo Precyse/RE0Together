@@ -181,6 +181,11 @@ enum class Thunk : uint8_t {
     TraceOutfitReceived,
     TraceRevertReceived,
     TraceWeaponSlotsReceived,
+    // Milestone 16 wave 1 (session_kick_sites.h): kick and session admin.
+    KickPickerOrConfirm,
+    KickTargetNamed,
+    KickTargetTaken,
+    RemoveEveryRemoteMember,
 };
 
 struct Site {
