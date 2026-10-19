@@ -176,10 +176,7 @@ int main() {
     check(phaseSize("upload share") == 1, "upload share: 1 site (W9a)");
     check(phaseSize("cutscene visuals") == 4, "cutscene visuals: 4 rows (PV1, PV2 and the check of what each resumes at)");
     check(phaseSize("anim trace") == 3, "anim trace: 3 sites (AN1 to AN3), written with trace=1 only");
-    check(phaseSize("mission players") == 3, "mission players: 3 sites (MC3, MC4, MC5), probe gated");
-    check(siteNamed(sites, "MC3")->gate == partner_sites::Gate::ProbeT && siteNamed(sites, "MC5")->gate == partner_sites::Gate::ProbeT &&
-              siteNamed(sites, "MC4")->gate == partner_sites::Gate::ProbeCp,
-          "MC3 and MC5 wait for probe T, MC4 for probe CP");
+    check(phaseSize("mission players") == 3, "mission players: 3 sites (MC3, MC4, MC5)");
     check(phaseSize("remote views") == 8, "remote views: 8 sites (W3a to W3h)");
     bool testsCallTheFrustumTest = true;
     for (const char* id : {"W3d", "W3e", "W3f", "W3g", "W3h"}) {

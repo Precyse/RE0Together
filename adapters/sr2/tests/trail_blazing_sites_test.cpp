@@ -149,8 +149,6 @@ void theTables() {
     check(std::size(trail_blazing_sites::kSets) == kSetCount && setSize("burn") == 8 && setSize("fire") == 4 && setSize("start") == 4 &&
               setSize("checkpoint") == 2,
           "four sets that partition the rows: burn 8, fire 4, start 4, checkpoint 2");
-    check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now; }),
-          "every site is written when its set is (no probe gate)");
     check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == Thunk::None); }),
           "a check row has no thunk and every written site has one");
     check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.kind == Kind::Bytes ? site.tail.empty() : true; }),

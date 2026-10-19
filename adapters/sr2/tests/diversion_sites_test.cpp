@@ -22,7 +22,6 @@
 
 namespace {
 
-using partner_sites::Gate;
 using partner_sites::Kind;
 using partner_sites::Site;
 
@@ -78,13 +77,6 @@ void theCounts() {
     }
     check(same, "the sets: streaking 5, tow 1, fraud 14, snatch 12, trafficking 6, mayhem 9, district 6, phase B 4");
     check(allSites().size() == 57, "57 rows here; with AC46 (DVP9a) of the activity table the 58 of the spec");
-    bool onlyPhaseBWaits = true;
-    for (const diversion_sites::Set& set : diversion_sites::kSets) {
-        for (const Site& site : set.sites) {
-            onlyPhaseBWaits = onlyPhaseBWaits && (site.gate == Gate::PhaseB) == (std::string_view(set.name) == "phase B");
-        }
-    }
-    check(onlyPhaseBWaits, "only phase B waits for partner_experimental");
 }
 
 void theShapes() {

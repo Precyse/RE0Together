@@ -50,15 +50,14 @@ bool sitesMatch() {
     return ok;
 }
 
-bool install(bool experimental, bool trace) {
+bool install(bool trace) {
     activity_state::setTracing(trace);
     logger::write("activities: %zu script overrides in coop\\scripts", script_override::names().size());
     bool all = true;
     for (const Phase& phase : kPhases) {
-        const site_installer::Result result = site_installer::install(phase.sites, experimental, &bindingOf);
+        const site_installer::Result result = site_installer::install(phase.sites, &bindingOf);
         if (result.installed) {
-            logger::write("activities: phase %s, %zu sites patched, %zu gated (probe E, probe H)", phase.name,
-                          result.patched, result.gated);
+            logger::write("activities: phase %s, %zu sites patched", phase.name, result.patched);
         } else {
             logger::write("activities: phase %s not patched", phase.name);
         }

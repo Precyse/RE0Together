@@ -94,8 +94,8 @@ void theTables() {
     check(std::any_of(std::begin(outfit_sync_sites::kLookSync), std::end(outfit_sync_sites::kLookSync),
                       [](const Site& site) { return site.address == 0x53FF08 && site.thunk == Thunk::EachRemoteMember82BC50; }),
           "OF6 is the call at 0x53FF08 with the look sync thunk MF22 asked for");
-    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now && site.thunk != Thunk::None; }),
-          "every site is written when its phase is, and has a thunk");
+    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.thunk != Thunk::None; }),
+          "every site has a thunk");
     check(phaseSize("mission prompts") == 11 && phaseSize("replay prompt") == 6 && phaseSize("mission rewards") == 4 &&
               phaseSize("mission flow trace") == 1,
           "the phases hold 11, 6, 4 and 1 sites");

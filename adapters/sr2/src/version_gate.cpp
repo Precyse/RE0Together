@@ -244,9 +244,9 @@ void __declspec(naked) refusalTextStub() {
 
 namespace version_gate {
 
-bool install(uint32_t maxPlayers, bool partnerExperimental, bool steamTransport, uint64_t contentHash, bool trace) {
+bool install(uint32_t maxPlayers, bool steamTransport, uint64_t contentHash, bool trace) {
     g_trace = trace;
-    g_settings = {static_cast<uint8_t>(maxPlayers), partnerExperimental, steamTransport, contentHash};
+    g_settings = {static_cast<uint8_t>(maxPlayers), steamTransport, contentHash};
     const version_gate_patches::Thunks thunks{reinterpret_cast<uintptr_t>(&gateJoinReq),
                                               reinterpret_cast<uintptr_t>(&gateJoinAcc),
                                               reinterpret_cast<uintptr_t>(&sendWithTrailerStub),
@@ -256,9 +256,8 @@ bool install(uint32_t maxPlayers, bool partnerExperimental, bool steamTransport,
         logger::write("version gate: sites differ, nothing installed; players are not told apart by version");
         return false;
     }
-    logger::write("version gate: protocol version %u, max_players %u, partner_experimental %d, transport %s, browser tag %s",
-                  version::kProtocolVersion, maxPlayers, partnerExperimental ? 1 : 0,
-                  transportName(steamTransport ? Transport::Steam : Transport::Native), browserTag().c_str());
+    logger::write("version gate: protocol version %u, max_players %u, transport %s, browser tag %s", version::kProtocolVersion,
+                  maxPlayers, transportName(steamTransport ? Transport::Steam : Transport::Native), browserTag().c_str());
     return true;
 }
 

@@ -82,9 +82,6 @@ void theTables() {
               std::size(vehicle_seating_sites::kMissionExit) == 2,
           "SE1 alone, SE2 alone, SE3 and SE4 together");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.thunk != Thunk::None; }), "every site has a thunk");
-    check(siteNamed(all, "SE2").gate == partner_sites::Gate::ProbeCp, "SE2 waits for probe CP like MC4");
-    check(std::count_if(all.begin(), all.end(), [](const Site& site) { return site.gate != partner_sites::Gate::Now; }) == 1,
-          "no other site is gated");
 }
 
 void theShapes() {

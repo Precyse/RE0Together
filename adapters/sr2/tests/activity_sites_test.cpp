@@ -14,7 +14,6 @@
 
 namespace {
 
-using activity_sites::Gate;
 using activity_sites::Kind;
 using activity_sites::Site;
 
@@ -118,12 +117,6 @@ int main() {
     check(shapesFit(sites), "a retargeted call is a 5 byte call, a hook covers 5 bytes, a block has room for its tail");
     check(clearOfEarlierMilestones(sites), "no site overlaps a milestone 3, 4, 5, 5b, 5d, 5g, 5h, 5i or 8 site");
     check(clearOfJuiced(sites), "no site within 16 bytes of an address Juiced touches");
-
-    std::set<std::string_view> gated;
-    for (const Site& site : sites) {
-        if (site.gate != Gate::Now) gated.insert(site.id);
-    }
-    check(gated == std::set<std::string_view>{"AV16", "AD6"}, "the gated sites are the derby filter (probe E) and the chop list send (probe H)");
 
     const Site* block = siteNamed(sites, "AV1");
     const auto written = partner_replacement::replacementFor(*block, 0x10000000);

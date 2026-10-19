@@ -133,8 +133,8 @@ void theTables() {
     const auto written = std::count_if(sites.begin(), sites.end(), [](const Site& site) { return site.kind != Kind::Bytes; });
     check(static_cast<size_t>(written) == kWrittenSites && sites.size() == kWrittenSites + kCheckRows, "8 written sites and 3 check rows");
     check(setSize("hide") == 6 && setSize("garage") == 1 && setSize("activity level") == 4, "three sets: hide 6 rows, garage 1, activity level 4");
-    check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now && site.tail.empty(); }),
-          "every site is written when its set is (no probe gate, no tail)");
+    check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.tail.empty(); }),
+          "every site is written when its set is (no tail)");
     check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == Thunk::None); }),
           "a check row has no thunk and every written site has one");
 }

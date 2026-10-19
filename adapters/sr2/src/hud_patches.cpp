@@ -21,7 +21,7 @@ void installSet(const hud_sites::Set& set) {
         logger::write("hud: %s sites differ, not patched", set.name);
         return;
     }
-    const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+    const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
     if (result.installed) {
         logger::write("hud: %s, %u sites patched", set.name, static_cast<unsigned>(result.patched));
     } else {

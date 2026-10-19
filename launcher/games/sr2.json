@@ -12,8 +12,6 @@
       { "value": "steam", "label": "Steam" }, { "value": "native", "label": "Direct" } ] },
     { "key": "max_players", "label": "Players", "values": [
       { "value": "4", "label": "4" }, { "value": "3", "label": "3" }, { "value": "2", "label": "2" } ] },
-    { "key": "partner_experimental", "label": "Experimental fixes", "values": [
-      { "value": "0", "label": "Off" }, { "value": "1", "label": "On" } ] },
     { "key": "trace", "label": "Trace", "values": [
       { "value": "1", "label": "On" }, { "value": "0", "label": "Off" } ] }
   ] }

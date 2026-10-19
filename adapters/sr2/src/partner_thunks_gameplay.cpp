@@ -1,5 +1,5 @@
 // Thunks of gameplay: going down, the team wipe and downed message, vehicles, the mission start block, the Lua party natives
-// and the experimental thunks that wait for a live probe (customisation exit passengers: probe G).
+// and the customisation exit passengers (live probe G).
 
 #include "fpu_guard.h"
 #include "guest_call.h"

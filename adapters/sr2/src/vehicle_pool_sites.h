@@ -119,9 +119,9 @@ constexpr size_t kExpectedBounds = 34;
 // The two spawners of parked vehicles test `0x20 - vehicles in use` (the pool size) in a block of their own: each becomes a call
 // to a thunk that answers with the headroom of the new pool, the result in the register the block loaded.
 inline constexpr partner_sites::Site kHeadroomBlocks[] = {
-    {"HD1", partner_sites::Kind::CallBlock, partner_sites::Gate::Now, 0x94F9F0, "B9 20 00 00 00 2B 0D D4 A0 52 02",
+    {"HD1", partner_sites::Kind::CallBlock, 0x94F9F0, "B9 20 00 00 00 2B 0D D4 A0 52 02",
      partner_sites::Thunk::VehicleHeadroomEcx, "90 90 90 90 90 90"},
-    {"HD2", partner_sites::Kind::CallBlock, partner_sites::Gate::Now, 0x94FD69, "B8 20 00 00 00 2B 05 D4 A0 52 02",
+    {"HD2", partner_sites::Kind::CallBlock, 0x94FD69, "B8 20 00 00 00 2B 05 D4 A0 52 02",
      partner_sites::Thunk::VehicleHeadroomEax, "90 90 90 90 90 90"},
 };
 

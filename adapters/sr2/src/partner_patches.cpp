@@ -26,15 +26,11 @@ bool sitesMatch() {
     return ok;
 }
 
-bool install(bool experimental, bool trace, uint32_t maxPlayers) {
+bool install(bool trace, uint32_t maxPlayers) {
     if (trace) partner_scope::enableTrace(maxPlayers);
-    const site_installer::Result result = site_installer::install(partner_sites::kSites, experimental, &bindingOf);
+    const site_installer::Result result = site_installer::install(partner_sites::kSites, &bindingOf);
     if (!result.installed) return false;
-    if (experimental) {
-        logger::write("partner: %zu sites patched, the experimental ones included", partner_sites::kSiteCount);
-    } else {
-        logger::write("partner: %zu sites patched, %zu gated (probe G)", result.patched, result.gated);
-    }
+    logger::write("partner: %zu sites patched", result.patched);
     return true;
 }
 

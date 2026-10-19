@@ -163,7 +163,6 @@ void theTables() {
         names = names && (set.needsActivities == (std::string_view(set.name) == "activity warp gate"));
     }
     check(names, "only the activity warp gate waits for the activity logic");
-    check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now; }), "every row is written when its set is");
     check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == Thunk::None); }),
           "a check row has no thunk and every written row has one");
     check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return (site.kind == Kind::CallBlock) == !site.tail.empty(); }),

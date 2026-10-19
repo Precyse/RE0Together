@@ -48,9 +48,9 @@ DWORD WINAPI initThread(LPVOID) {
     try {
         logger::write("sr2 adapter starting");
         const Config config = loadConfig();
-        logger::write("config: max_players=%u trace=%d partner_experimental=%d game_port=%u transport=%s", config.maxPlayers,
-                      config.trace ? 1 : 0, config.partnerExperimental ? 1 : 0, config.gamePort,
-                      transportName(config.transport));
+        logger::write("config: max_players=%u trace=%d game_port=%u transport=%s", config.maxPlayers, config.trace ? 1 : 0,
+                      config.gamePort, transportName(config.transport));
+        if (config.retiredPartnerExperimental) logger::write("config: partner_experimental is no longer used, ignored");
         if (!config.rejectedTransport.empty()) {
             logger::write("config: transport \"%s\" is neither %s nor %s, ignored", config.rejectedTransport.c_str(),
                           kTransportNative, kTransportSteam);
@@ -91,8 +91,7 @@ DWORD WINAPI initThread(LPVOID) {
 
         script_override::scan(config.trace);
         const uint64_t contentHash = content_hash::compute();
-        version_gate::install(config.maxPlayers, config.partnerExperimental && partnering, tunnelled, contentHash,
-                              config.trace);
+        version_gate::install(config.maxPlayers, tunnelled, contentHash, config.trace);
 
         hooks::beginBatch();
         if (replicating) {
@@ -106,21 +105,21 @@ DWORD WINAPI initThread(LPVOID) {
         if (!tunnelled) lan_address::install(config.maxPlayers, config.trace);
         force_join::install(config.trace, transport);
         player_name::install(config.trace);
-        if (partnering) partner_patches::install(config.partnerExperimental, config.trace, config.maxPlayers);
+        if (partnering) partner_patches::install(config.trace, config.maxPlayers);
         if (partnering) outfit_sync::install(config.trace);
-        if (activities) activity_patches::install(config.partnerExperimental, config.trace);
-        if (diversions) diversion_patches::install(config.partnerExperimental, config.trace);
+        if (activities) activity_patches::install(config.trace);
+        if (diversions) diversion_patches::install(config.trace);
         if (fuzz) fuzz_patches::install(config.trace);
         if (crowdControl) crowd_control_patches::install(config.trace);
         if (activities) trail_blazing::install(config.trace);
         if (walks) walk_patches::install(config.trace);
-        if (crowd) multiplayer_patches::install(config.trace, playerCap, config.partnerExperimental);
+        if (crowd) multiplayer_patches::install(config.trace, playerCap);
         if (partnering) hud_patches::install(config.trace);
         if (crowd) revive_patches::install(config.trace);
         if (partnering) party_ai_patches::install(config.trace);
         if (crowd) store_sync::install(config.trace);
         if (activities && crowd) zombie_uprising::install(config.trace);
-        if (crowd) vehicle_seating::install(config.partnerExperimental, config.trace);
+        if (crowd) vehicle_seating::install(config.trace);
         if (crowd) net_handlers::install(config.trace);
         if (animStreaming) anim_stream::install(config.maxPlayers, config.trace);
         if (replicating) char_types::install(config.maxPlayers, config.trace);

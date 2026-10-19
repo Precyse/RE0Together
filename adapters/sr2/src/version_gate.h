@@ -10,11 +10,10 @@
 // content hash, the host's join_deny carries its trailer, and the refused player's popup names the difference.
 namespace version_gate {
 
-// Checks all sites, then writes them together (nothing when any differs). `maxPlayers` and `partnerExperimental` (the
-// partner sites that are really patched), `steamTransport` (the tunnel is installed) and `contentHash`
-// (content_hash::compute) go into the trailer; `trace` logs each accept and refusal with its reason. Run before the trace
-// hooks are enabled. True when installed.
-bool install(uint32_t maxPlayers, bool partnerExperimental, bool steamTransport, uint64_t contentHash, bool trace);
+// Checks all sites, then writes them together (nothing when any differs). `maxPlayers`, `steamTransport` (the tunnel is
+// installed) and `contentHash` (content_hash::compute) go into the trailer; `trace` logs each accept and refusal with its
+// reason. Run before the trace hooks are enabled. True when installed.
+bool install(uint32_t maxPlayers, bool steamTransport, uint64_t contentHash, bool trace);
 
 // The browser tag `cfv<VVV>-<digest>` of this build (trailer_rules::tagFor); valid once `install` has run, also when it
 // found the sites changed.

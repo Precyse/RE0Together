@@ -54,7 +54,7 @@ void install(bool trace) {
     for (size_t i = 0; i < std::size(walk_sites::kSets); ++i) {
         if (!g_matched[i]) continue;
         const walk_sites::Set& set = walk_sites::kSets[i];
-        const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (result.installed) {
             logger::write("walks: set %s patched (%zu rows)", set.name, result.patched);
         } else {

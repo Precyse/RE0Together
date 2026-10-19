@@ -96,8 +96,8 @@ void theTables() {
     check(setSize("minimap") == 6 && setSize("pause map") == 4 && setSize("back prompt") == 1 && setSize("map distance") == 2 &&
               setSize("waypoint scope") == 4,
           "the sets hold 6, 4, 1, 2 and 4 rows");
-    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now && site.tail.empty(); }),
-          "every row is written when its set is (no probe gate, no tail)");
+    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.tail.empty(); }),
+          "every row is written when its set is (no tail)");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == Thunk::None); }),
           "every row but a check row has a thunk");
 }

@@ -161,7 +161,7 @@ void installSet(const Set& set) {
         logger::write("outfit sync: %s, sites differ, skipped", set.name);
         return;
     }
-    const bool installed = site_installer::install(set.sites, false, &bindingOf).installed;
+    const bool installed = site_installer::install(set.sites, &bindingOf).installed;
     logger::write("outfit sync: %s %s", set.name, installed ? "installed" : "not installed");
 }
 
@@ -171,7 +171,7 @@ void installTrace(const Site& site) {
         logger::write("outfit sync: trace %s, bytes differ, skipped", site.id);
         return;
     }
-    const bool installed = site_installer::install(one, false, &bindingOf).installed;
+    const bool installed = site_installer::install(one, &bindingOf).installed;
     logger::write("outfit sync: trace %s %s", site.id, installed ? "installed" : "not installed");
 }
 

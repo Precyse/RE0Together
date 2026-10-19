@@ -334,7 +334,7 @@ void install(bool trace) {
             continue;
         }
         logger::write("trail blazing: set %s matches (%zu rows)", set.name, set.sites.size());
-        const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (result.installed) {
             logger::write("trail blazing: set %s patched (%zu rows)", set.name, result.patched);
         } else {

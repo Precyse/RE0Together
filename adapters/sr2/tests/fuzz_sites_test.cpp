@@ -97,7 +97,6 @@ void theRows() {
           "row counts: level 3, weapons 7, crime area 1, cameraman 2, targets 2, vehicle 1, riot 6");
     const size_t written = static_cast<size_t>(std::count_if(sites.begin(), sites.end(), [](const Site& site) { return !isCheck(site); }));
     check(written == 20, "20 written sites, 2 checked rows");
-    check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now; }), "every row is written now");
 
     std::set<std::string_view> ids;
     std::set<uintptr_t> addresses;

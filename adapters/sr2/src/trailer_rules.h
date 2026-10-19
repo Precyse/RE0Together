@@ -18,15 +18,14 @@
 //   +8   4  magic 'C' 'F' 'V' 'G'
 //   +12  2  version::kProtocolVersion
 //   +14  1  max_players
-//   +15  1  flags: bit 0 = the partner_experimental sites are patched, bit 1 = the steam transport (the game's UDP goes
-//           through the launcher), so two machines on different transports refuse each other
+//   +15  1  flags: bit 1 = the steam transport (the game's UDP goes through the launcher), so two machines on different
+//           transports refuse each other; bit 0 was partner_experimental and is always 0 now
 //
 // The last 8 bytes are the milestone 8 trailer, unchanged, so a version 2 peer still reads a version it does not know.
-// The hash is read only from version 3 on. Two builds with another max_players, other patched sites or other files run
+// The hash is read only from version 3 on. Two builds with another max_players, another transport or other files run
 // different code, which is a wire difference at the same version, so all four fields must be equal.
 namespace trailer_rules {
 
-constexpr uint8_t kFlagPartnerExperimental = 1;
 constexpr uint8_t kFlagSteamTransport = 2;
 constexpr size_t kDigestFieldBytes = 12;  // what the tag's digest covers: version, max_players, flags, hash
 constexpr int kDigestHexDigits = 8;
@@ -34,7 +33,6 @@ constexpr int kDigestHexDigits = 8;
 // What this build puts into the trailer.
 struct Settings {
     uint8_t maxPlayers = 0;
-    bool partnerExperimental = false;
     bool steamTransport = false;
     uint64_t contentHash = 0;
 };
@@ -50,8 +48,7 @@ struct Trailer {
 
 inline Trailer ours(const Settings& settings) {
     return {version::kProtocolVersion, settings.maxPlayers,
-            static_cast<uint8_t>((settings.partnerExperimental ? kFlagPartnerExperimental : 0) |
-                                 (settings.steamTransport ? kFlagSteamTransport : 0)),
+            static_cast<uint8_t>(settings.steamTransport ? kFlagSteamTransport : 0),
             settings.contentHash};
 }
 
@@ -117,7 +114,7 @@ inline std::string refusalText(Verdict verdict, const std::optional<Trailer>& ho
             snprintf(text, sizeof(text), "max_players differs (host %u, yours %u).", host ? host->maxPlayers : 0u,
                      static_cast<unsigned>(mine.maxPlayers));
             return text;
-        case Verdict::FlagsDiffer: return "partner_experimental differs from the host.";
+        case Verdict::FlagsDiffer: return "Network setting differs from the host (Steam or Direct).";
         case Verdict::ContentDiffers: return "Co-op files differ from the host (dinput8.dll or coop\\scripts).";
     }
     return {};

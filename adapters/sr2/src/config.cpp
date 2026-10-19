@@ -15,7 +15,8 @@ namespace {
 
 constexpr int kDecimalBase = 10;
 constexpr const char* kTransportKey = "transport";
-const char* const kDefaultIni = "max_players=4\ntrace=1\npartner_experimental=0\n";
+constexpr const char* kRetiredExperimentalKey = "partner_experimental";
+const char* const kDefaultIni = "max_players=4\ntrace=1\n";
 
 std::string trim(const std::string& s) {
     const auto begin = s.find_first_not_of(" \t\r");
@@ -48,6 +49,10 @@ Config parseConfig(const std::string& text) {
             }
             continue;
         }
+        if (key == kRetiredExperimentalKey) {
+            config.retiredPartnerExperimental = true;
+            continue;
+        }
         unsigned long number = 0;
         if (!parseNumber(value, number)) continue;
         if (key == "max_players") {
@@ -55,8 +60,6 @@ Config parseConfig(const std::string& text) {
                 std::clamp<unsigned long>(number, sr2::kCoopDefaultPlayers, sr2::kMaxReplicatedPlayers));
         } else if (key == "trace") {
             config.trace = number != 0;
-        } else if (key == "partner_experimental") {
-            config.partnerExperimental = number != 0;
         } else if (key == "game_port") {
             if (game_port_rules::valid(number)) {
                 config.gamePort = static_cast<uint32_t>(number);

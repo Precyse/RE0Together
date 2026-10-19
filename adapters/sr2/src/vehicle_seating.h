@@ -12,8 +12,7 @@ namespace vehicle_seating {
 // The code behind SE1 to SE4; {nullptr, nullptr} for a thunk of another file.
 partner_thunks::Binding bind(partner_sites::Thunk thunk);
 
-// Checks and writes the three sets (SE2 with `experimental`, the probe CP gate), each all or nothing,
-// and logs one line of what was patched.
-void install(bool experimental, bool trace);
+// Checks and writes the three sets, each all or nothing, and logs one line of what was patched.
+void install(bool trace);
 
 }  // namespace vehicle_seating

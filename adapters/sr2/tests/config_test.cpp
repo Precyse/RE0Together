@@ -23,10 +23,11 @@ int main() {
     check(parseConfig("max_players=99\n").maxPlayers == 8, "above 8 clamps to 8");
     check(parseConfig("max_players=abc\ntrace=x\n").maxPlayers == 4, "bad values keep the defaults");
     check(parseConfig("max_players=\nunknown=5\nnoequals\n").maxPlayers == 4, "empty value and unknown keys ignored");
-    check(!parseConfig("").partnerExperimental, "partner_experimental defaults to off");
-    check(parseConfig("partner_experimental=1\n").partnerExperimental, "partner_experimental on");
-    check(!parseConfig("partner_experimental=0\nmax_players=3\n").partnerExperimental, "partner_experimental off");
-    check(parseConfig("partner_experimental=1\nmax_players=3\ntrace=0\n").maxPlayers == 3, "partner_experimental leaves the other keys alone");
+    check(!parseConfig("").retiredPartnerExperimental, "no partner_experimental line, nothing to report");
+    const Config retired = parseConfig("partner_experimental=1\nmax_players=3\ntrace=0\n");
+    check(retired.retiredPartnerExperimental && retired.maxPlayers == 3 && !retired.trace,
+          "a retired partner_experimental line is flagged and leaves the other keys alone");
+    check(parseConfig("partner_experimental=0\n").retiredPartnerExperimental, "partner_experimental=0 is flagged too");
     check(parseConfig("").gamePort == 4200 && parseConfig("").rejectedGamePort == 0, "game_port defaults to 4200");
     check(parseConfig("game_port=4201\n").gamePort == 4201, "game_port read");
     check(parseConfig("game_port=1024\n").gamePort == 1024 && parseConfig("game_port=65535\n").gamePort == 65535,

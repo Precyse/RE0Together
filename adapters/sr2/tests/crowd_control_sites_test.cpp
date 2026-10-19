@@ -17,7 +17,6 @@
 
 namespace {
 
-using partner_sites::Gate;
 using partner_sites::Kind;
 using partner_sites::Site;
 
@@ -65,9 +64,6 @@ void theCounts() {
     }
     check(same, "the sets: hold 6, phases 3, start 4, end 3");
     check(allSites().size() == 16, "16 rows");
-    bool allNow = true;
-    for (const Site& site : allSites()) allNow = allNow && site.gate == Gate::Now;
-    check(allNow, "no row waits for partner_experimental");
 }
 
 void theShapes() {

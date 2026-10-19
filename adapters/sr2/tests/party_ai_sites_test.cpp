@@ -135,7 +135,6 @@ void theTables() {
         if (site.kind != Kind::Bytes) unique = unique && writtenAddresses.insert(site.address).second;
     }
     check(unique, "ids are unique and unlike any other milestone's, written addresses are unique");
-    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now; }), "every row is written when its phase is");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == partner_sites::Thunk::None); }),
           "a check row has no thunk and every other row has one");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.kind != Kind::Bytes || site.tail.empty(); }), "a check row writes nothing");

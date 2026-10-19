@@ -1,6 +1,6 @@
 // Snatch for every remote. The level keeps one carried count for "the partner" and its proximity tests read the partner cached
 // at the start of the tick; here each remote has its own carried count and the proximity tests name the remote nearest to the
-// group. Phase B (partner_experimental) adds the spawn point and the waypoint for every remote.
+// group. Phase B adds the spawn point and the waypoint for every remote.
 #include "activity_state.h"
 #include "diversion_remotes.h"
 #include "diversion_rules.h"

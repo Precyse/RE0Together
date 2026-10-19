@@ -17,7 +17,6 @@
 
 namespace {
 
-using partner_sites::Gate;
 using partner_sites::Kind;
 using partner_sites::Site;
 
@@ -71,9 +70,6 @@ void theCounts() {
     }
     check(same, "the sets: fraud 7, snatch 4, trafficking 2, mayhem 1, derby 4, fight club 2, escort 3, mayhem blocks 5");
     check(allSites().size() == 28, "28 rows in all");
-    bool allNow = true;
-    for (const Site& site : allSites()) allNow = allNow && site.gate == Gate::Now;
-    check(allNow, "no row waits for partner_experimental");
 }
 
 void theShapes() {

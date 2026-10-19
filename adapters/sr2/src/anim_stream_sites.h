@@ -12,7 +12,6 @@
 // there. Each table is a phase, patched all or nothing, and only with 3 or more players and the milestone 9 sites in.
 namespace anim_stream_sites {
 
-using partner_sites::Gate;
 using partner_sites::Kind;
 using partner_sites::Site;
 using partner_sites::Thunk;
@@ -20,22 +19,22 @@ using partner_sites::Thunk;
 // Phase A "anim sets per remote": the 0x7E handler gate (AS1), its four sends (AS2 to AS5), the need row masks (AM1 to AM3) and the
 // leaver's releases (AL1). AS0a and AL1a check the game functions the thunks call.
 inline constexpr Site kRequests[] = {
-    {"AS1", Kind::PointerSwap, Gate::Now, 0xE8BDCC, "30 3F A8 00", Thunk::StreamingSyncGate, ""},
-    {"AS2", Kind::RetargetCall, Gate::Now, 0xA84702, "E8 39 00 D9 FF", Thunk::SendStreamingSync, ""},
-    {"AS3", Kind::RetargetCall, Gate::Now, 0xA84145, "E8 F6 05 D9 FF", Thunk::SendStreamingSync, ""},
-    {"AS4", Kind::RetargetCall, Gate::Now, 0xA84261, "E8 DA 04 D9 FF", Thunk::SendStreamingSync, ""},
-    {"AS5", Kind::RetargetCall, Gate::Now, 0xA849DC, "E8 5F FD D8 FF", Thunk::SendStreamingSync, ""},
-    {"AM1", Kind::CallBlock, Gate::Now, 0xA82747, "C6 82 CF 00 00 00 01", Thunk::SetNeedBitEdx, "90 90"},
-    {"AM2", Kind::CallBlock, Gate::Now, 0xA82750, "C6 85 CF 00 00 00 01", Thunk::SetNeedBitEbp, "90 90"},
-    {"AM3", Kind::CallBlock, Gate::Now, 0xA82686, "C6 86 CF 00 00 00 00", Thunk::ClearNeedBitEsi, "90 90"},
-    {"AL1", Kind::RetargetCall, Gate::Now, 0x819943, "E8 28 A8 26 00", Thunk::LeaverReleases, ""},
-    {"AS0a", Kind::Bytes, Gate::Now, 0x814670, "85 F6 53 8B 5C 24 08 55", Thunk::None, ""},
-    {"AL1a", Kind::Bytes, Gate::Now, 0xA82600, "66 81 FF FF FF 74 7E 33", Thunk::None, ""},
+    {"AS1", Kind::PointerSwap, 0xE8BDCC, "30 3F A8 00", Thunk::StreamingSyncGate, ""},
+    {"AS2", Kind::RetargetCall, 0xA84702, "E8 39 00 D9 FF", Thunk::SendStreamingSync, ""},
+    {"AS3", Kind::RetargetCall, 0xA84145, "E8 F6 05 D9 FF", Thunk::SendStreamingSync, ""},
+    {"AS4", Kind::RetargetCall, 0xA84261, "E8 DA 04 D9 FF", Thunk::SendStreamingSync, ""},
+    {"AS5", Kind::RetargetCall, 0xA849DC, "E8 5F FD D8 FF", Thunk::SendStreamingSync, ""},
+    {"AM1", Kind::CallBlock, 0xA82747, "C6 82 CF 00 00 00 01", Thunk::SetNeedBitEdx, "90 90"},
+    {"AM2", Kind::CallBlock, 0xA82750, "C6 85 CF 00 00 00 01", Thunk::SetNeedBitEbp, "90 90"},
+    {"AM3", Kind::CallBlock, 0xA82686, "C6 86 CF 00 00 00 00", Thunk::ClearNeedBitEsi, "90 90"},
+    {"AL1", Kind::RetargetCall, 0x819943, "E8 28 A8 26 00", Thunk::LeaverReleases, ""},
+    {"AS0a", Kind::Bytes, 0x814670, "85 F6 53 8B 5C 24 08 55", Thunk::None, ""},
+    {"AL1a", Kind::Bytes, 0xA82600, "66 81 FF FF FF 74 7E 33", Thunk::None, ""},
 };
 
 // Phase B "anim need table": the table reset of the level loader, whose first call moves the table (the immediates of kNeedTable).
 inline constexpr Site kNeedTableHook[] = {
-    {"AT0", Kind::HookEntry, Gate::Now, 0xA83400, "81 EC CC 03 00 00 A1 50", Thunk::MoveNeedTable, ""},
+    {"AT0", Kind::HookEntry, 0xA83400, "81 EC CC 03 00 00 A1 50", Thunk::MoveNeedTable, ""},
 };
 
 // An instruction of the exe with a dword that reaches the need table 0x2229528: its base or its end (0x2229BA8) plus a field offset.
@@ -75,32 +74,32 @@ constexpr uintptr_t kNeedTableEndImmediate = kNeedTable[1].address + kNeedTable[
 
 // Phase C "stream requests": the four message handlers of the ledger.
 inline constexpr Site kRequestLedger[] = {
-    {"SR1", Kind::PointerSwap, Gate::Now, 0xE8BCC4, "10 92 A7 00", Thunk::LedgerWorldAdd, ""},
-    {"SR2", Kind::PointerSwap, Gate::Now, 0xE8BCDC, "60 93 A7 00", Thunk::LedgerWorldRemove, ""},
-    {"SR3", Kind::PointerSwap, Gate::Now, 0xE8BCF4, "90 44 94 00", Thunk::LedgerCharacterAdd, ""},
-    {"SR4", Kind::PointerSwap, Gate::Now, 0xE8BD0C, "D0 44 94 00", Thunk::LedgerCharacterRemove, ""},
+    {"SR1", Kind::PointerSwap, 0xE8BCC4, "10 92 A7 00", Thunk::LedgerWorldAdd, ""},
+    {"SR2", Kind::PointerSwap, 0xE8BCDC, "60 93 A7 00", Thunk::LedgerWorldRemove, ""},
+    {"SR3", Kind::PointerSwap, 0xE8BCF4, "90 44 94 00", Thunk::LedgerCharacterAdd, ""},
+    {"SR4", Kind::PointerSwap, 0xE8BD0C, "D0 44 94 00", Thunk::LedgerCharacterRemove, ""},
 };
 
 // Phase D "set change gates": the strm_set_change handler and the game's reset of its time gates.
 inline constexpr Site kSetChange[] = {
-    {"SC1", Kind::PointerSwap, Gate::Now, 0xE8BCAC, "60 9D A7 00", Thunk::SetChangePerSender, ""},
-    {"SC2", Kind::HookEntry, Gate::Now, 0xA78F10, "55 56 33 F6 57 B9 D0 B2", Thunk::ResetSenderGates, ""},
+    {"SC1", Kind::PointerSwap, 0xE8BCAC, "60 9D A7 00", Thunk::SetChangePerSender, ""},
+    {"SC2", Kind::HookEntry, 0xA78F10, "55 56 33 F6 57 B9 D0 B2", Thunk::ResetSenderGates, ""},
 };
 
 // Phase E "trigger sets": the activity trigger character sets per remote. TS3r, TS3d and TS2a check the code the thunks resume at or call.
 inline constexpr Site kTriggerSets[] = {
-    {"TS1", Kind::PointerSwap, Gate::Now, 0xE8ABF0, "A0 85 68 00", Thunk::TriggerSetPerSender, ""},
-    {"TS2", Kind::HookEntry, Gate::Now, 0x687B40, "83 EC 0C A1 50 0B E8 00", Thunk::TriggerTick, ""},
-    {"TS3", Kind::JumpOut, Gate::Now, 0x68875B, "83 C7 04 83 FF 08 7C 9D", Thunk::TriggerCleanupPass, ""},
-    {"TS3r", Kind::Bytes, Gate::Now, 0x688700, "8B 74 3C 08 85 F6 74 13", Thunk::None, ""},
-    {"TS3d", Kind::Bytes, Gate::Now, 0x688763, "6A 00 6A 04", Thunk::None, ""},
-    {"TS4", Kind::HookEntry, Gate::Now, 0x687A80, "83 EC 08 A1 50 0B E8 00", Thunk::TriggerReset, ""},
-    {"TS2a", Kind::Bytes, Gate::Now, 0xA79240, "81 EC 20 05 00 00 A1 50", Thunk::None, ""},
+    {"TS1", Kind::PointerSwap, 0xE8ABF0, "A0 85 68 00", Thunk::TriggerSetPerSender, ""},
+    {"TS2", Kind::HookEntry, 0x687B40, "83 EC 0C A1 50 0B E8 00", Thunk::TriggerTick, ""},
+    {"TS3", Kind::JumpOut, 0x68875B, "83 C7 04 83 FF 08 7C 9D", Thunk::TriggerCleanupPass, ""},
+    {"TS3r", Kind::Bytes, 0x688700, "8B 74 3C 08 85 F6 74 13", Thunk::None, ""},
+    {"TS3d", Kind::Bytes, 0x688763, "6A 00 6A 04", Thunk::None, ""},
+    {"TS4", Kind::HookEntry, 0x687A80, "83 EC 08 A1 50 0B E8 00", Thunk::TriggerReset, ""},
+    {"TS2a", Kind::Bytes, 0xA79240, "81 EC 20 05 00 00 A1 50", Thunk::None, ""},
 };
 
 // Phase F "anim stream trace" (trace=1 only): the anim set load. AN1 to AN3 are in player_sites::kAnimTrace.
 inline constexpr Site kTrace[] = {
-    {"AN4", Kind::HookEntry, Gate::Now, 0xA82EA0, "A0 48 8B 52 02 81 EC 1C", Thunk::TraceAnimLoad, ""},
+    {"AN4", Kind::HookEntry, 0xA82EA0, "A0 48 8B 52 02 81 EC 1C", Thunk::TraceAnimLoad, ""},
 };
 
 // A phase: its sites, and the need table immediates that are checked with them (written by the hook's first call).

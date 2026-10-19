@@ -272,7 +272,7 @@ void install(uint32_t maxPlayers, bool trace) {
             logger::write("anim streaming: %s not patched, the bytes differ", phase.name);
             continue;
         }
-        if (site_installer::install(phase.sites, false, &bindingOf).installed) {
+        if (site_installer::install(phase.sites, &bindingOf).installed) {
             logger::write("anim streaming: %s, %zu sites patched", phase.name, anim_stream_sites::writtenCount(phase));
         } else {
             logger::write("anim streaming: %s not patched", phase.name);

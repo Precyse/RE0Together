@@ -152,7 +152,7 @@ void install(bool trace) {
             logger::write("store: %s not patched, the bytes differ", set.name);
             continue;
         }
-        const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (result.installed) {
             logger::write("store: %s, %zu sites patched", set.name, result.patched);
         } else {

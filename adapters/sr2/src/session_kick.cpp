@@ -229,7 +229,7 @@ void install(bool trace) {
             logger::write("players 3 and 4: %s not patched", set.name);
             continue;
         }
-        const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (result.installed) {
             logger::write("players 3 and 4: %s, %zu sites patched", set.name, result.patched);
         } else {

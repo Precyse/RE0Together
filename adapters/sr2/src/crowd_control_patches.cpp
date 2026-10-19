@@ -47,7 +47,7 @@ void install(bool trace) {
     for (size_t i = 0; i < std::size(crowd_control_sites::kSets); ++i) {
         if (!g_matched[i]) continue;
         const crowd_control_sites::Set& set = crowd_control_sites::kSets[i];
-        const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (result.installed) {
             logger::write("crowd control: set %s patched (%zu rows)", set.name, result.patched);
         } else {

@@ -15,7 +15,7 @@ void install(bool trace) {
             logger::write("party ai: %s sites differ, not installed", phase.name);
             continue;
         }
-        const site_installer::Result result = site_installer::install(phase.sites, false, &party_ai_thunks::bind);
+        const site_installer::Result result = site_installer::install(phase.sites, &party_ai_thunks::bind);
         if (result.installed) {
             logger::write("party ai: %s, %zu sites patched", phase.name, result.patched);
         } else {

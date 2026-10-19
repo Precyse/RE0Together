@@ -178,7 +178,7 @@ partner_thunks::Binding bind(Thunk thunk) {
     }
 }
 
-void install(bool experimental, bool trace) {
+void install(bool trace) {
     g_trace = trace;
     std::string patched;
     const auto installSet = [&](const char* name, std::span<const Site> sites) {
@@ -186,14 +186,13 @@ void install(bool experimental, bool trace) {
             logger::write("seating: %s not patched, the bytes differ", name);
             return;
         }
-        const site_installer::Result result = site_installer::install(sites, experimental, &bind);
+        const site_installer::Result result = site_installer::install(sites, &bind);
         if (!result.installed) {
             logger::write("seating: %s not patched, a thunk is missing", name);
             return;
         }
         if (!patched.empty()) patched += ", ";
-        patched += std::string(name) + " " + countText(result.patched ? result.patched : result.gated);
-        if (!result.patched) patched += " (gated probe CP)";
+        patched += std::string(name) + " " + countText(result.patched);
     };
     for (const Set& set : kSets) installSet(set.name, set.sites);
     if (!patched.empty()) logger::write("seating: %s patched", patched.c_str());

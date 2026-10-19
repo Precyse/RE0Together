@@ -61,7 +61,7 @@ void install(bool trace) {
     for (size_t i = 0; i < std::size(fuzz_sites::kSets); ++i) {
         if (!g_matched[i]) continue;
         const fuzz_sites::Set& set = fuzz_sites::kSets[i];
-        const site_installer::Result result = site_installer::install(set.sites, false, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (result.installed) {
             logger::write("fuzz: set %s patched (%zu rows)", set.name, result.patched);
         } else {

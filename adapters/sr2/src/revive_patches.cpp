@@ -29,7 +29,7 @@ bool installSet(std::span<const Site> sites, const char* name) {
         logger::write("revive: %s sites differ, not installed", name);
         return false;
     }
-    const site_installer::Result result = site_installer::install(sites, false, &bindingOf);
+    const site_installer::Result result = site_installer::install(sites, &bindingOf);
     if (!result.installed) {
         logger::write("revive: %s not installed", name);
         return false;

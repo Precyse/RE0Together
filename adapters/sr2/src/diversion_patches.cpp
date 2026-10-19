@@ -48,16 +48,14 @@ bool sitesMatch() {
     return any;
 }
 
-void install(bool experimental, bool trace) {
+void install(bool trace) {
     activity_state::setTracing(trace);
     for (size_t i = 0; i < std::size(diversion_sites::kSets); ++i) {
         if (!g_matched[i]) continue;
         const diversion_sites::Set& set = diversion_sites::kSets[i];
-        const site_installer::Result result = site_installer::install(set.sites, experimental, &bindingOf);
+        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
         if (!result.installed) {
             logger::write("diversions: set %s not patched", set.name);
-        } else if (result.patched == 0) {
-            logger::write("diversions: set %s gated (%zu rows, partner_experimental)", set.name, result.gated);
         } else {
             logger::write("diversions: set %s patched (%zu rows)", set.name, result.patched);
         }

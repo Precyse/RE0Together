@@ -9,11 +9,8 @@
 
 namespace {
 
-using partner_sites::Gate;
 using partner_sites::Kind;
 using partner_sites::Site;
-
-bool isPatched(const Site& site, bool experimental) { return site.gate == Gate::Now || experimental; }
 
 // The function pointer a table entry holds before the swap, for the thunk to call on.
 void* oldPointer(const Site& site) {
@@ -44,15 +41,10 @@ uintptr_t firstDifference(std::span<const Site> sites) {
     return 0;
 }
 
-Result install(std::span<const Site> sites, bool experimental, Binder binder) {
+Result install(std::span<const Site> sites, Binder binder) {
     std::vector<CodePatch> patches;
     std::vector<const Site*> hookSites;
-    size_t gated = 0;
     for (const Site& site : sites) {
-        if (!isPatched(site, experimental)) {
-            ++gated;
-            continue;
-        }
         if (site.kind == Kind::Bytes) {
             patches.push_back(patchFor(site, 0));
             continue;
@@ -60,7 +52,7 @@ Result install(std::span<const Site> sites, bool experimental, Binder binder) {
         const partner_thunks::Binding binding = binder(site.thunk);
         if (!binding.entry) {
             logger::write("sites: no thunk for %s, nothing patched", site.id);
-            return {false, 0, gated};
+            return {false, 0};
         }
         if (site.kind == Kind::HookEntry) {
             hookSites.push_back(&site);
@@ -71,13 +63,13 @@ Result install(std::span<const Site> sites, bool experimental, Binder binder) {
     }
     if (!applyCodePatches(patches)) {
         logger::write("sites: code edits not applied, nothing patched");
-        return {false, 0, gated};
+        return {false, 0};
     }
     for (const Site* site : hookSites) {
         const partner_thunks::Binding binding = binder(site->thunk);
         hooks::install(site->id, site->address, binding.entry, binding.original);
     }
-    return {true, sites.size() - gated, gated};
+    return {true, sites.size()};
 }
 
 }  // namespace site_installer

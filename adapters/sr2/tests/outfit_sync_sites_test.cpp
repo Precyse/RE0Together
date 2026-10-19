@@ -84,8 +84,8 @@ void theTables() {
     check(idsAndAddressesAreUnique(all), "ids and addresses are unique");
     check(std::size(outfit_sync_sites::kLookSync) == 2 && std::size(outfit_sync_sites::kItemWear) == 2 && std::size(outfit_sync_sites::kWeaponSlots) == 2,
           "three sets of two");
-    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now && site.tail.empty(); }),
-          "every site is written when its set is (no probe gate, no tail)");
+    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.tail.empty(); }),
+          "every site is written when its set is (no tail)");
     check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.thunk != Thunk::None; }), "every site has a thunk");
     check(std::all_of(std::begin(outfit_sync_sites::kLookSync), std::end(outfit_sync_sites::kLookSync),
                       [](const Site& site) { return site.thunk == Thunk::EachRemoteMember82BC50; }),

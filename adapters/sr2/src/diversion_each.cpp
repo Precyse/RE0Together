@@ -1,6 +1,6 @@
 // Calls and loops of the diversions that run once per remote: the game's code does for the local player and "the partner"
 // what every remote now gets: activity weapons, followers, setup, vehicle preparation, credit and the Snatch delivery. Phase B
-// (partner_experimental) adds the Mayhem district test for every player and the extra Trafficking seats.
+// adds the Mayhem district test for every player and the extra Trafficking seats.
 #include <bit>
 
 #include "activity_state.h"

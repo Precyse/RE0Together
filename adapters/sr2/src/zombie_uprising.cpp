@@ -209,7 +209,7 @@ void install(bool trace) {
             logger::write("zombie: %s not patched, the bytes differ", set.name);
             continue;
         }
-        const site_installer::Result result = site_installer::install(set.sites, false, &bind);
+        const site_installer::Result result = site_installer::install(set.sites, &bind);
         if (result.installed) {
             logger::write("zombie: %s, %zu sites patched", set.name, result.patched);
         } else {

@@ -16,7 +16,7 @@ void installSet(const world_walks_sites::Set& set, bool activities) {
         logger::write("world walks: %s sites differ, not patched", set.name);
         return;
     }
-    const site_installer::Result result = site_installer::install(set.sites, false, &world_walks::bindingOf);
+    const site_installer::Result result = site_installer::install(set.sites, &world_walks::bindingOf);
     if (result.installed) {
         logger::write("world walks: %s, %zu sites patched", set.name, result.patched);
     } else {

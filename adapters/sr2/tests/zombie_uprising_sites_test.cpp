@@ -164,8 +164,6 @@ void theTables() {
     bool named = true;
     for (size_t i = 0; i < std::size(names); ++i) named = named && names[i] == zombie_uprising_sites::kSets[i].name;
     check(named, "the sets are named start and end, wave bonus, trigger zones, waiting prompt and spawn tests");
-    check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.gate == partner_sites::Gate::Now; }),
-          "every site is written when its set is (no probe gate)");
     check(std::all_of(sites.begin(), sites.end(), [](const Site& site) { return site.kind != Kind::Bytes || site.thunk == Thunk::None; }),
           "a bytes row has no thunk");
 }

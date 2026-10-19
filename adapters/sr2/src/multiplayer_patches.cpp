@@ -39,13 +39,13 @@ void installScriptTraces() {
                 logger::write("trace: %s not installed, the bytes differ", site.id);
                 continue;
             }
-            if (site_installer::install(one, false, &multiplayer_thunks::bindingOf).installed) ++installed;
+            if (site_installer::install(one, &multiplayer_thunks::bindingOf).installed) ++installed;
         }
     }
     logger::write("trace: cutscene end, Lua error and fade traces, %zu of %zu sites installed", installed, total);
 }
 
-bool install(bool trace, bool leavePathInstalled, bool experimental) {
+bool install(bool trace, bool leavePathInstalled) {
     cutscene_sync::setTrace(trace);
     sender_scope::setTrace(trace);
     creation_queue::setTrace(trace);
@@ -66,9 +66,9 @@ bool install(bool trace, bool leavePathInstalled, bool experimental) {
             continue;
         }
 
-        const site_installer::Result result = site_installer::install(phase.sites, experimental, &multiplayer_thunks::bindingOf);
+        const site_installer::Result result = site_installer::install(phase.sites, &multiplayer_thunks::bindingOf);
         if (result.installed) {
-            logger::write("players 3 and 4: %s, %zu sites patched, %zu waiting for a probe", phase.name, result.patched, result.gated);
+            logger::write("players 3 and 4: %s, %zu sites patched", phase.name, result.patched);
         } else {
             logger::write("players 3 and 4: %s not patched", phase.name);
         }

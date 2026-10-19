@@ -167,7 +167,7 @@ void install(bool trace) {
             logger::write("net handlers: %s not patched, the bytes differ", set.name);
             continue;
         }
-        const site_installer::Result result = site_installer::install(set.sites, false, &bind);
+        const site_installer::Result result = site_installer::install(set.sites, &bind);
         g_installed[i] = result.installed;
         if (result.installed) {
             logger::write("net handlers: %s, %zu sites patched", set.name, result.patched);

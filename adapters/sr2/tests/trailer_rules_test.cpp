@@ -48,7 +48,7 @@ Verdict verdictOf(const std::vector<uint8_t>& payload, const Settings& mine) {
 }  // namespace
 
 int main() {
-    const Settings settings{kFourPlayers, false, false, kHash};
+    const Settings settings{kFourPlayers, false, kHash};
     const auto bytes = trailer_rules::make(settings);
     check(version::kProtocolVersion == 3 && version::kTrailerBytes == 16 && bytes.size() == 16, "version 3: the trailer is 16 bytes");
     check(bytes[0] == 0x88 && bytes[1] == 0x77 && bytes[7] == 0x11, "it starts with the content hash, little endian");
@@ -56,12 +56,8 @@ int main() {
     check(bytes[12] == (version::kProtocolVersion & 0xFF) && bytes[13] == (version::kProtocolVersion >> 8),
           "then the protocol version, little endian");
     check(bytes[14] == kFourPlayers && bytes[15] == 0, "then max_players and the flags");
-    check(trailer_rules::make({kFourPlayers, true, false, kHash})[15] == trailer_rules::kFlagPartnerExperimental,
-          "partner_experimental is bit 0 of the flags");
-    check(trailer_rules::make({kFourPlayers, false, true, kHash})[15] == trailer_rules::kFlagSteamTransport &&
-              trailer_rules::make({kFourPlayers, true, true, kHash})[15] ==
-                  (trailer_rules::kFlagPartnerExperimental | trailer_rules::kFlagSteamTransport),
-          "the steam transport is bit 1 of the flags, beside bit 0");
+    check(trailer_rules::make({kFourPlayers, true, kHash})[15] == trailer_rules::kFlagSteamTransport,
+          "the steam transport is bit 1 of the flags, bit 0 stays clear");
 
     const auto payload = payloadWith(bytesOf(settings));
     check(verdictOf(payload, settings) == Verdict::Match, "a payload that ends in our trailer matches");
@@ -92,17 +88,15 @@ int main() {
     std::vector<uint8_t> other = payload;
     other[other.size() - 4] = static_cast<uint8_t>(version::kProtocolVersion + 1);
     check(verdictOf(other, settings) == Verdict::VersionDiffers, "another version is refused");
-    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers + 1, false, false, kHash}) == Verdict::MaxPlayersDiffers,
+    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers + 1, false, kHash}) == Verdict::MaxPlayersDiffers,
           "another max_players is refused");
-    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, true, false, kHash}) == Verdict::FlagsDiffer,
-          "other patched sites (flags) are refused");
-    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, false, true, kHash}) == Verdict::FlagsDiffer,
+    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, true, kHash}) == Verdict::FlagsDiffer,
           "a native peer and a steam peer refuse each other");
-    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, false, false, kHash + 1}) == Verdict::ContentDiffers,
+    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, false, kHash + 1}) == Verdict::ContentDiffers,
           "another content hash is refused");
-    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers + 1, true, true, kHash + 1}) == Verdict::MaxPlayersDiffers,
+    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers + 1, true, kHash + 1}) == Verdict::MaxPlayersDiffers,
           "the verdict is the first field that differs: version, max_players, flags, then content");
-    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, true, false, kHash + 1}) == Verdict::FlagsDiffer,
+    check(trailer_rules::check(payload.data(), payload.size(), {kFourPlayers, true, kHash + 1}) == Verdict::FlagsDiffer,
           "flags come before content");
 
     const auto exact = payloadWith(bytesOf(settings), version::kTrailerBytes);
@@ -123,8 +117,8 @@ int main() {
           "version: both numbers");
     check(trailer_rules::refusalText(Verdict::MaxPlayersDiffers, host, mine) == "max_players differs (host 5, yours 4).",
           "max_players: both numbers");
-    check(trailer_rules::refusalText(Verdict::FlagsDiffer, host, mine) == "partner_experimental differs from the host.",
-          "flags: partner_experimental");
+    check(trailer_rules::refusalText(Verdict::FlagsDiffer, host, mine) == "Network setting differs from the host (Steam or Direct).",
+          "flags: the network setting");
     check(trailer_rules::refusalText(Verdict::ContentDiffers, host, mine) ==
               "Co-op files differ from the host (dinput8.dll or coop\\scripts).",
           "content: the files");
@@ -134,8 +128,7 @@ int main() {
     check(tag.size() == 15 && tag.compare(0, 7, "cfv003-") == 0 && force_join_names::isTag(tag),
           "the tag is cfv, the version in three digits, a dash and 8 hex digits");
     check(trailer_rules::tagFor(mine) == tag && trailer_rules::tagFor(trailer_rules::ours(settings)) == tag, "the tag is stable");
-    const Settings others[] = {{kFourPlayers + 1, false, false, kHash}, {kFourPlayers, true, false, kHash},
-                               {kFourPlayers, false, true, kHash}, {kFourPlayers, false, false, kHash + 1}};
+    const Settings others[] = {{kFourPlayers + 1, false, kHash}, {kFourPlayers, true, kHash}, {kFourPlayers, false, kHash + 1}};
     bool allDiffer = true;
     for (const Settings& variant : others) allDiffer = allDiffer && trailer_rules::tagFor(trailer_rules::ours(variant)) != tag;
     check(allDiffer, "every field the gate compares changes the tag");
