@@ -135,10 +135,14 @@ void* createGuarded(const Context& context, uint32_t index) {
 }
 
 // True when an enemy of the pool was created from the record (the create would hand that one back, and placing it
-// again would add the room origin twice).
+// again would add the room origin twice). A note counts only while its enemy still stands in its slot: records are
+// numbered across rooms, and the note of an enemy that left is never cleared.
 bool alreadyCreated(uint16_t record) {
-    for (const std::optional<Created>& created : g_created) {
-        if (created && created->origin.record == record) return true;
+    for (size_t slot = 0; slot < g_created.size(); ++slot) {
+        const std::optional<Created>& created = g_created[slot];
+        if (created && created->origin.record == record && created->enemy == enemy_registry::enemyAt(static_cast<int>(slot))) {
+            return true;
+        }
     }
     return false;
 }

@@ -481,10 +481,11 @@ int poolIndexOf(uintptr_t unit) {
 }
 
 // Index of the pool slot whose engine update is replaced for `unit` now (an enemy a stream shows, past construction, or
-// one that freeze() holds), or kNoIndex.
+// one that freeze() holds), or kNoIndex. The pool copy is last tick's: a unit the walk deleted and a later unit that took
+// its address would match it, so the live pool must still hold `unit` in that slot (nothing is written into anything else).
 int scopedSlot(uintptr_t unit) {
     const int index = poolIndexOf(unit);
-    if (index == kNoIndex) return kNoIndex;
+    if (index == kNoIndex || enemy_registry::enemyAt(index) != unit) return kNoIndex;
     Slot& slot = g_slots[static_cast<size_t>(index)];
     if (slot.frozenEnemy == unit) return index;
     if (!g_slotsLive) return kNoIndex;
