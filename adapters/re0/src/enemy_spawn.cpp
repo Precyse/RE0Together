@@ -122,14 +122,17 @@ void placeInRoom(uintptr_t enemy, uintptr_t record) {
     if (info) game::callThiscall<void>(game::kSceneAssignFunction, info, reinterpret_cast<void*>(record), reinterpret_cast<void*>(enemy));
 }
 
-// The create for the loaded room and its placement; the enemy, or null when the create refused or the engine faulted.
+// The create for the loaded room and its placement; the enemy, or null when the create refused or the engine faulted (the
+// game's random state is then put back: a fault inside the seeded create would leave it at the spawn's seed).
 void* createGuarded(const Context& context, uint32_t index) {
+    const game::RandomState randomBefore = game::readRandomState();
     __try {
         void* const enemy = createTracked(context.table, nullptr, static_cast<uint32_t>(context.record), index,
                                           game::readPointer(game::kEnemyCreateFlagsGlobal));
         if (enemy) placeInRoom(reinterpret_cast<uintptr_t>(enemy), context.record);
         return enemy;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        game::writeRandomState(randomBefore);
         return nullptr;
     }
 }
