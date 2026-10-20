@@ -23,7 +23,8 @@ partner_thunks::Binding bind(partner_sites::Thunk thunk);
 // The code behind MF18 to MF20 and MF23 (mission_flow_rewards.cpp).
 partner_thunks::Binding bindRewards(partner_sites::Thunk thunk);
 
-// A remote member left: the start and replay requesters it was are forgotten (mission_flow_prompts.cpp).
+// A remote member left: the start and replay requesters it was are forgotten, and its leave counts as a decline of the host's open
+// replay wait (mission_flow_prompts.cpp).
 void memberLeft(uintptr_t leaver);
 
 }  // namespace mission_flow

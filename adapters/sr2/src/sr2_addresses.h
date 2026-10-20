@@ -682,6 +682,7 @@ constexpr uintptr_t kHumanNameOffset = 0x12E0;         // wide name of a player 
 constexpr size_t kNameChars = 0x40;
 constexpr uintptr_t kReplayAsker = 0x25274A4;          // byte: this machine asked for the replay
 constexpr uintptr_t kReplayDialog = 0x25274A8;         // dword: the replay wait dialog or prompt, 0 when none
+constexpr uintptr_t kReplayCancel = 0x544F10;          // the game's cancel of the replay wait (its only caller is the leave teardown 0x8CB3D9): cdecl void(void)
 constexpr uint8_t kReplayAnswerAccept = 3;
 constexpr uintptr_t kActHeaderWide = 0xE8BC2C;         // byte: the act header is 4 bytes
 constexpr uintptr_t kStartHeaderWide = 0xE8BADC;       // byte: the mssn_req header is 4 bytes

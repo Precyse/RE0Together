@@ -74,4 +74,15 @@ void clearWaits() {
     g_waits.clear();
 }
 
+void memberLeft(uintptr_t leaver) {
+    if (!leaver) return;
+    const uint8_t slot = readByte(leaver + sr2::kMemberSlotOffset);
+    bool held = false;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        held = g_waits.forget(slot);
+    }
+    if (held && g_trace) logger::write("trace: respawn wait: slot %u left, its wait forgotten", static_cast<unsigned>(slot));
+}
+
 }  // namespace revive_state

@@ -36,4 +36,7 @@ void recordDeath(size_t slot);
 // The game cleared its notoriety and both waits: so does the table.
 void clearWaits();
 
+// `leaver` left the session: its slot's wait does not survive into whoever joins that slot next.
+void memberLeft(uintptr_t leaver);
+
 }  // namespace revive_state

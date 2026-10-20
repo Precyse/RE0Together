@@ -59,9 +59,9 @@ uint32_t __cdecl remoteDeathWait(uintptr_t local) {
         revive_state::recordDeath(sender.slot);
     }
     if (revive_state::trace()) {
-        logger::write("trace: respawn wait: slot %u died, waits until %d (now %d); local waiting %d, others down or waiting %d -> wipe %d",
+        logger::write("trace: respawn wait: slot %u died, waits until %d (now %d); local waiting %d, others down or waiting %d -> wipe %d; %s",
                       static_cast<unsigned>(sender.slot), revive_rules::deadlineAfter(now, sr2::kRespawnWaitMs), now, localWaiting ? 1 : 0,
-                      others ? 1 : 0, wipe ? 1 : 0);
+                      others ? 1 : 0, wipe ? 1 : 0, revive_rules::playersText(remotes, count).c_str());
     }
     return wipe ? kYes : kNo;
 }
@@ -90,7 +90,8 @@ uint32_t __cdecl localDeathWait(uintptr_t partner) {
     for (size_t i = 0; i < count; ++i) waiting += remotes[i].waiting ? 1 : 0;
     const bool wipe = revive_rules::wipeOnLocalDeath(remotes, count);
     if (revive_state::trace()) {
-        logger::write("trace: respawn wait: local died, %zu of %zu remotes waiting -> wipe %d", waiting, count, wipe ? 1 : 0);
+        logger::write("trace: respawn wait: local died, %zu of %zu remotes waiting (%s) -> wipe %d", waiting, count,
+                      revive_rules::playersText(remotes, count).c_str(), wipe ? 1 : 0);
     }
     return wipe ? kYes : kNo;
 }

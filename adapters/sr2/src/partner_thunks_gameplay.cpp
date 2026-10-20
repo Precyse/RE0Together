@@ -148,9 +148,9 @@ uint32_t __cdecl teamWipe(uintptr_t dead) {
         wipe = kill || revive_rules::wipeOnRemoteDeath(localWaiting, remotes, count, dead);
     }
     if (revive_state::trace()) {
-        logger::write("trace: team wipe: human 0x%X died (%s %u); local down %d waiting %d -> kill %d wipe %d", static_cast<unsigned>(dead),
+        logger::write("trace: team wipe: human 0x%X died (%s %u); local down %d waiting %d -> kill %d wipe %d; %s", static_cast<unsigned>(dead),
                       localDied ? "local" : "remote slot", localDied ? 0u : static_cast<unsigned>(revive_rules::slotOf(remotes, count, dead)),
-                      localDown ? 1 : 0, localWaiting ? 1 : 0, kill ? 1 : 0, wipe ? 1 : 0);
+                      localDown ? 1 : 0, localWaiting ? 1 : 0, kill ? 1 : 0, wipe ? 1 : 0, revive_rules::playersText(remotes, count).c_str());
     }
     return wipe ? 1 : 0;
 }

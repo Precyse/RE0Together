@@ -304,6 +304,7 @@ add_unit_test(multiplayer_bindings_test src/activity_participants.cpp src/multip
     src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/site_installer.cpp
     src/mission_flow_prompts.cpp src/mission_flow_rewards.cpp)
 target_sources(multiplayer_bindings_test PRIVATE src/net_handlers.cpp src/net_handlers_confess.cpp)
+target_sources(multiplayer_bindings_test PRIVATE src/revive_state.cpp)
 target_link_libraries(multiplayer_bindings_test PRIVATE minhook)
 add_unit_test(outfit_sync_bindings_test src/activity_participants.cpp src/outfit_sync.cpp src/outfit_sync_trace.cpp src/site_installer.cpp src/partner_thunks_calls.cpp
     src/partner_identity.cpp src/partner_scope.cpp src/remote_players.cpp src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp
