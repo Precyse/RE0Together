@@ -2,6 +2,7 @@
 and the shared mission_globals. Line numbers are those of the archive's script (em01: Juiced's copy)."""
 from lua_patch import Patch
 from .slots import REMOTE_HUD_SLOTS
+from .waypoints import per_player_waypoints
 
 IN_VEHICLE = "character_is_in_vehicle"
 NAV_IN_FOV = "navpoint_in_player_fov"
@@ -95,7 +96,7 @@ PATCHES = {
             (735, "get_dist(REMOTE_PLAYER, TRIGGER_TIMER_START) > 100", "coop_any_remote_farther_than(get_dist, TRIGGER_TIMER_START, 100)"),
             (752, f"{IN_VEHICLE}(REMOTE_PLAYER)", f"coop_any_remote({IN_VEHICLE}, REMOTE_PLAYER)"),
             (1322, "get_dist(REMOTE_PLAYER, TRIGGER_MISSION_COMPLETE) < 10.0", "not coop_any_remote_farther_than(get_dist, TRIGGER_MISSION_COMPLETE, 10.0)"),
-        ],
+        ] + per_player_waypoints("player", removes=(434, 483), adds=(424, 477)),
         blocks=[
             (
                 494, 495, "thread_kill(Tss02_clothes_thread[OTHER_PLAYER[player]])",

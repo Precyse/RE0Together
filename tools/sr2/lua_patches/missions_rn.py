@@ -1,7 +1,9 @@
 """Ronin story missions (rn01 to rn11). Line numbers are those of the archive's script (rn07: Juiced's copy)."""
 from lua_patch import Patch
 from .slots import REMOTE_HUD_SLOTS
+from .waypoints import per_player_waypoints
 
+MISSION = "mission_waypoint"
 IN_VEHICLE = "character_is_in_vehicle"
 NAV_IN_FOV = "navpoint_in_player_fov"
 OCCUPIED = "Rn10_player_defense_objectives_occupied"
@@ -41,7 +43,7 @@ PATCHES = {
             ),
             (1303, "not player_triggered_dealer(REMOTE_PLAYER)", "not coop_any_remote(player_triggered_dealer, REMOTE_PLAYER)"),
             (1791, "should_give_infinite_mass(REMOTE_PLAYER)", "coop_any_remote(should_give_infinite_mass, REMOTE_PLAYER)"),
-        ],
+        ] + per_player_waypoints("player", removes=(667, 680, 684, 743, 767), adds=(710, 716, 750, 769, 783), function=MISSION),
         blocks=[
             (
                 1191, 1193, "Current_repair_trigger[REMOTE_PLAYER]",

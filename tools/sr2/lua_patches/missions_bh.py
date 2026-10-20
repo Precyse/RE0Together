@@ -1,8 +1,10 @@
 """Brotherhood story missions (bh01 to bh11). Line numbers are those of the archive's script.
 Not listed here: the tables, the name tests, the thread starts and every call the wrappers answer, unchanged."""
 from lua_patch import Patch
+from .waypoints import per_player_waypoints
 
 BOAT_SPAWN = 'MP.."boat_spawn1"'
+MISSION = "mission_waypoint"
 IN_VEHICLE = "character_is_in_vehicle"
 HAS_SHIELD = "character_has_specific_human_shield"
 RANGE = "Players_out_of_current_boat_range"
@@ -94,7 +96,7 @@ PATCHES = {
             (850, f"{HAS_SHIELD}(REMOTE_PLAYER,npc)", f"coop_any_remote({HAS_SHIELD},REMOTE_PLAYER,npc)"),
         ],
     ),
-    "bh08.lua": Patch(each=("update_bus_gps",)),
+    "bh08.lua": Patch(lines=per_player_waypoints("player", removes=(846, 869), adds=(847,), function=MISSION), each=("update_bus_gps",)),
     "bh09.lua": Patch(
         lines=[
             (244, f"{RANGE}[REMOTE_PLAYER] == false", f"coop_all_remotes_equal({RANGE}, false)"),

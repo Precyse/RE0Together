@@ -1,7 +1,9 @@
 """Epilogue story missions (ep01 to ep04). Line numbers are those of the archive's script."""
 from lua_patch import Patch
 from .slots import REMOTE_HUD_SLOTS
+from .waypoints import per_player_waypoints
 
+MISSION = "mission_waypoint"
 SEQUENCE_BEGUN = "Player_sequence_begun"
 IN_VEHICLE = "character_is_in_vehicle"
 SYNC_REMOTE_BRANCH = "if ( (sync == SYNC_REMOTE) or (sync == SYNC_ALL) ) then"
@@ -78,7 +80,7 @@ PATCHES = {
             ),
             (356, "hud_timer_stop(PLAYER_TIMER[REMOTE_PLAYER])", "coop_each_remote_slot(hud_timer_stop, PLAYER_TIMER)"),
             (960, "hud_timer_stop(PLAYER_TIMER[REMOTE_PLAYER])", "coop_each_remote_slot(hud_timer_stop, PLAYER_TIMER)"),
-        ],
+        ] + per_player_waypoints("player", removes=(280,), adds=(293,), function=MISSION),
         blocks=[(141, 141, "PLAYER_TIMER", f"PLAYER_TIMER = coop_hud_slots(0, {REMOTE_HUD_SLOTS})")],
         each=("update_confessional_gps", "ep02_update_waypoint"),
     ),
