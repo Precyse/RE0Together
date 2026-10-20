@@ -192,8 +192,8 @@ void placeAt(uintptr_t human, uint32_t position, uint32_t orientation) {
                      {position, orientation, kTeleportFlagOn, kTeleportFlagOn, kTeleportFlagOff, kTeleportFlagOff});
 }
 
-// TB9: every remote is warped to the stage start. The default partner goes to the spot the game computed ([esp + 0x34]), so one remote
-// lands exactly where the shipped game puts it; the others take the next cells of a two-column grid behind the local player.
+// TB9: every remote is warped to the spot the game computed for the default partner ([esp + 0x34]). The spread of players on one
+// spot is MC5's (spread_rules, by guest rank), so the spot is not offset here as well.
 void __cdecl startPlaceEachRemote(JumpFrame* frame) {
     FpuGuard guard;
     const uintptr_t record = readDword(frame->regs.ebx + sr2::kTrailStartRecordOffset);
@@ -205,30 +205,14 @@ void __cdecl startPlaceEachRemote(JumpFrame* frame) {
         if (frame->regs.eax) placeAt(frame->regs.eax, gameSpot, orientation);
         return;
     }
-    uintptr_t humans[partner_rules::kMaxWalked];
-    size_t count = 0;
-    size_t defaultAt = partner_rules::kNone;
+    const Vec3 spot = diversion_remotes::vec3At(gameSpot);
     for (size_t i = 0; i < view.count(); ++i) {
-        if (!view.items()[i].human) continue;
-        if (i == view.defaultIndex) defaultAt = count;
-        humans[count++] = view.items()[i].human;
-    }
-    const Vec3 first = diversion_remotes::vec3At(addressOf(gameSlot(frame, sr2::kTrailStartLocalSlot)));
-    const Vec3 right = diversion_remotes::vec3At(record + sr2::kTrailStartRightOffset);
-    const Vec3 forward = diversion_remotes::vec3At(record + sr2::kTrailStartForwardOffset);
-    const auto spacing = static_cast<float>(readDouble(sr2::kTrailStartSpacing));
-    for (size_t at = 0; at < count; ++at) {
-        const size_t rank = trail_blazing_rules::placementRank(at, defaultAt);
-        Vec3 spot = diversion_remotes::vec3At(gameSpot);
-        uint32_t spotAddress = gameSpot;
-        if (rank != 0) {
-            spot = trail_blazing_rules::startPosition(first, right, forward, spacing, trail_blazing_rules::startCell(rank));
-            spotAddress = addressOf(&spot);
-        }
-        placeAt(humans[at], spotAddress, orientation);
+        const uintptr_t human = view.items()[i].human;
+        if (!human) continue;
+        placeAt(human, gameSpot, orientation);
         if (g_trace) {
-            logger::write("trace: trail blazing: stage start, remote 0x%X slot %u rank %zu placed at %.1f %.1f %.1f", static_cast<unsigned>(humans[at]),
-                          slotOf(humans[at]), rank, static_cast<double>(spot.x), static_cast<double>(spot.y), static_cast<double>(spot.z));
+            logger::write("trace: trail blazing: stage start, remote 0x%X slot %u placed at %.1f %.1f %.1f", static_cast<unsigned>(human),
+                          slotOf(human), static_cast<double>(spot.x), static_cast<double>(spot.y), static_cast<double>(spot.z));
         }
     }
 }

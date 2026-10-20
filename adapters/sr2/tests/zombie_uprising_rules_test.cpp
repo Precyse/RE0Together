@@ -4,7 +4,6 @@
 #include <iterator>
 #include <span>
 
-#include "../src/spread_rules.h"
 #include "../src/zombie_uprising_rules.h"
 #include "check.h"
 
@@ -26,13 +25,9 @@ constexpr float kPairs[][2] = {{0.25f, 0.75f}, {1.0f, 0.0f}, {0.3f, 0.7f}, {0.12
 bool almostEqual(float a, float b) { return a - b < kEpsilon && b - a < kEpsilon; }
 
 void testStartSpot() {
-    const Vec3 first = rules::startSpot(kMarker, kPartnerOffset, 0);
-    check(almostEqual(first.x, kMarker.x + kPartnerOffset) && first.y == kMarker.y && first.z == kMarker.z, "rank 0 is the shipped partner spot (x + 1, y, z)");
-    check(almostEqual(rules::startSpot(kMarker, kPartnerOffset, 1).x, kMarker.x + kPartnerOffset + spread_rules::kPlayerSpread), "rank 1 is one spread step further");
-    check(almostEqual(rules::startSpot(kMarker, kPartnerOffset, 2).x, kMarker.x + kPartnerOffset + 2 * spread_rules::kPlayerSpread), "rank 2 is two steps further");
-    const Vec3 third = rules::startSpot(kMarker, kPartnerOffset, 2);
-    check(third.y == kMarker.y && third.z == kMarker.z, "y and z are kept for every rank");
-    check(almostEqual(rules::startSpot(kMarker, kPartnerOffset, 1).x, 12.5f) && almostEqual(third.x, 14.0f), "P3 stands at +2.5 and P4 at +4.0 from the local player");
+    const Vec3 spot = rules::startSpot(kMarker, kPartnerOffset);
+    check(almostEqual(spot.x, kMarker.x + kPartnerOffset) && spot.y == kMarker.y && spot.z == kMarker.z,
+          "the start spot is the shipped partner spot (x + 1, y, z), the same for every remote (MC5 spreads them)");
 }
 
 void testHealthFraction() {

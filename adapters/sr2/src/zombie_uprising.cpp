@@ -56,7 +56,7 @@ Vec3 vec3At(uintptr_t address) {
     return value;
 }
 
-// ZU1: the wave start's four calls for every remote human, in the shipped order. Rank 0 is the shipped partner spot.
+// ZU1: the wave start's four calls for every remote human, in the shipped order, all at the shipped partner spot (MC5 spreads them).
 void __cdecl startEachRemote(GuestFrame* frame) {
     FpuGuard guard;
     const uintptr_t marker = dwordField(frame->regs.esi, sr2::kZombieStartMarkerOffset);
@@ -66,17 +66,17 @@ void __cdecl startEachRemote(GuestFrame* frame) {
     readMemory(sr2::kZombiePartnerStartOffset, &partnerOffset, sizeof(partnerOffset));
     Remote remotes[kMaxRemotes];
     const size_t count = remote_players::remotesWithHuman(remotes, kMaxRemotes);
-    for (size_t rank = 0; rank < count; ++rank) {
-        const uint32_t human = static_cast<uint32_t>(remotes[rank].human);
-        const Vec3 spot = rules::startSpot(markerPosition, static_cast<float>(partnerOffset), static_cast<uint32_t>(rank));
+    const Vec3 spot = rules::startSpot(markerPosition, static_cast<float>(partnerOffset));
+    for (size_t i = 0; i < count; ++i) {
+        const uint32_t human = static_cast<uint32_t>(remotes[i].human);
         guest_call::call(sr2::kRecruitSetMode, {.ecx = human}, {kRecruitNone});
         guest_call::call(sr2::kCharacterDontRegenerate, {.edi = human}, {kFlagOn});
         guest_call::call(sr2::kEvacuateFromVehicles, {.edi = human}, {kFlagOn});
         guest_call::call(sr2::kTeleportHuman, {.ecx = human},
                          {addressArg(&spot), orientation, kTeleportFlagA, kTeleportFlagB, kTeleportFlagC, kTeleportFlagD});
         if (g_trace) {
-            logger::write("trace: zombie: start, slot %u human 0x%X rank %zu at %.3f %.3f %.3f: no followers, no regeneration, out of vehicles",
-                          static_cast<unsigned>(remotes[rank].slot), static_cast<unsigned>(human), rank, static_cast<double>(spot.x), static_cast<double>(spot.y),
+            logger::write("trace: zombie: start, slot %u human 0x%X at %.3f %.3f %.3f: no followers, no regeneration, out of vehicles",
+                          static_cast<unsigned>(remotes[i].slot), static_cast<unsigned>(human), static_cast<double>(spot.x), static_cast<double>(spot.y),
                           static_cast<double>(spot.z));
         }
     }

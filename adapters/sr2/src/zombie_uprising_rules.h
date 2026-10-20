@@ -6,7 +6,6 @@
 #include <string>
 
 #include "partner_rules.h"
-#include "spread_rules.h"
 #include "sr2_addresses.h"
 
 // The pure rules of Zombie Uprising for 3 or 4 players (milestone 17 wave 3, unit tested; docs/SR2_NOTES.md, "Zombie Uprising for 3 to 4
@@ -18,11 +17,10 @@ constexpr size_t kSpawnPairSlots = 2;     // the players the game's own array ho
 constexpr size_t kExtraSlots = kSpawnPlayerSlots - kSpawnPairSlots;
 static_assert(kSpawnPlayerSlots == sr2::kMaxWalkedPlayers);
 
-// Where remote number `rank` (0 for the lowest slot) is placed at the wave start: the shipped partner spot, `partnerOffset` along x from
-// the marker, then one spread step further per rank along the same direction.
-inline partner_rules::Vec3 startSpot(partner_rules::Vec3 marker, float partnerOffset, uint32_t rank) {
-    const spread_rules::Offset step = spread_rules::stepsAlong(rank, 1, 0);
-    return {marker.x + partnerOffset + step.x, marker.y, marker.z + step.z};
+// Where every remote is placed at the wave start: the shipped partner spot, `partnerOffset` along x from the marker. Players placed on
+// one spot are spread by MC5 (spread_rules, by guest rank), so the spot is the same for all.
+inline partner_rules::Vec3 startSpot(partner_rules::Vec3 marker, float partnerOffset) {
+    return {marker.x + partnerOffset, marker.y, marker.z};
 }
 
 // A human's health as a fraction of its maximum, 0 without a maximum.
