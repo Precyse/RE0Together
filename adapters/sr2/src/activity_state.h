@@ -26,9 +26,10 @@ class LeaverDecline {
 public:
     explicit LeaverDecline(uintptr_t leaver) { context_[1] = static_cast<uint32_t>(leaver); }
 
-    uint32_t message() const { return addressOf(message_); }
-    uint32_t cursor() const { return addressOf(&cursor_); }
-    uint32_t context() const { return addressOf(context_); }
+    // Not const: the handler stores through the cursor (0x6A8983), so the object must not be a const one.
+    uint32_t message() { return addressOf(message_); }
+    uint32_t cursor() { return addressOf(&cursor_); }
+    uint32_t context() { return addressOf(context_); }
 
 private:
     static uint32_t addressOf(const void* part) { return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(part)); }
@@ -37,6 +38,9 @@ private:
     uint32_t cursor_ = 0;
     uint32_t context_[2] = {0, 0};
 };
+
+// True when a member that leaves without answering a request counts as a decline: it is a remote member, not this machine's own.
+bool leaverCountsAsDecline(uintptr_t leaver);
 
 // The remote members that are in the game, written to `members`; their count.
 size_t remoteMembersInGame(uintptr_t (&members)[activity_rules::kMaxMembers]);

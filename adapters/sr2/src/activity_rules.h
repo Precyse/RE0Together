@@ -70,6 +70,14 @@ private:
     size_t count_ = 0;
 };
 
+// What a member that leaves without answering a request counts for. It counts as a decline only when it is a remote member: the
+// member left callback also runs for this machine's own member (the host ending its session), which answered nothing. `flag` is the byte
+// at sr2::kMemberLocalFlagOffset.
+inline bool leaverCountsAsDecline(uint8_t flag) { return flag == 0; }
+
+// The game's decline handler 0x6A8960 reads the local player's flags without a null check, so it runs only while there is one.
+inline bool declineHandlerCanRun(uintptr_t localPlayer) { return localPlayer != 0; }
+
 // The two competitive diversions (cat and mouse, death tag) are 1 against 1: with more than one remote player they do
 // not start.
 inline bool blocksCompetitiveStart(size_t remoteHumans) { return remoteHumans > 1; }

@@ -40,6 +40,10 @@ uintptr_t senderOf(uintptr_t context) {
     return context ? readDword(context + sr2::kMessageContextMemberOffset) : 0;
 }
 
+bool leaverCountsAsDecline(uintptr_t leaver) {
+    return leaver && activity_rules::leaverCountsAsDecline(readByte(leaver + sr2::kMemberLocalFlagOffset));
+}
+
 size_t remoteMembersInGame(uintptr_t (&members)[activity_rules::kMaxMembers]) {
     remote_players::Snapshot snapshot;
     remote_players::takeMembers(snapshot);

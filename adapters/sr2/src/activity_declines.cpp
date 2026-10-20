@@ -39,8 +39,8 @@ void startWaitLeaverDeclines(uintptr_t leaver) {
         logger::write("trace: start wait: member 0x%X left, counted as a decline, %zu remaining -> %s", static_cast<unsigned>(leaver), outcome.staying,
                       outcome.ends ? "every remote has declined, the start ends" : "the start goes on");
     }
-    if (!outcome.ends) return;
-    const activity_state::LeaverDecline decline(leaver);
+    if (!outcome.ends || !activity_rules::declineHandlerCanRun(readDword(sr2::kLocalPlayer))) return;
+    activity_state::LeaverDecline decline(leaver);
     guest_call::call(g_declineHandler, {.edx = decline.message()}, {decline.cursor(), decline.context()});
 }
 
@@ -60,7 +60,7 @@ void zombieRequestLeaverDeclines(uintptr_t leaver) {
                       outcome.staying, outcome.ends ? "every remote has declined" : "waiting for the others");
     }
     if (!outcome.ends) return;
-    const activity_state::LeaverDecline decline(leaver);
+    activity_state::LeaverDecline decline(leaver);
     guest_call::call(reinterpret_cast<uintptr_t>(g_zombieAnswerOriginal), {}, {decline.message(), decline.context()});
 }
 
@@ -102,7 +102,7 @@ bool zombieDeclined(uint32_t dialog, uintptr_t member) {
 void** zombieAnswerOriginal() { return &g_zombieAnswerOriginal; }
 
 void memberLeft(uintptr_t leaver) {
-    if (!activity_state::isHost()) return;
+    if (!activity_state::isHost() || !activity_state::leaverCountsAsDecline(leaver)) return;
     startWaitLeaverDeclines(leaver);
     zombieRequestLeaverDeclines(leaver);
 }

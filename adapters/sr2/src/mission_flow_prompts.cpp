@@ -388,7 +388,7 @@ void memberLeft(uintptr_t leaver) {
         g_replayRequester = {};
         if (g_trace) logger::write("trace: mission flow: slot %u left: forgot the replay requester", slotOf(leaver));
     }
-    if (leaver) replayWaitLeaverDeclines(leaver);
+    if (activity_state::leaverCountsAsDecline(leaver)) replayWaitLeaverDeclines(leaver);
     const uintptr_t human = remote_players::humanOfMember(leaver);
     if (!g_trace || !human) return;
     const uint32_t handle = readDword(human + sr2::kObjectHandleOffset);

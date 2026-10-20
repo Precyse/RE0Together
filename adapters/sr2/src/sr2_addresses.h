@@ -80,6 +80,7 @@ constexpr uintptr_t kSessionPointer = 0x2528C14;
 constexpr uintptr_t kSessionMemberListOffset = 0x400;
 constexpr uintptr_t kSessionLocalMemberOffset = 0x408;
 constexpr uintptr_t kMemberNextOffset = 0x22CC;
+constexpr uintptr_t kMemberLocalFlagOffset = 0;  // byte: 0 for a remote member, set for this machine's own (0x8CB260 and 0x80F9B0 test it)
 constexpr uintptr_t kMemberStateOffset = 0x3C;
 constexpr uintptr_t kMemberSlotOffset = 0x1B0;  // byte: the session slot the 8-peer deltacomp arrays are indexed by
 

@@ -86,6 +86,11 @@ int main() {
         check(!earlier.declinedAll(kOtherRequest, kSecond, both, 2), "a leaver of an earlier request does not count for a new one");
     }
 
+    check(activity_rules::leaverCountsAsDecline(0) && !activity_rules::leaverCountsAsDecline(1),
+          "a remote member that leaves counts as a decline, this machine's own member does not");
+    check(activity_rules::declineHandlerCanRun(0x2170000) && !activity_rules::declineHandlerCanRun(0),
+          "the game's decline handler runs only while there is a local player");
+
     check(!activity_rules::blocksCompetitiveStart(0) && !activity_rules::blocksCompetitiveStart(1) &&
               activity_rules::blocksCompetitiveStart(2),
           "cat and mouse and death tag start with one remote, not with two");
