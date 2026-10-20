@@ -15,6 +15,7 @@ MSG_GAME_DATAGRAM = 0x0100
 BROADCAST = 0xFFFFFFFF
 MAX_DATAGRAM = 1300
 PING_BYTES = 20
+USABLE_LAST_OCTETS = 254
 
 LEN_FIELD = struct.Struct("<I")
 HEADER = struct.Struct("<HBB")
@@ -77,3 +78,9 @@ def split_datagram(payload):
 
 def dotted(address):
     return socket.inet_ntoa(struct.pack(">I", address))
+
+
+def virtual_address(steam_id):
+    """The dotted 10.a.b.c of a SteamID64 (tunnel_rules::virtualAddress)."""
+    account = steam_id & 0xFFFFFFFF
+    return f"10.{(account >> 16) & 0xFF}.{(account >> 8) & 0xFF}.{1 + (account & 0xFF) % USABLE_LAST_OCTETS}"
