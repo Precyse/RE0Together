@@ -7,9 +7,11 @@
 #include <optional>
 #include <vector>
 
+#include "character_owner.h"
 #include "debug_stats.h"
 #include "enemy_decision.h"
 #include "enemy_follow_rule.h"
+#include "enemy_lease.h"
 #include "enemy_observer_capture.h"
 #include "enemy_observer_game.h"
 #include "enemy_observer_rule.h"
@@ -73,7 +75,6 @@ struct World {
     uint32_t epoch = 0;
     std::optional<stream_clock::StreamClock> clock;  // the holder's clock; nothing before its first pose
     uint32_t nowMs = 0;
-    uint32_t targetMs = 0;  // the simulator's time to show
     std::array<uintptr_t, game::kEnemyPoolSlots> pool{};
 };
 World g_world;
@@ -94,7 +95,11 @@ const char* name(Hold hold) {
 // What this machine keeps about the enemy in one pool slot; it starts over when the slot holds another enemy.
 struct Slot {
     uintptr_t enemy = 0;
-    bool observer = false;  // an Observer-class enemy whose spawn is known
+    bool observer = false;  // an Observer-class enemy whose spawn is known and that a stream shows
+    enemy_lease::Role role = enemy_lease::Role::None;  // Away: shown from the lease holder's stream; Held: simulated here
+    uint8_t source = 0;                               // the machine whose stream shows it
+    std::optional<stream_clock::StreamClock> clock;   // that machine's clock; nothing before its first message
+    uint32_t targetMs = 0;                            // the source's time to show
     rule::LocalEnemy local;
     rule::ConstructionGate gate;
     bool released = false;         // the simulator removed the unit: its own code takes it out
@@ -116,6 +121,7 @@ uint32_t g_nextLogMs = 0;
 bool g_logStarted = false;
 std::vector<rule::MotionItem> g_due;
 rule::CreatePacer g_pacer;
+bool g_slotsLive = false;  // the pool slots below describe this frame (a stream shows some enemy of the room)
 bool g_waiting = false;  // the observed room lost its simulator and nobody holds it yet
 uint32_t g_waitSinceMs = 0;
 
@@ -182,10 +188,7 @@ World readWorld() {
         next.holderSlot = holder->slot;
         next.epoch = holder->epoch;
     }
-    if (next.observing) {
-        next.clock = puppet::clockFor(next.holderSlot);
-        if (next.clock) next.targetMs = next.clock->target(next.nowMs);
-    }
+    if (next.observing) next.clock = puppet::clockFor(next.holderSlot);
     for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) next.pool[static_cast<size_t>(slot)] = enemy_registry::enemyAt(slot);
     return next;
 }
@@ -226,6 +229,24 @@ void handOver(const World& next) {
                   static_cast<unsigned>(next.scene), next.epoch, resumed, atStepZero);
 }
 
+// The enemies this machine gave away leave their stream scope and carry on from the state they were last shown in (only
+// within the same room: after a room change they are gone); every lease and queued grant is dropped (the room changed,
+// the peer left or the session ended).
+void releaseLeases(const World& next) {
+    unsigned resumed = 0;
+    for (size_t index = 0; index < g_slots.size() && next.scene == g_world.scene; ++index) {
+        wire::PoseEntry state{};
+        const uintptr_t enemy = next.pool[index];
+        if (g_slots[index].role != enemy_lease::Role::Away || g_slots[index].enemy != enemy || !enemy_observer_game::read(enemy, state)) {
+            continue;
+        }
+        carryOn(enemy, state);
+        ++resumed;
+    }
+    if (resumed > 0) logger::write("enemy_observer: %u enemies given away resumed", resumed);
+    enemy_lease::reset();
+}
+
 // The room lost its simulator and nobody holds it yet: the world stays as it was, so the observed enemies keep their
 // scope and hold their last motion until the claim arrives (or the wait runs out).
 World heldWorld(World next) {
@@ -240,7 +261,6 @@ World heldWorld(World next) {
     next.holderSlot = g_world.holderSlot;
     next.epoch = g_world.epoch;
     next.clock = g_world.clock;
-    next.targetMs = next.clock ? next.clock->target(next.nowMs) : 0;
     return next;
 }
 
@@ -257,10 +277,12 @@ void refreshWorld() {
         case rule::RoleChange::HandOver:
             g_waiting = false;
             handOver(next);
+            enemy_lease::reset();
             resetStreams();
             break;
         case rule::RoleChange::Restart:
             g_waiting = false;
+            releaseLeases(next);
             resetStreams();
             if (next.observing) {
                 logger::write("enemy_observer: showing scene 0x%02x from slot %u e%u", static_cast<unsigned>(next.scene), next.holderSlot, next.epoch);
@@ -279,22 +301,33 @@ void refreshSlots() {
         const uintptr_t enemy = g_world.pool[index];
         const int classIndex = enemy ? enemy_policy::classIndexOf(game::readPointer(enemy)) : enemy_policy::kNoClass;
         const std::optional<enemy_spawn::Origin> origin = enemy ? enemy_spawn::originOf(static_cast<int>(index), enemy) : std::nullopt;
+        const auto leaseSlot = static_cast<uint8_t>(index);
+        const enemy_lease::Role role = enemy_lease::roleOf(leaseSlot);
+        // The lease holder's stream shows an enemy given away; one held here is simulated natively; every other enemy is
+        // shown from the room's simulator when the peer runs the room.
+        const bool streamed = role == enemy_lease::Role::Away || (role == enemy_lease::Role::None && g_world.observing);
         const bool observer = origin && classIndex != enemy_policy::kNoClass &&
-                              rule::observed(enemy_policy::kClasses[static_cast<size_t>(classIndex)].policy, g_world.observing);
+                              rule::observed(enemy_policy::kClasses[static_cast<size_t>(classIndex)].policy, streamed);
         const rule::LocalEnemy local = observer ? rule::LocalEnemy{static_cast<uint8_t>(classIndex), origin->spawnId} : rule::LocalEnemy{};
-        if (slot.enemy == enemy && slot.observer == observer && slot.local == local) continue;
-        slot = Slot{};
-        slot.enemy = enemy;
-        slot.observer = observer;
-        slot.local = local;
+        if (slot.enemy != enemy || slot.observer != observer || slot.local != local) {
+            slot = Slot{};
+            slot.enemy = enemy;
+            slot.observer = observer;
+            slot.local = local;
+        }
+        slot.role = role;
+        slot.source = role == enemy_lease::Role::Away ? enemy_lease::peerOf(leaseSlot).value_or(g_world.holderSlot) : g_world.holderSlot;
+        slot.clock = role == enemy_lease::Role::Away ? puppet::clockFor(slot.source) : g_world.clock;
+        slot.targetMs = slot.clock ? slot.clock->target(g_world.nowMs) : 0;
     }
 }
 
 // ---- Game thread: draining the net thread's batches --------------------------------------------------------------
 
-// False (and counted) when the batch is not from the slot that runs this room under the table's epoch.
-bool accepted(const wire::Header& header, uint8_t sender) {
-    const rule::Refusal refusal = rule::refusalOf(header, sender, g_world.holderSlot, g_world.epoch, g_world.scene);
+// False (and counted) when the batch is not from the machine that shows the enemy in `slot`: the slot that runs this
+// room, or the holder of the lease on the enemy, under the table's epoch.
+bool accepted(const wire::Header& header, uint8_t sender, uint8_t slot) {
+    const rule::Refusal refusal = rule::refusalOf(header, sender, g_slots[slot].source, g_world.epoch, g_world.scene);
     if (refusal == rule::Refusal::None) return true;
     debug_stats::count(Counter::EnemyObserverRefused);
     logger::writeUnlessRepeated("enemy_observer: batch from slot %u refused (%s)", sender, rule::name(refusal));
@@ -307,8 +340,15 @@ void createOnDemand(const wire::PoseEntry& entry) {
     if (g_pacer.allow(entry.slot, g_world.nowMs)) enemy_spawn::createOnDemand(entry.slot, entry.spawnRecord, entry.spawnId);
 }
 
-void takePose(const wire::Header& header, const wire::PoseEntry& entry, uint32_t arrivalMs) {
+void takePose(const wire::Header& header, const wire::PoseEntry& entry, uint8_t sender, uint32_t arrivalMs) {
     Slot& slot = g_slots[entry.slot];
+    if (slot.role == enemy_lease::Role::Held) return;  // this machine simulates it; a pose of the authority sent before the grant is stale
+    const bool leased = (entry.flags & wire::kFlagLeased) != 0;
+    if (leased != (slot.role == enemy_lease::Role::Away)) {
+        debug_stats::count(Counter::EnemyObserverRefused);
+        return;
+    }
+    if (!accepted(header, sender, entry.slot)) return;
     if (rule::createWanted(g_world.pool[entry.slot] == 0, entry)) return createOnDemand(entry);
     if (!slot.observer || !rule::bound(slot.local, entry)) {
         if (!slot.bindingRefused) {
@@ -320,8 +360,9 @@ void takePose(const wire::Header& header, const wire::PoseEntry& entry, uint32_t
         debug_stats::count(Counter::EnemyObserverRefused);
         return;
     }
+    if (!slot.clock || (leased && !enemy_lease::acceptPose(entry, sender, arrivalMs))) return;
     slot.bindingRefused = false;
-    slot.timeline.push(*g_world.clock, rule::sampleOf(header, entry, arrivalMs));
+    slot.timeline.push(*slot.clock, rule::sampleOf(header, entry, arrivalMs));
     debug_stats::count(Counter::EnemyObserverPoses);
 }
 
@@ -332,12 +373,12 @@ void drainPoses() {
         batches.swap(g_poses);
     }
     for (const PoseArrival& arrival : batches) {
-        if (!g_world.clock || !accepted(arrival.batch.header, arrival.sender)) continue;
-        for (const wire::PoseEntry& entry : arrival.batch.entries) takePose(arrival.batch.header, entry, arrival.arrivalMs);
+        for (const wire::PoseEntry& entry : arrival.batch.entries) takePose(arrival.batch.header, entry, arrival.sender, arrival.arrivalMs);
     }
 }
 
-void takeMotion(const wire::Header& header, const wire::MotionEntry& entry) {
+void takeMotion(const wire::Header& header, const wire::MotionEntry& entry, uint8_t sender) {
+    if (g_slots[entry.slot].role == enemy_lease::Role::Held || !accepted(header, sender, entry.slot)) return;
     const uint32_t seq = g_motionSeqKnown ? rule::extendSeq(g_motionSeq, entry.seqLow) : entry.seqLow;
     if (!g_motionSeqKnown || stream_clock::after(seq, g_motionSeq)) g_motionSeq = seq;
     g_motionSeqKnown = true;
@@ -352,8 +393,7 @@ void drainMotions() {
         batches.swap(g_motions);
     }
     for (const MotionArrival& arrival : batches) {
-        if (!accepted(arrival.batch.header, arrival.sender)) continue;
-        for (const wire::MotionEntry& entry : arrival.batch.entries) takeMotion(arrival.batch.header, entry);
+        for (const wire::MotionEntry& entry : arrival.batch.entries) takeMotion(arrival.batch.header, entry, arrival.sender);
     }
 }
 
@@ -391,17 +431,17 @@ void announce(size_t index, Slot& slot) {
     if (slot.announced) return;
     slot.announced = true;
     logger::write("enemy_observer: slot %zu (%s) observed from slot %u e%u", index, enemy_policy::nameOf(slot.local.classIndex),
-                  g_world.holderSlot, g_world.epoch);
+                  slot.source, g_world.epoch);
 }
 
 // Applies what the stream shows for this frame to the enemy, before its unit move. The enemy keeps its last state when
 // the stream gives nothing; false when the simulator removed the unit (its own update runs from now on).
 bool drive(size_t index, uintptr_t enemy, Slot& slot) {
-    if (!g_world.clock) {
+    if (!slot.clock) {
         noteHold(index, slot, Hold::NoData);
         return true;
     }
-    const rule::Shown shown = slot.timeline.render(*g_world.clock, g_world.nowMs);
+    const rule::Shown shown = slot.timeline.render(*slot.clock, g_world.nowMs);
     if (shown.stale) {
         noteHold(index, slot, Hold::Stale);
         return true;
@@ -428,7 +468,7 @@ bool drive(size_t index, uintptr_t enemy, Slot& slot) {
     }
     enemy_observer_game::write(enemy, shown.sample);
     g_due.clear();
-    slot.motions.takeDue(g_world.targetMs, g_due);
+    slot.motions.takeDue(slot.targetMs, g_due);
     for (const rule::MotionItem& item : g_due) replayMotion(index, enemy, slot, item);
     followBody(index, enemy, slot, shown.sample);
     return true;
@@ -440,14 +480,14 @@ int poolIndexOf(uintptr_t unit) {
     return found == g_world.pool.end() ? kNoIndex : static_cast<int>(found - g_world.pool.begin());
 }
 
-// Index of the pool slot whose engine update is replaced for `unit` now (an observed enemy past construction, or one
-// that freeze() holds), or kNoIndex.
+// Index of the pool slot whose engine update is replaced for `unit` now (an enemy a stream shows, past construction, or
+// one that freeze() holds), or kNoIndex.
 int scopedSlot(uintptr_t unit) {
     const int index = poolIndexOf(unit);
     if (index == kNoIndex) return kNoIndex;
     Slot& slot = g_slots[static_cast<size_t>(index)];
     if (slot.frozenEnemy == unit) return index;
-    if (!g_world.observing) return kNoIndex;
+    if (!g_slotsLive) return kNoIndex;
     int32_t state = rule::kSetupState;
     if (!slot.observer || !enemy_observer_game::recordState(unit, state)) return kNoIndex;
     slot.gate.note(state);
@@ -490,12 +530,13 @@ void logOncePerSecond() {
 
 void onTick() {
     refreshWorld();
-    if (g_world.simulating) {
-        enemy_observer_capture::tick(g_world.scene, g_world.epoch);
+    if (g_world.simulating || enemy_lease::anyHeld()) {
+        enemy_observer_capture::tick(g_world.scene, g_world.epoch, g_world.simulating);
     } else {
         enemy_observer_capture::stop();
     }
-    if (!g_world.observing) return dropPending();
+    g_slotsLive = g_world.observing || enemy_lease::anyAway();
+    if (!g_slotsLive) return dropPending();
     refreshSlots();
     g_pacer.beginFrame();
     drainPoses();
@@ -528,6 +569,11 @@ void uninstall() {
 
 rule::Simulator simulatorOf(uint8_t slot) {
     if (slot >= game::kEnemyPoolSlots) return {};
+    switch (enemy_lease::roleOf(slot)) {
+        case enemy_lease::Role::Away: return {true, false, enemy_lease::peerOf(slot).value_or(0)};
+        case enemy_lease::Role::Held: return {true, true, character_owner::localSlot()};
+        case enemy_lease::Role::None: break;
+    }
     const std::optional<room_authority::Holder> holder = room_authority::holderOf(scene::current());
     if (!holder) return {};
     return {true, holder->here, holder->slot};
@@ -558,10 +604,22 @@ bool startAt(int slot, const int32_t (&record)[4]) {
     return true;
 }
 
-bool observes(uintptr_t enemy) {
-    if (!g_world.observing) return false;
+bool replicates(uintptr_t enemy) {
     const int index = poolIndexOf(enemy);
-    return index != kNoIndex && g_slots[static_cast<size_t>(index)].observer;
+    if (index == kNoIndex) return false;
+    const Slot& slot = g_slots[static_cast<size_t>(index)];
+    return slot.role == enemy_lease::Role::Held || (g_slotsLive && slot.observer);
+}
+
+bool resume(int slot, const wire::PoseEntry& state) {
+    if (slot < 0 || slot >= game::kEnemyPoolSlots) return false;
+    const uintptr_t enemy = g_world.pool[static_cast<size_t>(slot)];
+    if (!enemy) return false;
+    float quat[4];
+    pose_wire::unpackQuat(state.quat, quat);
+    enemy_observer_game::place(enemy, state.pos, quat, state.hp);
+    carryOn(enemy, state);
+    return true;
 }
 
 }  // namespace enemy_observer

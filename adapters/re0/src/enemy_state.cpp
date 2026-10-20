@@ -157,7 +157,7 @@ void applyEntry(const EnemyEntry& entry) {
         follow = Follow{};
         return logMismatchOnce(entry, enemy ? "spawned a different class" : "has no local enemy");
     }
-    if (state_mode::on() && enemy_observer::observes(enemy)) return;  // shown from the simulator's stream (enemy_observer)
+    if (state_mode::on() && enemy_observer::replicates(enemy)) return;  // shown from a stream or simulated under a lease (enemy_observer)
     follow.valid = true;
     follow.target = entry.target;
     follow.ownerHp = entry.hp;

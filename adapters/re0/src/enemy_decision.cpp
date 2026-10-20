@@ -108,7 +108,7 @@ void __fastcall thinkDetour(void* enemy, void* edx) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
     const int slot = enemy_registry::slotOf(self);
     if (slot == enemy_registry::kNoSlot) return g_originalThink(enemy, edx);
-    if (state_mode::on() && enemy_observer::observes(self)) return g_originalThink(enemy, edx);
+    if (state_mode::on() && enemy_observer::replicates(self)) return g_originalThink(enemy, edx);
     if (enemy_state::followsOwner()) return thinkForOwner(enemy, edx, static_cast<uint8_t>(slot));
     Action before;
     const bool reports = enemy_state::leadsPeer() && readAction(self, before);
@@ -134,7 +134,7 @@ void boundaryForOwner(void* enemy, uint8_t slot, const Action& local) {
 // the call is an action boundary. A replacement set after the call starts as a new action on the next frame.
 void runExecutor(size_t executor, void* enemy, void* edx) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
-    if (state_mode::on() && enemy_observer::observes(self)) return g_originalExecutors[executor](enemy, edx);
+    if (state_mode::on() && enemy_observer::replicates(self)) return g_originalExecutors[executor](enemy, edx);
     Action before;
     const bool readBefore = readAction(self, before);
     g_originalExecutors[executor](enemy, edx);

@@ -2,7 +2,9 @@
 
 #include <atomic>
 
+#include "contact_net.h"
 #include "door_follow.h"
+#include "enemy_lease.h"
 #include "enemy_observer.h"
 #include "flag_sequencer.h"
 #include "game_tick.h"
@@ -20,7 +22,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 11;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, enemy observer, item ledger, room move, door follow
+constexpr unsigned kModuleCount = 13;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow
 
 std::atomic<bool> g_on{false};
 
@@ -47,6 +49,10 @@ void enableAll(NetClient& net) {
     if (flag_sequencer::enable()) ++enabled;
     if (weapon_fx_capture::enable()) ++enabled;
     if (weapon_fx_replay::enable()) ++enabled;
+    // The contact and lease ticks run before the enemy observer's, so a lease granted or started in a frame scopes or frees
+    // its enemy in the same frame.
+    if (contact_net::enable()) ++enabled;
+    if (enemy_lease::enable()) ++enabled;
     if (enemy_observer::enable()) ++enabled;
     if (item_ledger::enable()) ++enabled;
     if (room_move::enable()) ++enabled;

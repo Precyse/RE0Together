@@ -58,10 +58,14 @@ bool read(uintptr_t enemy, enemy_observer_wire::PoseEntry& entry) {
 
 bool recordState(uintptr_t enemy, int32_t& state) { return game::readMemory(enemy + game::kEnemyActionOffset, state); }
 
+void place(uintptr_t enemy, const float (&pos)[3], const float (&quat)[4], int32_t hp) {
+    game::writeTransform(enemy, pos, quat);
+    int32_t current = 0;
+    if (game::readMemory(enemy + game::kEnemyHpOffset, current) && current != hp) player_damage::setHp(enemy, hp);
+}
+
 void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
-    game::writeTransform(enemy, shown.pos, shown.quat);
-    int32_t hp = 0;
-    if (game::readMemory(enemy + game::kEnemyHpOffset, hp) && hp != shown.hp) player_damage::setHp(enemy, shown.hp);
+    place(enemy, shown.pos, shown.quat, shown.hp);
     if (enemy_observer_rule::recordApplies(shown.record)) game::writeMemory(enemy + game::kEnemyActionOffset, shown.record);
     writeHitAttributes(enemy, shown.hitAttr);
     game::writeMemory(enemy + game::kEnemyFlags6a0cOffset, shown.flags6a0c);

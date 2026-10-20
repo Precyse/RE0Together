@@ -17,9 +17,10 @@ bool entryFor(int slot, uintptr_t enemy, enemy_observer_wire::PoseEntry& entry);
 // not be installed or the observer list is full.
 bool enable();
 
-// Game thread, once per frame while this machine runs `scene` (room authority epoch `epoch`) with the peer in it:
-// flushes the frame's motion requests and sends the pose round when it is due.
-void tick(uint16_t scene, uint32_t epoch);
+// Game thread, once per frame while this machine streams enemies of `scene` (room authority epoch `epoch`) to the peer:
+// either it runs the room (`simulatesRoom`: every enemy it has not given away) or it holds leases (only those enemies,
+// named by their token). Flushes the frame's motion requests and sends the pose round when it is due.
+void tick(uint16_t scene, uint32_t epoch, bool simulatesRoom);
 
 // Game thread: this machine stopped being the room's simulator (room left, authority lost, peer gone). Forgets what was
 // sent; the next tick starts over.

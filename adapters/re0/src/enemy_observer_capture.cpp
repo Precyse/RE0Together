@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "debug_stats.h"
+#include "enemy_lease.h"
+#include "enemy_lease_rule.h"
 #include "enemy_observer_game.h"
 #include "enemy_observer_send_rule.h"
 #include "enemy_observer_wire.h"
@@ -37,6 +39,7 @@ struct PendingMotion {
 };
 
 bool g_capturing = false;  // game thread only, like everything below
+bool g_simulatesRoom = false;  // this machine runs the room (else it streams only the enemies it holds a lease on)
 uint16_t g_scene = 0;
 uint32_t g_epoch = 0;
 uint32_t g_batchSeq = 0;   // one number per batch of either type
@@ -50,12 +53,15 @@ uint32_t g_bytesSent = 0;
 uint32_t g_nextLogMs = 0;
 bool g_logStarted = false;
 
+// This machine streams the enemy in `slot`: all of the room's it keeps, or the ones it holds a lease on.
+bool streamsSlot(int slot) { return enemy_lease_rule::streams(g_simulatesRoom, enemy_lease::roleOf(static_cast<uint8_t>(slot))); }
+
 void onMotionRequest(uintptr_t animControl, const pose_game::MotionRequest& request) {
     if (!g_capturing || request.layer >= pose_wire::kMotionLayers) return;
     const uintptr_t enemy = animControl - game::kAnimControlOffset;
     if (enemy_policy::policyOf(game::readPointer(enemy)) != enemy_policy::Policy::Observer) return;
     const int slot = enemy_registry::slotOf(enemy);
-    if (slot == enemy_registry::kNoSlot || g_pending.size() >= kMaxPendingMotions) return;
+    if (slot == enemy_registry::kNoSlot || !streamsSlot(slot) || g_pending.size() >= kMaxPendingMotions) return;
     g_pending.push_back({pose_wire::clockMs(),
                          {static_cast<uint8_t>(slot), static_cast<uint8_t>(request.layer), static_cast<uint16_t>(request.motionNo),
                           request.flags, request.interp, request.start, 0, 0}});
@@ -92,31 +98,35 @@ void sendRound(uint32_t nowMs) {
     std::vector<wire::PoseEntry> reliable;
     g_planner.startRound();
     for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
+        if (!streamsSlot(slot)) continue;
         const uintptr_t enemy = enemy_registry::enemyAt(slot);
         wire::PoseEntry entry{};
         const bool present = enemy_observer_capture::entryFor(slot, enemy, entry);
+        const uint16_t token = enemy_lease::tokenOf(static_cast<uint8_t>(slot));
+        const uint8_t leased = token != 0 ? wire::kFlagLeased : 0;
+        entry.leaseToken = token;
         const bool alive = present && entry.hp > 0;
         const send_rule::Action action = g_planner.next(static_cast<uint8_t>(slot), present, alive, static_cast<uint32_t>(enemy));
         wire::PoseEntry& last = g_last[static_cast<size_t>(slot)];
         switch (action) {
             case send_rule::Action::Pose:
-                entry.flags = wire::kFlagAlive;
+                entry.flags = wire::kFlagAlive | leased;
                 last = entry;
                 unreliable.push_back(entry);
                 break;
             case send_rule::Action::Corpse:
-                entry.flags = wire::kFlagTerminal;
+                entry.flags = wire::kFlagTerminal | leased;
                 last = entry;
                 unreliable.push_back(entry);
                 break;
             case send_rule::Action::Terminal:
-                entry.flags = wire::kFlagTerminal;
+                entry.flags = wire::kFlagTerminal | leased;
                 last = entry;
                 reliable.push_back(entry);
                 logger::write("enemy_observer: slot %d terminal", slot);
                 break;
             case send_rule::Action::Removed:
-                last.flags = wire::kFlagRemoved;
+                last.flags = wire::kFlagRemoved | (last.flags & wire::kFlagLeased);
                 reliable.push_back(last);
                 logger::write("enemy_observer: slot %d removed", slot);
                 break;
@@ -164,8 +174,9 @@ bool entryFor(int slot, uintptr_t enemy, wire::PoseEntry& entry) {
 
 bool enable() { return pose_game::addAnimObserver(onMotionRequest); }
 
-void tick(uint16_t scene, uint32_t epoch) {
+void tick(uint16_t scene, uint32_t epoch, bool simulatesRoom) {
     g_capturing = true;
+    g_simulatesRoom = simulatesRoom;
     g_scene = scene;
     g_epoch = epoch;
     const uint32_t now = pose_wire::clockMs();

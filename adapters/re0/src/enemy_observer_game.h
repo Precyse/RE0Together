@@ -16,6 +16,9 @@ bool read(uintptr_t enemy, enemy_observer_wire::PoseEntry& entry);
 // Word 0 of the enemy's behaviour record (kSetupState while it is still constructing).
 bool recordState(uintptr_t enemy, int32_t& state);
 
+// Puts the enemy at a pose and sets its HP through setHP when it differs (a lease grant, the end of a lease).
+void place(uintptr_t enemy, const float (&pos)[3], const float (&quat)[4], int32_t hp);
+
 // Writes the shown sample into the enemy: position and rotation, HP (through setHP, only when it differs), the record
 // words once the simulator's enemy has left its setup state, the hit attributes and +0x6a0c.
 void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown);
