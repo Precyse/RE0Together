@@ -13,6 +13,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "net_pad.h"
+#include "pose_wire.h"
 #include "protocol.h"
 #include "room_phase.h"
 #include "save_gate.h"
@@ -49,6 +50,7 @@ std::atomic<int32_t> g_slot{kUnknown};
 std::atomic<int32_t> g_hostPhase{room_phase::kUnreadable};  // guest: the host's last announced room phase
 Announcement g_announced{kUnknown, room_phase::kUnreadable};  // net thread only
 Clock::time_point g_lastAnnounce;
+save_gate_rule::Patience g_patience;  // game thread: how long the save screen's request has been refused
 
 bool guestInSession() { return net_pad::active() && !character_owner::isHost(); }
 
@@ -87,10 +89,17 @@ bool __fastcall loadAltDetour(void* self, void* edx, int32_t slot, int32_t arg) 
     return accepted;
 }
 
-// State mode: the host's save waits until the partner stands in plain gameplay.
+// State mode: the host's save waits until the partner stands in plain gameplay, for at most save_gate_rule::kMaxWaitMs
+// (the save screen has no other way out of a refused request).
 bool partnerSettled() {
     const save_gate_rule::Verdict verdict = save_gate::check();
-    if (verdict == save_gate_rule::Verdict::Plain) return true;
+    switch (g_patience.decide(verdict, pose_wire::clockMs())) {
+        case save_gate_rule::Decision::Save: return true;
+        case save_gate_rule::Decision::SaveUnsettled:
+            logger::write("session_slot: saved without the partner settled (%s)", save_gate_rule::name(verdict));
+            return true;
+        case save_gate_rule::Decision::Wait: break;
+    }
     debug_stats::count(debug_stats::Counter::SaveWaits);
     logger::writeUnlessRepeated("session_slot: save waits for plain gameplay (%s)", save_gate_rule::name(verdict));
     return false;

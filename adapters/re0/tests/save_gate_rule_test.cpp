@@ -42,11 +42,51 @@ void testDoorAndScript() {
 }
 
 void testPose() {
-    check(rule::judge({std::nullopt, false, false}, kNow) == rule::Verdict::NoPose, "no pose waits");
+    check(rule::judge({std::nullopt, false, false}, kNow) == rule::Verdict::Plain, "a partner with no pose has nothing changing");
+    check(rule::judge({std::nullopt, true, true}, kNow) == rule::Verdict::Plain, "no pose is plain whatever else is reported");
     check(rule::judge({standing(0, 0, kNow - peer_sight::kFreshMs - 1), false, false}, kNow) == rule::Verdict::StalePose,
           "a stale pose waits");
     check(rule::judge({standing(0, 0, kNow - peer_sight::kFreshMs), false, false}, kNow) == rule::Verdict::Plain,
           "a pose at the freshness limit counts");
+}
+
+// The save screen asks once a frame; returns the first ask (ms after the start) that goes through, or -1.
+int firstThrough(rule::Patience& patience, rule::Verdict verdict, uint32_t startMs, uint32_t spanMs) {
+    constexpr uint32_t kFrameMs = 16;
+    for (uint32_t elapsed = 0; elapsed <= spanMs; elapsed += kFrameMs) {
+        if (patience.decide(verdict, startMs + elapsed) != rule::Decision::Wait) return static_cast<int>(elapsed);
+    }
+    return -1;
+}
+
+void testPatience() {
+    rule::Patience patience;
+    check(patience.decide(rule::Verdict::Plain, kNow) == rule::Decision::Save, "a plain verdict saves");
+    check(patience.decide(rule::Verdict::PartnerBusy, kNow) == rule::Decision::Wait, "a refusal waits");
+    rule::Patience frames;
+    const int through = firstThrough(frames, rule::Verdict::StalePose, kNow, 2 * rule::kMaxWaitMs);
+    check(through >= static_cast<int>(rule::kMaxWaitMs) && through < static_cast<int>(rule::kMaxWaitMs) + 16,
+          "a screen asking every frame is let through after the limit");
+    check(frames.decide(rule::Verdict::StalePose, kNow + through + 16) == rule::Decision::Wait,
+          "the request after a pass starts a new wait");
+
+    rule::Patience gap;
+    gap.decide(rule::Verdict::PartnerBusy, kNow);
+    check(gap.decide(rule::Verdict::PartnerBusy, kNow + rule::kMaxWaitMs + rule::kRequestGapMs) == rule::Decision::Wait,
+          "an ask after a pause is a new request, not the old wait");
+
+    rule::Patience reset;
+    reset.decide(rule::Verdict::PartnerBusy, kNow);
+    reset.decide(rule::Verdict::Plain, kNow + 1000);
+    check(reset.decide(rule::Verdict::PartnerBusy, kNow + 1100) == rule::Decision::Wait &&
+              reset.decide(rule::Verdict::PartnerBusy, kNow + rule::kMaxWaitMs) == rule::Decision::Wait,
+          "a plain answer restarts the count");
+
+    rule::Patience wrapped;
+    constexpr uint32_t kNearWrap = 0xffffff00u;
+    const int wrappedThrough = firstThrough(wrapped, rule::Verdict::PartnerBusy, kNearWrap, 2 * rule::kMaxWaitMs);
+    check(wrappedThrough >= static_cast<int>(rule::kMaxWaitMs) && wrappedThrough < static_cast<int>(rule::kMaxWaitMs) + 16,
+          "the wait survives the clock wrapping");
 }
 
 void testNames() {
@@ -61,6 +101,7 @@ int main() {
     testBusy();
     testDoorAndScript();
     testPose();
+    testPatience();
     testNames();
     if (g_failures == 0) std::printf("save_gate_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
