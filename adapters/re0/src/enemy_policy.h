@@ -11,6 +11,8 @@
 //   Legacy:   today's decision replay stays (enemy_decision, enemy_state, HIT_APPLIED) until probe X2 decides phase 18:
 //             the classes that pose their body from code or spawn and own other units.
 //   Native:   runs natively on both machines (event actors, stubs, static objects).
+// `hasSetAction` is false for a class whose vtable slot 63 is not a setAction (uEnemy3bRebecca shares the Rebecca demo
+// actor's 0x48ac80, which writes one byte through its first argument): nothing may call that slot with an action.
 namespace enemy_policy {
 
 enum class Policy : uint8_t { Observer, Legacy, Native };
@@ -19,6 +21,7 @@ struct EnemyClass {
     uintptr_t vtable;
     const char* name;
     Policy policy;
+    bool hasSetAction = true;
 };
 
 constexpr size_t kClassCount = game::kEnemyVtables.size();
@@ -47,7 +50,7 @@ constexpr std::array<EnemyClass, 38> kClasses = {{
     {0xcc5ae8, "uEnemy38", Policy::Observer},
     {0xcc0cb0, "uEnemy39", Policy::Observer},
     {0xcc13d8, "uEnemy3a", Policy::Legacy},
-    {0xcc1618, "uEnemy3bRebecca", Policy::Native},
+    {0xcc1618, "uEnemy3bRebecca", Policy::Native, false},
     {0xcc18e8, "uEnemy3c", Policy::Observer},
     {0xcc5c60, "uEnemy3e", Policy::Legacy},
     {0xcc1ce8, "uEnemy40", Policy::Observer},
@@ -86,6 +89,12 @@ constexpr int classIndexOf(uintptr_t vtable) {
 constexpr Policy policyOf(uintptr_t vtable) {
     const int index = classIndexOf(vtable);
     return index == kNoClass ? Policy::Native : kClasses[static_cast<size_t>(index)].policy;
+}
+
+// False when the class at this vtable has no setAction in slot 63; true for every other vtable.
+constexpr bool hasSetAction(uintptr_t vtable) {
+    const int index = classIndexOf(vtable);
+    return index == kNoClass || kClasses[static_cast<size_t>(index)].hasSetAction;
 }
 
 // Name of the class at a wire index; "?" past the table.

@@ -6,6 +6,7 @@
 
 #include "debug_stats.h"
 #include "enemy_net.h"
+#include "enemy_policy.h"
 #include "enemy_observer.h"
 #include "enemy_registry.h"
 #include "enemy_state.h"
@@ -47,9 +48,10 @@ enemy_follow_rule::PendingDecision& pendingFor(uint8_t slot) {
 
 bool readAction(uintptr_t enemy, Action& out) { return game::readMemory(enemy + game::kEnemyActionOffset, out.word); }
 
-// The class's own setAction (vtable slot 63), the way its code starts an action.
+// The class's own setAction (vtable slot 63), the way its code starts an action; a class without one is left alone.
 void setAction(void* enemy, const Action& action) {
     const uintptr_t vtable = game::readPointer(reinterpret_cast<uintptr_t>(enemy));
+    if (!enemy_policy::hasSetAction(vtable)) return;
     const uintptr_t function = game::readPointer(vtable + game::kEnemySetActionSlot * sizeof(uint32_t));
     game::callThiscall<void>(function, enemy, action.word[0], action.word[1], action.word[2], action.word[3]);
 }

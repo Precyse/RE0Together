@@ -72,6 +72,17 @@ void testWireIndexIsTheGameOrder() {
     check(names.size() == policy::kClassCount, "class names are unique");
 }
 
+void testOnlyRebeccaLacksASetAction() {
+    std::set<std::string> without;
+    for (const policy::EnemyClass& enemyClass : policy::kClasses) {
+        if (!enemyClass.hasSetAction) without.insert(enemyClass.name);
+    }
+    check(without == std::set<std::string>({"uEnemy3bRebecca"}), "only uEnemy3bRebecca has no setAction in slot 63");
+    check(!policy::hasSetAction(0xcc1618), "hasSetAction by vtable: 3bRebecca");
+    check(policy::hasSetAction(0xcc13d8) && policy::hasSetAction(0xcbdcd8), "hasSetAction by vtable: the other classes");
+    check(policy::hasSetAction(0), "an unknown vtable keeps the call it always had");
+}
+
 void testUnknownVtableIsNeverReplicated() {
     check(policy::classIndexOf(0) == policy::kNoClass, "no class for vtable 0");
     check(policy::classIndexOf(game::kControlledThinkVtable) == policy::kNoClass, "no class for a think vtable");
@@ -87,6 +98,7 @@ int main() {
     testLegacyAndNativeSetsAreExact();
     testObserverSetHoldsTheNamedClasses();
     testWireIndexIsTheGameOrder();
+    testOnlyRebeccaLacksASetAction();
     testUnknownVtableIsNeverReplicated();
     if (g_failures == 0) std::printf("enemy_policy_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
