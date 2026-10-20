@@ -240,15 +240,21 @@ void __declspec(naked) teamWipeStub() {
     }
 }
 
-// The caller compares esi with the eax of the inline getter loop: a remote passenger counts as the partner.
+// The caller compares esi with the eax of the inline getter loop: a remote passenger counts as the partner. The game keeps
+// the local player in ecx through the seat loop, so ecx and edx are saved too. The pops leave the flags of the test alone and
+// come before the replaced `mov edi, [esp + 0x1C]` (the stub's own return address makes it 0x20).
 void __declspec(naked) passengerIsRemoteStub() {
     __asm {
+        push ecx
+        push edx
         push eax
         push esi
         call isRemoteHuman
         add esp, 4
         test eax, eax
         pop eax
+        pop edx
+        pop ecx
         jz keep
         mov eax, esi
     keep:
