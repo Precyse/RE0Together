@@ -325,13 +325,19 @@ void afterMove(uintptr_t player) {
     logWindow();
 }
 
+void removeHooks() {
+    for (const Hook& hook : kHooks) hooks::remove(hook.address);
+}
+
 }  // namespace
 
 namespace weapon_fx_capture {
 
 bool enable() {
     for (const Hook& hook : kHooks) {
-        if (!hooks::install(hook.name, hook.address, hook.detour, hook.original)) return false;
+        if (hooks::install(hook.name, hook.address, hook.detour, hook.original)) continue;
+        removeHooks();  // the ones before it: a module that is not up must not leave capture hooks running
+        return false;
     }
     g_installed = true;
     game_tick::addPostMove("weapon_fx_capture", afterMove);
@@ -340,7 +346,7 @@ bool enable() {
 
 void uninstall() {
     if (!g_installed) return;
-    for (const Hook& hook : kHooks) hooks::remove(hook.address);
+    removeHooks();
     g_installed = false;
 }
 
