@@ -14,8 +14,10 @@
 #include "../src/player_sites.h"
 #include "../src/session_kick_sites.h"
 #include "../src/sr2_addresses.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -38,26 +40,10 @@ constexpr size_t kSets = 5;
 // block 0x7A37E0..0x7A3D2F, and the sites they must stay clear of.
 constexpr uintptr_t kJuicedMinimapOperands[] = {0x7A383C, 0x7A3876, 0x7A38B9, 0x7A38BF, 0x7A3B5E, 0x7A3B64, 0x7A3C13, 0x7A3C19};
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
 std::vector<Site> everySite() {
     std::vector<Site> all;
     for (const hud_sites::Set& set : hud_sites::kSets) all.insert(all.end(), set.sites.begin(), set.sites.end());
     return all;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
 }
 
 // The rel32 that ends the bytes of a site, as a displacement.
@@ -65,13 +51,6 @@ uint32_t trailingDisplacement(const Site& site) {
     const auto bytes = partner_sites::parseHex(site.expected);
     const size_t size = bytes.size();
     return bytes[size - 4] | bytes[size - 3] << 8 | bytes[size - 2] << 16 | static_cast<uint32_t>(bytes[size - 1]) << 24;
-}
-
-// Where the `call rel32` at the start of a site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 size_t setSize(std::string_view name) {
@@ -126,7 +105,7 @@ void theShapes() {
     const Site& hm3 = *siteNamed(all, "HM3");
     const auto join = partner_replacement::replacementFor(hm3, kThunk);
     check(join.size() == sizeOf(hm3) && join[0] == kJmpRel32 &&
-              std::all_of(join.begin() + kBranchBytes, join.end(), [](uint8_t b) { return b == partner_replacement::kNop; }),
+              std::all_of(join.begin() + kBranchBytes, join.end(), [](uint8_t b) { return b == kNop; }),
           "HM3 gets a jmp to the thunk and nops over the rest of the join");
 }
 

@@ -15,12 +15,6 @@ constexpr size_t kMaxStreamEntriesRead = 4096;
 
 namespace anim_stream_state {
 
-uint16_t readWord(uintptr_t address) {
-    uint16_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 uint8_t slotOfMember(uintptr_t member) {
     return member ? readByte(member + sr2::kMemberSlotOffset) : anim_stream_rules::kNoSlot;
 }

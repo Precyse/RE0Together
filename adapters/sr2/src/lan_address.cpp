@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "ascii_text.h"
 #include "code_patch.h"
 #include "lan_address_patches.h"
 #include "lan_address_rules.h"
@@ -24,20 +25,12 @@ constexpr ULONG kAdapterFlags =
     GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_INCLUDE_GATEWAYS;
 constexpr int kAdapterReadTries = 3;
 constexpr size_t kHostNameBytes = 256;
-constexpr unsigned kAsciiLimit = 0x80;
 
 bool g_trace = false;
 lan_address::OwnAddress g_virtualOwn = nullptr;
 std::once_flag g_chosenOnce;
 std::once_flag g_unknownOnce;
 std::optional<uint32_t> g_chosen;
-
-// Wide text as ASCII; anything else becomes '?'.
-std::string narrow(const wchar_t* text) {
-    std::string out;
-    for (; text && *text; ++text) out += static_cast<unsigned>(*text) < kAsciiLimit ? static_cast<char>(*text) : '?';
-    return out;
-}
 
 bool hasIpv4Gateway(const IP_ADAPTER_ADDRESSES& adapter) {
     for (const IP_ADAPTER_GATEWAY_ADDRESS_LH* gateway = adapter.FirstGatewayAddress; gateway; gateway = gateway->Next) {
@@ -52,7 +45,7 @@ lan_address_rules::Adapter describe(const IP_ADAPTER_ADDRESSES& a) {
     adapter.hasGateway = hasIpv4Gateway(a);
     adapter.ifType = a.IfType;
     adapter.metric = a.Ipv4Metric;
-    adapter.names = narrow(a.FriendlyName) + " " + narrow(a.Description);
+    adapter.names = ascii_text::narrow(a.FriendlyName) + " " + ascii_text::narrow(a.Description);
     for (const IP_ADAPTER_UNICAST_ADDRESS* u = a.FirstUnicastAddress; u; u = u->Next) {
         if (u->Address.lpSockaddr->sa_family != AF_INET) continue;
         adapter.addresses.push_back(reinterpret_cast<const sockaddr_in*>(u->Address.lpSockaddr)->sin_addr.S_un.S_addr);

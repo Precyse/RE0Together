@@ -7,8 +7,11 @@
 #include <vector>
 
 #include "../src/session_kick_sites.h"
+#include "../src/sr2_addresses.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -18,36 +21,11 @@ using partner_sites::Site;
 constexpr uintptr_t kClearance = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr size_t kHookBytes = 8;
-constexpr uintptr_t kPartnerMemberGetter = 0x8CA380;
-constexpr uintptr_t kSessionRemoveMember = 0x80F9B0;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
     for (const session_kick_sites::Set& set : session_kick_sites::kSets) all.insert(all.end(), set.sites.begin(), set.sites.end());
     return all;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 size_t setSize(std::string_view name) {
@@ -138,10 +116,10 @@ int main() {
     check(siteNamed(sites, "KA2")->address == 0x7EF5F6 && siteNamed(sites, "KA3")->address == 0x7EF534 &&
               siteNamed(sites, "KA4")->address == 0x7EEB18 && siteNamed(sites, "KA5")->address == 0x69A1D6,
           "KA2 is the confirm builder's getter call, KA3 the confirm callback's, KA4 kick_coop_player's, KA5 the sign-in loss removal");
-    check(callTarget(*siteNamed(sites, "KA2")) == kPartnerMemberGetter && callTarget(*siteNamed(sites, "KA3")) == kPartnerMemberGetter &&
-              callTarget(*siteNamed(sites, "KA4")) == kPartnerMemberGetter,
+    check(callTarget(*siteNamed(sites, "KA2")) == sr2::kPartnerMemberGetter && callTarget(*siteNamed(sites, "KA3")) == sr2::kPartnerMemberGetter &&
+              callTarget(*siteNamed(sites, "KA4")) == sr2::kPartnerMemberGetter,
           "KA2 to KA4 each call the partner member getter 0x8CA380");
-    check(callTarget(*siteNamed(sites, "KA5")) == kSessionRemoveMember, "KA5 calls the member removal 0x80F9B0");
+    check(callTarget(*siteNamed(sites, "KA5")) == sr2::kSessionRemoveMember, "KA5 calls the member removal 0x80F9B0");
     check(siteNamed(sites, "KA3")->thunk == siteNamed(sites, "KA4")->thunk && siteNamed(sites, "KA2")->thunk != siteNamed(sites, "KA3")->thunk,
           "KA3 and KA4 share the thunk that uses the choice up; KA2 only reads it");
 

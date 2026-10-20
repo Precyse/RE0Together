@@ -10,6 +10,7 @@
 namespace zombie_uprising_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -61,11 +62,6 @@ inline constexpr Site kSpawnTests[] = {
     {"ZS4", Kind::CallBlock, 0x5B957B, "8B 4C 94 48 3B CB", Thunk::ZombieSpawnPlayerAtEcx, "90"},
     {"ZSc3", Kind::Bytes, 0x5B9581, "0F 84 77 01 00 00 8B 44", Thunk::None, ""},
     {"ZS5", Kind::Bytes, 0x5B9701, "83 FA 02 0F 8C 71 FE FF FF", Thunk::None, "83 FA 0C"},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

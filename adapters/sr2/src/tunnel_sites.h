@@ -27,8 +27,6 @@ constexpr uintptr_t kThreadSelectCall = 0x814375; // S5: the net thread's select
 constexpr uintptr_t kThreadIsSetCall = 0x81438A;  // S6: its __WSAFDIsSet
 constexpr uintptr_t kPrivateEqualsPublic = 0x810CAF;  // A1: je that skips the public address of a logged in player
 
-constexpr uint8_t kJeShort = 0x74;
-constexpr uint8_t kJmpShort = 0xEB;
 constexpr uint8_t kJeDisplacement = 0x69;
 
 // Where the retargets go to.

@@ -1,7 +1,5 @@
 #include "activity_patches.h"
 
-#include <span>
-
 #include "activity_sites.h"
 #include "activity_state.h"
 #include "activity_thunks.h"
@@ -13,12 +11,7 @@
 
 namespace {
 
-struct Phase {
-    const char* name;
-    std::span<const partner_sites::Site> sites;
-};
-
-const Phase kPhases[] = {
+const partner_sites::Set kPhases[] = {
     {"1", activity_sites::kPhase1},
     {"2", activity_sites::kPhase2},
     {"3", activity_sites::kPhase3},
@@ -42,7 +35,7 @@ namespace activity_patches {
 bool sitesMatch() {
     bool ok = true;
     size_t total = 0;
-    for (const Phase& phase : kPhases) {
+    for (const partner_sites::Set& phase : kPhases) {
         ok = site_installer::sitesMatch(phase.sites) && ok;
         total += phase.sites.size();
     }
@@ -54,7 +47,7 @@ bool install(bool trace) {
     activity_state::setTracing(trace);
     logger::write("activities: %zu script overrides in coop\\scripts", script_override::names().size());
     bool all = true;
-    for (const Phase& phase : kPhases) {
+    for (const partner_sites::Set& phase : kPhases) {
         const site_installer::Result result = site_installer::install(phase.sites, &bindingOf);
         if (result.installed) {
             logger::write("activities: phase %s, %zu sites patched", phase.name, result.patched);

@@ -9,6 +9,7 @@
 #include "../src/join_net_trace_sites.h"
 #include "../src/player_cap_patches.h"
 #include "../src/replication_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 
 namespace {
@@ -20,13 +21,6 @@ constexpr uintptr_t kOtherThunk = 0x10002000;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr size_t kCallBytes = 5;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 // An IPv4 address as the game stores it: the first octet is the lowest byte.
 constexpr uint32_t ip(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {

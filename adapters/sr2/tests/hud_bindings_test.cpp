@@ -6,6 +6,7 @@
 #include "../src/hud_sites.h"
 #include "../src/partner_thunks.h"
 #include "../src/waypoint_scope.h"
+#include "check.h"
 
 namespace logger {
 void write(const char*, ...) {}
@@ -17,13 +18,6 @@ void setError(const char*, ...) {}
 }  // namespace debug_stats
 
 namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
     for (const auto bind : {&hud_remotes::bind, &waypoint_scope::bind, &partner_thunks::bindCalls}) {

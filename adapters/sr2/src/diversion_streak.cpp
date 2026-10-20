@@ -164,7 +164,7 @@ uint32_t coatBufferOfBuilt(uintptr_t built, uint32_t emptyBuffer) {
     size_t index = partner_rules::kNone;
     for (size_t i = 0; view.usable() && i < view.count(); ++i) {
         const uintptr_t human = view.items()[i].human;
-        const uintptr_t instance = human ? readDword(human + sr2::kHumanCharacterOffset) : 0;
+        const uintptr_t instance = human ? readDword(human + sr2::kHumanCharInstanceOffset) : 0;
         if (instance && readDword(instance + sr2::kCharacterIdOffset) == id) index = i;
     }
     const uintptr_t human = index != partner_rules::kNone ? view.items()[index].human : partner_scope::partnerHuman();

@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "../src/handoff_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -12,13 +13,6 @@ constexpr uintptr_t kNear = 0x100;
 constexpr uintptr_t kMiddle = 0x200;
 constexpr uintptr_t kFar = 0x300;
 constexpr uintptr_t kFallback = 0x900;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

@@ -10,6 +10,7 @@
 namespace trail_blazing_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -47,11 +48,6 @@ inline constexpr Site kStart[] = {
 inline constexpr Site kCheckpoint[] = {
     {"TB11", Kind::JumpOut, 0x590386, "8D 48 14 8B 44 24 14", Thunk::TrailCheckpointDistance, ""},
     {"TB11r", Kind::Bytes, 0x5903B1, "8B 46 44 85 C0", Thunk::None, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

@@ -7,7 +7,9 @@
 #include "../src/partner_replacement.h"
 #include "../src/partner_sites.h"
 #include "../src/replication_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -19,15 +21,6 @@ constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr uint8_t kCallOpcode = 0xE8;
 constexpr uint8_t kJmpOpcode = 0xE9;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
 
 bool addressesAreUnique() {
     std::set<uintptr_t> seen;

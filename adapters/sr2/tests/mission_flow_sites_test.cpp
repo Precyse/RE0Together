@@ -14,8 +14,10 @@
 #include "../src/sr2_addresses.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -31,16 +33,6 @@ constexpr size_t kJumpOutBytes = 12;
 constexpr size_t kTotalSites = 22;
 constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint8_t kCallOpcode = 0xE8;
-constexpr uint8_t kNop = 0x90;
-constexpr uintptr_t kGetRemotePlayer = 0x9D7BD0;
-constexpr uintptr_t kPartnerMemberGetter = 0x8CA380;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> everySite() {
     std::vector<Site> all;
@@ -49,22 +41,6 @@ std::vector<Site> everySite() {
         all.insert(all.end(), table.begin(), table.end());
     }
     return all;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 size_t phaseSize(std::string_view name) {
@@ -135,13 +111,13 @@ void theCallees() {
     const std::vector<Site> all = everySite();
     const auto callee = [&](std::string_view id) { return callTarget(*siteNamed(all, id)); };
     bool getters = true;
-    for (const char* id : {"MF2", "MF3", "MF7", "MF8", "MF9", "MF10", "MF11", "MF21"}) getters = getters && callee(id) == kGetRemotePlayer;
+    for (const char* id : {"MF2", "MF3", "MF7", "MF8", "MF9", "MF10", "MF11", "MF21"}) getters = getters && callee(id) == sr2::kRemotePlayerGetter;
     check(getters, "MF2, MF3, MF7 to MF11 and MF21 call get_remote_player 0x9D7BD0");
     check(callee("MF4") == sr2::kStartRequest, "MF4 calls the start request 0x6A8680");
     bool broadcasts = true;
     for (const char* id : {"MF5", "MF12", "MF14", "MF16", "MF19"}) broadcasts = broadcasts && callee(id) == sr2::kSendBroadcast;
     check(broadcasts, "MF5, MF12, MF14, MF16 and MF19 call the broadcast 0x814740");
-    check(callee("MF17") == kPartnerMemberGetter, "MF17 calls the partner member getter 0x8CA380");
+    check(callee("MF17") == sr2::kPartnerMemberGetter, "MF17 calls the partner member getter 0x8CA380");
     check(callee("MF20") == sr2::kBonusAward, "MF20 calls the bonus function 0x6A9640");
     check(siteNamed(all, "MF18")->address == sr2::kBonusAward, "MF18 hooks the bonus function 0x6A9640");
     check(siteNamed(all, "MF1")->address == 0x6A8450 && siteNamed(all, "MF13")->address == 0x543D70 && siteNamed(all, "MF15")->address == 0x543F10,

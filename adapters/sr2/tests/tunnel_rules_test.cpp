@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "../src/tunnel_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -15,13 +16,6 @@ constexpr uint8_t kGuestSlot = 2;
 constexpr uint32_t kOwn = 0x0A000101;
 constexpr uint64_t kSweep = 70000;
 constexpr uint32_t kLastOctet = 0xFF;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<uint8_t> bytesOfSize(size_t size) { return std::vector<uint8_t>(size, 0x5A); }
 

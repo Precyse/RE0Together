@@ -2,19 +2,13 @@
 #include <cstdio>
 
 #include "../src/home_network_rules.h"
+#include "check.h"
 
 namespace {
 
 constexpr uint32_t kPublicIp = 0x0100007F;
 constexpr uint16_t kPortOfSecondPlayer = 50001;
 constexpr uint16_t kPortOfThirdPlayer = 50002;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

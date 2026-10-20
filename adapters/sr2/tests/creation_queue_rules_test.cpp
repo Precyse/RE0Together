@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "../src/creation_queue_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -9,13 +10,6 @@ using creation_queue_rules::Overflow;
 
 constexpr uintptr_t kMemberA = 0x1000;
 constexpr uintptr_t kMemberB = 0x2000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

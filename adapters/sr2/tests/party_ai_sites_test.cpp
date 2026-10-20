@@ -19,8 +19,10 @@
 #include "../src/sr2_addresses.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace logger {
 void write(const char*, ...) {}
@@ -42,15 +44,7 @@ constexpr size_t kHookBytes = 8;
 constexpr size_t kDwordBytes = 4;
 constexpr size_t kShortJumpBytes = 2;
 constexpr uint8_t kCallOpcode = 0xE8;
-constexpr uint8_t kShortJumpOpcode = 0xEB;
 constexpr uintptr_t kThunk = 0x10004000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> allSites() {
     std::vector<Site> all;
@@ -66,27 +60,11 @@ std::vector<Site> writtenSites() {
     return written;
 }
 
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
-}
-
 // Where the `jmp rel8` that a call block's tail starts with lands.
 uintptr_t tailTarget(const Site& site) {
     const auto tail = partner_sites::parseHex(site.tail);
     const auto bytes = partner_replacement::replacementFor(site, kThunk);
-    if (tail.size() != kShortJumpBytes || tail[0] != kShortJumpOpcode || bytes.size() != kBranchBytes + kShortJumpBytes) return 0;
+    if (tail.size() != kShortJumpBytes || tail[0] != kJmpShort || bytes.size() != kBranchBytes + kShortJumpBytes) return 0;
     return site.address + kBranchBytes + kShortJumpBytes + static_cast<int8_t>(tail[1]);
 }
 
@@ -160,8 +138,8 @@ void theShapes() {
     const Site* septic = siteNamed(written, "PA3");
     const auto derbyBytes = partner_replacement::replacementFor(*derby, kThunk);
     const auto septicBytes = partner_replacement::replacementFor(*septic, kThunk);
-    check(derbyBytes.size() == kBranchBytes + kShortJumpBytes && derbyBytes[0] == kCallOpcode && derbyBytes[kBranchBytes] == kShortJumpOpcode &&
-              septicBytes.size() == kBranchBytes + kShortJumpBytes && septicBytes[0] == kCallOpcode && septicBytes[kBranchBytes] == kShortJumpOpcode,
+    check(derbyBytes.size() == kBranchBytes + kShortJumpBytes && derbyBytes[0] == kCallOpcode && derbyBytes[kBranchBytes] == kJmpShort &&
+              septicBytes.size() == kBranchBytes + kShortJumpBytes && septicBytes[0] == kCallOpcode && septicBytes[kBranchBytes] == kJmpShort,
           "PA2 and PA3 are a call to the thunk and a short jump");
     check(derbyBytes.size() <= sizeOf(*derby) && septicBytes.size() <= sizeOf(*septic), "the written bytes fit in the block each replaces");
     check(tailTarget(*derby) == sr2::kDerbyEnterResume && tailTarget(*septic) == sr2::kSepticEnterResume,

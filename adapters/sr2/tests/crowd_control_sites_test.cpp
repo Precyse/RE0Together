@@ -12,8 +12,10 @@
 #include "../src/crowd_control_sites.h"
 #include "../src/diversion_sites.h"
 #include "../src/partner_replacement.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -23,34 +25,11 @@ using partner_sites::Site;
 constexpr uintptr_t kClearance = 16;
 constexpr size_t kBranchBytes = 5;
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
 std::vector<Site> allSites() {
     std::vector<Site> all;
     for (const crowd_control_sites::Set& set : crowd_control_sites::kSets) all.insert(all.end(), set.sites.begin(), set.sites.end());
     return all;
 }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-uint32_t dwordOf(const std::vector<uint8_t>& bytes, size_t at) {
-    return bytes[at] | bytes[at + 1] << 8 | bytes[at + 2] << 16 | static_cast<uint32_t>(bytes[at + 3]) << 24;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) { return site.address + kBranchBytes + dwordOf(partner_sites::parseHex(site.expected), 1); }
 
 void theCounts() {
     struct Count {

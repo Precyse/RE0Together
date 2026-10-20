@@ -4,6 +4,7 @@
 
 #include "code_patch.h"
 #include "game_port_rules.h"
+#include "sr2_addresses.h"
 #include "transport.h"
 
 // The code edits of milestones 5e and 5g as data (pure, unit tested): a per-machine game port, so that guests behind one
@@ -15,14 +16,11 @@ constexpr uintptr_t kBindPortImmediate = 0xC1BBAF;  // E1: mov eax, 4200 before 
 constexpr uintptr_t kQuickCheckPort = 0x8CDA3B;     // E3: mov word ptr [esi+0x2C], 4200
 constexpr size_t kQuickCheckBytes = 6;              // the mov; its replacement is a call and a nop
 constexpr uintptr_t kPortWordOffset = 4;            // in an E2 mov: the imm16
-constexpr uint8_t kNop = 0x90;
 
 constexpr uintptr_t kReportedPortCapture = 0x815D8C;  // H1: mov eax, [esp+0x14]; mov eax, [eax] in the join_req handler
 constexpr size_t kReportedPortBytes = 6;              // its replacement is a call and a nop
 constexpr uintptr_t kRecordPortCall = 0x815666;       // H2: call 0x7FB3D0 in the new_conn record builder
-constexpr uintptr_t kBuildAddressRecord = 0x7FB3D0;
 constexpr uintptr_t kSenderLookupCall = 0x813BF2;     // T11: call 0x7FA070 in the receive loop
-constexpr uintptr_t kMapSender = 0x7FA070;
 
 // Where the edits go to.
 struct Thunks {
@@ -51,7 +49,7 @@ inline uint8_t high(uint32_t port) { return static_cast<uint8_t>(port >> 8); }
 inline std::vector<CodePatch> forPort(uint32_t port, uint32_t maxPlayers, bool trace, Transport transport, const Thunks& thunks) {
     if (transport == Transport::Steam) {
         if (!trace) return {};
-        return {retargetedCall("game_port_unmapped_sender", kSenderLookupCall, kMapSender, thunks.unmappedSender)};
+        return {retargetedCall("game_port_unmapped_sender", kSenderLookupCall, sr2::kMapSender, thunks.unmappedSender)};
     }
     const bool moved = port != game_port_rules::kShippedGamePort;
     const bool replicating = maxPlayers > 2;
@@ -79,10 +77,10 @@ inline std::vector<CodePatch> forPort(uint32_t port, uint32_t maxPlayers, bool t
         std::vector<uint8_t> reportedAndNop(reported.begin(), reported.end());
         reportedAndNop.resize(kReportedPortBytes, kNop);
         patches.push_back({"game_port_reported_port", kReportedPortCapture, {0x8B, 0x44, 0x24, 0x14, 0x8B, 0x00}, reportedAndNop});
-        patches.push_back(retargetedCall("game_port_relayed_record", kRecordPortCall, kBuildAddressRecord, thunks.relayedRecordPort));
+        patches.push_back(retargetedCall("game_port_relayed_record", kRecordPortCall, sr2::kBuildAddressRecord, thunks.relayedRecordPort));
     }
     if (trace) {
-        patches.push_back(retargetedCall("game_port_unmapped_sender", kSenderLookupCall, kMapSender, thunks.unmappedSender));
+        patches.push_back(retargetedCall("game_port_unmapped_sender", kSenderLookupCall, sr2::kMapSender, thunks.unmappedSender));
     }
     return patches;
 }

@@ -6,6 +6,7 @@
 
 #include "../src/activity_rules.h"
 #include "../src/mission_flow_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -23,13 +24,6 @@ constexpr uint32_t kMission = 0x55;
 constexpr size_t kOneRemote = 1;
 constexpr size_t kTwoRemotes = 2;
 constexpr size_t kNameCapacity = 128;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 rules::SendInputs inputs(bool isHost, size_t remotes, uintptr_t explicitMember, uintptr_t scoped, uintptr_t remembered) {
     return {isHost, remotes, explicitMember, scoped, remembered, kHost};

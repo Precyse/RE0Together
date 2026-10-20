@@ -8,6 +8,7 @@
 
 #include "../src/player_sites.h"
 #include "../src/player_visuals_rules.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
 
@@ -17,13 +18,6 @@ using player_sites::kSkinPool;
 
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kShippedBase = 0x21F2988;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 uint32_t immediateOf(const player_sites::SkinPoolSite& site) {
     const auto bytes = partner_sites::parseHex(site.expected);

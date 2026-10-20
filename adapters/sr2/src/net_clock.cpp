@@ -30,16 +30,10 @@ uintptr_t g_debtSession = 0;  // the session the debt was measured in
 uint32_t g_debt = 0;
 rate_limit::RateLimit g_eventLimit;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 uint32_t& netTime(uintptr_t session) { return *reinterpret_cast<uint32_t*>(session + sr2::kSessionNetTimeOffset); }
 
 bool governed(uintptr_t session) {
-    const bool isHost = byteAt(session + sr2::kSessionHostFlagOffset) != 0;
+    const bool isHost = readByte(session + sr2::kSessionHostFlagOffset) != 0;
     return net_clock_rules::governs(isHost, remote_players::remoteMemberCount());
 }
 
@@ -69,7 +63,7 @@ ClockMessage readClock(const uint32_t* args, uintptr_t sender, uintptr_t session
 
 void traceClock(const ClockMessage& clock, uint32_t debt) {
     logger::write("trace: net clock: from slot %u, payload %u + half rtt %u = target %u, ours %u, step %d ms, debt %u",
-                  byteAt(clock.sender + sr2::kMemberSlotOffset), clock.payload, clock.halfRtt, clock.target, clock.ours,
+                  readByte(clock.sender + sr2::kMemberSlotOffset), clock.payload, clock.halfRtt, clock.target, clock.ours,
                   static_cast<int32_t>(clock.target - clock.ours), debt);
 }
 
@@ -77,7 +71,7 @@ void logEvent(const ClockMessage& clock, net_clock_rules::Outcome outcome) {
     uint32_t events = 0;
     if (!g_eventLimit.allow(GetTickCount64(), events)) return;
     if (outcome == net_clock_rules::Outcome::Ignored) {
-        logger::write("net clock: ignored a clock from slot %u, which is not the host", byteAt(clock.sender + sr2::kMemberSlotOffset));
+        logger::write("net clock: ignored a clock from slot %u, which is not the host", readByte(clock.sender + sr2::kMemberSlotOffset));
     } else {
         logger::write("net clock: resync, ours was %u ms ahead of the host", clock.ours - clock.target);
     }

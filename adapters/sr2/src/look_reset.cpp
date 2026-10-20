@@ -11,7 +11,6 @@
 
 namespace {
 
-constexpr uintptr_t kHumanCharInstanceOffset = 0x13B0;  // pointer to the human's character instance
 constexpr uintptr_t kCharInstancePoolIndexOffset = 0x10;
 constexpr uintptr_t kEntrySlotOffset = 4;
 constexpr uintptr_t kEntryTintAOffset = 8;
@@ -35,7 +34,7 @@ TRACE_ENTRY_STUB(resetIndexLooksStub, resetIndexLooks, g_createCharInstance)
 
 // T1: what the local human's tint list holds as a components message is built.
 void __cdecl traceTintSend(uint32_t human) {
-    const uint32_t poolIndex = readDword(readDword(human + kHumanCharInstanceOffset) + kCharInstancePoolIndexOffset);
+    const uint32_t poolIndex = readDword(readDword(human + sr2::kHumanCharInstanceOffset) + kCharInstancePoolIndexOffset);
     if (poolIndex >= look_reset_rules::kPoolIndices) return;
     const uint32_t count = readDword(look_reset_rules::kAppliedCounts + poolIndex * sizeof(uint32_t));
     const uintptr_t entries = look_reset_rules::kAppliedEntries + poolIndex * look_reset_rules::kTintRowBytes;

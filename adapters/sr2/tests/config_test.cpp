@@ -2,17 +2,7 @@
 #include <cstdio>
 
 #include "../src/config.h"
-
-namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-}  // namespace
+#include "check.h"
 
 int main() {
     check(parseConfig("").maxPlayers == 4 && parseConfig("").trace, "defaults: 4 players, trace on");

@@ -1,4 +1,5 @@
 #pragma once
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 
@@ -18,12 +19,22 @@ inline uint8_t readByte(uintptr_t address) {
     return value;
 }
 
+// The 16-bit value at `address` in this process, 0 when it is not readable.
+inline uint16_t readWord(uintptr_t address) {
+    uint16_t value = 0;
+    readMemory(address, &value, sizeof(value));
+    return value;
+}
+
 // The 32-bit value at `address` in this process, 0 when it is not readable.
 inline uint32_t readDword(uintptr_t address) {
     uint32_t value = 0;
     readMemory(address, &value, sizeof(value));
     return value;
 }
+
+// The float at `address` in this process, 0 when it is not readable.
+inline float readFloat(uintptr_t address) { return std::bit_cast<float>(readDword(address)); }
 
 // The NUL-terminated text at `address` copied into `out`, up to `capacity` - 1 characters, then a NUL; the number of characters
 // copied. Stops early at an unreadable byte.

@@ -64,7 +64,7 @@ void enable(bool vehiclePool) {
 void fallBackToSinglePeer() {
     if (!g_enabled || g_fellBack.exchange(true)) return;
     const bool ok = applyCodePatches(
-        replication_patches::branchPatches(replication_sites::kJmpShort, replication_sites::kJeShort));
+        replication_patches::branchPatches(kJmpShort, kJeShort));
     logger::write(ok ? "replication: peer index back to 0, co-op serves one peer" : "replication: peer index could not be reset");
 }
 

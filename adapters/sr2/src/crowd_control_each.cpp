@@ -1,7 +1,6 @@
 // Blocks of the Crowd Control level start, end and protect start that the game runs for the local player and "the partner": the
 // start weapon and flags, the end release and flags and the vehicle call of the protect phase now reach every remote.
 #include "activity_state.h"
-#include "crowd_control_remotes.h"
 #include "crowd_control_rules.h"
 #include "crowd_control_thunks.h"
 #include "diversion_stubs.h"
@@ -9,6 +8,7 @@
 #include "log.h"
 #include "memory.h"
 #include "partner_scope.h"
+#include "party_ai_remotes.h"
 #include "sr2_addresses.h"
 
 namespace {
@@ -48,13 +48,13 @@ void eachHuman(Fn fn) {
 // CR9: the vehicle call of the protect start (edi = human) runs for the local player, every remote and the celebrity that the
 // game keeps at [esp + 0x10] and [esp + 0x18] when the loop starts.
 void __cdecl protectStart(JumpFrame* frame) {
-    const crowd_control_remotes::List remotes = crowd_control_remotes::take();
+    const party_ai_remotes::Remotes remotes;
     uintptr_t order[crowd_control_rules::kMaxProtectOrder];
-    const size_t count = crowd_control_rules::protectStartOrder(*gameSlot(frame, sr2::kProtectLocalSlot), remotes.humans, remotes.count,
+    const size_t count = crowd_control_rules::protectStartOrder(*gameSlot(frame, sr2::kProtectLocalSlot), remotes.humans().items, remotes.humans().count,
                                                                *gameSlot(frame, sr2::kProtectCelebSlot), order);
     for (size_t i = 0; i < count; ++i) {
         if (!readDword(order[i] + sr2::kHumanVehicleOffset)) continue;
-        guest_call::call(sr2::kProtectStartVehicle, {.edi = asArgument(order[i])}, {kProtectFlag});
+        guest_call::call(sr2::kEvacuateFromVehicles, {.edi = asArgument(order[i])}, {kProtectFlag});
         if (tracing()) logger::write("trace: crowd: protect start, vehicle call for human 0x%X", asArgument(order[i]));
     }
 }
@@ -63,7 +63,7 @@ void __cdecl protectStart(JumpFrame* frame) {
 void __cdecl giveStartWeapon(JumpFrame* frame) {
     const uint32_t weapon = readDword(frame->regs.ebx + sr2::kCrowdWeaponOffset);
     eachHuman([&](uintptr_t human) {
-        guest_call::call(sr2::kCrowdGiveWeapon, {.ecx = asArgument(human)}, {weapon, kGiveWeaponFlag, kGiveWeaponNoSlot, kGiveWeaponOff, kGiveWeaponOff});
+        guest_call::call(sr2::kGiveWeapon, {.ecx = asArgument(human)}, {weapon, kGiveWeaponFlag, kGiveWeaponNoSlot, kGiveWeaponOff, kGiveWeaponOff});
         if (tracing()) logger::write("trace: crowd: start weapon 0x%X given to remote 0x%X", weapon, asArgument(human));
     });
 }
@@ -72,7 +72,7 @@ void __cdecl giveStartWeapon(JumpFrame* frame) {
 void __cdecl setStartFlags(JumpFrame* frame) {
     eachHuman([&](uintptr_t human) {
         guest_call::call(sr2::kSyncIgnoreEquipOnGrab, {}, {asArgument(human), kFlagSet});
-        guest_call::call(sr2::kInventoryEquip, {}, {asArgument(human + sr2::kHumanInventoryOffset), frame->regs.esi, kEquipFlag, kEquipOff});
+        guest_call::call(sr2::kInventoryApply, {}, {asArgument(human + sr2::kHumanInventoryOffset), frame->regs.esi, kEquipFlag, kEquipOff});
         if (tracing()) logger::write("trace: crowd: start flags set for remote 0x%X", asArgument(human));
     });
 }

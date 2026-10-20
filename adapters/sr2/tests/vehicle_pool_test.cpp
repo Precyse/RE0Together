@@ -14,6 +14,7 @@
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_rules.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
 
@@ -29,13 +30,6 @@ using vehicle_pool_sites::TableId;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kDwordBytes = 4;
 constexpr uint32_t kFakeBase = 0x20000000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 size_t referencesOf(TableId id) {
     return static_cast<size_t>(std::count_if(std::begin(kReferences), std::end(kReferences), [id](const auto& row) { return row.table == id; }));

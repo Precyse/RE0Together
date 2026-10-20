@@ -37,27 +37,14 @@ std::unordered_map<uintptr_t, uint64_t> g_lastShotMs;
 std::unordered_map<uintptr_t, uint32_t> g_lastNextShot;
 std::unordered_map<uintptr_t, uint64_t> g_lastWeaponState;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
-uint16_t wordAt(uintptr_t address) {
-    uint16_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 uint8_t slotOfRecordOf(uintptr_t human) {
     const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
-    return record ? byteAt(record) : partner_rules::kNoSlot;
+    return record ? readByte(record) : partner_rules::kNoSlot;
 }
 
 uint8_t localSlot() {
-    const uintptr_t session = readDword(sr2::kSessionPointer);
-    const uintptr_t local = session ? readDword(session + sr2::kSessionLocalMemberOffset) : 0;
-    return local ? byteAt(local + sr2::kMemberSlotOffset) : partner_rules::kNoSlot;
+    const uintptr_t local = remote_players::localMember();
+    return local ? readByte(local + sr2::kMemberSlotOffset) : partner_rules::kNoSlot;
 }
 
 uint64_t nowMs() { return GetTickCount64(); }
@@ -82,7 +69,7 @@ void __cdecl traceShot(GuestFrame* frame) {
     logger::write("trace: shot: human 0x%X local player %u npc %u owner slot %u (local slot %u) owned-check %u record bits 0x%02X weapon id %u, %llu ms since its last shot",
                   static_cast<unsigned>(human), human == remote_players::localHuman() ? 1 : 0,
                   partner_rules::isPlayerPoolMember(human) ? 0 : 1, slotOfRecordOf(human), localSlot(), ownedHere,
-                  record ? byteAt(record + kRecordLocalBitsOffset) : 0, info ? wordAt(info + kWeaponInfoIdOffset) : 0,
+                  record ? readByte(record + kRecordLocalBitsOffset) : 0, info ? readWord(info + kWeaponInfoIdOffset) : 0,
                   static_cast<unsigned long long>(since));
 }
 
@@ -94,7 +81,7 @@ void __cdecl tracePlayback(GuestFrame* frame) {
     if (!human || !remote_players::isRemotePlayerHuman(human)) return;
     const uintptr_t weapon = readDword(human + kHumanWeaponOffset);
     if (!weapon) return;
-    const uint32_t fired = byteAt(weapon + kWeaponFiredOffset) & 1;
+    const uint32_t fired = readByte(weapon + kWeaponFiredOffset) & 1;
     const uint32_t nextShot = readDword(weapon + kWeaponNextShotOffset);
     const uint64_t state = (static_cast<uint64_t>(nextShot) << 1) | fired;
     uint64_t& previous = g_lastWeaponState[human];
@@ -119,8 +106,8 @@ void __cdecl traceBundleSender(GuestFrame* frame) {
     const uintptr_t object = remote_players::objectOfHandle(handle);
     const uintptr_t record = object ? readDword(object + sr2::kObjectNetRecordOffset) : 0;
     if (!record) return;
-    const uint8_t owner = byteAt(record + sr2::kRecordOwnerOffset);
-    const uint8_t senderSlot = byteAt(sender + sr2::kMemberSlotOffset);
+    const uint8_t owner = readByte(record + sr2::kRecordOwnerOffset);
+    const uint8_t senderSlot = readByte(sender + sr2::kMemberSlotOffset);
     if (owner == senderSlot) return;
     {
         std::lock_guard<std::mutex> lock(g_bundleMutex);

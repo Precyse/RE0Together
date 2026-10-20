@@ -18,6 +18,7 @@
 namespace {
 
 using outfit_sync_rules::Route;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -26,11 +27,6 @@ constexpr size_t kVariantArg = 2;
 constexpr size_t kBroadcastBufferArg = 0;
 constexpr size_t kBroadcastLengthArg = 1;
 constexpr size_t kNameLimit = 16;  // "#PLAYER12#" is 10 characters
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
-};
 
 constexpr Set kSets[] = {
     {"look sync per remote", outfit_sync_sites::kLookSync},

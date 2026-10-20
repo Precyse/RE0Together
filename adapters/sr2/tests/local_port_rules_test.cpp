@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "../src/local_port_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -9,13 +10,6 @@ constexpr uint32_t kPublicIp = 0x6A66E6AE;   // 174.230.102.106 as stored in mem
 constexpr uint16_t kExternalPortOfSecond = 11948;
 constexpr uint16_t kExternalPortOfThird = 4201;
 constexpr uint16_t kLocalPort = 4200;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 // An IPv4 address as the game stores it: the first octet is the lowest byte.
 constexpr uint32_t ip(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {

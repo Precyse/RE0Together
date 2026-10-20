@@ -10,6 +10,7 @@
 #include "../src/partner_scope.h"
 #include "../src/remote_players.h"
 #include "../src/sr2_addresses.h"
+#include "check.h"
 
 namespace logger {
 void write(const char*, ...) {}
@@ -30,13 +31,6 @@ constexpr size_t kSessionBytes = 0x1000;
 constexpr size_t kRecordBytes = 0x20;
 constexpr uintptr_t kFakeOriginal = 0x77;
 constexpr uint32_t kFirstHandle = 0x10;  // the handle of the human of slot n is kFirstHandle + n
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 uint32_t& at(void* base, uintptr_t offset) { return *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(base) + offset); }
 uint32_t& word(uintptr_t address) { return *reinterpret_cast<uint32_t*>(address); }

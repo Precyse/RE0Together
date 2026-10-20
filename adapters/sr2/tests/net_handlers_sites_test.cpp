@@ -18,8 +18,10 @@
 #include "../src/trace_sites.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -31,16 +33,6 @@ constexpr uintptr_t kClearance = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr size_t kPointerBytes = 4;
 constexpr uintptr_t kThunk = 0x10004000;
-constexpr uint8_t kNop = 0x90;
-constexpr uintptr_t kPartnerGetter = 0x9D7BD0;
-constexpr uintptr_t kBroadcast = 0x814740;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
@@ -48,29 +40,13 @@ std::vector<Site> ourSites() {
     return all;
 }
 
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
 bool isCheck(const Site& site) { return site.kind == Kind::Bytes; }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
 
 size_t setSize(std::string_view name) {
     for (const net_handlers_sites::Set& set : net_handlers_sites::kSets) {
         if (name == set.name) return set.sites.size();
     }
     return 0;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 void theRows() {
@@ -152,9 +128,9 @@ void theShapes() {
 void theTargets() {
     const std::vector<Site> sites = ourSites();
     bool getters = true;
-    for (const char* id : {"CF1", "CF2", "CF3", "CF4", "SL1"}) getters = getters && callTarget(*siteNamed(sites, id)) == kPartnerGetter;
+    for (const char* id : {"CF1", "CF2", "CF3", "CF4", "SL1"}) getters = getters && callTarget(*siteNamed(sites, id)) == sr2::kRemotePlayerGetter;
     check(getters, "CF1 to CF4 and SL1 replace the partner getter 0x9D7BD0");
-    check(callTarget(*siteNamed(sites, "CF5")) == kBroadcast, "CF5 replaces the broadcast 0x814740 of the host's notice");
+    check(callTarget(*siteNamed(sites, "CF5")) == sr2::kSendBroadcast, "CF5 replaces the broadcast 0x814740 of the host's notice");
     check(siteNamed(sites, "CF1")->thunk == siteNamed(sites, "CF3")->thunk && siteNamed(sites, "CF2")->thunk != siteNamed(sites, "CF4")->thunk,
           "CF1 and CF3 share the farthest remote; CF2 (with the price) and CF4 (the name) are the poorest");
 }

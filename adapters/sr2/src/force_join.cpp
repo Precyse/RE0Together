@@ -136,7 +136,7 @@ TRACE_ENTRY_STUB(frontEndTickStub, onFrontEndTick, g_frontEndTick)
 // True when the session was started from Co-op > LAN (its info's LAN flag): an online session cannot be found by the LAN
 // browser the guests search.
 bool isLanSession(uintptr_t session) {
-    return readByte(readDword(session + kSessionInfoOffset) + kInfoLanFlagOffset) != 0;
+    return readByte(readDword(session + sr2::kSessionInfoOffset) + kInfoLanFlagOffset) != 0;
 }
 
 // In a session the front end tick does not run: this thread reports the host's member count, and whether the guest got

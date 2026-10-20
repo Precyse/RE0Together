@@ -6,6 +6,7 @@
 #include "../src/partner_sites.h"
 #include "../src/player_cap_patches.h"
 #include "../src/replication_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 
 namespace {
@@ -17,13 +18,6 @@ constexpr player_cap_patches::Thunks kThunks{kThunk, kSenderThunk, kWelcomeThunk
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kEightPlayers = 8;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 bool overlaps(const CodePatch& patch, uintptr_t address, size_t size) {
     return patch.address < address + size && address < patch.address + patch.expected.size();

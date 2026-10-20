@@ -11,9 +11,6 @@
 // category byte. Every read is safe: a game that is not there reads as zero.
 namespace anim_stream_state {
 
-// The word at `address`, 0 when it is not readable.
-uint16_t readWord(uintptr_t address);
-
 // The session slot of `member`, anim_stream_rules::kNoSlot for none.
 uint8_t slotOfMember(uintptr_t member);
 

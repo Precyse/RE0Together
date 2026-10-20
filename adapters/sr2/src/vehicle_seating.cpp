@@ -17,16 +17,12 @@
 
 namespace {
 
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 using vehicle_seating_rules::Occupant;
 
 constexpr size_t kSeatArg = 4;       // SE1: the enter request block (dword 0 = seat) sits 0x10 above the stack at the replaced call
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
-};
 
 constexpr Set kSets[] = {
     {"trafficking", vehicle_seating_sites::kTrafficking},
@@ -48,12 +44,8 @@ struct Remotes {
 };
 
 Remotes remotesWithHuman() {
-    remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
     Remotes remotes;
-    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
-        if (snapshot.pairing.items[i].human) remotes.items[remotes.count++] = snapshot.pairing.items[i];
-    }
+    remotes.count = remote_players::remotesWithHuman(remotes.items, partner_rules::kMaxWalked);
     return remotes;
 }
 
@@ -117,7 +109,7 @@ uintptr_t __cdecl checkpointVehicleHolder(uint32_t) {
 // Stops the car of `human` the way the mission exit stops the player's: when the human is settled in a vehicle that has a component,
 // the component's vtable +0x20 is called with 0. True when the call was made.
 bool stopCarOf(uintptr_t human) {
-    const uintptr_t vehicle = guest_call::call(sr2::kVehicleOfHandleChecked, {.ecx = readDword(human + sr2::kHumanVehicleOffset)});
+    const uintptr_t vehicle = guest_call::call(sr2::kVehicleObjectOf, {.ecx = readDword(human + sr2::kHumanVehicleOffset)});
     if (!vehicle) return false;
     const bool settled = static_cast<uint8_t>(guest_call::call(sr2::kHumanInVehicle, {.edi = static_cast<uint32_t>(vehicle), .esi = static_cast<uint32_t>(human)}));
     const uintptr_t component = readDword(vehicle + sr2::kVehicleComponentOffset);

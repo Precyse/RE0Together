@@ -11,6 +11,7 @@
 namespace store_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -42,11 +43,6 @@ inline constexpr Site kActivityLevel[] = {
     {"LM2", Kind::RetargetCall, 0x75BCBB, "E8 80 8A 0B 00", Thunk::SendToActivityOwner, ""},
     {"LM3", Kind::RetargetCall, 0x75B671, "E8 CA 90 0B 00", Thunk::SendAnswerToHost, ""},
     {"LM4", Kind::RetargetCall, 0x75B744, "E8 F7 8F 0B 00", Thunk::SendAnswerToHost, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

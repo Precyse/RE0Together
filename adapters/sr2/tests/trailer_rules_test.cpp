@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../src/trailer_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -16,13 +17,6 @@ constexpr uint8_t kFourPlayers = 4;
 constexpr size_t kPayloadBytes = 115;  // a join_req of the logs
 constexpr uint64_t kHash = 0x1122334455667788ull;
 constexpr uint16_t kOldVersion = 2;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 // A payload of `size` filler bytes ending in `trailer`.
 std::vector<uint8_t> payloadWith(const std::vector<uint8_t>& trailer, size_t size = kPayloadBytes) {

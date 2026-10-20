@@ -7,35 +7,25 @@
 #include "local_port_rules.h"
 #include "log.h"
 #include "memory.h"
+#include "sr2_addresses.h"
 
 namespace {
 
 // Offsets from the stack pointer of the join_req handler at H1 (the `call` of the thunk is not counted).
 constexpr uintptr_t kContextSlot = 0x14;      // pointer to the pointer to the sender block
 constexpr uintptr_t kReportedPortSlot = 0x28; // word: the guest's reported local port, until 0x815D97 overwrites it
-constexpr uintptr_t kSenderIpOffset = 0;      // dword, in the sender block
-constexpr uintptr_t kSenderPortOffset = 4;    // word
-
-constexpr uintptr_t kBuildAddressRecordAddress = 0x7FB3D0;  // writes an address record; H2's original call
-constexpr uintptr_t kMapSenderAddress = 0x7FA070;           // cdecl(address, kind): the member of a sender, or 0
 
 std::mutex g_mutex;
 local_port_rules::PortMap g_ports;
 local_port_rules::SeenAddresses g_seen;
 bool g_trace = false;
-const uintptr_t g_buildAddressRecord = kBuildAddressRecordAddress;
-
-uint16_t readWord(uintptr_t address) {
-    uint16_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
+const uintptr_t g_buildAddressRecord = sr2::kBuildAddressRecord;
 
 // H1: `espAtSite` is the handler's stack pointer. The sender block is the real source of the join_req.
 void __cdecl captureReportedPort(uintptr_t espAtSite) {
     const uintptr_t sender = readDword(readDword(espAtSite + kContextSlot));
-    const uint32_t ip = readDword(sender + kSenderIpOffset);
-    const uint16_t port = readWord(sender + kSenderPortOffset);
+    const uint32_t ip = readDword(sender + sr2::kSenderIpOffset);
+    const uint16_t port = readWord(sender + sr2::kSenderPortOffset);
     const uint16_t local = readWord(espAtSite + kReportedPortSlot);
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -47,8 +37,8 @@ void __cdecl captureReportedPort(uintptr_t espAtSite) {
 // H2: an address record for the member whose source address is at `source` was just written at `buffer + before`. The
 // port inside it becomes the guest's local port, when the host knows it; the member's own record keeps the real source.
 void __cdecl relayLocalPort(uintptr_t source, uintptr_t buffer, uint32_t before) {
-    const uint32_t ip = readDword(source + kSenderIpOffset);
-    const uint16_t port = readWord(source + kSenderPortOffset);
+    const uint32_t ip = readDword(source + sr2::kSenderIpOffset);
+    const uint16_t port = readWord(source + sr2::kSenderPortOffset);
     std::optional<uint16_t> local;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -61,10 +51,10 @@ void __cdecl relayLocalPort(uintptr_t source, uintptr_t buffer, uint32_t before)
 
 // T11: the receive loop's sender lookup, then a note for a sender it does not know that comes from a private range.
 uintptr_t __cdecl traceUnmappedSender(uintptr_t address, uint32_t kind) {
-    const uintptr_t member = reinterpret_cast<uintptr_t(__cdecl*)(uintptr_t, uint32_t)>(kMapSenderAddress)(address, kind);
+    const uintptr_t member = reinterpret_cast<uintptr_t(__cdecl*)(uintptr_t, uint32_t)>(sr2::kMapSender)(address, kind);
     if (member != 0) return member;
-    const uint32_t ip = readDword(address + kSenderIpOffset);
-    const uint16_t port = readWord(address + kSenderPortOffset);
+    const uint32_t ip = readDword(address + sr2::kSenderIpOffset);
+    const uint16_t port = readWord(address + sr2::kSenderPortOffset);
     bool first = false;
     if (local_port_rules::isPrivateIpv4(ip)) {
         std::lock_guard<std::mutex> lock(g_mutex);

@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../src/partner_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -14,13 +15,6 @@ using partner_rules::Vec3;
 
 constexpr uint32_t kInGame = sr2::kMemberStateInGame;
 constexpr uint32_t kJoining = 7;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 Pairing paired(const HumanEntry* humans, size_t humanCount, const MemberEntry* members, size_t memberCount) {
     Pairing pairing;

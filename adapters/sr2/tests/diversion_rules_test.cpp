@@ -3,19 +3,13 @@
 #include <cstdio>
 
 #include "../src/diversion_rules.h"
+#include "check.h"
 
 namespace {
 
 using diversion_rules::kNone;
 using partner_rules::Remote;
 using partner_rules::Vec3;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 constexpr uint32_t kLocalHandle = 0x11;
 constexpr uint32_t kOwnerHandle = 0x22;

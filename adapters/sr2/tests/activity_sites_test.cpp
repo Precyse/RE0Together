@@ -9,8 +9,10 @@
 
 #include "../src/activity_sites.h"
 #include "../src/partner_replacement.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -23,13 +25,6 @@ constexpr size_t kPhase3Sites = 6;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
 std::vector<Site> allSites() {
     std::vector<Site> all;
     for (const auto phase : {std::span<const Site>(activity_sites::kPhase1), std::span<const Site>(activity_sites::kPhase2),
@@ -39,18 +34,7 @@ std::vector<Site> allSites() {
     return all;
 }
 
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
 using other_sites::overlaps;
-
-bool idsAndAddressesAreUnique(const std::vector<Site>& sites) {
-    std::set<std::string_view> ids;
-    std::set<uintptr_t> addresses;
-    for (const Site& site : sites) {
-        if (!ids.insert(site.id).second || !addresses.insert(site.address).second) return false;
-    }
-    return true;
-}
 
 bool sitesDoNotOverlap(const std::vector<Site>& sites) {
     for (const Site& a : sites) {
@@ -94,13 +78,6 @@ bool shapesFit(const std::vector<Site>& sites) {
         if (site.kind == Kind::CallBlock && bytes.size() < kBranchBytes + partner_sites::parseHex(site.tail).size()) return false;
     }
     return true;
-}
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
 }
 
 }  // namespace

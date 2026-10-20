@@ -4,6 +4,7 @@
 #include <initializer_list>
 #include <string_view>
 
+#include "game_message.h"
 #include "sr2_addresses.h"
 
 // The pure rules of milestone 16 W2 mission flow (no game access, unit tested; docs/SR2_NOTES.md, "Mission flow"): who a start or
@@ -106,8 +107,7 @@ inline size_t joinNames(const std::u16string_view* names, size_t count, char16_t
 }
 
 // Where byte `index` of a message's payload is: after the 3 byte header (4 with the wide header flag of that message).
-constexpr size_t kHeaderBytes = 3;
-inline size_t payloadOffset(bool wideHeader, size_t index) { return kHeaderBytes + (wideHeader ? 1 : 0) + index; }
+inline size_t payloadOffset(bool wideHeader, size_t index) { return (wideHeader ? game_message::kWideHeaderBytes : game_message::kHeaderBytes) + index; }
 
 // The byte of the act 7 message that says whose bonus it is: the one after the sub id, which is the first byte of the payload.
 constexpr size_t kBonusFlagIndex = 1;

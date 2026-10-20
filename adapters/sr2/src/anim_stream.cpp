@@ -16,9 +16,12 @@
 #include "anim_stream_triggers.h"
 #include "anim_trace.h"
 #include "code_patch.h"
+#include "game_message.h"
 #include "guest_call.h"
 #include "log.h"
 #include "memory.h"
+#include "remote_players.h"
+#include "scoped_value.h"
 #include "site_installer.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
@@ -45,27 +48,8 @@ std::atomic<bool> g_moveAttempted{false};
 thread_local uintptr_t t_handlerSender = 0;
 thread_local std::optional<uint8_t> t_needOwner;
 
-// Sets a thread-local value for the life of the scope.
-template <typename T>
-class ScopedValue {
-public:
-    ScopedValue(T& target, T value) : target_(target), previous_(target) { target_ = value; }
-    ~ScopedValue() { target_ = previous_; }
-    ScopedValue(const ScopedValue&) = delete;
-    ScopedValue& operator=(const ScopedValue&) = delete;
-
-private:
-    T& target_;
-    T previous_;
-};
-
 std::optional<uint8_t> ownerOf(uint8_t slot) {
     return slot == kNoSlot ? std::nullopt : std::optional<uint8_t>(slot);
-}
-
-uintptr_t hostMember() {
-    const uintptr_t session = readDword(sr2::kSessionPointer);
-    return session ? readDword(session + sr2::kSessionHostMemberOffset) : 0;
 }
 
 // ---- AS1: the handler of streaming_sync ----
@@ -76,10 +60,10 @@ void __cdecl streamingSyncGate(GuestFrame* frame) {
     const uintptr_t payload = frame->args[kPayloadArg];
     const uintptr_t context = frame->args[kContextArg];
     const uint8_t sub = readByte(payload);
-    const uint16_t group = anim_stream_state::readWord(payload + sr2::kStreamingGroupOffset);
+    const uint16_t group = readWord(payload + sr2::kStreamingGroupOffset);
     const uintptr_t sender = activity_state::senderOf(context);
     const bool groupPending = sub == sr2::kStreamingSubAnswer && anim_stream_rules::pendingFor(anim_stream_state::pendingRequests(), group).found;
-    const bool senderIsHost = sender != 0 && sender == hostMember();
+    const bool senderIsHost = sender != 0 && sender == remote_players::hostMember();
     const anim_stream_rules::Verdict verdict = anim_stream_rules::gate(sub, activity_state::isHost(), senderIsHost, groupPending);
     const uint8_t slot = anim_stream_state::slotOfMember(sender);
     if (verdict != anim_stream_rules::Verdict::Run) {
@@ -101,7 +85,7 @@ void __cdecl streamingSyncGate(GuestFrame* frame) {
 // The member a message of this sub goes to, 0 for everyone.
 uintptr_t recipientMember(anim_stream_rules::Recipient recipient) {
     switch (recipient) {
-        case anim_stream_rules::Recipient::Host: return hostMember();
+        case anim_stream_rules::Recipient::Host: return remote_players::hostMember();
         case anim_stream_rules::Recipient::HandlerSender: return t_handlerSender;
         default: return 0;
     }
@@ -120,9 +104,9 @@ const char* missingRecipientText(anim_stream_rules::Recipient recipient) {
 void __cdecl sendStreamingSync(GuestFrame* frame) {
     const uint32_t buffer = frame->args[kBufferArg];
     const uint32_t length = frame->args[kLengthArg];
-    const uintptr_t header = readByte(sr2::kStreamingSyncRelFlag) ? sr2::kMessageHeaderWithRelBytes : sr2::kMessageHeaderBytes;
+    const uintptr_t header = readByte(sr2::kStreamingSyncRelFlag) ? game_message::kWideHeaderBytes : game_message::kHeaderBytes;
     const uint8_t sub = readByte(buffer + header);
-    const uint16_t group = anim_stream_state::readWord(buffer + header + sr2::kStreamingGroupOffset);
+    const uint16_t group = readWord(buffer + header + sr2::kStreamingGroupOffset);
     const anim_stream_rules::Recipient recipient = anim_stream_rules::recipient(sub, t_handlerSender != 0);
     const uintptr_t member = recipientMember(recipient);
     if (member) {
@@ -165,12 +149,12 @@ NeedClears clearLeaverNeeds(uint8_t slot) {
     const anim_trace_rules::NeedTableView view = anim_stream_state::needTableView();
     for (size_t i = 0; i < view.rows; ++i) {
         const uintptr_t row = view.base + i * sr2::kAnimNeedRowBytes;
-        const uint16_t group = anim_stream_state::readWord(row + sr2::kAnimNeedGroupOffset);
+        const uint16_t group = readWord(row + sr2::kAnimNeedGroupOffset);
         const bool local = readByte(row + sr2::kAnimNeedLocalOffset) != 0;
         if (local || group == sr2::kNoGroup || (readByte(row + sr2::kAnimNeedRemoteOffset) & anim_stream_rules::slotBit(slot)) == 0) continue;
         guest_call::call(sr2::kAnimNeedClear, {.edi = group, .edx = 0});
         ++clears.cleared;
-        if (anim_stream_state::readWord(row + sr2::kAnimNeedGroupOffset) == sr2::kNoGroup) ++clears.freed;
+        if (readWord(row + sr2::kAnimNeedGroupOffset) == sr2::kNoGroup) ++clears.freed;
     }
     return clears;
 }

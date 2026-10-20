@@ -1,8 +1,9 @@
 // Selection thunks of Crowd Control: a call of the partner getter becomes the remote that the test around it is about (the one that
 // holds the celebrity, the one nearest to the object or the remote start), and the warp of the level start and end reaches every
 // remote. One remote gives the shipped answer.
+#include <span>
+
 #include "activity_state.h"
-#include "crowd_control_remotes.h"
 #include "crowd_control_rules.h"
 #include "crowd_control_thunks.h"
 #include "diversion_trace.h"
@@ -11,6 +12,7 @@
 #include "memory.h"
 #include "partner_identity.h"
 #include "partner_scope.h"
+#include "party_ai_remotes.h"
 #include "rate_limit.h"
 #include "remote_players.h"
 #include "sr2_addresses.h"
@@ -34,15 +36,16 @@ uint64_t pairKey(uintptr_t first, uintptr_t second) { return (static_cast<uint64
 uintptr_t __cdecl remoteHoldingCelebrity(uintptr_t celebrity) {
     if (partner_scope::overrideActive()) return partner_scope::partnerHuman();
     const uint32_t handle = readDword(celebrity + sr2::kObjectHandleOffset);
-    const crowd_control_remotes::List remotes = crowd_control_remotes::take();
+    const party_ai_remotes::Remotes remotes;
+    const std::span<const uintptr_t> humans = remotes.humans().span();
     uint32_t held[partner_rules::kMaxWalked];
-    for (size_t i = 0; i < remotes.count; ++i) held[i] = readDword(remotes.humans[i] + sr2::kHumanHeldOffset);
-    const size_t at = crowd_control_rules::holderIndex(held, remotes.count, handle);
+    for (size_t i = 0; i < humans.size(); ++i) held[i] = readDword(humans[i] + sr2::kHumanHeldOffset);
+    const size_t at = crowd_control_rules::holderIndex(held, humans.size(), handle);
     if (at == crowd_control_rules::kNone) return partner_scope::partnerHuman();
-    if (diversion_trace::firstTime(g_holderSeen, pairKey(handle, remotes.humans[at]))) {
-        logger::write("trace: crowd: celeb 0x%X held by remote 0x%X", handle, static_cast<unsigned>(remotes.humans[at]));
+    if (diversion_trace::firstTime(g_holderSeen, pairKey(handle, humans[at]))) {
+        logger::write("trace: crowd: celeb 0x%X held by remote 0x%X", handle, static_cast<unsigned>(humans[at]));
     }
-    return remotes.humans[at];
+    return humans[at];
 }
 
 // The remote nearest to `point`, else the default partner (no remote).

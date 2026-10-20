@@ -9,7 +9,9 @@
 #include "../src/partner_sites.h"
 #include "../src/player_cap_patches.h"
 #include "../src/replication_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -22,15 +24,6 @@ constexpr size_t kMinEntryBytes = 5;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uintptr_t kThunk = 0x10003000;
 constexpr uint32_t kMaxPlayers = 4;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
 
 bool overlaps(uintptr_t a, size_t aSize, uintptr_t b, size_t bSize) { return a < b + bSize && b < a + aSize; }
 
@@ -113,7 +106,7 @@ int main() {
           "both drop branches go to 0x81611E");
     check(siteNamed("T4a")->address == join_net_trace_sites::kJoinReqMappedDrop &&
               siteNamed("T4b")->address == join_net_trace_sites::kJoinReqDuplicateDrop &&
-              siteNamed("T4")->address == join_net_trace_sites::kJoinReqHandler,
+              siteNamed("T4")->address == sr2::kJoinReqHandler,
           "the drop branches are the two of the join_req handler 0x815BC0");
 
     const CodePatch entry = join_net_trace_sites::patchFor(*siteNamed("T6"), kThunk);

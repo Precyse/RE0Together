@@ -17,8 +17,10 @@
 #include "../src/store_sites.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -33,16 +35,8 @@ constexpr size_t kBlockBytes = 39;
 constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint8_t kCallOpcode = 0xE8;
 constexpr uint8_t kJumpOpcode = 0xE9;
-constexpr uint8_t kNop = 0x90;
 constexpr size_t kWrittenSites = 8;
 constexpr size_t kCheckRows = 3;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
@@ -54,25 +48,11 @@ size_t sizeOf(std::string_view hex) { return partner_sites::parseHex(hex).size()
 
 size_t sizeOf(const Site& site) { return sizeOf(site.expected); }
 
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
 size_t setSize(std::string_view name) {
     for (const store_sites::Set& set : store_sites::kSets) {
         if (name == set.name) return set.sites.size();
     }
     return 0;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 // Every site table of the other milestones (milestone 16 wave 1 included), by range.

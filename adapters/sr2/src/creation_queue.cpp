@@ -21,12 +21,6 @@ void* g_drainOriginal = nullptr;
 const uintptr_t g_resumeCreate = sr2::kQueueAppendResumeCreate;
 const uintptr_t g_resumeBatch = sr2::kQueueAppendResumeBatch;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 // After the game's drain emptied the queue: the oldest handles that did not fit go in, to be sent on the next tick.
 void refill(uintptr_t member) {
     uint32_t handles[creation_queue_rules::kCapacity];
@@ -113,7 +107,7 @@ void append(uintptr_t member, uint32_t handle) {
     std::lock_guard<std::mutex> lock(g_overflowLock);
     g_overflow.add(member, handle);
     if (g_trace) {
-        logger::writeUnlessRepeated("trace: creation queue of slot %u is full, %zu handles wait", byteAt(member + sr2::kMemberSlotOffset),
+        logger::writeUnlessRepeated("trace: creation queue of slot %u is full, %zu handles wait", readByte(member + sr2::kMemberSlotOffset),
                                     g_overflow.pending(member));
     }
 }
@@ -123,7 +117,7 @@ bool enqueue(uintptr_t member, uintptr_t record) {
     append(member, readDword(record + sr2::kRecordHandleOffset));
     uint16_t mask = 0;
     readMemory(record + sr2::kRecordCreatedMaskOffset, &mask, sizeof(mask));
-    mask = creation_queue_rules::maskAfterQueue(mask, byteAt(member + sr2::kMemberSlotOffset));
+    mask = creation_queue_rules::maskAfterQueue(mask, readByte(member + sr2::kMemberSlotOffset));
     *reinterpret_cast<uint16_t*>(record + sr2::kRecordCreatedMaskOffset) = mask;
     return fits;
 }

@@ -9,6 +9,7 @@
 #include "../src/char_types_sites.h"
 #include "../src/partner_sites.h"
 #include "../src/player_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
 
@@ -21,13 +22,6 @@ using char_types_sites::kRows;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr size_t kExpectedRows = 8;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 size_t sizeOf(const Row& row) { return partner_sites::parseHex(row.expected).size(); }
 

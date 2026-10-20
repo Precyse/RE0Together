@@ -4,6 +4,7 @@
 
 #include "../src/fnv1a.h"
 #include "../src/sender_scope_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -12,13 +13,6 @@ using namespace sender_scope_rules;
 constexpr uintptr_t kSession = 0x20000000;
 constexpr uintptr_t kOtherSession = 0x20100000;
 constexpr size_t kRemotes = 3;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

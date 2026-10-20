@@ -5,6 +5,7 @@
 #include "../src/guest_welcome_rules.h"
 #include "../src/partner_sites.h"
 #include "../src/player_cap_patches.h"
+#include "check.h"
 
 namespace {
 
@@ -18,13 +19,6 @@ constexpr uintptr_t kSecondMember = 0x30100000;
 constexpr uintptr_t kOwnMember = 0x30200000;
 constexpr uintptr_t kNearby = 0x2E0;  // no milestone 4 site closer to the guest branch (J5 at 0x8CB747 is 0x2ED away)
 constexpr uintptr_t kThunk = 0x10006000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

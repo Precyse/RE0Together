@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../src/notoriety_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -17,13 +18,6 @@ constexpr size_t kSlotB = 3;
 constexpr size_t kSlotGone = 5;
 const uint8_t kBoth[] = {kSlotA, kSlotB};
 const uint8_t kOnlyA[] = {kSlotA};
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void theMerge() {
     const int32_t none[] = {kNoLock, kNoLock};

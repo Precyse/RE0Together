@@ -58,8 +58,6 @@ void* g_replayAnswerOriginal = nullptr;
 const uintptr_t g_acceptResume = sr2::kAcceptResume;
 const uintptr_t g_acceptSkip = sr2::kAcceptSkip;
 
-uintptr_t hostMember() { return readDword(readDword(sr2::kSessionPointer) + sr2::kSessionHostMemberOffset); }
-
 rules::Prompt promptState() { return {readDword(sr2::kStartPromptDialog), readByte(sr2::kStartPromptDeferred) != 0}; }
 
 // The start requester while its question is still the pending one and it is still a remote member, else 0.
@@ -78,7 +76,7 @@ uintptr_t liveReplayRequester() {
 
 rules::SendInputs sendInputs(uintptr_t remembered) {
     return {activity_state::isHost(), remote_players::remoteMemberCount(), t_explicitTarget, sender_scope::currentSender(), remembered,
-            hostMember()};
+            remote_players::hostMember()};
 }
 
 // Sends the message of a retargeted broadcast call (args: buffer, length; edi: the session) to `target`.
@@ -92,7 +90,7 @@ void send(const rules::Target& target, const uint32_t* args, uintptr_t session) 
 
 std::string targetText(const rules::Target& target) {
     if (target.kind == rules::TargetKind::Broadcast) return "every member";
-    if (target.member == hostMember()) return "the host";
+    if (target.member == remote_players::hostMember()) return "the host";
     char text[kTargetTextChars];
     std::snprintf(text, sizeof(text), "slot %u", mission_flow::slotOf(target.member));
     return text;

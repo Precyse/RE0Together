@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -457,5 +458,11 @@ inline std::vector<uint8_t> parseHex(std::string_view text) {
     }
     return bytes;
 }
+
+// A named group of rows that is checked and installed on its own.
+struct Set {
+    const char* name;
+    std::span<const Site> sites;
+};
 
 }  // namespace partner_sites

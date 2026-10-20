@@ -13,6 +13,7 @@
 #include "join_deny_rules.h"
 #include "log.h"
 #include "memory.h"
+#include "sr2_addresses.h"
 #include "trailer_rules.h"
 #include "transport.h"
 #include "version_gate_patches.h"
@@ -24,7 +25,6 @@ using trailer_rules::Verdict;
 constexpr size_t kMaxPayload = 1300;      // the game's message buffers
 constexpr uintptr_t kPayloadLengthBack = 2;  // the u16 payload length sits just before the payload (3 byte header)
 constexpr uintptr_t kContextMemberOffset = 4;   // ctx[1]: the member the sender is mapped to, 0 for a stranger
-constexpr uintptr_t kSenderPortOffset = 4;      // in the sender address block (the IP is at 0)
 constexpr size_t kAddressBlockWords = 5;        // {ip, port, 0, 0, 0}
 constexpr size_t kDenyPayloadWords = 2;
 constexpr size_t kRefusalChars = 160;           // the wide text shown for a refusal, its end mark included
@@ -34,18 +34,12 @@ bool g_trace = false;
 std::mutex g_passwordMutex;
 std::string g_joinPassword;  // what a join_req must carry, empty = nothing is checked
 std::atomic<uint8_t> g_lastDenyReason{join_deny_rules::kReasonNone};
-const uintptr_t g_send = version_gate_patches::kSend;
+const uintptr_t g_send = sr2::kSendToMember;
 const uintptr_t g_errorText = version_gate_patches::kErrorText;
 
 using HandlerFn = void(__cdecl*)(uintptr_t payload, uintptr_t ctx);
 
 void callHandler(uintptr_t handler, uintptr_t payload, uintptr_t ctx) { reinterpret_cast<HandlerFn>(handler)(payload, ctx); }
-
-uint16_t readWord(uintptr_t address) {
-    uint16_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
 
 struct Inspection {
     Verdict verdict;
@@ -125,13 +119,13 @@ void denyJoin(uint32_t ip, uint32_t port, uint8_t reason) {
 // sender and ending in our trailer, and nothing else happens.
 void __cdecl gateJoinReq(uintptr_t payload, uintptr_t ctx) {
     if (readDword(ctx + kContextMemberOffset) != 0) {  // the sender has a member: the handler drops it itself
-        callHandler(version_gate_patches::kJoinReqHandler, payload, ctx);
+        callHandler(sr2::kJoinReqHandler, payload, ctx);
         return;
     }
     const Inspection inspection = inspect(payload);
     const uintptr_t sender = readDword(ctx);
     const uint32_t ip = readDword(sender);
-    const uint32_t port = readDword(sender + kSenderPortOffset);
+    const uint32_t port = readDword(sender + sr2::kSenderPortOffset);
     if (inspection.verdict == Verdict::Match) {
         if (!passwordAccepted(payload)) {
             logger::write("version gate: join_req from 0x%08X:%u refused, wrong password", ip, port);
@@ -139,7 +133,7 @@ void __cdecl gateJoinReq(uintptr_t payload, uintptr_t ctx) {
             return;
         }
         if (g_trace) logger::write("version gate: join_req from 0x%08X:%u accepted", ip, port);
-        callHandler(version_gate_patches::kJoinReqHandler, payload, ctx);
+        callHandler(sr2::kJoinReqHandler, payload, ctx);
         return;
     }
     logRefusal("join_req from", ip, static_cast<uint16_t>(port), inspection);
@@ -167,7 +161,7 @@ void __cdecl gateJoinAcc(uintptr_t payload, uintptr_t ctx) {
         return;
     }
     const uintptr_t sender = readDword(ctx);
-    logRefusal("join_acc from host", readDword(sender), readWord(sender + kSenderPortOffset), inspection);
+    logRefusal("join_acc from host", readDword(sender), readWord(sender + sr2::kSenderPortOffset), inspection);
     setPending(inspection);
     g_lastDenyReason = join_deny_rules::kReasonWrongVersion;
     uint32_t deny[kDenyPayloadWords] = {join_deny_rules::kGameVersion, join_deny_rules::kReasonWrongVersion};

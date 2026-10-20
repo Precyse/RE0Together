@@ -10,6 +10,7 @@
 namespace session_kick_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -25,11 +26,6 @@ inline constexpr Site kKickTarget[] = {
 // KA5: the sign-in loss on the host removed the partner only; the call of the member removal 0x80F9B0 removes every remote.
 inline constexpr Site kSessionEnd[] = {
     {"KA5", Kind::RetargetCall, 0x69A1D6, "E8 D5 57 17 00", Thunk::RemoveEveryRemoteMember, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

@@ -13,8 +13,10 @@
 #include "../src/sr2_addresses.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -30,13 +32,6 @@ constexpr uint8_t kCallOpcode = 0xE8;
 constexpr size_t kWrittenSites = 6;
 constexpr size_t kTraceSites = 3;
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
 std::vector<Site> writtenSites() {
     std::vector<Site> all;
     for (const auto table : {std::span<const Site>(outfit_sync_sites::kLookSync), std::span<const Site>(outfit_sync_sites::kItemWear),
@@ -50,31 +45,6 @@ std::vector<Site> everySite() {
     std::vector<Site> all = writtenSites();
     all.insert(all.end(), std::begin(outfit_sync_sites::kTraces), std::end(outfit_sync_sites::kTraces));
     return all;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
-}
-
-bool idsAndAddressesAreUnique(const std::vector<Site>& sites) {
-    std::set<std::string_view> ids;
-    std::set<uintptr_t> addresses;
-    for (const Site& site : sites) {
-        if (!ids.insert(site.id).second || !addresses.insert(site.address).second) return false;
-    }
-    return true;
 }
 
 void theTables() {

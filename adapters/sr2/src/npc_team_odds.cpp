@@ -100,7 +100,7 @@ int enemiesOf(uintptr_t human, uintptr_t head, const HumanList& others) {
             bool armed = false;
             if (targetsHead || targetsNearOther) {
                 hostile = (guest_call::call(sr2::kNpcHostileTest, {.eax = npc}, {target, 0}) & 0xFF) != 0;
-                armed = hostile && guest_call::call(sr2::kNpcArmedTest, {}, {npc + sr2::kNpcArmedStateOffset, 1, 0, 0, 0}) != 0;
+                armed = hostile && guest_call::call(sr2::kNpcArmedTest, {}, {npc + sr2::kHumanInventoryOffset, 1, 0, 0, 0}) != 0;
             }
             if (party_ai_rules::countsAsEnemy(targetsHead, targetsNearOther, hostile, armed)) ++enemies;
         }

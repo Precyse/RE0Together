@@ -7,7 +7,9 @@
 #include "../src/leave_rules.h"
 #include "../src/partner_sites.h"
 #include "../src/player_cap_patches.h"
+#include "check.h"
 #include "juiced_targets.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -20,20 +22,6 @@ constexpr uint32_t kFourPlayers = 4;
 constexpr uint8_t kHost = 0;
 constexpr uint8_t kGuestOne = 1;
 constexpr uint8_t kGuestTwo = 2;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-const CodePatch* patchAt(const std::vector<CodePatch>& patches, uintptr_t address) {
-    for (const CodePatch& patch : patches) {
-        if (patch.address == address) return &patch;
-    }
-    return nullptr;
-}
 
 std::vector<uint8_t> jumpTo(uintptr_t address, uintptr_t thunk, size_t size) {
     const uint32_t to = static_cast<uint32_t>(thunk - (address + 5));
@@ -68,7 +56,6 @@ int main() {
               guestLeave(8, false, false) == GuestLeave::ObjectPass,
           "another guest leaving in the states 1, 6 and 8: the host's pass over the objects, and no cutscene end");
     check(guestLeave(3, false, false) == GuestLeave::Nothing, "another guest leaving in any other state: nothing");
-
 
     check(usableMember(false, 1, 8, kGuestOne, kGuestTwo), "a remote member that can receive and is connected gets the reissue");
     check(!usableMember(true, 1, 13, kHost, kGuestTwo) && !usableMember(false, 0, 13, kGuestOne, kGuestTwo) &&

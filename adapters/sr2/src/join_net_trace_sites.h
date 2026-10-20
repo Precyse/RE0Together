@@ -5,6 +5,7 @@
 
 #include "code_patch.h"
 #include "partner_sites.h"
+#include "sr2_addresses.h"
 
 // Where the join path trace (milestone 5b, docs/SR2_NOTES.md "Join trace") hooks the exe. Copied from the research
 // table m5_patch_sites.tsv; the bytes are what the exe has there.
@@ -21,7 +22,6 @@ struct Site {
     const char* expected;
 };
 
-constexpr uintptr_t kJoinReqHandler = 0x815BC0;
 constexpr uintptr_t kJoinReqMappedDrop = 0x815BEB;     // the sender already has a member
 constexpr uintptr_t kJoinReqDuplicateDrop = 0x815EB5;  // a member with the sender's address exists
 constexpr uintptr_t kJoinReqDropExit = 0x81611E;       // where both drops go
@@ -30,7 +30,7 @@ constexpr size_t kBranchBytes = 6;                     // 0F 85 rel32
 inline constexpr Site kSites[] = {
     {"T1", Kind::Entry, 0x8CFDE0, "51 A1 18 8C 52 02 85 C0"},
     {"T2", Kind::Entry, 0x8CC1F0, "51 56 8B 74 24 0C 57 56"},
-    {"T4", Kind::Entry, kJoinReqHandler, "55 8B EC 83 E4 F8 81 EC"},
+    {"T4", Kind::Entry, sr2::kJoinReqHandler, "55 8B EC 83 E4 F8 81 EC"},
     {"T4a", Kind::DropBranch, kJoinReqMappedDrop, "0F 85 2D 05 00 00"},
     {"T4b", Kind::DropBranch, kJoinReqDuplicateDrop, "0F 85 63 02 00 00"},
     {"T5", Kind::Entry, 0x816F60, "81 EC 24 05 00 00 A1 50"},
@@ -55,7 +55,7 @@ inline CodePatch patchFor(const Site& site, uintptr_t thunk) {
     if (site.kind == Kind::DropBranch) {
         const auto jump = relativeBranch(kJmpRel32, site.address, thunk);
         patch.replacement.assign(jump.begin(), jump.end());
-        patch.replacement.resize(kBranchBytes, 0x90);
+        patch.replacement.resize(kBranchBytes, kNop);
     }
     return patch;
 }

@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "../src/trail_blazing_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -18,13 +19,6 @@ constexpr float kDeep = 5.0f;
 constexpr float kJustOver = 1.0001f;
 constexpr float kDistance = 100.0f;
 constexpr float kTolerance = 1e-5f;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 bool sameCell(Cell cell, uint32_t right, uint32_t back) { return cell.right == right && cell.back == back; }
 

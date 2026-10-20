@@ -20,13 +20,7 @@ constexpr uint32_t kPausedFlagBits = 0xFF;  // cl, set by the handler's `setne c
 bool g_trace = false;
 rate_limit::RateLimit g_noSenderLimit;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
-uint8_t slotOf(uintptr_t member) { return member ? byteAt(member + sr2::kMemberSlotOffset) : 0; }
+uint8_t slotOf(uintptr_t member) { return member ? readByte(member + sr2::kMemberSlotOffset) : 0; }
 
 uint8_t& pauseByte() { return *reinterpret_cast<uint8_t*>(sr2::kPartnerPaused); }
 
@@ -37,7 +31,7 @@ struct PauseState {
 };
 
 PauseState readPauseState() {
-    return {readDword(sr2::kPauseRefCount), byteAt(sr2::kWorldPausedFlag), byteAt(sr2::kRemotePauseFlag)};
+    return {readDword(sr2::kPauseRefCount), readByte(sr2::kWorldPausedFlag), readByte(sr2::kRemotePauseFlag)};
 }
 
 // The game's apply for the byte as it is now, with the pause count before and after in the trace.

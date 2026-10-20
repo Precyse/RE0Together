@@ -35,19 +35,6 @@ const uintptr_t g_renameBody = sr2::kLeaveRenameBody;
 const uintptr_t g_renameSkip = sr2::kLeaveRenameSkip;
 const uintptr_t g_cutsceneCleanup = sr2::kCutsceneCleanup;
 
-
-uint8_t readByte(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
-uint16_t readWord(uintptr_t address) {
-    uint16_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 // The session as this machine sees it: its members and their slots.
 struct SessionView {
     uintptr_t session = 0;
@@ -163,7 +150,7 @@ void reissue(const leave_rules::ReissueSet& set, const std::vector<remote_player
     for (const leave_rules::Item& item : set.items()) {
         const leave_rules::Message message = destroyMessageOf(item);
         for (const remote_players::MemberInfo& member : members) {
-            guest_call::call(sr2::kSendMessage, {.esi = static_cast<uint32_t>(member.address)},
+            guest_call::call(sr2::kSendToMember, {.esi = static_cast<uint32_t>(member.address)},
                              {static_cast<uint32_t>(reinterpret_cast<uintptr_t>(message.bytes.data())),
                               static_cast<uint32_t>(message.length), 0, 0});
             const bool queued = creation_queue::enqueue(member.address, item.record);

@@ -10,7 +10,9 @@
 #include "../src/player_cap_patches.h"
 #include "../src/replication_sites.h"
 #include "../src/version_gate_patches.h"
+#include "check.h"
 #include "juiced_targets.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -25,21 +27,7 @@ constexpr uint32_t kFourPlayers = 4;
 constexpr uint32_t kMovedPort = 4201;
 constexpr size_t kSites = 12;
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
 bool overlaps(uintptr_t a, size_t aSize, uintptr_t b, size_t bSize) { return a < b + bSize && b < a + aSize; }
-
-const CodePatch* patchAt(const std::vector<CodePatch>& patches, uintptr_t address) {
-    for (const CodePatch& patch : patches) {
-        if (patch.address == address) return &patch;
-    }
-    return nullptr;
-}
 
 bool clearOfJuiced(const std::vector<CodePatch>& patches) {
     for (const CodePatch& patch : patches) {

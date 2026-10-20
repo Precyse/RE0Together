@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../src/net_clock_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -10,13 +11,6 @@ using namespace net_clock_rules;
 
 constexpr uint32_t kNow = 100000;
 constexpr uint32_t kFrameMs = 33;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

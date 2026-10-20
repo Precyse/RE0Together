@@ -41,6 +41,34 @@ uintptr_t firstDifference(std::span<const Site> sites) {
     return 0;
 }
 
+bool matchSets(const char* label, std::span<const partner_sites::Set> sets, std::span<bool> matched) {
+    bool any = false;
+    for (size_t i = 0; i < sets.size(); ++i) {
+        const partner_sites::Set& set = sets[i];
+        const uintptr_t differs = firstDifference(set.sites);
+        matched[i] = differs == 0;
+        any = any || matched[i];
+        if (differs) {
+            logger::write("%s: set %s differs at 0x%X, not installed", label, set.name, static_cast<unsigned>(differs));
+        } else {
+            logger::write("%s: set %s matches (%zu rows)", label, set.name, set.sites.size());
+        }
+    }
+    return any;
+}
+
+void installMatchedSets(const char* label, std::span<const partner_sites::Set> sets, std::span<const bool> matched, Binder binder) {
+    for (size_t i = 0; i < sets.size(); ++i) {
+        if (!matched[i]) continue;
+        const Result result = install(sets[i].sites, binder);
+        if (result.installed) {
+            logger::write("%s: set %s patched (%zu rows)", label, sets[i].name, result.patched);
+        } else {
+            logger::write("%s: set %s not patched", label, sets[i].name);
+        }
+    }
+}
+
 Result install(std::span<const Site> sites, Binder binder) {
     std::vector<CodePatch> patches;
     std::vector<const Site*> hookSites;

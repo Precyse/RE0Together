@@ -5,6 +5,7 @@
 
 #include "../src/traffic_trace_rules.h"
 #include "../src/vehicle_census_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -12,13 +13,6 @@ using population_rules::Player;
 using population_rules::Point;
 using traffic_trace_rules::FarOwned;
 using traffic_trace_rules::OwnerAreaCounts;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 Point at(float x) { return {x, 0, 0}; }
 

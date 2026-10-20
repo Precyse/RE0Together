@@ -34,18 +34,12 @@ activity_rules::DeclineTally g_zombieTally;
 enum CompetitiveDiversion : size_t { kCatAndMouse, kDeathTag, kCompetitiveDiversions };
 diversion_rules::EdgeLog<kCompetitiveDiversions> g_competitiveLog;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 // AV1: any remote player human still in a ragdoll keeps the Insurance Fraud level going.
 uint32_t __cdecl anyRemoteRagdolling() {
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
     for (size_t i = 0; i < snapshot.humanCount; ++i) {
-        if (byteAt(snapshot.humans[i].human + sr2::kHumanRagdollOffset) != 0) return 1;
+        if (readByte(snapshot.humans[i].human + sr2::kHumanRagdollOffset) != 0) return 1;
     }
     return 0;
 }
@@ -82,7 +76,7 @@ void __stdcall flagBEachRemote(uint32_t, uint32_t flag) { forEachRemote(sr2::kHu
 void __cdecl derbyParticipantsOnly(GuestFrame* frame) {
     const uint32_t* args = frame->args;
     const uint32_t local = readDword(readDword(sr2::kLocalPlayer) + sr2::kObjectHandleOffset);
-    const uint8_t sub = byteAt(args[kBufferArg]);
+    const uint8_t sub = readByte(args[kBufferArg]);
     if (activity_rules::derbyFlowIgnored(local, readDword(sr2::kMissionOwnerHandle), readDword(sr2::kMissionPartnerHandle), sub)) {
         if (activity_state::tracing()) logger::write("trace: derby sub %u ignored, this player is a spectator", sub);
         return;
@@ -112,7 +106,7 @@ uintptr_t __cdecl zombiePartner() {
 void __cdecl zombieAnswerGate(GuestFrame* frame) {
     const uint32_t* args = frame->args;
     const uint32_t dialog = readDword(sr2::kZombieDialog);
-    if (activity_state::isHost() && dialog && byteAt(args[kBufferArg]) != kZombieAnswerAccept) {
+    if (activity_state::isHost() && dialog && readByte(args[kBufferArg]) != kZombieAnswerAccept) {
         uintptr_t required[activity_rules::kMaxMembers];
         const size_t count = activity_state::remoteMembersInGame(required);
         const uintptr_t member = activity_state::senderOf(args[kContextArg]);

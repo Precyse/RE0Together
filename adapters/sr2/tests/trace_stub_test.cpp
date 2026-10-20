@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include "../src/thunk_frame.h"
+#include "check.h"
 
 namespace {
 
@@ -14,13 +15,6 @@ namespace {
 #define kRegisterMark 0xC0FFEE
 #define kWrapEax 0x5A5A01
 #define kWrapEcx 0x5A5A02
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 uint32_t __stdcall fakeAdd(uint32_t a, uint32_t b, uint32_t c) { return a + b + c; }
 

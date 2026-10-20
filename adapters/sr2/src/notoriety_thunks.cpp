@@ -49,7 +49,7 @@ uint32_t __cdecl teamSeesAnyRemote(uint32_t team) {
 }
 
 bool inAirOrWaterVehicle(uintptr_t human) {
-    const uint32_t vehicle = guest_call::call(sr2::kObjectOfHandleUnlessKind5, {.ecx = readDword(human + sr2::kHumanVehicleOffset)});
+    const uint32_t vehicle = guest_call::call(sr2::kVehicleObjectOf, {.ecx = readDword(human + sr2::kHumanVehicleOffset)});
     if (!vehicle) return false;
     for (const uintptr_t test : sr2::kVehicleClassTests) {
         if ((guest_call::call(test, {.edx = vehicle, .eax = vehicle}) & 0xFF) != 0) return true;

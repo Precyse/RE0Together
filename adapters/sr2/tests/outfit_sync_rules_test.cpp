@@ -2,17 +2,11 @@
 #include <cstdio>
 
 #include "../src/outfit_sync_rules.h"
+#include "check.h"
 
 namespace {
 
 using outfit_sync_rules::Route;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 constexpr uint32_t kLocalMask = 1;
 constexpr uint32_t kRemoteMask = 2;

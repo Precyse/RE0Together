@@ -7,7 +7,6 @@
 
 namespace partner_replacement {
 
-constexpr uint8_t kNop = 0x90;
 
 // What the exe gets at a site: a branch to `thunk`, then the site's tail (call block) or nops (jump out). A retargeted
 // call or jmp keeps its opcode. The tail alone for a bytes site. Empty for a hook, which MinHook writes.

@@ -41,10 +41,6 @@ rate_limit::RateLimit g_guardLimit[kTableCount];
 
 size_t indexOf(TableId id) { return static_cast<size_t>(id); }
 
-std::vector<uint8_t> littleEndian(uint32_t value) {
-    return {static_cast<uint8_t>(value), static_cast<uint8_t>(value >> 8), static_cast<uint8_t>(value >> 16), static_cast<uint8_t>(value >> 24)};
-}
-
 // ---- The game's constructors the new tables need ----
 
 void constructVehicle(uintptr_t object) { reinterpret_cast<void*(__thiscall*)(void*)>(sr2::kVehicleConstructor)(reinterpret_cast<void*>(object)); }

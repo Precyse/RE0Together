@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../src/activity_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -11,13 +12,6 @@ constexpr uintptr_t kThird = 0x2000;
 constexpr uintptr_t kFourth = 0x3000;
 constexpr uint32_t kRequest = 77;
 constexpr uint32_t kOtherRequest = 78;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

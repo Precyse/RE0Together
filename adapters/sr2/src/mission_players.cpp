@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "fpu_guard.h"
+#include "game_message.h"
 #include "guest_call.h"
 #include "memory.h"
 #include "partner_scope.h"
@@ -17,11 +18,8 @@ namespace {
 using partner_sites::Thunk;
 
 constexpr uintptr_t kCutsceneWideHeaderFlag = 0xE8BC74;  // byte: the cutscn_pkt header is 4 bytes
-constexpr size_t kHeaderBytes = 3;
-constexpr size_t kWideHeaderBytes = 4;
 constexpr size_t kEndPositionOffset = 1;  // after the sub id: three floats
 constexpr size_t kEndForwardOffset = 0xD;  // and the forward vector
-constexpr size_t kMaxMessageBytes = 0x200;
 constexpr size_t kTeleportPayloadBytes = 0x36;
 constexpr size_t kTeleportPositionOffset = 2;     // three floats, after the net id
 constexpr size_t kTeleportOrientationOffset = 0xE;  // the orientation, row 0 first
@@ -73,15 +71,15 @@ void __cdecl sendCutsceneEndPerRemote(GuestFrame* frame) {
     FpuGuard guard;
     const uint8_t* packet = reinterpret_cast<const uint8_t*>(frame->args[kBufferArg]);
     const size_t length = frame->args[kLengthArg];
-    if (length > kMaxMessageBytes) return;
+    if (length > game_message::kMaxMessageBytes) return;
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
     const Slots slots = slotsOf(snapshot);
-    const size_t sub = *reinterpret_cast<const uint8_t*>(kCutsceneWideHeaderFlag) ? kWideHeaderBytes : kHeaderBytes;
+    const size_t sub = *reinterpret_cast<const uint8_t*>(kCutsceneWideHeaderFlag) ? game_message::kWideHeaderBytes : game_message::kHeaderBytes;
     for (size_t i = 0; i < snapshot.pairing.count; ++i) {
         const partner_rules::Remote& remote = snapshot.pairing.items[i];
         if (!remote.member) continue;
-        uint8_t copy[kMaxMessageBytes];
+        uint8_t copy[game_message::kMaxMessageBytes];
         memcpy(copy, packet, length);
         const spread_rules::Offset right = spread_rules::rightOf(readFloat(copy + sub + kEndForwardOffset),
                                                                  readFloat(copy + sub + kEndForwardOffset + 2 * sizeof(float)));

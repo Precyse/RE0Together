@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "fnv1a.h"
+#include "game_message.h"
 #include "sr2_addresses.h"
 
 // The pure rules of the sender scope (milestone 9 and 11, unit tested).
@@ -22,7 +23,7 @@ inline uint16_t lookNetId(uint16_t payloadId, uint16_t senderHumanId) {
 // A look is applied again only when it changed (milestone 11 B2). Every look sender broadcasts to every remote on a join,
 // a load, a pause exit and a mission start, so with several players each of those re-dressed every player on every machine.
 constexpr size_t kNetIdBytes = sizeof(uint16_t);  // the first word of a look payload names the human; the rest is the look
-constexpr size_t kMaxLookPayload = 0x1FF;         // a message this long or longer is never sent
+constexpr size_t kMaxLookPayload = game_message::kSendLengthLimit;  // a message this long or longer is never sent
 constexpr size_t kMinRemoteHumansToDrop = 2;      // with one remote the game's handler always runs
 constexpr uint8_t kLookSlots = 8;                 // sender slots 0..7
 

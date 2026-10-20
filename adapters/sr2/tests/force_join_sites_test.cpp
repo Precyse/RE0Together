@@ -7,8 +7,10 @@
 
 #include "../src/force_join_sites.h"
 #include "../src/partner_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -17,15 +19,6 @@ using force_join_sites::Site;
 constexpr size_t kExpectedSites = 6;
 constexpr size_t kMinHookBytes = 5;
 constexpr uintptr_t kJuicedMargin = 16;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
 
 bool uniqueAndDisjoint() {
     std::set<std::string_view> ids;

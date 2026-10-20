@@ -21,7 +21,6 @@ namespace {
 
 namespace rules = char_types_rules;
 
-constexpr uint8_t kNop = 0x90;
 constexpr const char* kPlayerTypeName = "styletest_pc";
 constexpr uint32_t kRequestKind = 5;  // the arguments of the shipped block for mp2 (0x69CB18 to 0x69CB24)
 constexpr uint32_t kRequestFlags = 1;

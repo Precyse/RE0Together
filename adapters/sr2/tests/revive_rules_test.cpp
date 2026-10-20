@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../src/revive_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -18,13 +19,6 @@ constexpr uint32_t kNegativeZeroBits = 0x80000000;
 constexpr uint32_t kQuietNanBits = 0x7FC00000;
 constexpr uintptr_t kDead = 0xD0;
 constexpr uintptr_t kThird = 0xD1;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 Player up(uintptr_t human, uint8_t slot) { return {human, slot, true, false, false}; }
 Player downed(uintptr_t human, uint8_t slot) { return {human, slot, true, true, false}; }

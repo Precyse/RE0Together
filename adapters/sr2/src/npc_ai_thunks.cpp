@@ -12,6 +12,7 @@
 #include "memory.h"
 #include "partner_identity.h"
 #include "partner_scope.h"
+#include "party_ai_remotes.h"
 #include "party_ai_rules.h"
 #include "party_ai_thunks.h"
 #include "rate_limit.h"
@@ -23,6 +24,7 @@
 namespace {
 
 using partner_sites::Thunk;
+using party_ai_remotes::Remotes;
 using party_ai_rules::AiCounters;
 using party_ai_rules::Pair;
 
@@ -34,25 +36,6 @@ rate_limit::RateLimit g_summaryLimit(kSummaryIntervalMs);
 rate_limit::OncePerKey g_teamBytesSeen;  // the remotes whose team byte was logged
 
 static_assert(sr2::kObjectPositionOffset == 0x14, "the nearest remote stubs assemble this offset");
-
-// The remote player humans now, and whether a thunk takes the shipped path.
-class Remotes {
-public:
-    Remotes() {
-        remote_players::take(snapshot_);
-        humans_ = party_ai_rules::remoteHumansOf(snapshot_.pairing);
-        shipped_ = party_ai_rules::shippedPath(snapshot_.pairing.trusted, humans_.count);
-    }
-
-    const party_ai_rules::HumanList& humans() const { return humans_; }
-    bool shipped() const { return shipped_; }
-    uint8_t slotOf(uintptr_t human) const { return party_ai_rules::slotOfHuman(snapshot_.pairing, human); }
-
-private:
-    remote_players::Snapshot snapshot_;
-    party_ai_rules::HumanList humans_;
-    bool shipped_;
-};
 
 bool rayBlocked(uintptr_t player, uint32_t npc, uint32_t point) {
     return (guest_call::call(sr2::kRayBlocked, {.edi = npc, .eax = player}, {point}) & 0xFF) != 0;

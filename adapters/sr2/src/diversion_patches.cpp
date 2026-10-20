@@ -7,7 +7,6 @@
 #include "activity_thunks.h"
 #include "diversion_sites.h"
 #include "diversion_thunks.h"
-#include "log.h"
 #include "partner_thunks.h"
 #include "site_installer.h"
 
@@ -32,34 +31,11 @@ partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
 
 namespace diversion_patches {
 
-bool sitesMatch() {
-    bool any = false;
-    for (size_t i = 0; i < std::size(diversion_sites::kSets); ++i) {
-        const diversion_sites::Set& set = diversion_sites::kSets[i];
-        const uintptr_t differs = site_installer::firstDifference(set.sites);
-        g_matched[i] = differs == 0;
-        any = any || g_matched[i];
-        if (differs) {
-            logger::write("diversions: set %s differs at 0x%X, not installed", set.name, static_cast<unsigned>(differs));
-        } else {
-            logger::write("diversions: set %s matches (%zu rows)", set.name, set.sites.size());
-        }
-    }
-    return any;
-}
+bool sitesMatch() { return site_installer::matchSets("diversions", diversion_sites::kSets, g_matched); }
 
 void install(bool trace) {
     activity_state::setTracing(trace);
-    for (size_t i = 0; i < std::size(diversion_sites::kSets); ++i) {
-        if (!g_matched[i]) continue;
-        const diversion_sites::Set& set = diversion_sites::kSets[i];
-        const site_installer::Result result = site_installer::install(set.sites, &bindingOf);
-        if (!result.installed) {
-            logger::write("diversions: set %s not patched", set.name);
-        } else {
-            logger::write("diversions: set %s patched (%zu rows)", set.name, result.patched);
-        }
-    }
+    site_installer::installMatchedSets("diversions", diversion_sites::kSets, g_matched, &bindingOf);
 }
 
 }  // namespace diversion_patches
