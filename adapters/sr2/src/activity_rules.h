@@ -74,10 +74,12 @@ private:
 // not start.
 inline bool blocksCompetitiveStart(size_t remoteHumans) { return remoteHumans > 1; }
 
-// Demolition derby act 0x1A subtypes of the garage, the car spawn and the arena warp: only the two participants run them.
+// Demolition derby act 0x1A subtypes of the garage, the car spawn and the arena warp: only the two participants run them. The pair cells are
+// written on a guest by the start; while either is still 0 the participants are not known, so nothing is ignored (the real partner
+// would otherwise never get its garage or car).
 inline bool derbyFlowIgnored(uint32_t localHandle, uint32_t owner, uint32_t partner, uint8_t sub) {
     const bool flow = sub == 1 || sub == 7 || sub == 8 || sub == 9;
-    return flow && localHandle != owner && localHandle != partner;
+    return flow && owner && partner && localHandle != owner && localHandle != partner;
 }
 
 // A race_req answer (accept or decline) goes back to the member that invited.

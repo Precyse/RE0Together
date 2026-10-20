@@ -100,6 +100,9 @@ int main() {
     check(!activity_rules::derbyFlowIgnored(kOwner, kOwner, kPartner, 1) &&
               !activity_rules::derbyFlowIgnored(kPartner, kOwner, kPartner, 8),
           "the owner and the partner run all of them");
+    check(!activity_rules::derbyFlowIgnored(kLocal, 0, kPartner, 1) && !activity_rules::derbyFlowIgnored(kLocal, kOwner, 0, 9) &&
+              !activity_rules::derbyFlowIgnored(kLocal, 0, 0, 7),
+          "while a pair cell is not set nobody is told apart from the participants");
 
     check(activity_rules::racePeerGetsReply(sr2::kRaceSubAccept) && activity_rules::racePeerGetsReply(sr2::kRaceSubDecline) &&
               !activity_rules::racePeerGetsReply(sr2::kRaceSubInvite),
