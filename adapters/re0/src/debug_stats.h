@@ -91,6 +91,9 @@ enum class Counter : size_t {
     DoorFollowsSent,
     DoorFollowsAccepted,
     DoorFollowsRejected,
+    EventBodyOpsSkipped,
+    DemoSkipsSent,
+    DemoSkipsApplied,
     Count
 };
 

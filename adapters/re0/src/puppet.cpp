@@ -61,6 +61,7 @@ uint32_t g_nextLogMs = 0;
 bool g_logStarted = false;
 bool g_stale = false;
 uint32_t g_staleSinceMs = 0;
+int32_t g_loggedEventPhase = room_phase::kUnreadable;
 
 void discardStream() {
     std::lock_guard lock(g_mutex);
@@ -156,10 +157,24 @@ void logState(uintptr_t player, Character character, const pose_wire::Pose& pose
         body.manualPitch, pose.manualPitch, stats.total[static_cast<size_t>(Counter::PuppetSubEvents)]);
 }
 
-// A door, a cutscene or another room: the engine or the room scripts move the character, the stream waits.
+// A door or another room: the engine moves the character, the stream waits. Scripted events and cutscenes do not
+// suspend it: the engine already holds both characters' thinks there, the owner's character runs the same scripts and
+// its samples keep coming, and the thread's Body ops skip the puppet (event_body), so the stream is its only writer. A
+// demo plays in its own room record, where the puppet is not in the loaded room and the other tests hold it.
 bool suspended(uintptr_t player, const pose_wire::Pose& pose) {
-    return room_phase::isEvent(game_state::roomPhase()) || game_state::doorActive() || pose.room != scene::current() ||
-           !game_state::inCurrentRoom(player);
+    return game_state::doorActive() || pose.room != scene::current() || !game_state::inCurrentRoom(player);
+}
+
+// Says once per event phase that the stream drives the puppet through it.
+void noteEventPhase(Character character) {
+    const int32_t phase = game_state::roomPhase();
+    if (!room_phase::isEvent(phase)) {
+        g_loggedEventPhase = room_phase::kUnreadable;
+        return;
+    }
+    if (phase == g_loggedEventPhase) return;
+    g_loggedEventPhase = phase;
+    logger::write("puppet: %s driven through %s phase", character_owner::name(character), room_phase::name(phase));
 }
 
 // The freshness of the owner's stream: the puppet holds while it is lost and says so once.
@@ -195,6 +210,7 @@ bool drive(uintptr_t player, Character character) {
     if (!result.valid) return false;
     if (result.reset != pose_timeline::Reset::None) noteReset(character, result.reset);
     if (suspended(player, pose)) return false;
+    noteEventPhase(character);
     if (result.staleDropped > 0) logger::writeUnlessRepeated("puppet: %u stale motion events dropped", result.staleDropped);
     pose_game::writePose(player, pose);
     checkWeapon(player, character, pose);

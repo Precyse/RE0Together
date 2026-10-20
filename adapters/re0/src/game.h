@@ -261,6 +261,36 @@ constexpr uintptr_t kUnitRoomRegistryGlobal = 0xdcc010;
 constexpr uintptr_t kUnitRoomRegistryFunction = 0x411570;
 constexpr int32_t kNoScene = -1;
 
+// state mode: phase 11 (script body ops and the shared demo skip; docs/RE0_NOTES.md "State mode: scripts and cutscenes")
+constexpr uintptr_t kOpcodeNameOffset = 8;            // char* in an opcode row
+constexpr uintptr_t kUnitOrdinalFunction = 0x40ff00;  // thiscall on [kUnitRoomRegistryGlobal] (script key, ordinal) ret 8 -> unit index
+constexpr uint32_t kNoUnit = 0xffffffff;
+constexpr uintptr_t kUnitObjectFunction = 0x51fed0;   // thiscall on sGameChara (unit index) ret 4 -> object or 0
+// uEventDemoScheduler update (fastcall, this in ECX): state at +0x58, 5 plays the demo and tests for a skip, 6 fades out.
+constexpr uintptr_t kDemoSchedulerUpdateFunction = 0x54ac30;
+constexpr uintptr_t kDemoStateOffset = 0x58;
+constexpr uint32_t kDemoStatePlaying = 5;
+constexpr uint32_t kDemoStateFadingOut = 6;
+// The skip branch of state 5 starts the fade-out with the duration at +0x64 of the object in [0xdcbe98], on the object
+// at +0x20 of [0xdcbea4] (thiscall (float duration) ret 4), then sets state 6.
+constexpr uintptr_t kDemoFadeDurationGlobal = 0xdcbe98;
+constexpr uintptr_t kDemoFadeDurationOffset = 0x64;
+constexpr uintptr_t kDemoFadeHolderGlobal = 0xdcbea4;
+constexpr uintptr_t kDemoFadeObjectOffset = 0x20;
+constexpr uintptr_t kFadeStartFunction = 0x5aa410;
+// The inputs that test true for a skip in state 5 (0x54b496 .. 0x54b4f9): the active pad's trigger word bit 8, the
+// keyboard word & 0x8050000, the mouse byte & 2. The pad word is [pad + [pad + 0xc38] * 0x2cc + 0x1a0].
+constexpr uintptr_t kPadActiveIndexOffset = 0xc38;
+constexpr uintptr_t kPadDeviceStride = 0x2cc;
+constexpr uintptr_t kPadTriggerWordOffset = 0x1a0;
+constexpr uint32_t kPadSkipBit = 8;
+constexpr uintptr_t kKeyboardGlobal = 0xe2e148;
+constexpr uintptr_t kKeyboardWordOffset = 0x160;
+constexpr uint32_t kKeyboardSkipMask = 0x8050000;
+constexpr uintptr_t kMouseGlobal = 0xe2e16c;
+constexpr uintptr_t kMouseButtonsOffset = 0x40;
+constexpr uint8_t kMouseSkipBit = 2;
+
 // Enemies: sEnemy holds a 37-entry pool; the pool slot index is the enemy's network id.
 constexpr uintptr_t kEnemyGlobal = 0xdcdc78;  // sEnemy*
 constexpr uintptr_t kEnemyPoolOffset = 0x4b0;

@@ -162,6 +162,16 @@ slot changes on both, the item leaves the placer's inventory once); the train li
 up, Billy stays, the party becomes Split up); a door event in Team and Leave behind; a room entry together; one player
 examining a typewriter (no message on the other screen).
 
+## 7a. State mode (phase 11)
+
+With `partner_mode=state` the remote-owned character is a puppet fed by its owner's stream. Ops that write one
+character's body (position, motion, think, climb, attachment, reset, game over; the list is `OpRole::Body` in
+`event_rule.h`) run only where that character is owned: the follower still waits for the leader's finished op, then
+`event_body::plan` skips the op on a puppet and the owner's own run does it. SubMove for an owner without the thread and
+a climb of type 7 report the peer copy's new place to the owner (CHARACTER_PLACE). A cutscene plays natively on both
+machines with one skip (`demo_skip`, DEMO_SKIP_REQUEST 0x0153 and DEMO_SKIP 0x0154). Details and logs:
+`docs/RE0_NOTES.md` "State mode: scripts and cutscenes".
+
 ## 8. Risks
 
 - The perspective swap covers the getters of sPlayer +0x2c / +0x3c; code that reads sGameChara's mirrors

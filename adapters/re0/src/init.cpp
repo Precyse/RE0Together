@@ -11,6 +11,7 @@
 #include "config.h"
 #include "crash_dump.h"
 #include "debug_overlay.h"
+#include "demo_skip.h"
 #include "door_sync.h"
 #include "door_travel.h"
 #include "enemy_damage_hook.h"
@@ -164,6 +165,7 @@ void shutdownAdapter() {
     pickup_guard::uninstall();
     puppet::uninstall();
     room_move::uninstall();
+    demo_skip::uninstall();
     pose_capture::uninstall();
     game_tick::uninstall();
     vtable_tracer::uninstall();
