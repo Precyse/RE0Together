@@ -21,7 +21,7 @@ struct MotionRequest {
     float start;
 };
 
-// Called on the game thread after the engine ran a motion request on the character whose anim control is `animControl`.
+// Called on the game thread (a request made on any other thread is not reported) after the engine ran a motion request on the character whose anim control is `animControl`.
 using SetObserver = void (*)(uintptr_t animControl, const MotionRequest& request);
 
 // Hooks cAnimControl::set on the first call (one MinHook for all) and adds `observer`, which sees every request the

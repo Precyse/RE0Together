@@ -16,6 +16,10 @@ void addCallback(const char* name, Callback callback);
 // next frame. A fault that persists disables them again.
 void rearmAfterResync();
 
+// Any thread: true on the thread that runs the ticks (the game thread), false anywhere else and before the first tick.
+// Recorders that fill game-thread-only buffers from engine calls the engine also makes off-thread check it first.
+bool onGameThread();
+
 // Called with true just before and false just after each player's own move runs. Scopes enter in registration order
 // and exit in reverse; at most kMaxMoveScopes. Safe to add while the hook is live (the game thread reads a published count).
 // `name` picks the SLOW_FRAME column the scope's time is added to (slow_frame_rule.h) and names it when it raises an

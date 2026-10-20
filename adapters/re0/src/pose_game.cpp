@@ -10,6 +10,7 @@
 
 #include "crash_dump.h"
 #include "game.h"
+#include "game_tick.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -30,6 +31,7 @@ bool g_pauseWasSet = false;
 void __fastcall setDetour(void* animControl, void* edx, uint32_t layer, uint32_t motionNo, uint32_t flags, float interp,
                           float start) {
     g_originalSet(animControl, edx, layer, motionNo, flags, interp, start);
+    if (!game_tick::onGameThread()) return;  // the observers fill game-thread-only buffers
     const size_t count = g_observerCount.load(std::memory_order_acquire);
     for (size_t i = 0; i < count; ++i) g_observers[i](reinterpret_cast<uintptr_t>(animControl), {layer, motionNo, flags, interp, start});
 }

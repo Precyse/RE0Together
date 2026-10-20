@@ -44,6 +44,7 @@ struct RegisteredMoveScope {
 std::vector<Registered> g_callbacks;  // filled before install(), then only read on the game thread
 std::vector<RegisteredPostMove> g_postMoves;  // likewise
 std::atomic<bool> g_rearmRequested{false};
+std::atomic<DWORD> g_gameThreadId{0};  // the thread that ran the last tick; 0 before the first
 
 using MoveFunction = void(__fastcall*)(void* self, void* edx);
 MoveFunction g_originalMove = nullptr;
@@ -115,6 +116,7 @@ void runPostMoves(uintptr_t player) {
 }
 
 void tick() {
+    g_gameThreadId.store(GetCurrentThreadId(), std::memory_order_relaxed);
     slow_frame::beginFrame();
     if (g_rearmRequested.exchange(false)) {
         for (Registered& entry : g_callbacks) rearm(entry.name, entry.disabled);
@@ -164,6 +166,8 @@ void addPostMove(const char* name, PostMove postMove) {
 }
 
 void rearmAfterResync() { g_rearmRequested = true; }
+
+bool onGameThread() { return g_gameThreadId.load(std::memory_order_relaxed) == GetCurrentThreadId(); }
 
 bool install() {
     if (!hooks::install("uPlayerBase::move", game::kPlayerMove, reinterpret_cast<void*>(&moveDetour),

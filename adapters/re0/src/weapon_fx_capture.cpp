@@ -42,7 +42,7 @@ weapon_fx_game::RippleFunction g_originalRipple = nullptr;
 
 bool g_installed = false;
 
-std::atomic<uint32_t> g_windowUnlisted{0};  // sEffect::create is also called off the game thread
+std::atomic<uint32_t> g_windowUnlisted{0};  // sEffect::create is also called off the game thread (counted from any thread)
 
 // Game thread only: listed sites are handler code.
 weapon_fx_wire::Batch g_batch;
@@ -88,8 +88,10 @@ void noteUnlisted() {
     ++g_windowUnlisted;
 }
 
-// Keeps `entry` for this frame's message, or counts it when the receiver's own rules would refuse it.
+// Keeps `entry` for this frame's message, or counts it when the receiver's own rules would refuse it. g_batch is the game
+// thread's: a call made on another thread is not recorded.
 void add(const Entry& entry) {
+    if (!game_tick::onGameThread()) return;
     if (!weapon_fx_wire::acceptable(entry)) {
         noteUnlisted();
         return;
