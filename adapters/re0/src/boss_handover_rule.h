@@ -9,13 +9,15 @@
 // 4.1 and 10.5): when the room authority leaves a room with a boss fight in it, the old authority freezes its boss
 // members and offers their state (prepare), the new authority confirms it has every member (ready), the old one commits
 // and, once the room changes hands, the new authority applies the snapshot and starts each member at step 0. A hand-over
-// that cannot finish keeps the members frozen (frozen). Pure, no game access, unit tested.
+// that cannot finish keeps the members that fit frozen for `kFrozenReleaseMs` (frozen), then resumes them. Pure, no game
+// access, unit tested.
 namespace boss_handover_rule {
 
 namespace wire = boss_wire;
 
 constexpr uint32_t kPrepareTimeoutMs = 5000;  // a prepare not answered / not committed in this long is cancelled
 constexpr uint32_t kCommitWaitMs = 15000;     // after the commit the room must change hands in this long
+constexpr uint32_t kFrozenReleaseMs = 5000;   // a frozen hand-over waits this long for the resync, then resumes what fits
 constexpr unsigned kTokenSlotShift = 24;      // the issuer's slot + 1 rides above the counter, so a token is never 0
 constexpr uint32_t kTokenCounterMask = (1u << kTokenSlotShift) - 1;
 
@@ -75,7 +77,7 @@ struct Plan {
 };
 
 // Every living member is resumed; one that died meanwhile is left dead; one that is missing or is another enemy makes
-// the whole hand-over Frozen (the members stay held and a resync is asked).
+// the whole hand-over Frozen (the members that fit stay held and a resync is asked); `resume` is also the set to hold.
 inline Plan planFlip(std::span<const wire::Member> members, std::span<const Local> locals) {
     Plan plan;
     bool bad = false;
@@ -110,8 +112,9 @@ enum class Role : uint8_t { Old, New };
 // applied, or the machine took over alone) or Frozen (it could not be applied).
 enum class Stage : uint8_t { Idle, Preparing, Prepared, Committed, Running, Away, Frozen };
 
-// What to do with a transaction that lingers: cancel (Old, tell the peer and start the members again) or drop (New).
-enum class Lapse : uint8_t { None, CancelPrepare, CancelCommit, DropPrepared, DropCommit };
+// What to do with a transaction that lingers: cancel (Old, tell the peer and start the members again), drop (New) or
+// release (New, Frozen: resume the members that fit and carry on as if it had committed alone).
+enum class Lapse : uint8_t { None, CancelPrepare, CancelCommit, DropPrepared, DropCommit, ReleaseFrozen };
 
 class Machine {
 public:
@@ -154,7 +157,7 @@ public:
     // alone (a new token, nothing offered).
     void run(uint32_t token, uint8_t count, uint8_t alive, uint32_t nowMs) { begin(Role::New, Stage::Running, token, count, alive, nowMs); }
 
-    // New authority: the members could not be started; they stay held.
+    // New authority: the members could not be started; the ones that fit stay held until the release.
     void freeze(uint32_t nowMs) {
         if (role_ == Role::New && active()) enter(Stage::Frozen, nowMs);
     }
@@ -187,6 +190,7 @@ public:
         }
         if (stage_ == Stage::Prepared && elapsed >= kPrepareTimeoutMs) return Lapse::DropPrepared;
         if (stage_ == Stage::Committed && elapsed >= kCommitWaitMs) return Lapse::DropCommit;
+        if (stage_ == Stage::Frozen && elapsed >= kFrozenReleaseMs) return Lapse::ReleaseFrozen;
         return Lapse::None;
     }
 

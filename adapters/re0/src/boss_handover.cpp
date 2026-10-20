@@ -62,6 +62,7 @@ rule::Machine g_machine;
 Members g_members;                          // the snapshot: the old authority's frozen members, or its copy on the new one
 uint16_t g_scene = scene::kNone;            // the transaction's room
 uint32_t g_epoch = 0;                       // the room authority's epoch for it when the transaction began
+uint8_t g_held = 0;                         // bit i = member i is frozen here (a slot that fits no member is never touched)
 uint32_t g_lastToken = 0;
 bool g_doorLatched = false;                 // a prepare was tried for the door that is running
 Members g_watched;                          // the boss members seen in the room another machine runs
@@ -154,12 +155,16 @@ bool anyLeased(const Members& members) {
 }
 
 void holdMembers() {
-    for (const wire::Member& member : g_members) enemy_observer::freeze(member.slot);
+    for (size_t i = 0; i < g_members.size(); ++i) {
+        if (g_held & (1u << i)) enemy_observer::freeze(g_members[i].slot);
+    }
 }
 
-// The members carry on from the snapshot's record at step 0 (the freeze ends).
+// The held members carry on from the snapshot's record at step 0 (the freeze ends).
 void restartMembers() {
-    for (const wire::Member& member : g_members) enemy_observer::startAt(member.slot, member.record);
+    for (size_t i = 0; i < g_members.size(); ++i) {
+        if (g_held & (1u << i)) enemy_observer::startAt(g_members[i].slot, g_members[i].record);
+    }
 }
 
 // ---- Game thread: messages and log lines -------------------------------------------------------------------------
@@ -221,6 +226,7 @@ void startOnDoor(const World& world) {
     g_members = std::move(members);
     g_scene = world.scene;
     g_epoch = world.holder->epoch;
+    g_held = wire::maskOf(g_members.size());
     holdMembers();
     const auto count = static_cast<uint8_t>(g_members.size());
     wire::Header header = headerOf(g_lastToken, g_epoch, g_scene, wire::Phase::Prepare);
@@ -260,6 +266,7 @@ void onPrepare(const Arrival& arrival, const World& world) {
     if (g_machine.inFlight()) return refuse(header, wire::Reason::Busy);
     if (!rule::acceptsPrepare(arrival.message.members, localsOf(arrival.message.members))) return refuse(header, wire::Reason::Member);
     g_members = arrival.message.members;
+    g_held = wire::maskOf(g_members.size());
     g_scene = header.scene;
     g_epoch = header.roomEpoch;
     g_machine.acceptPrepare(header.token, header.count, header.alive, world.nowMs);
@@ -332,6 +339,14 @@ void watch(const World& world) {
     g_watchedMs = world.nowMs;
 }
 
+// Every member that fits is put back at the snapshot pose with HP = the lower of the snapshot's and what the stream left,
+// and started at step 0 (this ends its freeze).
+void resumeMembers(const rule::Plan& plan, const std::vector<rule::Local>& locals) {
+    for (size_t i = 0; i < g_members.size(); ++i) {
+        if (plan.resume & (1u << i)) enemy_observer::resume(g_members[i].slot, entryOf(g_members[i], rule::resumeHp(g_members[i].hp, locals[i].hp)));
+    }
+}
+
 // The room changed hands to this machine (the enemy observer already carried its enemies on): put the offered snapshot
 // back, or note the members it last saw, and run the fight from here.
 void onFlip(const World& world) {
@@ -357,15 +372,14 @@ void onFlip(const World& world) {
     }
     if (plan.verdict == rule::Verdict::Frozen) {
         g_machine.freeze(world.nowMs);
+        g_held = plan.resume;
         holdMembers();
         resync::request("boss member missing");
         debug_stats::count(Counter::BossFrozen);
         logger::write("boss: token %u frozen (member slot %u, alive %02x)", g_machine.token(), plan.badSlot, plan.alive);
         return;
     }
-    for (size_t i = 0; i < g_members.size(); ++i) {
-        if (plan.resume & (1u << i)) enemy_observer::resume(g_members[i].slot, entryOf(g_members[i], rule::resumeHp(g_members[i].hp, locals[i].hp)));
-    }
+    resumeMembers(plan, locals);
     const bool alone = stage == rule::Stage::Prepared;
     g_machine.run(g_machine.token(), count, plan.alive, world.nowMs);
     debug_stats::count(Counter::BossHandOvers);
@@ -435,6 +449,18 @@ void followLink(const World& world) {
     g_machine.finish();
 }
 
+// A frozen fight waited for the resync long enough: the members that fit carry on from the snapshot, the missing one is
+// logged, and the machine runs the fight like a commit alone (nobody else is left to wait for).
+void releaseFrozen(const World& world) {
+    const std::vector<rule::Local> locals = localsOf(g_members);
+    const rule::Plan plan = rule::planFlip(g_members, locals);
+    resumeMembers(plan, locals);
+    if (plan.verdict == rule::Verdict::Frozen) logger::write("boss: token %u member slot %u is gone", g_machine.token(), plan.badSlot);
+    g_machine.run(g_machine.token(), g_machine.count(), plan.alive, world.nowMs);
+    debug_stats::count(Counter::BossHandOvers);
+    logPhase("released");
+}
+
 void followTimeouts(const World& world) {
     switch (g_machine.lapse(world.nowMs, !world.peerGone)) {
         case rule::Lapse::CancelPrepare:
@@ -446,6 +472,7 @@ void followTimeouts(const World& world) {
             logCancel(g_machine.token(), wire::Reason::Timeout);
             g_machine.finish();
             break;
+        case rule::Lapse::ReleaseFrozen: releaseFrozen(world); break;
         case rule::Lapse::None: break;
     }
 }

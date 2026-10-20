@@ -84,8 +84,10 @@ void testFlipPlan() {
     check(plan.verdict == rule::Verdict::Apply && plan.resume == 0x5 && plan.alive == 0x5, "a member that died meanwhile is left dead");
     plan = rule::planFlip(members, std::vector<rule::Local>{local(), {}, local(0x41)});
     check(plan.verdict == rule::Verdict::Frozen && plan.badSlot == 5 && plan.alive == 0x5, "a missing member freezes the hand-over");
+    check(plan.resume == 0x5, "only the members that fit are held (the missing slot's bystander is not)");
     plan = rule::planFlip(members, std::vector<rule::Local>{local(), local(0x40), local(0x77)});
     check(plan.verdict == rule::Verdict::Frozen && plan.badSlot == 8, "another enemy in a member's slot freezes it");
+    check(plan.resume == 0x3, "the slot holding another enemy is not held");
     plan = rule::planFlip(members, std::vector<rule::Local>{{}, {}, {}});
     check(plan.verdict == rule::Verdict::Frozen && plan.badSlot == 3, "the first offending slot is named");
     check(rule::resumeHp(600, 600) == 600, "HP unchanged");
@@ -195,8 +197,16 @@ void testFrozen() {
     machine.onCommit(kToken, kStartMs + 10);
     machine.freeze(kStartMs + 20);
     check(machine.stage() == rule::Stage::Frozen && machine.active() && !machine.inFlight(), "a commit that cannot finish is frozen");
-    check(machine.lapse(kStartMs + 99999, false) == rule::Lapse::None, "a frozen hand-over waits for the resync");
+    check(machine.lapse(kStartMs + 20 + rule::kFrozenReleaseMs - 1, false) == rule::Lapse::None, "a frozen hand-over waits for the resync");
+    check(machine.lapse(kStartMs + 20 + rule::kFrozenReleaseMs, false) == rule::Lapse::ReleaseFrozen,
+          "a frozen hand-over is released after the wait, whether or not the peer is there");
+    check(machine.lapse(kStartMs + 20 + rule::kFrozenReleaseMs, true) == rule::Lapse::ReleaseFrozen, "the peer's presence does not matter");
     check(!machine.onCancel(kToken), "a cancel does not unfreeze it");
+    rule::Machine released = machine;
+    released.run(kToken, 2, 0x1, kStartMs + 20 + rule::kFrozenReleaseMs);
+    check(released.stage() == rule::Stage::Running && released.alive() == 0x1 && released.token() == kToken,
+          "the release carries on as a running hand-over with the members that fit");
+    check(released.lapse(kStartMs + 99999, false) == rule::Lapse::None, "a released hand-over never lapses again");
     machine.finish();
     check(!machine.active(), "it ends with the room");
 
