@@ -15,7 +15,10 @@
 #include "character_owner.h"
 #include "debug_stats.h"
 #include "door_sync.h"
+#include "demo_skip.h"
 #include "door_travel.h"
+#include "event_body.h"
+#include "event_place.h"
 #include "event_rule.h"
 #include "game.h"
 #include "game_state.h"
@@ -25,6 +28,7 @@
 #include "party_mode.h"
 #include "protocol.h"
 #include "scene.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -153,6 +157,16 @@ uint16_t opcodeAt(uintptr_t thread) {
     return static_cast<uint16_t>(bytes[0] << 8 | bytes[1]);
 }
 
+// The big-endian dword operand `index` of the op at the thread's pc, for ops whose operands before it are dwords.
+uint32_t operandWord(uintptr_t thread, int index) {
+    const uintptr_t code = game::readPointer(thread + game::kThreadCodeOffset);
+    std::array<uint8_t, 4> bytes{};
+    const uintptr_t at = code + pcOf(thread) + game::kOpcodeSize + index * sizeof(uint32_t);
+    if (!code || !game::readMemory(at, bytes)) return 0;
+    return static_cast<uint32_t>(bytes[0]) << 24 | static_cast<uint32_t>(bytes[1]) << 16 |
+           static_cast<uint32_t>(bytes[2]) << 8 | bytes[3];
+}
+
 // Bytes of the opcode and its operands, sized by the game's own signature reader.
 uint32_t opSize(uint16_t opcode) {
     const auto signature = reinterpret_cast<const char*>(
@@ -175,24 +189,58 @@ uint8_t serialFlags(const Slot& slot) { return slot.serialMine ? 0 : event_sync:
 
 // ---- both roles ----
 
-// Runs the op with the subject as sPlayer's controlled character (and the other one as the partner).
-int runAsSubject(void* self, void* edx, uintptr_t thread, Character subject) {
+// The Body op at the thread's pc as event_body reads it.
+event_body::Op bodyOp(uintptr_t thread, uint16_t opcode) {
+    const int subject = event_rule::subjectOperand(opcode);
+    return {opcode, subject == event_rule::kNoOperand ? 0u : operandWord(thread, subject),
+            event_rule::isClimb(opcode) ? static_cast<int32_t>(operandWord(thread, event_rule::kClimbTypeOperand)) : 0,
+            threadField<uint32_t>(thread, game::kThreadKeyOffset)};
+}
+
+// A skipped op finishes at once: the pc moves past it and the thread goes on, as the handler's own tail does.
+int stepOverBody(uintptr_t thread, uint16_t opcode) {
+    moveTo(thread, pcOf(thread) + opSize(opcode));
+    return event_rule::kResultNext;
+}
+
+// Runs the op with the subject as sPlayer's controlled character (and the other one as the partner). In state mode a
+// Body op runs only for a character this machine owns (event_body): the puppet's op is skipped, or its slot of sPlayer
+// reads 0 while an op that reaches both characters runs.
+int runAsSubject(void* self, void* edx, uintptr_t thread, Character subject, uint16_t opcode, bool ownerRunsThread) {
     const uintptr_t sPlayer = game::readPointer(game::kPlayerGlobal);
     const uintptr_t controlled = game::controlled();
     const uintptr_t partner = game::partner();
     const uintptr_t subjectObject = character_owner::find(subject);
     const bool swap = sPlayer && subjectObject && subjectObject != controlled;
-    if (swap) {
-        game::writeMemory(sPlayer + game::kPlayerControlledOffset, static_cast<uint32_t>(subjectObject));
-        game::writeMemory(sPlayer + game::kPlayerPartnerOffset,
-                          static_cast<uint32_t>(partner == subjectObject ? controlled : partner));
+    const event_body::Seen seen{swap ? subjectObject : controlled,
+                                swap ? (partner == subjectObject ? controlled : partner) : partner};
+    event_body::Plan body;
+    std::optional<event_place::Mark> placed;
+    if (state_mode::on() && event_rule::roleOf(opcode) == OpRole::Body) {
+        const event_body::Op op = bodyOp(thread, opcode);
+        body = event_body::plan(op, seen, ownerRunsThread);
+        if (body.run == event_rule::BodyRun::Skip) return stepOverBody(thread, opcode);
+        placed = event_body::markPlacement(op, seen, body);
+    }
+    const bool write = sPlayer && (swap || body.hideControlled || body.hidePartner);
+    if (write) {
+        game::writeMemory(sPlayer + game::kPlayerControlledOffset,
+                          static_cast<uint32_t>(body.hideControlled ? 0 : seen.controlled));
+        game::writeMemory(sPlayer + game::kPlayerPartnerOffset, static_cast<uint32_t>(body.hidePartner ? 0 : seen.partner));
     }
     const int result = g_originalDispatch(self, edx, thread);
-    if (swap) {
+    if (write) {
         game::writeMemory(sPlayer + game::kPlayerControlledOffset, static_cast<uint32_t>(controlled));
         game::writeMemory(sPlayer + game::kPlayerPartnerOffset, static_cast<uint32_t>(partner));
     }
+    if (placed) event_place::reportMoved(*placed);
     return result;
+}
+
+// A cutscene starts on this thread: the shared skip (demo_skip) needs to know which one plays and who leads it.
+void noteDemoStart(uintptr_t thread, const Slot& slot, bool leads) {
+    const auto demoId = static_cast<uint16_t>(operandWord(thread, 0) >> 16);  // the op's one operand is an S2
+    demo_skip::onDemoStart(demoId, slot.serial, slot.serialMine, leads);
 }
 
 // TraceOff / TraceOn: the thread's doors leave the partner behind or not, and the host's party mode follows the script.
@@ -327,14 +375,15 @@ int runLeading(void* self, void* edx, uintptr_t thread, Slot& slot) {
         case OpRole::Follow:
             setPartnerFollows(slot, event_rule::followsAfter(opcode));
             return stepOver(thread, slot, pc, opcode);
-        case OpRole::Run: case OpRole::LeaderOnly: case OpRole::Wait:
+        case OpRole::Run: case OpRole::LeaderOnly: case OpRole::Wait: case OpRole::Body:
             break;
     }
+    if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, true);
     const uintptr_t script = eventScript();
     const uint32_t before = activeMask(script);
     const bool doorAlone = event_rule::isDoor(opcode) && !slot.partnerFollows;
     if (doorAlone) door_sync::setScriptDoorAlone(true);
-    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject));
+    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, slot.announced));
     if (doorAlone) door_sync::setScriptDoorAlone(false);
     if (event_rule::finished(pc, pcOf(thread), result)) record(slot, pc, pcOf(thread), result);
     const Slot parent = slot;
@@ -419,7 +468,8 @@ int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
         ++(role == OpRole::Wait ? slot.waitsSkipped : slot.skipped);
         return takeLeadersStep(thread, slot, queued);
     }
-    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject));
+    if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, false);
+    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, true));
     const uint32_t after = pcOf(thread);
     switch (event_rule::afterRun(event_rule::finished(queued.step.from, after, result), msSince(queued.received))) {
         case event_rule::AfterRun::KeepRunning:

@@ -101,6 +101,24 @@ void onTick() {
 
 namespace event_place {
 
+std::optional<Mark> mark(Character peer) {
+    const std::optional<CharacterPlace> here = placeOf(peer);
+    if (!here) return std::nullopt;
+    Mark before{peer, here->scene, {}};
+    std::memcpy(before.pos, here->pos, sizeof(before.pos));
+    return before;
+}
+
+void reportMoved(const Mark& before) {
+    const std::optional<CharacterPlace> now = placeOf(before.peer);
+    if (!now || !g_net) return;
+    if (now->scene == before.scene && position_blend::distance(before.pos, now->pos) <= kMovedDistance) return;
+    if (g_net->send(proto::kMsgCharacterPlace, true, proto::kSlotAll, proto::bytesOf(*now))) {
+        logger::write("event_place: a script op moved %s to scene 0x%02x, sent to its owner",
+                      character_owner::name(before.peer), now->scene);
+    }
+}
+
 void onFrame(const GameFrame& frame) {
     if (frame.type != proto::kMsgCharacterPlace || frame.payload.size() != sizeof(CharacterPlace) ||
         frame.slot != net_pad::peerSlot()) {

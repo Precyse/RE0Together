@@ -98,6 +98,9 @@ enum class Counter : size_t {
     LeasesStarted,
     LeasesEnded,
     LeasePosesRefused,
+    EventBodyOpsSkipped,
+    DemoSkipsSent,
+    DemoSkipsApplied,
     Count
 };
 

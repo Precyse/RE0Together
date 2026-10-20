@@ -3,6 +3,7 @@
 #include <atomic>
 
 #include "contact_net.h"
+#include "demo_skip.h"
 #include "door_follow.h"
 #include "enemy_lease.h"
 #include "enemy_observer.h"
@@ -22,7 +23,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 13;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow
+constexpr unsigned kModuleCount = 14;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip
 
 std::atomic<bool> g_on{false};
 
@@ -57,6 +58,7 @@ void enableAll(NetClient& net) {
     if (item_ledger::enable()) ++enabled;
     if (room_move::enable()) ++enabled;
     if (door_follow::enable()) ++enabled;
+    if (demo_skip::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

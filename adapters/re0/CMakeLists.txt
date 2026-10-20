@@ -97,6 +97,8 @@ add_library(re0_adapter SHARED
     src/room_authority.cpp
     src/room_move.cpp
     src/door_follow.cpp
+    src/event_body.cpp
+    src/demo_skip.cpp
     ${DS2_AUTHORITY_SOURCES}
     src/save_redirect.cpp
     src/remote_storage_proxy.cpp
@@ -234,12 +236,10 @@ add_executable(enemy_lease_rule_test tests/enemy_lease_rule_test.cpp)
 add_executable(enemy_lease_wire_test tests/enemy_lease_wire_test.cpp)
 target_include_directories(enemy_lease_wire_test PRIVATE src ${DS2_SRC_DIR})
 
-foreach(target contact_rule_test enemy_lease_rule_test enemy_lease_wire_test)
-    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-endforeach()
+add_executable(demo_skip_test tests/demo_skip_test.cpp)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test room_authority_test weapon_fx_wire_test weapon_fx_sites_test weapon_fx_matrix_test enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test item_ledger_test item_wire_test room_move_wire_test room_move_rule_test slow_frame_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test menu_hold_rule_test partner_status_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test room_authority_test weapon_fx_wire_test weapon_fx_sites_test weapon_fx_matrix_test enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test item_ledger_test item_wire_test room_move_wire_test room_move_rule_test slow_frame_test contact_rule_test enemy_lease_rule_test enemy_lease_wire_test demo_skip_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

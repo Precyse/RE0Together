@@ -111,6 +111,72 @@ void testStartFate() {
     check(rule::startFate(kRoom, kRoom, false, rule::kPendingStartMs * 2) == StartFate::Apply, "same room even late");
 }
 
+void testBodyRoles() {
+    namespace o = rule::op;
+    const uint16_t bodyOps[] = {o::kSubMove, o::kCharPoint, o::kCharPointY, o::kCharAddY, o::kChPosSet, o::kCorrectPos,
+                                o::kPlayerAnimSet, o::kPlayerAnimSet2, o::kPlayerAnimSetSpeed, o::kNeckRotation,
+                                o::kPlayerAnimPause, o::kPlayerReset, o::kPlayerReset2, o::kPlayerClimb,
+                                o::kPlayerClimbPos, o::kPlayerAddChild, o::kPlayerEventStart, o::kGameOver};
+    for (const uint16_t code : bodyOps) check(rule::roleOf(code) == OpRole::Body, "a single-target body op is Body");
+    constexpr uint16_t kDemoEntryPos = 226, kCorrectPos2 = 276, kAfterDemo = 233, kAfterDemo2 = 236, kAfterDemoNc = 270;
+    constexpr uint16_t kPlayerPause = 158, kControlPause = 277;
+    for (const uint16_t code : {kDemoEntryPos, kCorrectPos2, kAfterDemo, kAfterDemo2, kAfterDemoNc, kPlayerPause, kControlPause}) {
+        check(rule::roleOf(code) == OpRole::Run, "a two-target op and the pause families keep Run");
+    }
+    check(rule::beforeOp(true, OpRole::Body) == Follow::Run, "a finished Body op runs on the follower");
+}
+
+void testSubjects() {
+    namespace o = rule::op;
+    check(rule::subjectOperand(o::kChPosSet) == 0 && rule::subjectOperand(o::kPlayerClimb) == 0, "the subject is operand 0");
+    check(rule::subjectOperand(o::kCharPoint) == rule::kCharPointSubjectOperand, "CharPoint names it third");
+    check(rule::subjectOperand(o::kSubMove) == rule::kNoOperand && rule::subjectOperand(o::kPlayerEventStart) == rule::kNoOperand,
+          "SubMove and PlayerEventStart name no subject");
+    check(rule::targetOf(o::kChPosSet, rule::kSubjectControlled) == rule::Target::Controlled, "0x20000 is the controlled one");
+    check(rule::targetOf(o::kChPosSet, rule::kSubjectPartner) == rule::Target::Partner, "0x30000 is the partner");
+    check(rule::targetOf(o::kChPosSet, 3) == rule::Target::Unit, "ChPosSet names units by ordinal");
+    check(rule::targetOf(o::kCharAddY, 3) == rule::Target::Unit, "CharAddY names units by ordinal");
+    check(rule::targetOf(o::kPlayerReset, 3) == rule::Target::Nobody, "Player_Reset ignores any other word");
+    check(rule::targetOf(o::kSubMove, 0) == rule::Target::Partner, "SubMove moves the partner");
+    check(rule::targetOf(o::kPlayerEventStart, 0) == rule::Target::Both, "PlayerEventStart reaches both");
+}
+
+void testBodyRun() {
+    namespace o = rule::op;
+    using rule::BodyRun;
+    using rule::Puppets;
+    const Puppets none{};
+    const Puppets partnerPuppet{false, true, false};
+    const Puppets controlledPuppet{true, false, false};
+    const Puppets both{true, true, false};
+    check(rule::runFor(o::kChPosSet, rule::kSubjectControlled, none, true) == BodyRun::Run, "owned characters run");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectPartner, partnerPuppet, true) == BodyRun::Skip, "a puppet partner skips");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectControlled, partnerPuppet, true) == BodyRun::Run, "the owned one still runs");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectControlled, controlledPuppet, true) == BodyRun::Skip,
+          "a swapped perspective skips the puppet that became controlled");
+    check(rule::runFor(o::kChPosSet, 3, Puppets{false, false, true}, true) == BodyRun::Skip, "a puppet unit skips");
+    check(rule::runFor(o::kChPosSet, 3, partnerPuppet, true) == BodyRun::Run, "an ordinary unit runs");
+    check(rule::runFor(o::kPlayerReset, 3, both, true) == BodyRun::Run, "an op that names no character runs");
+    check(rule::runFor(o::kPlayerEventStart, 0, none, true) == BodyRun::Run, "both owned: PlayerEventStart runs");
+    check(rule::runFor(o::kPlayerEventStart, 0, partnerPuppet, true) == BodyRun::RunLocalHalf,
+          "PlayerEventStart runs on the owned half only");
+    check(rule::runFor(o::kPlayerEventStart, 0, both, true) == BodyRun::Skip, "two puppets: nothing to start");
+    check(rule::runFor(o::kSubMove, 0, partnerPuppet, true) == BodyRun::Skip, "SubMove skips when the owner runs the thread");
+    check(rule::runFor(o::kSubMove, 0, partnerPuppet, false) == BodyRun::Run, "SubMove runs for an owner without the thread");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectPartner, partnerPuppet, false) == BodyRun::Skip,
+          "only SubMove runs for an absent owner");
+    check(rule::movesAbsentOwner(o::kSubMove, false) && !rule::movesAbsentOwner(o::kSubMove, true), "absent owner rule");
+}
+
+void testClimbPlacement() {
+    namespace o = rule::op;
+    check(rule::placesPartner(o::kPlayerClimb, rule::kClimbWithPartner), "climb type 7 places the partner");
+    check(rule::placesPartner(o::kPlayerClimbPos, rule::kClimbWithPartner), "also with a position");
+    check(!rule::placesPartner(o::kPlayerClimb, 1), "other climbs do not");
+    check(!rule::placesPartner(o::kChPosSet, rule::kClimbWithPartner), "only climbs");
+    check(rule::isClimb(o::kPlayerClimb) && !rule::isClimb(o::kPlayerReset), "climb ops");
+}
+
 void testWire() {
     check(sizeof(event_sync::EventStart) == 16, "EVENT_START is 16 bytes");
     check(sizeof(event_sync::EventStep) == 8, "a step is 8 bytes");
@@ -124,6 +190,10 @@ int main() {
     testOpRoles();
     testFollow();
     testLead();
+    testBodyRoles();
+    testSubjects();
+    testBodyRun();
+    testClimbPlacement();
     testStartFate();
     testWire();
     if (g_failures == 0) std::printf("event_rule_test: all checks passed\n");

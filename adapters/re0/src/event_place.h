@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
+#include "character_owner.h"
 #include "net_client.h"
 
 // Cutscenes run on the machine that triggered them, and may move the other player's character (step it aside, put it
@@ -19,6 +21,18 @@ struct CharacterPlace {
     float quat[4];
 };
 static_assert(sizeof(CharacterPlace) == 32);
+
+// partner_mode=state: a script op that ran here wrote the copy of the peer's character (SubMove for an owner that does
+// not run the thread, climb type 7), which its owner's stream would only overwrite. `mark` is taken before the op and
+// `reportMoved` after it: when the copy moved more than 50 units or into another room, CHARACTER_PLACE tells the owner.
+struct Mark {
+    character_owner::Character peer;
+    uint16_t scene;
+    float pos[3];
+};
+
+std::optional<Mark> mark(character_owner::Character peer);
+void reportMoved(const Mark& before);
 
 // Net thread: queues a placement of this machine's own character.
 void onFrame(const GameFrame& frame);
