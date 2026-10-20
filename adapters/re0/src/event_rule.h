@@ -19,28 +19,49 @@ constexpr int64_t kPendingStartMs = 10000;  // a start for a room this machine i
 // Who may fire a trigger. Local conditions read only the controlled character (its zone, pad, inventory, the entry it
 // came in by, the item it is using): each machine keeps its own character controlled, so they fire where that player
 // met them. Shared conditions (flags, enemies, units, timers, either character) read state both machines share and
-// fire on the room's authority only, or they would fire twice.
-enum class TriggerKind : uint8_t { Local, Shared };
+// fire on the room's authority only, or they would fire twice. In state mode a push block's zone trigger (conditions 4 and
+// 5 naming an obstacle unit) is the pusher's: Obstacle fires on the machine that last pushed the box.
+enum class TriggerKind : uint8_t { Local, Shared, Obstacle };
 
 constexpr uint32_t kSubjectControlled = 0x20000;  // p2 of the "unit in zone" types 4 and 5: the controlled character
 constexpr uint32_t kSubjectPartner = 0x30000;     // the partner (sPlayer +0x3c); any other word names a unit
 
-constexpr TriggerKind classify(uint32_t type, uint32_t p2) {
+constexpr uint32_t kLastObstacleUnit = 4;  // p2 0..4 name an obstacle unit through the engine's table at 0xcd5398
+
+constexpr bool isObstacleUnit(uint32_t p2) { return p2 <= kLastObstacleUnit; }
+
+// `obstaclesByPusher` is state mode: an obstacle unit's trigger belongs to its pusher.
+constexpr TriggerKind classify(uint32_t type, uint32_t p2, bool obstaclesByPusher = false) {
     switch (type) {
         case 1: case 2: case 6: case 7: case 8: case 9: case 10: case 22: case 30: case 31:
             return TriggerKind::Local;
         case 4: case 5:
-            return p2 == kSubjectControlled ? TriggerKind::Local : TriggerKind::Shared;
+            if (p2 == kSubjectControlled) return TriggerKind::Local;
+            return obstaclesByPusher && isObstacleUnit(p2) ? TriggerKind::Obstacle : TriggerKind::Shared;
         default:
             return TriggerKind::Shared;
     }
 }
 
-constexpr bool mayFire(TriggerKind kind, bool peerInRoom, bool roomAuthority) {
-    return kind == TriggerKind::Local || !peerInRoom || roomAuthority;
+// Who pushed the box last, seen from this machine (prop_sync): the lease holder, else the last committer.
+enum class PropOwner : uint8_t { Mine, Theirs, Unknown };
+
+// An Obstacle trigger fires on the box's pusher; a box nobody pushed (Unknown) is the room authority's like any shared
+// trigger. A player alone in a room fires everything.
+constexpr bool mayFire(TriggerKind kind, bool peerInRoom, bool roomAuthority, PropOwner owner = PropOwner::Unknown) {
+    if (kind == TriggerKind::Local || !peerInRoom) return true;
+    if (kind == TriggerKind::Obstacle && owner != PropOwner::Unknown) return owner == PropOwner::Mine;
+    return roomAuthority;
 }
 
-constexpr const char* name(TriggerKind kind) { return kind == TriggerKind::Local ? "local" : "shared"; }
+constexpr const char* name(TriggerKind kind) {
+    switch (kind) {
+        case TriggerKind::Local: return "local";
+        case TriggerKind::Shared: return "shared";
+        case TriggerKind::Obstacle: return "obstacle";
+    }
+    return "shared";
+}
 
 // Opcode indices (rows of the table at 0xcd57d8; tools/re0/bes2.py prints them by name).
 namespace op {

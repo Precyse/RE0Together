@@ -123,6 +123,28 @@ void observeLoad() {
     logger::write("scene: load serial %u (scene 0x%02x)", g_loadTracker.value(), idOf(record));
 }
 
+std::optional<uint32_t> unitIndex(uint16_t sceneId, uint8_t unitClass, uint8_t unitKind, uint32_t nth) {
+    void* registry = reinterpret_cast<void*>(game::readPointer(game::kUnitRoomRegistryGlobal));
+    if (!registry) return std::nullopt;
+    __try {
+        const auto index = game::callThiscall<uint32_t>(game::kUnitFindFunction, registry, static_cast<uint32_t>(sceneId),
+                                                        unitClass, unitKind, static_cast<int32_t>(nth));
+        return index == game::kNoUnit ? std::nullopt : std::optional<uint32_t>(index);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return std::nullopt;
+    }
+}
+
+uintptr_t unitObject(uint32_t index) {
+    void* characters = reinterpret_cast<void*>(game::readPointer(game::kGameCharaGlobal));
+    if (!characters) return 0;
+    __try {
+        return game::callThiscall<uintptr_t>(game::kUnitObjectFunction, characters, index);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
+
 bool move(uintptr_t player, uint16_t sceneId, uint32_t entry, std::optional<uint32_t> spotMode) {
     if (!moveGuarded(player, sceneId, entry, spotMode)) {
         logger::write("scene: moving 0x%x to scene 0x%x faulted", static_cast<unsigned>(player), sceneId);

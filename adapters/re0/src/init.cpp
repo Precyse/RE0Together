@@ -43,6 +43,7 @@
 #include "pickup_guard.h"
 #include "player_damage.h"
 #include "pose_capture.h"
+#include "prop_sync.h"
 #include "protocol.h"
 #include "puppet.h"
 #include "resync.h"
@@ -166,6 +167,7 @@ void shutdownAdapter() {
     puppet::uninstall();
     room_move::uninstall();
     demo_skip::uninstall();
+    prop_sync::uninstall();
     pose_capture::uninstall();
     game_tick::uninstall();
     vtable_tracer::uninstall();
