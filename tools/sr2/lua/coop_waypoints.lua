@@ -9,13 +9,37 @@ function coop_sends_to_one(player)
 	return coop_count(coop_remote_players()) > 1 and coop_is_remote_player(player)
 end
 
+-- Sent to one remote, ug_lib's mission_waypoint_add and mission_waypoint_remove are made with the natives they call. Those two
+-- keep one record for every machine (Mission_waypoint): a remove for one remote cleared it, so the next remote's remove was
+-- skipped and that player kept the GPS. Here the remove always reaches the player and leaves the record, and the add sets it,
+-- so a later mission-wide remove still runs. A remove when none is set does nothing in the game.
+function coop_mission_waypoint_add_one(navpoint, sync)
+	waypoint_remove(sync)
+	Mission_waypoint = waypoint_add(navpoint, sync)
+end
+
+function coop_mission_waypoint_remove_one(sync)
+	waypoint_remove(sync)
+end
+
+-- The function a call for one remote makes in place of the waypoint function the script named.
+function coop_waypoint_one(waypoint_function)
+	if waypoint_function == mission_waypoint_add then
+		return coop_mission_waypoint_add_one
+	elseif waypoint_function == mission_waypoint_remove then
+		return coop_mission_waypoint_remove_one
+	end
+	return waypoint_function
+end
+
 -- add(navpoint, sync) for player: sent to that player's machine alone when there is more than one remote player.
 function coop_waypoint_add_for(player, add, navpoint, sync)
 	if not coop_sends_to_one(player) then
 		return add(navpoint, sync)
 	end
+	coop_trace("waypoint add " .. player)
 	mission_debug(COOP_SEND_TO .. " " .. player)
-	local result = add(navpoint, sync)
+	local result = coop_waypoint_one(add)(navpoint, sync)
 	mission_debug(COOP_SEND_TO)
 	return result
 end
@@ -25,8 +49,9 @@ function coop_waypoint_remove_for(player, remove, sync)
 	if not coop_sends_to_one(player) then
 		return remove(sync)
 	end
+	coop_trace("waypoint remove " .. player)
 	mission_debug(COOP_SEND_TO .. " " .. player)
-	local result = remove(sync)
+	local result = coop_waypoint_one(remove)(sync)
 	mission_debug(COOP_SEND_TO)
 	return result
 end

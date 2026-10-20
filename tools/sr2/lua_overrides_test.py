@@ -6,6 +6,7 @@ With SR2_LUA_SOURCE (the extracted scripts) and SR2_LUA_FIXES (Juiced's TU3 Miss
 override into a temporary dir and runs the parse and style checks on them.
 """
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -17,9 +18,15 @@ import lua_params  # noqa: E402
 import lua_patch  # noqa: E402
 from lua_patch import Patch  # noqa: E402
 from lua_patches import GENERIC_RULES, PATCHES  # noqa: E402
+from lua_patches.waypoints import per_player_waypoints  # noqa: E402
 
 failures = 0
 REAL_SCRIPT_COUNT = 50
+# The calls of tools/sr2/lua/coop_waypoints.lua per script: the generic rules (10) and lua_patches/waypoints.py (25); ss01 also holds the M16 block's two
+WAYPOINT_CALLS = {"bh08": 5, "ep01": 2, "ep02": 4, "rn01": 2, "rn02": 10, "rn03": 2, "tss02": 4, "ss01": 3, "ss06": 3, "ss10": 2}
+# Decided to stay broadcast: tss04 keeps one remote tow, so its garage GPS belongs to every remote (docs/SR2_NOTES.md)
+WAYPOINT_SYNC_CALL = re.compile(r"\b(mission_)?waypoint_(add|remove)\([^()]*\bsync(_type)?\s*\)")
+TSS04_REMOTE_TOW_CALLS = [("tss04", "waypoint_add(TOWED_VEHICLE_TRIGGER, sync_type)"), ("tss04", "waypoint_remove( sync_type )"), ("tss04", "waypoint_remove( sync_type )")]
 
 
 def check(ok, what):
@@ -50,6 +57,11 @@ def test_engine():
     each = lua_patch.apply_each("t", "f(a, REMOTE_PLAYER)\nf(a, LOCAL_PLAYER)\n", ["f"])
     check(each == "coop_each_remote(f, a, REMOTE_PLAYER)\nf(a, LOCAL_PLAYER)\n", "each rewrites only the calls with REMOTE_PLAYER")
     check(raises(lua_patch.apply_each, "t", "f(a)\n", ["f"]), "each of a function never called with REMOTE_PLAYER is refused")
+    waypoint_body = "a\nmission_waypoint_remove(sync)\nmission_waypoint_add(nav, sync)\n"
+    waypoint_lines = lua_patch.apply_line_edits("t", waypoint_body, per_player_waypoints("who", (2,), (3,), "mission_waypoint"))
+    check(waypoint_lines == "a\ncoop_waypoint_remove_for(who, mission_waypoint_remove, sync)\ncoop_waypoint_add_for(who, mission_waypoint_add, nav, sync)\n",
+          "per_player_waypoints names the player on the remove and add lines")
+    check(raises(lua_patch.apply_line_edits, "t", waypoint_body, per_player_waypoints("who", (1,))), "a waypoint edit on a line without the call is refused")
 
 
 def test_generic_rules():
@@ -176,9 +188,18 @@ def test_real_scripts():
         problems = lua_check.check_dir(out, Path(source))
         sync_calls = sum((Path(temporary) / name).read_bytes().decode("latin-1").count("coop_sync_for(") for name in ("rn02.lua", "ep02.lua", "rn08.lua"))
         check(sync_calls == 5, f"rn02, ep02 and rn08 hold the 5 targeted sync masks (found {sync_calls})")
-        waypoint_calls = sum(((Path(temporary) / name).read_bytes().decode("latin-1").count("coop_waypoint_add_for(") + (Path(temporary) / name).read_bytes().decode("latin-1").count("coop_waypoint_remove_for("))
-                             for name in written if name not in ("ug_lib.lua", "ss01.lua"))
-        check(waypoint_calls == 10, f"the generic rules name exactly 10 per-player waypoint calls (found {waypoint_calls})")
+        generated = {name: (out / name).read_bytes().decode("latin-1") for name in written if name != "ug_lib.lua"}
+        counts = {name[:-4]: text.count("coop_waypoint_add_for(") + text.count("coop_waypoint_remove_for(") for name, text in generated.items()}
+        counts = {name: count for name, count in counts.items() if count}
+        check(counts == WAYPOINT_CALLS, f"the per-player waypoint calls per script are {WAYPOINT_CALLS} (found {counts})")
+        census = [
+            (name[:-4], line.strip())
+            for name, text in sorted(generated.items())
+            for line in text.split("\n")
+            if WAYPOINT_SYNC_CALL.search(line)
+        ]
+        check(census == TSS04_REMOTE_TOW_CALLS,
+              f"the only waypoint calls left through a sync variable are the three tss04 remote tow ones, lines 1134, 1209 and 1273 of the source (found {census})")
         ss01 = (Path(temporary) / "ss01.lua").read_bytes().decode("latin-1")
         check(ss01.count("coop_waypoint_add_for( p, waypoint_add, closest_nav_remote, SYNC_REMOTE )") == 1 and ss01.count("coop_closest_navpoint( group_locations, p )") == 1,
               "ss01 sends each remote its own nearest dealer")

@@ -66,6 +66,21 @@ SYNC_FROM_PLAYER = (
     "\tif player_name == LOCAL_PLAYER then\n\t\treturn SYNC_LOCAL\n\tend\n\t\n\treturn SYNC_ALL\nend\n"
 )
 
+# ug_lib.lua's own mission waypoint functions (the record Mission_waypoint is shared by every machine), over the mocked natives.
+UG_LIB_MISSION_WAYPOINTS = """
+Mission_waypoint = -1
+function mission_waypoint_add(navpoint, sync_type)
+	mission_waypoint_remove(sync_type)
+	Mission_waypoint = waypoint_add(navpoint, sync_type)
+end
+function mission_waypoint_remove(sync_type)
+	if (Mission_waypoint ~= -1) then
+		waypoint_remove(sync_type)
+		Mission_waypoint = -1
+	end
+end
+"""
+
 # The game registers the base library of Lua 5.0 only: no table, string, math or os, and no select.
 ABSENT_LIBRARIES = "table = nil; string = nil; math = nil; os = nil; io = nil; debug = nil; package = nil; select = nil"
 
@@ -390,24 +405,44 @@ end
         lua.execute('mock("mission_debug"); mock("waypoint_add"); mock("waypoint_remove"); mock("mission_waypoint_add"); mock("mission_waypoint_remove")')
         log, _ = call(lua, 'coop_waypoint_add_for(REMOTE_PLAYER, waypoint_add, "nav", SYNC_REMOTE)')
         check(log == ["waypoint_add(nav,2)"], f"{count} players: a waypoint add is the plain call, no mission_debug")
+        log, _ = call(lua, 'coop_waypoint_add_for(REMOTE_PLAYER, mission_waypoint_add, "nav", SYNC_REMOTE)')
+        check(log == ["mission_waypoint_add(nav,2)"], f"{count} players: a mission waypoint add is the plain call, no mission_debug")
         log, _ = call(lua, "coop_waypoint_remove_for(REMOTE_PLAYER, mission_waypoint_remove, SYNC_REMOTE)")
         check(log == ["mission_waypoint_remove(2)"], f"{count} players: a waypoint remove is the plain call, no mission_debug")
     lua = new_runtime(3)
     lua.execute('mock("mission_debug"); mock("waypoint_add"); mock("waypoint_remove"); mock("mission_waypoint_add"); mock("mission_waypoint_remove")')
     log, _ = call(lua, 'coop_waypoint_add_for("#PLAYER3#", waypoint_add, "nav", SYNC_REMOTE)')
-    check(log == ["mission_debug(coop_send_to #PLAYER3#)", "waypoint_add(nav,2)", "mission_debug(coop_send_to)"],
-          "3 players: an add for a remote is named, made with its arguments, then cleared")
-    log, _ = call(lua, 'coop_waypoint_add_for("#PLAYER2#", mission_waypoint_add, "nav", SYNC_REMOTE)')
-    check(log == ["mission_debug(coop_send_to #PLAYER2#)", "mission_waypoint_add(nav,2)", "mission_debug(coop_send_to)"],
-          "3 players: the first remote is named too, with the function the call site used")
+    check(log == ["mission_debug(coop: waypoint add #PLAYER3#)", "mission_debug(coop_send_to #PLAYER3#)", "waypoint_add(nav,2)", "mission_debug(coop_send_to)"],
+          "3 players: an add for a remote is traced, named, made with its arguments, then cleared")
+    lua.execute("Mission_waypoint = -1; RESULT.waypoint_add = 'handle'")
+    log, _ = call(lua, 'coop_waypoint_add_for("#PLAYER3#", mission_waypoint_add, "nav", SYNC_REMOTE)')
+    check(log == ["mission_debug(coop: waypoint add #PLAYER3#)", "mission_debug(coop_send_to #PLAYER3#)", "waypoint_remove(2)", "waypoint_add(nav,2)",
+                  "mission_debug(coop_send_to)"],
+          "3 players: a mission add for a remote removes, then adds, with the natives it calls")
+    check(lua.eval("Mission_waypoint") == "handle", "3 players: a mission add for a remote sets the record to the native's result")
     log, _ = call(lua, 'coop_waypoint_remove_for("#PLAYER3#", waypoint_remove, SYNC_REMOTE)')
-    check(log == ["mission_debug(coop_send_to #PLAYER3#)", "waypoint_remove(2)", "mission_debug(coop_send_to)"],
-          "3 players: a remove for a remote is named, made, then cleared")
+    check(log == ["mission_debug(coop: waypoint remove #PLAYER3#)", "mission_debug(coop_send_to #PLAYER3#)", "waypoint_remove(2)", "mission_debug(coop_send_to)"],
+          "3 players: a remove for a remote is traced, named, made, then cleared")
+    lua.execute("Mission_waypoint = -1")
+    log, _ = call(lua, 'coop_waypoint_remove_for("#PLAYER3#", mission_waypoint_remove, SYNC_REMOTE)')
+    check(log == ["mission_debug(coop: waypoint remove #PLAYER3#)", "mission_debug(coop_send_to #PLAYER3#)", "waypoint_remove(2)", "mission_debug(coop_send_to)"],
+          "3 players: a mission remove for a remote is made even when the record is -1")
+    check(lua.eval("Mission_waypoint") == -1, "3 players: a mission remove for a remote leaves the record as it was")
     log, _ = call(lua, 'coop_waypoint_add_for(LOCAL_PLAYER, waypoint_add, "nav", SYNC_LOCAL)')
     check(log == ["waypoint_add(nav,1)"], "3 players: the local player gets the plain call")
-    lua.execute("RESULT.mission_waypoint_add = 'handle'")
-    _, value = call(lua, 'coop_waypoint_add_for("#PLAYER3#", mission_waypoint_add, "nav", SYNC_REMOTE)')
-    check(value == "handle", "3 players: the result of the native is returned")
+    _, value = call(lua, 'coop_waypoint_add_for("#PLAYER3#", waypoint_add, "nav", SYNC_REMOTE)')
+    check(value == "handle", "3 players: a raw add inside the scope returns the native's result")
+
+    lua = new_runtime(3)
+    lua.execute('mock("mission_debug"); mock("waypoint_add"); mock("waypoint_remove"); RESULT.waypoint_add = "handle"')
+    lua.execute(UG_LIB_MISSION_WAYPOINTS)
+    for player in ("#PLAYER2#", "#PLAYER3#"):
+        call(lua, f'coop_waypoint_add_for("{player}", mission_waypoint_add, "nav", SYNC_REMOTE)')
+    for player in ("#PLAYER2#", "#PLAYER3#"):
+        log, _ = call(lua, f'coop_waypoint_remove_for("{player}", mission_waypoint_remove, SYNC_REMOTE)')
+        check("waypoint_remove(2)" in log, f"3 players: the remove for {player} reaches the native after the remove for the player before")
+    log, _ = call(lua, "mission_waypoint_remove(SYNC_ALL)")
+    check(log == ["waypoint_remove(3)"], "3 players: a mission-wide remove still runs after the per-remote ones")
 
     lua = new_runtime(3)
     lua.execute(ss01_scan)

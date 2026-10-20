@@ -1,5 +1,6 @@
 """Saints story missions (ss01 to ss11). Line numbers are those of the archive's script."""
 from lua_patch import Patch
+from .waypoints import per_player_waypoints
 
 IN_VEHICLE = "character_is_in_vehicle"
 NAV_IN_FOV = "navpoint_in_player_fov"
@@ -23,7 +24,7 @@ PATCHES = {
                 1312, "ss01_get_closest_nav_to_char( group_locations, REMOTE_PLAYER )",
                 "coop_best_remote( ss01_get_closest_nav_to_char, 3, group_locations, REMOTE_PLAYER )",
             ),
-        ],
+        ] + per_player_waypoints("triggerer_name", removes=(404,)),
         blocks=[
             (
                 776, 785, "local other_player = LOCAL_PLAYER",
@@ -110,7 +111,7 @@ PATCHES = {
             (2069, f"{IN_DEFENSE_AREA}[REMOTE_PLAYER_INDEX]", f"{IN_DEFENSE_AREA}[human_name]"),
             (2084, f"{IN_DEFENSE_AREA}[LOCAL_PLAYER_INDEX]", f"{IN_DEFENSE_AREA}[LOCAL_PLAYER]"),
             (2086, f"{IN_DEFENSE_AREA}[REMOTE_PLAYER_INDEX]", f"{IN_DEFENSE_AREA}[human_name]"),
-        ],
+        ] + per_player_waypoints("player_name", adds=(1564,)) + per_player_waypoints("human_name", removes=(2074,), adds=(2091,)),
         blocks=[
             (
                 1371, 1373, f"if ( coop_is_active() and {IN_DEFENSE_AREA}[REMOTE_PLAYER_INDEX] == false ) then",
@@ -215,7 +216,7 @@ PATCHES = {
                 1894, "ss10_player_has_weapon_equipped_in_station( REMOTE_PLAYER )",
                 "coop_any_remote( ss10_player_has_weapon_equipped_in_station, REMOTE_PLAYER )",
             ),
-        ],
+        ] + per_player_waypoints("player_name", removes=(2165,), adds=(2154,)),
         each=("ss10_notoriety_event",),
     ),
     "ss11.lua": Patch(
