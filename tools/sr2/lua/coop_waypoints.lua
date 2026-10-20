@@ -32,16 +32,25 @@ function coop_waypoint_one(waypoint_function)
 	return waypoint_function
 end
 
+-- Runs make() with the waypoint calls it makes named to player, then clears the name. The name is cleared also when make() raises an
+-- error (the error is raised again), so the calls of every later script do not all go to that one player.
+function coop_send_to_player(player, make)
+	mission_debug(COOP_SEND_TO .. " " .. player)
+	local ok, result = pcall(make)
+	mission_debug(COOP_SEND_TO)
+	if not ok then
+		error(result)
+	end
+	return result
+end
+
 -- add(navpoint, sync) for player: sent to that player's machine alone when there is more than one remote player.
 function coop_waypoint_add_for(player, add, navpoint, sync)
 	if not coop_sends_to_one(player) then
 		return add(navpoint, sync)
 	end
 	coop_trace("waypoint add " .. player)
-	mission_debug(COOP_SEND_TO .. " " .. player)
-	local result = coop_waypoint_one(add)(navpoint, sync)
-	mission_debug(COOP_SEND_TO)
-	return result
+	return coop_send_to_player(player, function() return coop_waypoint_one(add)(navpoint, sync) end)
 end
 
 -- remove(sync) for player: sent to that player's machine alone when there is more than one remote player.
@@ -50,10 +59,7 @@ function coop_waypoint_remove_for(player, remove, sync)
 		return remove(sync)
 	end
 	coop_trace("waypoint remove " .. player)
-	mission_debug(COOP_SEND_TO .. " " .. player)
-	local result = coop_waypoint_one(remove)(sync)
-	mission_debug(COOP_SEND_TO)
-	return result
+	return coop_send_to_player(player, function() return coop_waypoint_one(remove)(sync) end)
 end
 
 -- The name of the navpoint in navpoint_names closest to player, measured with the game's own get_dist so that a remote player is not

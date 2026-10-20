@@ -432,6 +432,15 @@ end
     check(log == ["waypoint_add(nav,1)"], "3 players: the local player gets the plain call")
     _, value = call(lua, 'coop_waypoint_add_for("#PLAYER3#", waypoint_add, "nav", SYNC_REMOTE)')
     check(value == "handle", "3 players: a raw add inside the scope returns the native's result")
+    lua.execute("RESULT.waypoint_add = function() error('boom') end")
+    for what, code in (("add", 'coop_waypoint_add_for("#PLAYER3#", waypoint_add, "nav", SYNC_REMOTE)'),
+                       ("remove", 'coop_waypoint_remove_for("#PLAYER3#", function() error("boom") end, SYNC_REMOTE)')):
+        lua.execute("log_reset()")
+        ok, message = lua.eval(f"pcall(function() return {code} end)")
+        log = list(lua.eval("LOG").values())
+        check(not ok and "boom" in str(message), f"3 players: an error in the {what} native reaches the script")
+        check(log[-1] == "mission_debug(coop_send_to)", f"3 players: an error in the {what} native still clears the player name")
+    lua.execute("RESULT.waypoint_add = 'handle'")
 
     lua = new_runtime(3)
     lua.execute('mock("mission_debug"); mock("waypoint_add"); mock("waypoint_remove"); RESULT.waypoint_add = "handle"')
