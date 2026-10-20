@@ -101,6 +101,10 @@ enum class Counter : size_t {
     EventBodyOpsSkipped,
     DemoSkipsSent,
     DemoSkipsApplied,
+    PropMovesSent,
+    PropMovesApplied,
+    PropMovesRefused,
+    PropCommits,
     Count
 };
 

@@ -1,5 +1,6 @@
 // Checks the room event replication rules (no game). Exit 0 when every check passes.
 #include <cstdio>
+#include <string>
 
 #include "../src/event_rule.h"
 #include "../src/event_sync.h"
@@ -177,6 +178,29 @@ void testClimbPlacement() {
     check(rule::isClimb(o::kPlayerClimb) && !rule::isClimb(o::kPlayerReset), "climb ops");
 }
 
+void testObstacleTriggers() {
+    constexpr uint32_t kBox = 1;
+    check(rule::classify(4, kBox) == TriggerKind::Shared, "a box in a zone is shared in input mode");
+    check(rule::classify(4, kBox, true) == TriggerKind::Obstacle, "a box in a zone is the pusher's in state mode");
+    check(rule::classify(5, rule::kLastObstacleUnit, true) == TriggerKind::Obstacle, "the last obstacle unit too");
+    check(rule::classify(5, rule::kLastObstacleUnit + 1, true) == TriggerKind::Shared, "past the table it is a plain unit");
+    check(rule::classify(4, rule::kSubjectControlled, true) == TriggerKind::Local, "the controlled character stays local");
+    check(rule::classify(4, kPartnerSubject, true) == TriggerKind::Shared, "the partner stays shared");
+    check(rule::classify(14, kBox, true) == TriggerKind::Shared, "either character in a zone stays shared");
+    check(rule::classify(11, kBox, true) == TriggerKind::Shared, "other conditions are untouched");
+    check(rule::isObstacleUnit(0) && rule::isObstacleUnit(4) && !rule::isObstacleUnit(5), "obstacle unit words are 0..4");
+
+    using Owner = rule::PropOwner;
+    check(rule::mayFire(TriggerKind::Obstacle, true, false, Owner::Mine), "the pusher fires its box's trigger");
+    check(rule::mayFire(TriggerKind::Obstacle, true, true, Owner::Mine), "also when it is not the room authority");
+    check(!rule::mayFire(TriggerKind::Obstacle, true, true, Owner::Theirs), "the other machine does not, authority or not");
+    check(rule::mayFire(TriggerKind::Obstacle, true, true, Owner::Unknown), "a box nobody pushed is the authority's");
+    check(!rule::mayFire(TriggerKind::Obstacle, true, false, Owner::Unknown), "and not the other machine's");
+    check(rule::mayFire(TriggerKind::Obstacle, false, false, Owner::Theirs), "a player alone in the room fires everything");
+    check(rule::mayFire(TriggerKind::Shared, true, true, Owner::Theirs), "the owner only matters to obstacle triggers");
+    check(std::string(rule::name(TriggerKind::Obstacle)) == "obstacle", "obstacle triggers are named in the log");
+}
+
 void testWire() {
     check(sizeof(event_sync::EventStart) == 16, "EVENT_START is 16 bytes");
     check(sizeof(event_sync::EventStep) == 8, "a step is 8 bytes");
@@ -195,6 +219,7 @@ int main() {
     testBodyRun();
     testClimbPlacement();
     testStartFate();
+    testObstacleTriggers();
     testWire();
     if (g_failures == 0) std::printf("event_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

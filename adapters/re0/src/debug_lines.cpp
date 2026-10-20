@@ -138,6 +138,8 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"leases granted/started/ended/refused poses", format(L"%u / %u / %u / %u", total(s, Counter::LeasesGranted), total(s, Counter::LeasesStarted), total(s, Counter::LeasesEnded), total(s, Counter::LeasePosesRefused)), false});
     lines.push_back({L"event body ops skipped", format(L"%u", total(s, Counter::EventBodyOpsSkipped)), false});
     lines.push_back({L"demo skips sent/applied", format(L"%u / %u", total(s, Counter::DemoSkipsSent), total(s, Counter::DemoSkipsApplied)), false});
+    lines.push_back({L"prop moves sent/applied/refused", format(L"%u / %u / %u", total(s, Counter::PropMovesSent), total(s, Counter::PropMovesApplied), total(s, Counter::PropMovesRefused)), false});
+    lines.push_back({L"prop commits", format(L"%u", total(s, Counter::PropCommits)), false});
     lines.push_back({L"hit request sent/s", format(L"%u", rate(s, Counter::HitRequestSent)), false});
     lines.push_back({L"hit request recv/s", format(L"%u", rate(s, Counter::HitRequestReceived)), false});
     lines.push_back({L"hit applied sent/s", format(L"%u", rate(s, Counter::HitAppliedSent)), false});

@@ -26,6 +26,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "party_mode.h"
+#include "prop_sync.h"
 #include "protocol.h"
 #include "scene.h"
 #include "state_mode.h"
@@ -314,25 +315,28 @@ uint32_t triggerParam2(void* script, uint32_t key, uint32_t index) {
     return p2;
 }
 
-void logRefusedOnce(uint32_t key, uint32_t index, uint32_t type) {
+void logRefusedOnce(uint32_t key, uint32_t index, uint32_t type, TriggerKind kind) {
     if (scene::current() != g_refusedScene) {
         g_refusedLogged.clear();
         g_refusedScene = scene::current();
     }
     if (!g_refusedLogged.insert(key << 16 | index).second) return;
     debug_stats::count(debug_stats::Counter::EventsRefused);
-    logger::write("event_sync: scene 0x%02x trigger %u (type 0x%02x) is the room authority's to fire, not fired here",
-                  key, index, type);
+    logger::write("event_sync: scene 0x%02x trigger %u (type 0x%02x) is the %s to fire, not fired here", key, index, type,
+                  kind == TriggerKind::Obstacle ? "box pusher's" : "room authority's");
 }
 
 uintptr_t __fastcall startDetour(void* self, void* edx, uint32_t key, uint32_t index, uint32_t type) {
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     if (!net_pad::active() || caller == game::kItemProbeStartReturn) return g_originalStart(self, edx, key, index, type);
-    const TriggerKind kind = caller == game::kTriggerScanStartReturn
-                                 ? event_rule::classify(type, triggerParam2(self, key, index))
-                                 : TriggerKind::Local;
-    if (!event_rule::mayFire(kind, peerInRoom(), door_travel::enemyAuthority())) {
-        logRefusedOnce(key, index, type);
+    const bool scanned = caller == game::kTriggerScanStartReturn;
+    const uint32_t param2 = scanned ? triggerParam2(self, key, index) : 0;
+    const TriggerKind kind = scanned ? event_rule::classify(type, param2, state_mode::on()) : TriggerKind::Local;
+    const event_rule::PropOwner boxOwner = kind == TriggerKind::Obstacle
+                                               ? prop_sync::triggerOwner(static_cast<uint16_t>(key), static_cast<uint8_t>(param2))
+                                               : event_rule::PropOwner::Unknown;
+    if (!event_rule::mayFire(kind, peerInRoom(), door_travel::enemyAuthority(), boxOwner)) {
+        logRefusedOnce(key, index, type, kind);
         return 0;
     }
     const uintptr_t thread = g_originalStart(self, edx, key, index, type);

@@ -26,6 +26,13 @@ uint16_t loadSerial();
 // Game thread, once per game tick: feeds the loaded record to the load serial and logs a change.
 void observeLoad();
 
+// The index of the unit of the per-room unit registry that has class `unitClass` and kind `unitKind` and is the `nth` of
+// them in room `sceneId` (the lookup a room script's unit words do), or nothing. Game thread only.
+std::optional<uint32_t> unitIndex(uint16_t sceneId, uint8_t unitClass, uint8_t unitKind, uint32_t nth);
+
+// The object of registry unit `index` (0x51fed0), or 0 when none is alive. Game thread only.
+uintptr_t unitObject(uint32_t index);
+
 // Moves `player` into room `sceneId` at door entry `entry` the way the engine's door carry does, but alone: the
 // room's record is found (or loaded dormant), the player is put on the entry spot and assigned to it, and its old
 // record is released when nobody is left in it. Into the loaded room the player appears at the door; out of it, it

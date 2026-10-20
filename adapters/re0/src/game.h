@@ -291,6 +291,22 @@ constexpr uintptr_t kMouseGlobal = 0xe2e16c;
 constexpr uintptr_t kMouseButtonsOffset = 0x40;
 constexpr uint8_t kMouseSkipBit = 2;
 
+// state mode: phase 13 (push blocks; docs/RE0_NOTES.md "State mode: props")
+// uObstacle's per-frame update (vtable slot 41 of 0xcc8140, fastcall, this in ECX, no arguments); its position is at +0x40.
+constexpr uintptr_t kObstacleMoveFunction = 0x4e7830;
+// The obstacle a pushing character moves (uPlayerBase +0x6a00, getter 0x50e290); the push is think group 0 state 9 (handler
+// 0x501180, entered by changeState(0, 9, 0)), which writes the obstacle's +0x40 / +0x44 / +0x48 and its fourth word 0.
+constexpr uintptr_t kPlayerPushedObstacleOffset = 0x6a00;
+constexpr int32_t kPushThinkGroup = 0;
+constexpr int32_t kPushThinkState = 9;
+constexpr uintptr_t kObstacleFourthWordOffset = 0x4c;
+// The table a room script's obstacle unit word (p2 0..4) indexes: rows of {u8 class, u8 kind, u16 n-th of that kind}. The unit
+// registry finds the unit (0x410070, thiscall on [kUnitRoomRegistryGlobal] (scene, class, kind, n-th) ret 0x10 -> unit
+// index or kNoUnit); kUnitObjectFunction turns the index into the object.
+constexpr uintptr_t kObstacleUnitTable = 0xcd5398;
+constexpr uintptr_t kObstacleUnitRowSize = 4;
+constexpr uintptr_t kUnitFindFunction = 0x410070;
+
 // Enemies: sEnemy holds a 37-entry pool; the pool slot index is the enemy's network id.
 constexpr uintptr_t kEnemyGlobal = 0xdcdc78;  // sEnemy*
 constexpr uintptr_t kEnemyPoolOffset = 0x4b0;

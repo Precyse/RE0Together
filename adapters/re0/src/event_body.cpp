@@ -6,6 +6,7 @@
 #include "game.h"
 #include "log.h"
 #include "puppet.h"
+#include "scene.h"
 
 namespace {
 
@@ -24,13 +25,11 @@ const char* opName(uint16_t opcode) {
 // script's room (0x40ff00), then its object (0x51fed0). 0 when there is none.
 uintptr_t unitByOrdinal(uint32_t scriptKey, uint32_t ordinal) {
     const uintptr_t registry = game::readPointer(game::kUnitRoomRegistryGlobal);
-    const uintptr_t characters = game::readPointer(game::kGameCharaGlobal);
-    if (!registry || !characters) return 0;
+    if (!registry) return 0;
     __try {
         const auto index = game::callThiscall<uint32_t>(game::kUnitOrdinalFunction, reinterpret_cast<void*>(registry),
                                                         scriptKey, ordinal);
-        if (index == game::kNoUnit) return 0;
-        return game::callThiscall<uintptr_t>(game::kUnitObjectFunction, reinterpret_cast<void*>(characters), index);
+        return index == game::kNoUnit ? 0 : scene::unitObject(index);
     } __except (crash_dump::reportCaught(GetExceptionInformation(), "event_body: unit lookup")) {
         return 0;
     }

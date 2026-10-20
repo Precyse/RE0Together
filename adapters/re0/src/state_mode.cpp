@@ -12,6 +12,7 @@
 #include "item_ledger.h"
 #include "log.h"
 #include "pose_capture.h"
+#include "prop_sync.h"
 #include "puppet.h"
 #include "room_authority.h"
 #include "room_move.h"
@@ -23,7 +24,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 14;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip
+constexpr unsigned kModuleCount = 15;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip, prop sync
 
 std::atomic<bool> g_on{false};
 
@@ -59,6 +60,7 @@ void enableAll(NetClient& net) {
     if (room_move::enable()) ++enabled;
     if (door_follow::enable()) ++enabled;
     if (demo_skip::enable()) ++enabled;
+    if (prop_sync::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }
