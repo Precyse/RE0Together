@@ -15,6 +15,8 @@
 #include "remote_players.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "vehicle_seat_count.h"
+#include "vehicle_seating_rules.h"
 
 namespace {
 
@@ -199,7 +201,8 @@ void __cdecl mayhemDistrictAllPlayers(JumpFrame* frame) {
 }
 
 // Phase B, DVK7: the Trafficking seat loop seats {dealer, local, partner}; the other remotes sit in the next seats with the
-// request the loop builds (its flag bytes are what the loop stores; ebx is the zero it keeps, ebp the mode, edi the vehicle).
+// request the loop builds (its flag bytes are what the loop stores; ebx is the zero it keeps, ebp the mode, edi the vehicle), as many as
+// the vehicle has seats for: a seat number past its count would go out of range in the seat request.
 #pragma pack(push, 1)
 struct SeatRequest {
     uint32_t occupant;
@@ -215,8 +218,11 @@ void __cdecl traffickingExtraSeats(JumpFrame* frame) {
     const uint8_t zero = static_cast<uint8_t>(frame->regs.ebx);
     diversion_remotes::View view;
     diversion_remotes::take(view);
+    const size_t room = frame->regs.edi ? vehicle_seating_rules::extraSeatsThatFit(sr2::kFirstExtraSeat, vehicle_seat_count::of(frame->regs.edi),
+                                                                                    kMaxExtraSeats)
+                                        : 0;
     size_t seated = 0;
-    for (size_t i = 0; i < view.count() && seated < kMaxExtraSeats; ++i) {
+    for (size_t i = 0; i < view.count() && seated < room; ++i) {
         if (!view.items()[i].human || i == view.defaultIndex) continue;
         SeatRequest request = {static_cast<uint32_t>(view.items()[i].human), frame->regs.edi, frame->regs.ebp,
                                sr2::kFirstExtraSeat + static_cast<uint32_t>(seated),

@@ -11,6 +11,7 @@
 #include "site_installer.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "vehicle_seat_count.h"
 #include "vehicle_seating_rules.h"
 #include "vehicle_seating_sites.h"
 #include "vehicle_seating_state.h"
@@ -56,11 +57,6 @@ Occupant occupantOf(uintptr_t vehicle, uint32_t seat) {
     return object == remote_players::localHuman() || remote_players::isRemotePlayerHuman(object) ? Occupant::Player : Occupant::Npc;
 }
 
-uint32_t seatCountOf(uintptr_t vehicle) {
-    return vehicle_seating_rules::seatCount(readByte(vehicle + sr2::kVehicleSeatsDeclaredOffset),
-                                            readDword(vehicle + sr2::kVehicleSeatCountOffset));
-}
-
 // SE1: replaces `call 0x9D7BD0` of the "is this the partner's car" test in the enter button handler; esi = the vehicle found, edi = the
 // entering human, args[4] = the seat of the request (2). al answers whether it is a remote's car. The seat becomes a free one.
 void __cdecl traffickingRemoteSeat(GuestFrame* frame) {
@@ -77,7 +73,7 @@ void __cdecl traffickingRemoteSeat(GuestFrame* frame) {
     }
     frame->regs.eax = 1;
     Occupant seats[vehicle_seating_rules::kMaxSeats] = {};
-    const uint32_t count = seatCountOf(vehicle);
+    const uint32_t count = vehicle_seat_count::of(vehicle);
     for (uint32_t seat = 0; seat < count; ++seat) seats[seat] = occupantOf(vehicle, seat);
     const auto scripted = static_cast<int32_t>(frame->args[kSeatArg]);
     const int32_t chosen = vehicle_seating_rules::chooseTraffickingSeat(std::span<const Occupant>(seats, count), scripted);

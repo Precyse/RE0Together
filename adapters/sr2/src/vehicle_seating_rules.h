@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string_view>
@@ -44,6 +45,12 @@ constexpr bool isRemoteVehicle(uint32_t handle, std::span<const uint32_t> remote
 // True when a human whose vehicle handle is `humanVehicle` rides in the vehicle `vehicle`. A vehicle of 0 is nobody's vehicle, so a human on foot
 // never matches it.
 constexpr bool ridesVehicle(uint32_t humanVehicle, uint32_t vehicle) { return vehicle != 0 && humanVehicle == vehicle; }
+
+// How many of `wanted` extra players fit in a vehicle of `seats` seats when the first extra one sits in seat `firstSeat`: a seat number
+// at or past the count goes out of range in the seat request.
+constexpr size_t extraSeatsThatFit(uint32_t firstSeat, uint32_t seats, size_t wanted) {
+    return seats > firstSeat ? std::min<size_t>(wanted, seats - firstSeat) : 0;
+}
 
 // The remembered checkpoint holder while that session slot is still paired with a remote, else the default.
 constexpr int32_t restoreHolderSlot(int32_t remembered, std::span<const uint8_t> pairedSlots) {

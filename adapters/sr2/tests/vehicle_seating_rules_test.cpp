@@ -63,6 +63,18 @@ void theRidingPassenger() {
     check(!vehicle_seating_rules::ridesVehicle(kCarHandle, 0), "no customised car matches nobody");
 }
 
+void theExtraSeats() {
+    using vehicle_seating_rules::extraSeatsThatFit;
+    constexpr uint32_t kFirstExtra = 3;
+    check(extraSeatsThatFit(kFirstExtra, 8, 2) == 2, "an undeclared car (8 seats) seats both extra remotes");
+    check(extraSeatsThatFit(kFirstExtra, 5, 2) == 2, "5 seats: seats 3 and 4 both exist");
+    check(extraSeatsThatFit(kFirstExtra, 4, 2) == 1, "a 4 seat car has seat 3 only: P4 does not get seat 4");
+    check(extraSeatsThatFit(kFirstExtra, 3, 2) == 0, "a 3 seat car has no seat 3");
+    check(extraSeatsThatFit(kFirstExtra, 2, 2) == 0 && extraSeatsThatFit(kFirstExtra, 0, 2) == 0, "fewer seats than the first extra seat: none");
+    check(extraSeatsThatFit(kFirstExtra, 8, 0) == 0 && extraSeatsThatFit(kFirstExtra, 4, 1) == 1, "never more than wanted");
+    check(vehicle_seating_rules::seatCount(1, 4) == 4 && vehicle_seating_rules::seatCount(0, 4) == 8, "the declared count is the car's seats, else 8");
+}
+
 void theCheckpointHolder() {
     const std::array<uint8_t, 2> paired{1, 2};
     check(vehicle_seating_rules::restoreHolderSlot(2, paired) == 2, "a remembered slot that is still paired is kept");
@@ -89,6 +101,7 @@ int main() {
     theTraffickingSeat();
     theRemoteVehicle();
     theRidingPassenger();
+    theExtraSeats();
     theCheckpointHolder();
     theTraceFilter();
     return g_failures == 0 ? 0 : 1;
