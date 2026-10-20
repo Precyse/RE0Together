@@ -36,7 +36,9 @@ struct RegisteredPostMove {
 
 struct RegisteredMoveScope {
     game_tick::MoveScope scope;
+    const char* name;
     slow_frame::Category category;
+    bool disabled;  // game thread only
 };
 
 std::vector<Registered> g_callbacks;  // filled before install(), then only read on the game thread
@@ -50,7 +52,7 @@ std::atomic<size_t> g_moveScopeCount{0};  // scopes published to the game thread
 
 LONG report(EXCEPTION_POINTERS* info, const char* name) {
     char what[kTextLength];
-    snprintf(what, sizeof(what), "game_tick: callback '%s'", name);
+    snprintf(what, sizeof(what), "game_tick: '%s'", name);
     return crash_dump::reportCaught(info, what);
 }
 
@@ -60,6 +62,15 @@ bool runGuarded(game_tick::Callback callback, const char* name) {
         callback();
         return true;
     } __except (report(GetExceptionInformation(), name)) {
+        return false;
+    }
+}
+
+bool runMoveScopeGuarded(const RegisteredMoveScope& entry, uintptr_t player, bool entering) {
+    __try {
+        entry.scope(player, entering);
+        return true;
+    } __except (report(GetExceptionInformation(), entry.name)) {
         return false;
     }
 }
@@ -91,6 +102,11 @@ void rearm(const char* name, bool& disabled) {
     logger::write("game_tick: '%s' re-armed by a resync", name);
 }
 
+void rearmMoveScopes() {
+    const size_t scopes = g_moveScopeCount.load(std::memory_order_acquire);
+    for (size_t i = 0; i < scopes; ++i) rearm(g_moveScopes[i].name, g_moveScopes[i].disabled);
+}
+
 void runPostMoves(uintptr_t player) {
     for (RegisteredPostMove& entry : g_postMoves) {
         const slow_frame::Scope timing(entry.category);
@@ -103,6 +119,7 @@ void tick() {
     if (g_rearmRequested.exchange(false)) {
         for (Registered& entry : g_callbacks) rearm(entry.name, entry.disabled);
         for (RegisteredPostMove& entry : g_postMoves) rearm(entry.name, entry.disabled);
+        rearmMoveScopes();
     }
     for (Registered& entry : g_callbacks) {
         const slow_frame::Scope timing(entry.category);
@@ -110,9 +127,11 @@ void tick() {
     }
 }
 
-void runMoveScope(const RegisteredMoveScope& entry, uintptr_t player, bool entering) {
+// A scope that raised an exception stays off (enter and exit) until the next resync, like a callback.
+void runMoveScope(RegisteredMoveScope& entry, uintptr_t player, bool entering) {
+    if (entry.disabled) return;
     const slow_frame::Scope timing(entry.category);
-    entry.scope(player, entering);
+    if (!runMoveScopeGuarded(entry, player, entering)) stop(entry.name, entry.disabled);
 }
 
 void __fastcall moveDetour(void* self, void* edx) {
@@ -136,7 +155,7 @@ void addCallback(const char* name, Callback callback) {
 void addMoveScope(MoveScope scope, const char* name) {
     const size_t count = g_moveScopeCount.load();
     if (count >= kMaxMoveScopes) return;
-    g_moveScopes[count] = {scope, slow_frame::categoryOf(name)};
+    g_moveScopes[count] = {scope, name, slow_frame::categoryOf(name), false};
     g_moveScopeCount.store(count + 1, std::memory_order_release);
 }
 

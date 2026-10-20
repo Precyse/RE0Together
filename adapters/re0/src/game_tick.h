@@ -18,7 +18,8 @@ void rearmAfterResync();
 
 // Called with true just before and false just after each player's own move runs. Scopes enter in registration order
 // and exit in reverse; at most kMaxMoveScopes. Safe to add while the hook is live (the game thread reads a published count).
-// `name` only picks the SLOW_FRAME column the scope's time is added to (slow_frame_rule.h).
+// `name` picks the SLOW_FRAME column the scope's time is added to (slow_frame_rule.h) and names it when it raises an
+// exception: that is logged, toasted and the scope (enter and exit) is disabled until the next resync, like a callback.
 constexpr size_t kMaxMoveScopes = 4;
 using MoveScope = void (*)(uintptr_t player, bool entering);
 void addMoveScope(MoveScope scope, const char* name = "move_scope");
