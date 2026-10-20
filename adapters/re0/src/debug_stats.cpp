@@ -27,6 +27,7 @@ std::array<std::atomic<int>, kGaugeCount> g_gauge{0, debug_stats::kUnknownOwner,
                                                   static_cast<int>(JitterTarget::kInitial)};
 
 std::atomic<bool> g_linked{false};
+std::atomic<bool> g_stateMode{false};
 std::atomic<uint8_t> g_localSlot{0};
 std::atomic<uint8_t> g_hostSlot{0};
 std::atomic<uint32_t> g_epoch{0};
@@ -59,6 +60,8 @@ void count(Counter counter, uint32_t amount) {
 }
 
 void set(Gauge gauge, int value) { g_gauge[static_cast<size_t>(gauge)].store(value, std::memory_order_relaxed); }
+
+void setStateMode(bool on) { g_stateMode = on; }
 
 void setSession(const SessionSnapshot& session) {
     g_linked = session.linked;
@@ -125,6 +128,7 @@ std::string roomAuthorityLine() {
 Snapshot snapshot() {
     Snapshot out;
     out.linked = g_linked;
+    out.stateMode = g_stateMode;
     out.localSlot = g_localSlot;
     out.hostSlot = g_hostSlot;
     out.epoch = g_epoch;

@@ -60,6 +60,41 @@ void addPeers(const Snapshot& s, std::vector<debug_lines::Line>& lines) {
     }
 }
 
+// The rows of partner_mode=state's modules; in input mode they would all read 0 or blank.
+void addStateLines(const Snapshot& s, std::vector<debug_lines::Line>& lines) {
+    lines.push_back({L"flag commits", format(L"%u", total(s, Counter::FlagCommits)), false});
+    lines.push_back({L"flag corrections", format(L"%u", total(s, Counter::FlagCorrections)), false});
+    lines.push_back({L"item takes granted/refused", format(L"%u / %u", total(s, Counter::TakesGranted), total(s, Counter::TakesRefused)), false});
+    lines.push_back({L"pickup holds", format(L"%u", total(s, Counter::PickupsHeld)), false});
+    lines.push_back({L"puppet poses in/s", format(L"%u", rate(s, Counter::PosesReceived)), false});
+    lines.push_back({L"puppet events in/out", format(L"%u / %u", total(s, Counter::MotionEventsReceived), total(s, Counter::MotionEventsSent)), false});
+    lines.push_back({L"puppet sub events", format(L"%u", total(s, Counter::PuppetSubEvents)), false});
+    lines.push_back({L"puppet seeks/misses", format(L"%u / %u", total(s, Counter::PuppetSeeks), total(s, Counter::PuppetMotionMisses)), false});
+    lines.push_back({L"fx out", format(L"%u", total(s, Counter::WeaponFxOut)), false});
+    lines.push_back({L"fx in", format(L"%u", total(s, Counter::WeaponFxIn)), false});
+    lines.push_back({L"fx unlisted", format(L"%u", total(s, Counter::WeaponFxUnlisted)), false});
+    lines.push_back({L"state refused", format(L"%u", total(s, Counter::StateSendRefused)), false});
+    lines.push_back({L"router dropped", format(L"%u", total(s, Counter::RouterDropped)), false});
+    lines.push_back({L"room authority", widen(debug_stats::roomAuthorityLine()), false});
+    lines.push_back({L"enemy observer poses/s", format(L"%u", rate(s, Counter::EnemyObserverPoses)), false});
+    lines.push_back({L"enemy observer motions/misses/seeks", format(L"%u / %u / %u", total(s, Counter::EnemyObserverMotions), total(s, Counter::EnemyObserverMisses), total(s, Counter::EnemyObserverSeeks)), false});
+    lines.push_back({L"enemy observer stale/refused", format(L"%u / %u", total(s, Counter::EnemyObserverStale), total(s, Counter::EnemyObserverRefused)), false});
+    lines.push_back({L"enemy observer sent", format(L"%u", total(s, Counter::EnemyObserverSent)), false});
+    lines.push_back({L"enemy hand-overs/created on demand", format(L"%u / %u", total(s, Counter::EnemyHandOvers), total(s, Counter::EnemyCreatedOnDemand)), false});
+    lines.push_back({L"enemy hits forwarded/unrouted", format(L"%u / %u", total(s, Counter::EnemyHitsForwarded), total(s, Counter::EnemyHitsUnrouted)), false});
+    lines.push_back({L"room moves sent/applied/healed", format(L"%u / %u / %u", total(s, Counter::RoomMovesSent), total(s, Counter::RoomMovesApplied), total(s, Counter::RoomMoveHeals)), false});
+    lines.push_back({L"door follows sent/accepted/rejected", format(L"%u / %u / %u", total(s, Counter::DoorFollowsSent), total(s, Counter::DoorFollowsAccepted), total(s, Counter::DoorFollowsRejected)), false});
+    lines.push_back({L"contact hits sent/applied/dropped", format(L"%u / %u / %u", total(s, Counter::ContactHitsSent), total(s, Counter::ContactHitsApplied), total(s, Counter::ContactHitsDropped)), false});
+    lines.push_back({L"leases granted/started/ended/refused poses", format(L"%u / %u / %u / %u", total(s, Counter::LeasesGranted), total(s, Counter::LeasesStarted), total(s, Counter::LeasesEnded), total(s, Counter::LeasePosesRefused)), false});
+    lines.push_back({L"boss hand-overs/cancelled/frozen", format(L"%u / %u / %u", total(s, Counter::BossHandOvers), total(s, Counter::BossCancels), total(s, Counter::BossFrozen)), false});
+    lines.push_back({L"event body ops skipped", format(L"%u", total(s, Counter::EventBodyOpsSkipped)), false});
+    lines.push_back({L"demo skips sent/applied", format(L"%u / %u", total(s, Counter::DemoSkipsSent), total(s, Counter::DemoSkipsApplied)), false});
+    lines.push_back({L"prop moves sent/applied/refused", format(L"%u / %u / %u", total(s, Counter::PropMovesSent), total(s, Counter::PropMovesApplied), total(s, Counter::PropMovesRefused)), false});
+    lines.push_back({L"prop commits", format(L"%u", total(s, Counter::PropCommits)), false});
+    lines.push_back({L"session ready sent/echoed/refused", format(L"%u / %u / %u", total(s, Counter::SessionReadySent), total(s, Counter::SessionReadyEchoes), total(s, Counter::SessionReadyRefused)), false});
+    lines.push_back({L"saves waited", format(L"%u", total(s, Counter::SaveWaits)), false});
+}
+
 }  // namespace
 
 namespace debug_lines {
@@ -95,16 +130,12 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"outfit swaps", format(L"%u", total(s, Counter::AppearanceSwaps)), false});
     lines.push_back({L"enemy decisions sent/applied", format(L"%u / %u", total(s, Counter::EnemyDecisionsSent), total(s, Counter::EnemyDecisionsApplied)), false});
     lines.push_back({L"flag words sent/applied", format(L"%u / %u", total(s, Counter::FlagWordsSent), total(s, Counter::FlagWordsApplied)), false});
-    lines.push_back({L"flag commits", format(L"%u", total(s, Counter::FlagCommits)), false});
-    lines.push_back({L"flag corrections", format(L"%u", total(s, Counter::FlagCorrections)), false});
     lines.push_back({L"events fired/followed/refused/dropped", format(L"%u / %u / %u / %u", total(s, Counter::EventsFired), total(s, Counter::EventsFollowed), total(s, Counter::EventsRefused), total(s, Counter::EventsDropped)), false});
     lines.push_back({L"floor put sent/applied", format(L"%u / %u", total(s, Counter::FloorPutSent), total(s, Counter::FloorPutApplied)), false});
     lines.push_back({L"floor take sent/applied", format(L"%u / %u", total(s, Counter::FloorTakeSent), total(s, Counter::FloorTakeApplied)), false});
     lines.push_back({L"floor pending", format(L"%d", gauge(s, Gauge::FloorPending)), false});
     lines.push_back({L"floor pend appl/drop", format(L"%u / %u", total(s, Counter::FloorPendingApplied), total(s, Counter::FloorPendingDropped)), false});
     lines.push_back({L"floor take misses", format(L"%u", total(s, Counter::FloorTakeMisses)), false});
-    lines.push_back({L"item takes granted/refused", format(L"%u / %u", total(s, Counter::TakesGranted), total(s, Counter::TakesRefused)), false});
-    lines.push_back({L"pickup holds", format(L"%u", total(s, Counter::PickupsHeld)), false});
     lines.push_back({L"room desyncs", format(L"%u", total(s, Counter::RoomDesyncs)), false});
     lines.push_back({L"doors sent/run/blocked", format(L"%u / %u / %u", total(s, Counter::DoorsSent), total(s, Counter::DoorsApplied), total(s, Counter::DoorsSuppressed)), false});
     lines.push_back({L"pad sent/s", format(L"%u", rate(s, Counter::PadSent)), false});
@@ -116,33 +147,6 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"state received/s", format(L"%u", rate(s, Counter::PlayerStateReceived)), false});
     lines.push_back({L"blends/s", format(L"%u", rate(s, Counter::Blends)), false});
     lines.push_back({L"snaps", format(L"%u", total(s, Counter::Snaps)), false});
-    lines.push_back({L"puppet poses in/s", format(L"%u", rate(s, Counter::PosesReceived)), false});
-    lines.push_back({L"puppet events in/out", format(L"%u / %u", total(s, Counter::MotionEventsReceived), total(s, Counter::MotionEventsSent)), false});
-    lines.push_back({L"puppet sub events", format(L"%u", total(s, Counter::PuppetSubEvents)), false});
-    lines.push_back({L"puppet seeks/misses", format(L"%u / %u", total(s, Counter::PuppetSeeks), total(s, Counter::PuppetMotionMisses)), false});
-    lines.push_back({L"fx out", format(L"%u", total(s, Counter::WeaponFxOut)), false});
-    lines.push_back({L"fx in", format(L"%u", total(s, Counter::WeaponFxIn)), false});
-    lines.push_back({L"fx unlisted", format(L"%u", total(s, Counter::WeaponFxUnlisted)), false});
-    lines.push_back({L"state refused", format(L"%u", total(s, Counter::StateSendRefused)), false});
-    lines.push_back({L"router dropped", format(L"%u", total(s, Counter::RouterDropped)), false});
-    lines.push_back({L"room authority", widen(debug_stats::roomAuthorityLine()), false});
-    lines.push_back({L"enemy observer poses/s", format(L"%u", rate(s, Counter::EnemyObserverPoses)), false});
-    lines.push_back({L"enemy observer motions/misses/seeks", format(L"%u / %u / %u", total(s, Counter::EnemyObserverMotions), total(s, Counter::EnemyObserverMisses), total(s, Counter::EnemyObserverSeeks)), false});
-    lines.push_back({L"enemy observer stale/refused", format(L"%u / %u", total(s, Counter::EnemyObserverStale), total(s, Counter::EnemyObserverRefused)), false});
-    lines.push_back({L"enemy observer sent", format(L"%u", total(s, Counter::EnemyObserverSent)), false});
-    lines.push_back({L"enemy hand-overs/created on demand", format(L"%u / %u", total(s, Counter::EnemyHandOvers), total(s, Counter::EnemyCreatedOnDemand)), false});
-    lines.push_back({L"enemy hits forwarded/unrouted", format(L"%u / %u", total(s, Counter::EnemyHitsForwarded), total(s, Counter::EnemyHitsUnrouted)), false});
-    lines.push_back({L"room moves sent/applied/healed", format(L"%u / %u / %u", total(s, Counter::RoomMovesSent), total(s, Counter::RoomMovesApplied), total(s, Counter::RoomMoveHeals)), false});
-    lines.push_back({L"door follows sent/accepted/rejected", format(L"%u / %u / %u", total(s, Counter::DoorFollowsSent), total(s, Counter::DoorFollowsAccepted), total(s, Counter::DoorFollowsRejected)), false});
-    lines.push_back({L"contact hits sent/applied/dropped", format(L"%u / %u / %u", total(s, Counter::ContactHitsSent), total(s, Counter::ContactHitsApplied), total(s, Counter::ContactHitsDropped)), false});
-    lines.push_back({L"leases granted/started/ended/refused poses", format(L"%u / %u / %u / %u", total(s, Counter::LeasesGranted), total(s, Counter::LeasesStarted), total(s, Counter::LeasesEnded), total(s, Counter::LeasePosesRefused)), false});
-    lines.push_back({L"boss hand-overs/cancelled/frozen", format(L"%u / %u / %u", total(s, Counter::BossHandOvers), total(s, Counter::BossCancels), total(s, Counter::BossFrozen)), false});
-    lines.push_back({L"event body ops skipped", format(L"%u", total(s, Counter::EventBodyOpsSkipped)), false});
-    lines.push_back({L"demo skips sent/applied", format(L"%u / %u", total(s, Counter::DemoSkipsSent), total(s, Counter::DemoSkipsApplied)), false});
-    lines.push_back({L"prop moves sent/applied/refused", format(L"%u / %u / %u", total(s, Counter::PropMovesSent), total(s, Counter::PropMovesApplied), total(s, Counter::PropMovesRefused)), false});
-    lines.push_back({L"prop commits", format(L"%u", total(s, Counter::PropCommits)), false});
-    lines.push_back({L"session ready sent/echoed/refused", format(L"%u / %u / %u", total(s, Counter::SessionReadySent), total(s, Counter::SessionReadyEchoes), total(s, Counter::SessionReadyRefused)), false});
-    lines.push_back({L"saves waited", format(L"%u", total(s, Counter::SaveWaits)), false});
     lines.push_back({L"hit request sent/s", format(L"%u", rate(s, Counter::HitRequestSent)), false});
     lines.push_back({L"hit request recv/s", format(L"%u", rate(s, Counter::HitRequestReceived)), false});
     lines.push_back({L"hit applied sent/s", format(L"%u", rate(s, Counter::HitAppliedSent)), false});
@@ -152,6 +156,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"enemy mismatches", format(L"%u", total(s, Counter::EnemyMismatches)), false});
     lines.push_back({L"deaths reported", format(L"%u", total(s, Counter::DeathsReported)), false});
     lines.push_back({L"deaths applied", format(L"%u", total(s, Counter::DeathsApplied)), false});
+    if (s.stateMode) addStateLines(s, lines);
     lines.push_back({L"disabled", s.disabledCallbacks.empty() ? L"none" : joined(s.disabledCallbacks),
                      !s.disabledCallbacks.empty()});
     const bool hasError = !s.lastError.empty();

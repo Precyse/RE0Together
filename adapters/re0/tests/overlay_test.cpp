@@ -69,6 +69,13 @@ void fillFakeStats() {
     debug_stats::setPartnerLine("Ahmad / Caution / room 0x24 / in menu");
 }
 
+bool hasLabel(const std::vector<debug_lines::Line>& lines, const wchar_t* label) {
+    for (const auto& line : lines) {
+        if (line.label == label) return true;
+    }
+    return false;
+}
+
 int checkLines() {
     const auto lines = debug_lines::build(debug_stats::snapshot());
     bool linkUp = false;
@@ -79,6 +86,15 @@ int checkLines() {
     }
     if (!linkUp) return fail("link line is not up");
     if (!errorShown) return fail("error line is not flagged");
+    if (hasLabel(lines, L"puppet poses in/s") || hasLabel(lines, L"saves waited")) return fail("state rows shown in input mode");
+    if (!hasLabel(lines, L"pad sent/s")) return fail("input rows missing");
+    debug_stats::setStateMode(true);
+    const auto stateLines = debug_lines::build(debug_stats::snapshot());
+    debug_stats::setStateMode(false);
+    if (!hasLabel(stateLines, L"puppet poses in/s") || !hasLabel(stateLines, L"saves waited") || !hasLabel(stateLines, L"pad sent/s")) {
+        return fail("state mode rows missing");
+    }
+    if (stateLines.size() <= lines.size()) return fail("state mode adds rows");
     return 0;
 }
 

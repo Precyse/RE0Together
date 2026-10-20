@@ -130,6 +130,7 @@ struct Note {
 
 struct Snapshot {
     bool linked = false;
+    bool stateMode = false;  // partner_mode=state: the panel shows the state modules' rows
     uint8_t localSlot = 0;
     uint8_t hostSlot = 0;
     uint32_t epoch = 0;
@@ -146,6 +147,7 @@ struct Snapshot {
 
 void count(Counter counter, uint32_t amount = 1);
 void set(Gauge gauge, int value);
+void setStateMode(bool on);
 void setSession(const SessionSnapshot& session);
 void noteCallbackDisabled(const char* name);
 void noteCallbackRearmed(const char* name);

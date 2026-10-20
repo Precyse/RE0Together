@@ -9,6 +9,7 @@
 #include "boss_handover.h"
 #include "contact_net.h"
 #include "debug_overlay.h"
+#include "debug_stats.h"
 #include "demo_skip.h"
 #include "door_follow.h"
 #include "enemy_lease.h"
@@ -98,7 +99,10 @@ void reportIncomplete(const std::vector<const char*>& failed) {
 
 namespace state_mode {
 
-void configure(PartnerMode mode) { g_on = mode == PartnerMode::State; }
+void configure(PartnerMode mode) {
+    g_on = mode == PartnerMode::State;
+    debug_stats::setStateMode(g_on);
+}
 
 bool on() { return g_on.load(std::memory_order_relaxed); }
 

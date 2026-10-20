@@ -58,6 +58,7 @@ public sealed class FreshQueue
     /// <summary>Every held frame, oldest first-queued first, and empties the queue.</summary>
     public IReadOnlyList<(ulong Peer, Frame Frame)> Drain()
     {
+        if (_order.Count == 0) return [];
         var drained = _order.Select(key => (key.Peer, _pending[key])).ToList();
         _pending.Clear();
         _order.Clear();
