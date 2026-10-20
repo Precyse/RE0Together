@@ -30,7 +30,8 @@ bool matchSets(const char* label, std::span<const partner_sites::Set> sets, std:
 // Writes each set that `matchSets` found matching, on its own: a set that cannot be written leaves the others alone.
 void installMatchedSets(const char* label, std::span<const partner_sites::Set> sets, std::span<const bool> matched, Binder binder);
 
-// Writes every site. Nothing is written when a thunk is missing or a site differs; the hooks are queued after the code edits.
+// Writes every site. Nothing is written when a thunk is missing or a site differs; the hooks are queued after the code edits, and a hook
+// that cannot be installed takes the whole set back (the hooks already installed are removed, the code edits reverted).
 Result install(std::span<const partner_sites::Site> sites, Binder binder);
 
 }  // namespace site_installer

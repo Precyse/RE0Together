@@ -201,6 +201,7 @@ endfunction()
 
 add_unit_test(config_test src/config.cpp ${SHARED_DIR}/paths.cpp)
 add_unit_test(byte_pattern_test)
+add_unit_test(code_patch_test src/code_patch.cpp src/memory.cpp)
 add_unit_test(pool_size_test)
 add_unit_test(replication_sites_test)
 add_unit_test(partner_rules_test)

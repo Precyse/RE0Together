@@ -41,3 +41,6 @@ bool codeMatches(const std::vector<CodePatch>& patches);
 
 // Writes every replacement when all patches match, otherwise writes nothing. True when the code was changed.
 bool applyCodePatches(const std::vector<CodePatch>& patches);
+
+// Puts the original bytes back over the replacements applyCodePatches wrote.
+void revertCodePatches(const std::vector<CodePatch>& patches);

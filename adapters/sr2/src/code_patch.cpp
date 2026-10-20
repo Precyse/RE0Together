@@ -37,6 +37,14 @@ bool writeBytes(const CodePatch& patch, const uint8_t* bytes, size_t size) {
     return true;
 }
 
+// Puts back the original bytes of the first `count` patches.
+void revertFirst(const std::vector<CodePatch>& patches, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        const CodePatch& patch = patches[i];
+        if (!patch.replacement.empty()) writeBytes(patch, patch.expected.data(), patch.replacement.size());
+    }
+}
+
 }  // namespace
 
 bool codeMatches(const std::vector<CodePatch>& patches) {
@@ -50,11 +58,10 @@ bool applyCodePatches(const std::vector<CodePatch>& patches) {
     for (size_t written = 0; written < patches.size(); ++written) {
         const CodePatch& patch = patches[written];
         if (patch.replacement.empty() || writeBytes(patch, patch.replacement.data(), patch.replacement.size())) continue;
-        for (size_t undone = 0; undone < written; ++undone) {  // all or nothing: put back what was written
-            const CodePatch& earlier = patches[undone];
-            if (!earlier.replacement.empty()) writeBytes(earlier, earlier.expected.data(), earlier.replacement.size());
-        }
+        revertFirst(patches, written);  // all or nothing: put back what was written
         return false;
     }
     return true;
 }
+
+void revertCodePatches(const std::vector<CodePatch>& patches) { revertFirst(patches, patches.size()); }

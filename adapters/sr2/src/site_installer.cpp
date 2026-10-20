@@ -93,9 +93,17 @@ Result install(std::span<const Site> sites, Binder binder) {
         logger::write("sites: code edits not applied, nothing patched");
         return {false, 0};
     }
+    std::vector<uintptr_t> hooked;
     for (const Site* site : hookSites) {
         const partner_thunks::Binding binding = binder(site->thunk);
-        hooks::install(site->id, site->address, binding.entry, binding.original);
+        if (hooks::install(site->id, site->address, binding.entry, binding.original)) {
+            hooked.push_back(site->address);
+            continue;
+        }
+        logger::write("sites: hook %s failed, the set is taken back", site->id);  // all or nothing, hooks included
+        for (const uintptr_t address : hooked) hooks::remove(address);
+        revertCodePatches(patches);
+        return {false, 0};
     }
     return {true, sites.size()};
 }
