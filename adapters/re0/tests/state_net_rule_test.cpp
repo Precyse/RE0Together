@@ -42,12 +42,24 @@ void testOtherTypesAreUntouched() {
     }
 }
 
+void testPeerModeMismatch() {
+    check(rule::peerRunsOtherMode(false, rule::kFirstStateType) && rule::peerRunsOtherMode(false, rule::kLastStateType),
+          "a state-block frame shows a state-mode peer to an input-mode machine");
+    check(!rule::peerRunsOtherMode(false, kPadFrame) && !rule::peerRunsOtherMode(false, kPlayerState),
+          "pad and player state frames are an input-mode machine's own kind");
+    check(rule::peerRunsOtherMode(true, kPadFrame), "a PAD_FRAME shows an input-mode peer to a state-mode machine");
+    check(!rule::peerRunsOtherMode(true, rule::kFirstStateType) && !rule::peerRunsOtherMode(true, kPlayerState) &&
+              !rule::peerRunsOtherMode(true, kProfileSpecific),
+          "state-block, player state and other frames are a state-mode machine's own kind");
+}
+
 }  // namespace
 
 int main() {
     testBlockEdges();
     testEveryStateTypeIsRefusedInInputMode();
     testOtherTypesAreUntouched();
+    testPeerModeMismatch();
     if (g_failures == 0) std::printf("state_net_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

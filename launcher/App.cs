@@ -298,9 +298,13 @@ public sealed class App
         }
         if (_saveSync?.Ready == false) return true;
         _launchPending = false;
-        _saveSync?.EnableAdapter(GameOptions.Current(_profile!, _gameDir));
+        _saveSync?.EnableAdapter(AdapterOptions());
         return _options.NoLaunch || GameLauncher.Launch(_profile!, _gameDir);
     }
+
+    private Dictionary<string, string> AdapterOptions() =>
+        GameOptions.ForAdapter(_profile!, GameOptions.Current(_profile!, _gameDir), _lobby?.HostOptions ?? new Dictionary<string, string>(),
+            _lobby == null || _lobby.OwnerId == _transport!.LocalId);
 
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
     private void EndSession()

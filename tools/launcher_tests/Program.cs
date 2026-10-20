@@ -1,5 +1,5 @@
 // Unit tests for the launcher's pure rules (no Steam, no sockets): the mod content hash and the BUILD_INFO comparison, the
-// member grace, the token buckets, the fresh-frame queue. Usage: dotnet run --project tools/launcher_tests. Exit 0 when every check passes.
+// member grace, the token buckets, the fresh-frame queue, the adapter option values. Usage: dotnet run --project tools/launcher_tests. Exit 0 when every check passes.
 namespace LauncherTests;
 
 public static class Check
@@ -23,6 +23,7 @@ public static class Program
         MemberGraceTests.Run();
         PeerBudgetTests.Run();
         FreshQueueTests.Run();
+        GameOptionsTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }

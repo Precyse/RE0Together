@@ -5,6 +5,8 @@
   "adapterLog": "coop/adapter.log",
   "freshTypes": ["0x0140", "0x0160", "0x0173"],
   "options": [
+    { "key": "partner_mode", "label": "Partner mode", "host": true, "values": [
+      { "value": "input", "label": "Input" }, { "value": "state", "label": "State" } ] },
     { "key": "character", "label": "Character", "host": true, "values": [
       { "value": "rebecca", "label": "Rebecca" }, { "value": "billy", "label": "Billy" } ] },
     { "key": "outfit_rebecca", "label": "Rebecca outfit", "values": [

@@ -1,6 +1,8 @@
 #include "state_sync.h"
 
+#include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <string>
@@ -42,6 +44,7 @@
 #include "scene.h"
 #include "state_correction.h"
 #include "state_mode.h"
+#include "state_net_rule.h"
 
 namespace {
 
@@ -52,7 +55,10 @@ constexpr auto kSendInterval = std::chrono::microseconds(static_cast<int>(1'000'
 constexpr auto kLogInterval = std::chrono::seconds(1);
 constexpr float kPeerToastSeconds = 4.0f;
 constexpr float kHostLeftToastSeconds = 10.0f;
+constexpr float kModeMismatchToastSeconds = 15.0f;
+constexpr size_t kToastLength = 96;
 
+std::atomic<bool> g_modeMismatchNoted{false};
 Clock::time_point g_lastSend;
 Clock::time_point g_lastLog;
 uint32_t g_seq = 0;
@@ -128,8 +134,21 @@ void logRemoteState(const GameFrame& frame) {
                   state.pos[0], state.pos[1], state.pos[2]);
 }
 
+// Nothing negotiates partner_mode between the machines: a peer on the other mode shows in the types it sends. Said once.
+void noteModeMismatch(const GameFrame& frame) {
+    if (!state_net_rule::peerRunsOtherMode(state_mode::on(), frame.type) || g_modeMismatchNoted.exchange(true)) return;
+    const char* const own = partnerModeName(state_mode::on() ? PartnerMode::State : PartnerMode::Input);
+    const char* const peer = partnerModeName(state_mode::on() ? PartnerMode::Input : PartnerMode::State);
+    logger::write("state_sync: the peer runs partner_mode=%s (type 0x%04x from slot %u), this machine runs %s", peer, frame.type,
+                  frame.slot, own);
+    char text[kToastLength];
+    snprintf(text, sizeof(text), "Partner runs partner_mode=%s, this machine %s", peer, own);
+    debug_overlay::toast(text, kModeMismatchToastSeconds);
+}
+
 void onFrame(const GameFrame& frame) {
     net_trace::record(frame);
+    noteModeMismatch(frame);
     if (frame.type == proto::kMsgPartyRequest || frame.type == proto::kMsgPartyMode) {
         party_mode::onFrame(frame);
         return;
@@ -203,7 +222,11 @@ void onFrame(const GameFrame& frame) {
         floor_items_sync::onFrame(frame);
         return;
     }
-    if (frame_router::dispatch(frame, g_lastSession.hostSlot)) return;
+    if (state_mode::on()) {
+        if (frame_router::dispatch(frame, g_lastSession.hostSlot)) return;
+    } else if (state_net_rule::isStateType(frame.type)) {
+        return;  // a state-mode peer's frame: nothing here handles it (noted once above)
+    }
     if (frame.type == state_sync::kMsgPlayerState) debug_stats::count(debug_stats::Counter::PlayerStateReceived);
     logRemoteState(frame);
     state_correction::onFrame(frame);
