@@ -151,7 +151,9 @@ void testEntryRefusals() {
     check(wire::valid(mutated([](wire::PoseEntry& e) { e.target = wire::kNoTarget; })), "no target is fine");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.pos[1] = std::nanf(""); })), "a non-finite position is refused");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.frame0 = INFINITY; })), "a non-finite frame is refused");
-    check(!wire::valid(mutated([](wire::PoseEntry& e) { e.pad = 1; })), "a non-zero pad is refused");
+    check(!wire::valid(mutated([](wire::PoseEntry& e) { e.leaseToken = 1; })), "a token without the leased flag is refused");
+    check(!wire::valid(mutated([](wire::PoseEntry& e) { e.flags |= wire::kFlagLeased; })), "the leased flag without a token is refused");
+    check(wire::valid(mutated([](wire::PoseEntry& e) { e.flags |= wire::kFlagLeased; e.leaseToken = 7; })), "a leased entry with its token is valid");
 
     check(wire::valid(motionEntry(36)), "a motion for slot 36 is fine");
     wire::MotionEntry bad = motionEntry(37);

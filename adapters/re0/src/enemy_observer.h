@@ -21,14 +21,14 @@ bool enable();
 
 void uninstall();
 
-// Game thread: this machine shows `enemy` from the peer's stream (state mode, the peer runs the loaded room, the class
-// is an Observer class), whether or not its construction is over. The decision, alignment and hit replay paths of the
-// input-mode design skip such an enemy.
-bool observes(uintptr_t enemy);
+// Game thread: the engine's own decision, alignment and hit-replay paths of the input-mode design skip this enemy
+// (state mode): it is shown from a stream (the peer runs the loaded room and the class is an Observer class, or the
+// enemy was leased away), whether or not its construction is over, or this machine simulates it under a lease.
+bool replicates(uintptr_t enemy);
 
-// Any thread: the machine that simulates the enemy in pool slot `slot` of the loaded room right now, as this machine
-// sees it: the room authority (a lease holder takes over from it in phase 9). Unknown while the room is unowned or no
-// session is linked.
+// Game thread: the machine that simulates the enemy in pool slot `slot` of the loaded room right now, as this machine
+// sees it: the holder of the lease on it, else the room authority. Unknown while the room is unowned or no session is
+// linked.
 enemy_observer_rule::Simulator simulatorOf(uint8_t slot);
 
 // Game thread, for the boss hand-over (phase 15): holds the enemy in pool slot `slot` under the CharPause scope whoever
@@ -39,6 +39,10 @@ bool freeze(int slot);
 // Game thread: the pose entry (class, spawn, HP, pose, record) of the enemy in pool slot `slot`, flagged alive or
 // terminal, or nothing when the slot holds no Observer-class enemy created through the spawn hook.
 std::optional<enemy_observer_wire::PoseEntry> snapshot(int slot);
+
+// Game thread: carries the enemy in pool slot `slot` on from `state` on this machine (its pose and HP are put back, then
+// the hand-over rule runs): the end of a lease on an enemy this machine gave away. False when the slot is empty.
+bool resume(int slot, const enemy_observer_wire::PoseEntry& state);
 
 // Game thread: ends the freeze of pool slot `slot` and carries the enemy on from `record` the way a hand-over does (the
 // class's own setAction at step 0 when the record is an action). False when the slot is empty or unreadable.

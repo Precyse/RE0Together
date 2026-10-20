@@ -91,6 +91,13 @@ enum class Counter : size_t {
     DoorFollowsSent,
     DoorFollowsAccepted,
     DoorFollowsRejected,
+    ContactHitsSent,
+    ContactHitsApplied,
+    ContactHitsDropped,
+    LeasesGranted,
+    LeasesStarted,
+    LeasesEnded,
+    LeasePosesRefused,
     Count
 };
 

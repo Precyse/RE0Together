@@ -525,6 +525,19 @@ constexpr uint32_t kPlayerThinkAlign = 0x10;
 // 0x61e2c0 before it returns and its only caller is the door thunk 0x552720 (sDoorLoad update phase 4, once per door).
 constexpr uintptr_t kChangeRoomFunction = 0x610c60;
 
+// state mode: phase 9 (contact router and grab lease; docs/RE0_NOTES.md "State mode: contact and lease")
+// The player damage entry 0x512570 indexes this table by its kind argument: row `kind` is a pair {begin, end} of
+// 16-byte entries {i32 think state, i32 motion front, i32 motion back (-1 = none), f32 speed}, entry `level` is at
+// begin + level * 16; a null row or a level at or past `end` makes the entry assert and read null. The entry's first word
+// is the group-2 think state the victim is put in (changeState(2, state, 0)).
+constexpr uintptr_t kReactionTable = 0xd8d6f8;
+constexpr uintptr_t kReactionRowSize = 8;
+constexpr uintptr_t kReactionEntrySize = 0x10;
+// For reference, not hooked: an enemy writes the victim's grab command (+0x69cc) through 0x517340 and the struggle
+// reads the pad through 0x4c8ed0, both on the victim's own machine once the enemy runs there.
+constexpr uintptr_t kGrabCommandFunction = 0x517340;
+constexpr uintptr_t kStruggleFunction = 0x4c8ed0;
+
 // MSVC cannot declare a free thiscall pointer; __fastcall with edx unused has the same register and stack layout.
 template <class R, class... Args>
 R callThiscall(uintptr_t function, void* self, Args... args) {

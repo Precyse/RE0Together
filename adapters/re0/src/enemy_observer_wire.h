@@ -30,7 +30,7 @@ constexpr uint8_t kLastTargetCharacter = 1;  // character_owner::Character::Rebe
 constexpr uint8_t kFlagAlive = 0x1;
 constexpr uint8_t kFlagTerminal = 0x2;  // the enemy died: sent once more, reliably
 constexpr uint8_t kFlagRemoved = 0x4;   // the unit left the pool: sent once, reliably
-constexpr uint8_t kFlagLeased = 0x8;    // a paired attack moved the simulation to the victim's machine (phase 9)
+constexpr uint8_t kFlagLeased = 0x8;    // sent by a lease holder (enemy_lease): the simulation of this enemy moved to the victim's machine
 constexpr uint8_t kKnownFlags = kFlagAlive | kFlagTerminal | kFlagRemoved | kFlagLeased;
 
 // The first bytes of every batch.
@@ -61,7 +61,7 @@ struct PoseEntry {
     uint16_t motion1;
     float frame0;
     uint16_t frame1;     // fixed point, 1/64 frame
-    uint16_t pad;
+    uint16_t leaseToken; // low 16 bits of the lease token (never 0) while kFlagLeased is set, else 0
     int32_t record[4];   // +0x67a4: {state, action id, a, b}
     uint32_t flags6a0c;  // read by the player's aim filter and weapon hit path
 };
@@ -126,11 +126,14 @@ std::optional<Header> decodeHeader(std::span<const uint8_t> payload) {
     return header;
 }
 
+// A leased entry names its lease; every other entry carries no token.
+inline bool leaseTokenFits(const PoseEntry& entry) { return ((entry.flags & kFlagLeased) != 0) == (entry.leaseToken != 0); }
+
 inline bool valid(const PoseEntry& entry) {
     const bool targetOk = entry.target <= kLastTargetCharacter || entry.target == kNoTarget;
     return entry.slot < game::kEnemyPoolSlots && entry.classIndex < enemy_policy::kClassCount &&
            (entry.flags & ~kKnownFlags) == 0 && targetOk && finite(entry.pos[0]) && finite(entry.pos[1]) &&
-           finite(entry.pos[2]) && finite(entry.frame0) && entry.pad == 0;
+           finite(entry.pos[2]) && finite(entry.frame0) && leaseTokenFits(entry);
 }
 
 inline bool valid(const MotionEntry& entry) {

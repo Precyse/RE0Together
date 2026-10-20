@@ -200,7 +200,7 @@ void applyHit(const Hit& event) {
         return;
     }
     // An observed enemy's HP, reaction and death come from the simulator's stream, not from a replayed damage function.
-    if (event.type == enemy_protocol::kMsgHitApplied && state_mode::on() && enemy_observer::observes(enemy)) return;
+    if (event.type == enemy_protocol::kMsgHitApplied && state_mode::on() && enemy_observer::replicates(enemy)) return;
     if (event.type == enemy_protocol::kMsgHitRequest && state_mode::on() && !takesRequest(hit)) return;
     if (hit.attackerCharacterId == enemy_protocol::kNoAttacker) return applyOutcome(enemy, hit);
     const uintptr_t attacker = character_owner::find(static_cast<Character>(hit.attackerCharacterId));

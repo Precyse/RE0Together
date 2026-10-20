@@ -88,6 +88,9 @@ add_library(re0_adapter SHARED
     src/puppet.cpp
     src/puppet_hooks.cpp
     src/player_contact.cpp
+    src/contact_game.cpp
+    src/contact_net.cpp
+    src/enemy_lease.cpp
     src/state_mode.cpp
     src/state_net.cpp
     src/frame_router.cpp
@@ -223,6 +226,17 @@ add_executable(room_move_wire_test tests/room_move_wire_test.cpp)
 add_executable(room_move_rule_test tests/room_move_rule_test.cpp)
 
 add_executable(slow_frame_test tests/slow_frame_test.cpp)
+
+add_executable(contact_rule_test tests/contact_rule_test.cpp)
+
+add_executable(enemy_lease_rule_test tests/enemy_lease_rule_test.cpp)
+
+add_executable(enemy_lease_wire_test tests/enemy_lease_wire_test.cpp)
+target_include_directories(enemy_lease_wire_test PRIVATE src ${DS2_SRC_DIR})
+
+foreach(target contact_rule_test enemy_lease_rule_test enemy_lease_wire_test)
+    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+endforeach()
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
