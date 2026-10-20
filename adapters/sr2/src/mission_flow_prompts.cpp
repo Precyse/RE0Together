@@ -1,6 +1,7 @@
 // Mission start and replay prompts for 3 and 4 players (MF1 to MF17): who asked and who answers, the first accept that starts the
 // mission, the remote a restart keeps, the replay answer tally and the names a waiting dialog shows.
 #include <cstdio>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -46,6 +47,7 @@ struct ReplayRequester {
 StartRequester g_startRequester{};
 ReplayRequester g_replayRequester{};
 activity_rules::DeclineTally g_replayTally;
+std::mutex g_replayTallyLock;  // the tally is touched by the misc handler (MF15) and the member left callback
 bool g_trace = false;
 thread_local bool t_answeringStart = false;
 thread_local uintptr_t t_explicitTarget = 0;
@@ -321,18 +323,47 @@ void __cdecl replayAnswerTally(GuestFrame* frame) {
         const int32_t answer = static_cast<int8_t>(readByte(args[kBufferArg]));
         uintptr_t required[activity_rules::kMaxMembers];
         const size_t count = activity_state::remoteMembersInGame(required);
-        const bool declinedAll =
-            answer != sr2::kReplayAnswerAccept && g_replayTally.declinedAll(readDword(sr2::kReplayDialog), member, required, count);
+        bool declinedAll = false;
+        size_t declined = 0;
+        {
+            const std::lock_guard<std::mutex> lock(g_replayTallyLock);
+            declinedAll = answer != sr2::kReplayAnswerAccept && g_replayTally.declinedAll(readDword(sr2::kReplayDialog), member, required, count);
+            declined = g_replayTally.declinedCount();
+        }
         applies = rules::replayAnswerApplies(answer, declinedAll);
         if (g_trace) {
             logger::write("trace: mission flow: replay answer %d from slot %u, declined %zu of %zu, %s", answer, mission_flow::slotOf(member),
-                          g_replayTally.declinedCount(), count, applies ? "applied" : "withheld");
+                          declined, count, applies ? "applied" : "withheld");
         }
     }
     if (applies) {
         frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(g_replayAnswerOriginal), frame->regs,
                                            {args[kBufferArg], args[kContextArg]});
     }
+}
+
+// The leave rule of the host's replay wait: a remote that leaves without answering counts as a decline. When the remotes that stay have
+// all declined, the wait is cancelled the way the game does at its own leave teardown, which only runs for the last remote.
+void replayWaitLeaverDeclines(uintptr_t leaver) {
+    if (!activity_state::isHost() || readByte(sr2::kReplayAsker) == 0 || readDword(sr2::kReplayDialog) == 0) return;
+    uintptr_t inGame[activity_rules::kMaxMembers];
+    const size_t count = activity_state::remoteMembersInGame(inGame);
+    uintptr_t remaining[activity_rules::kMaxMembers];
+    const size_t stay = rules::withoutMember(inGame, count, leaver, remaining);
+    if (stay == 0) return;
+    bool declinedAll = false;
+    size_t declined = 0;
+    {
+        const std::lock_guard<std::mutex> lock(g_replayTallyLock);
+        declinedAll = g_replayTally.declinedAll(readDword(sr2::kReplayDialog), leaver, remaining, stay);
+        declined = g_replayTally.declinedCount();
+    }
+    const bool cancel = rules::replayLeaveCancels(stay, declinedAll);
+    if (g_trace) {
+        logger::write("trace: mission flow: slot %u left the replay wait: counted as a decline, %zu declined, %zu remaining -> %s",
+                      mission_flow::slotOf(leaver), declined, stay, cancel ? "cancelled" : "still waiting");
+    }
+    if (cancel) guest_call::call(sr2::kReplayCancel, {});
 }
 
 PARTNER_WRAP_STUB(startPromptAnswerStub, startPromptAnswer, 0)
@@ -362,6 +393,7 @@ void memberLeft(uintptr_t leaver) {
         g_replayRequester = {};
         if (g_trace) logger::write("trace: mission flow: slot %u left: forgot the replay requester", slotOf(leaver));
     }
+    if (leaver) replayWaitLeaverDeclines(leaver);
     const uintptr_t human = remote_players::humanOfMember(leaver);
     if (!g_trace || !human) return;
     const uint32_t handle = readDword(human + sr2::kObjectHandleOffset);

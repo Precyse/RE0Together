@@ -28,7 +28,8 @@ constexpr size_t kBranchBytes = 5;
 constexpr size_t kDwordBytes = 4;
 constexpr size_t kCallBlockBytes = 10;
 constexpr size_t kJumpOutBytes = 12;
-constexpr size_t kTotalSites = 22;
+constexpr size_t kTotalSites = 23;
+constexpr size_t kWrittenSites = 22;  // MF15c only checks bytes
 constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint8_t kCallOpcode = 0xE8;
 constexpr uint8_t kNop = 0x90;
@@ -89,16 +90,18 @@ void theTables() {
         ids.insert(site.id);
         addresses.insert(site.address);
     }
-    check(all.size() == kTotalSites && ids.size() == kTotalSites && addresses.size() == kTotalSites, "22 sites with unique ids and addresses (MF22 is OF6)");
+    check(all.size() == kTotalSites && ids.size() == kTotalSites && addresses.size() == kTotalSites, "23 sites with unique ids and addresses (MF22 is OF6)");
+    check(static_cast<size_t>(std::count_if(all.begin(), all.end(), [](const Site& site) { return site.kind != Kind::Bytes; })) == kWrittenSites,
+          "22 of them are written, MF15c only checks bytes");
     check(siteNamed(all, "MF22") == nullptr, "MF22 is not repeated, outfit_sync_sites.h writes 0x53FF08 as OF6");
     check(std::any_of(std::begin(outfit_sync_sites::kLookSync), std::end(outfit_sync_sites::kLookSync),
                       [](const Site& site) { return site.address == 0x53FF08 && site.thunk == Thunk::EachRemoteMember82BC50; }),
           "OF6 is the call at 0x53FF08 with the look sync thunk MF22 asked for");
-    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return site.thunk != Thunk::None; }),
-          "every site has a thunk");
-    check(phaseSize("mission prompts") == 11 && phaseSize("replay prompt") == 6 && phaseSize("mission rewards") == 4 &&
+    check(std::all_of(all.begin(), all.end(), [](const Site& site) { return (site.kind == Kind::Bytes) == (site.thunk == Thunk::None); }),
+          "every written site has a thunk, the check has none");
+    check(phaseSize("mission prompts") == 11 && phaseSize("replay prompt") == 7 && phaseSize("mission rewards") == 4 &&
               phaseSize("mission flow trace") == 1,
-          "the phases hold 11, 6, 4 and 1 sites");
+          "the phases hold 11, 7, 4 and 1 sites");
     check(phaseIsTraceOnly("mission flow trace") && !phaseIsTraceOnly("mission prompts") && !phaseIsTraceOnly("replay prompt") &&
               !phaseIsTraceOnly("mission rewards"),
           "only the trace phase waits for trace=1");
@@ -144,6 +147,9 @@ void theCallees() {
     check(callee("MF17") == kPartnerMemberGetter, "MF17 calls the partner member getter 0x8CA380");
     check(callee("MF20") == sr2::kBonusAward, "MF20 calls the bonus function 0x6A9640");
     check(siteNamed(all, "MF18")->address == sr2::kBonusAward, "MF18 hooks the bonus function 0x6A9640");
+    const Site* cancel = siteNamed(all, "MF15c");
+    check(cancel->kind == Kind::Bytes && cancel->address == sr2::kReplayCancel && std::string_view(cancel->tail).empty(),
+          "MF15c checks the bytes of the replay wait cancel 0x544F10 and writes nothing");
     check(siteNamed(all, "MF1")->address == 0x6A8450 && siteNamed(all, "MF13")->address == 0x543D70 && siteNamed(all, "MF15")->address == 0x543F10,
           "MF1, MF13 and MF15 hook the start prompt callback and the replay ask and answer handlers");
 }

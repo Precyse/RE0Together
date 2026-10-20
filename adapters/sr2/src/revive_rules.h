@@ -106,6 +106,13 @@ public:
 
     bool waiting(size_t slot, int32_t now) const { return slot < kWaitSlots && isPending(deadlines_[slot], now); }
 
+    // Drops the wait of a slot whose member left; true when the slot held a deadline.
+    bool forget(size_t slot) {
+        if (slot >= kWaitSlots || deadlines_[slot] == kNoDeadline) return false;
+        deadlines_[slot] = kNoDeadline;
+        return true;
+    }
+
 private:
     int32_t deadlines_[kWaitSlots];
 };
@@ -131,13 +138,13 @@ constexpr size_t markerIndex(uint32_t marker) {
     return index >= sr2::kBlipCount ? partner_rules::kNone : index;
 }
 
-// "slot 1 alive 1 down 0, slot 2 alive 0 down 1" for the trace lines.
+// "slot 1 alive 1 down 0 waiting 0, slot 2 alive 0 down 1 waiting 1" for the trace lines.
 inline std::string playersText(const Player* remotes, size_t count) {
     std::string text;
     for (size_t i = 0; i < count; ++i) {
         char part[48];
-        std::snprintf(part, sizeof(part), "%sslot %u alive %d down %d", text.empty() ? "" : ", ", static_cast<unsigned>(remotes[i].slot),
-                      remotes[i].alive ? 1 : 0, remotes[i].down ? 1 : 0);
+        std::snprintf(part, sizeof(part), "%sslot %u alive %d down %d waiting %d", text.empty() ? "" : ", ",
+                      static_cast<unsigned>(remotes[i].slot), remotes[i].alive ? 1 : 0, remotes[i].down ? 1 : 0, remotes[i].waiting ? 1 : 0);
         text += part;
     }
     return text;

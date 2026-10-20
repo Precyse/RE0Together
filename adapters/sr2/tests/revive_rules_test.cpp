@@ -130,6 +130,12 @@ void theRespawnWaits() {
     check(!waits.waiting(1, kNow) && !waits.waiting(2, kNow), "clear forgets every slot");
     waits.record(revive_rules::kWaitSlots, kNow + kWait);
     check(!waits.waiting(revive_rules::kWaitSlots, kNow), "a slot past the table is ignored");
+
+    waits.record(1, kNow + kWait);
+    waits.record(2, kNow + kWait);
+    check(waits.forget(1) && !waits.waiting(1, kNow) && waits.waiting(2, kNow), "forget drops one slot and keeps the others");
+    check(!waits.forget(1), "a slot without a deadline reports nothing forgotten");
+    check(!waits.forget(revive_rules::kWaitSlots), "a slot past the table reports nothing forgotten");
 }
 
 void theRevivePoseAnchor() {
@@ -157,8 +163,9 @@ void theBlipMarker() {
 }
 
 void theTraceText() {
-    const Player remotes[] = {dead(1, 1), downed(2, 2)};
-    check(revive_rules::playersText(remotes, 2) == "slot 1 alive 0 down 0, slot 2 alive 1 down 1", "the players text");
+    const Player remotes[] = {dead(1, 1), downed(2, 2), waiting(3, 3)};
+    check(revive_rules::playersText(remotes, 3) == "slot 1 alive 0 down 0 waiting 0, slot 2 alive 1 down 1 waiting 0, slot 3 alive 0 down 0 waiting 1",
+          "the players text");
     check(revive_rules::slotOf(remotes, 2, 2) == 2 && revive_rules::slotOf(remotes, 2, 9) == partner_rules::kNoSlot, "the slot of a remote, kNoSlot for another");
 }
 

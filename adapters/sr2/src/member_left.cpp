@@ -4,6 +4,7 @@
 #include "mission_flow.h"
 #include "net_handlers.h"
 #include "pause_mask.h"
+#include "revive_state.h"
 #include "sr2_addresses.h"
 
 namespace {
@@ -16,6 +17,7 @@ void __cdecl memberLeft(uintptr_t leaver) {
     pause_mask::afterLeave(leaver);
     cutscene_sync::memberLeft(leaver);
     mission_flow::memberLeft(leaver);
+    revive_state::memberLeft(leaver);
     net_handlers::memberLeft(leaver);
 }
 

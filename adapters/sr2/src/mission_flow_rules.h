@@ -84,6 +84,19 @@ inline bool answersPrompt(int32_t event) { return event == kPromptEventDecline |
 // The asker of a replay goes on with an accept at once, and with a decline only once every remote has declined.
 inline bool replayAnswerApplies(int32_t answer, bool declinedAll) { return answer == sr2::kReplayAnswerAccept || declinedAll; }
 
+// The members except `leaver`, in order, into `out` (room for `count`); the number copied.
+inline size_t withoutMember(const uintptr_t* members, size_t count, uintptr_t leaver, uintptr_t* out) {
+    size_t kept = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (members[i] != leaver) out[kept++] = members[i];
+    }
+    return kept;
+}
+
+// A leave ends the host's replay wait when remotes stay in the game and all of them have declined. With none left the game's own
+// leave teardown closes the wait.
+inline bool replayLeaveCancels(size_t remaining, bool remainingDeclined) { return remaining > 0 && remainingDeclined; }
+
 // A new wait dialog starts a new tally; the pending id stands in while there is none.
 inline uint32_t declineKey(uint32_t waitDialog, uint32_t pendingId) { return waitDialog ? waitDialog : pendingId; }
 
