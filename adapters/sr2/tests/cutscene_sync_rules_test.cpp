@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "../src/cutscene_sync_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -12,13 +13,6 @@ using namespace cutscene_sync_rules;
 constexpr uintptr_t kHost = 0x1000;
 constexpr uintptr_t kGuestTwo = 0x2000;
 constexpr uintptr_t kGuestThree = 0x3000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

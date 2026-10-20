@@ -6,6 +6,7 @@
 
 #include "../src/spread_rules.h"
 #include "../src/zombie_uprising_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -21,13 +22,6 @@ constexpr uint32_t kSecondRemote = 0x02C02000;
 constexpr uint32_t kThirdRemote = 0x02C03000;
 constexpr uint32_t kNobody = 0;
 constexpr float kPairs[][2] = {{0.25f, 0.75f}, {1.0f, 0.0f}, {0.3f, 0.7f}, {0.123f, 0.456f}, {0.0f, 0.0f}};
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 bool almostEqual(float a, float b) { return a - b < kEpsilon && b - a < kEpsilon; }
 

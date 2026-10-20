@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "../src/world_walks_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -24,13 +25,6 @@ constexpr uintptr_t kLocalFollower = 0x5000;
 constexpr uintptr_t kPartnerFollower = 0x6000;
 constexpr uintptr_t kNoHuman = 0;
 constexpr uintptr_t kMemberBase = 0x9000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 Remote remote(uintptr_t human, uint8_t slot) { return {human, kMemberBase + slot, slot, 0}; }
 

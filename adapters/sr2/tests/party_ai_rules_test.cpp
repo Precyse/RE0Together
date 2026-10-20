@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../src/party_ai_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -15,13 +16,6 @@ constexpr uintptr_t kRemoteA = 0x2000;
 constexpr uintptr_t kRemoteB = 0x3000;
 constexpr uintptr_t kRemoteC = 0x4000;
 constexpr uint8_t kNoSlot = partner_rules::kNoSlot;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<uintptr_t> itemsOf(const HumanList& list) { return {list.items, list.items + list.count}; }
 

@@ -1,12 +1,12 @@
 #pragma once
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "ascii_text.h"
 #include "local_port_rules.h"
 
 // The pure rules of milestone 5g, L1 (unit tested): which network adapter's IPv4 address the game should use as its local
@@ -31,13 +31,8 @@ struct Adapter {
     std::vector<uint32_t> addresses;  // IPv4 unicast, as stored in memory
 };
 
-inline std::string lowered(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return text;
-}
-
 inline bool excludedByName(const std::string& names) {
-    const std::string text = lowered(names);
+    const std::string text = ascii_text::lowered(names);
     return std::any_of(std::begin(kExcludedNames), std::end(kExcludedNames),
                        [&](const char* excluded) { return text.find(excluded) != std::string::npos; });
 }

@@ -6,6 +6,7 @@
 
 #include "../src/vehicle_seating_rules.h"
 #include "../src/vehicle_seating_state.h"
+#include "check.h"
 
 namespace {
 
@@ -15,13 +16,6 @@ constexpr int32_t kScriptedSeat = 2;
 constexpr int32_t kDefault = vehicle_seating_rules::kDefaultHolder;
 constexpr uint32_t kCarHandle = 0x1234;
 constexpr uint8_t kDeclared = 1;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 template <size_t N>
 int32_t seatIn(const std::array<Occupant, N>& seats) {

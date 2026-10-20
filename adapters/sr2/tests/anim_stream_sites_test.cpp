@@ -12,8 +12,10 @@
 #include "../src/partner_replacement.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -28,20 +30,11 @@ constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint32_t kMovedBase = 0x3A00000;
 constexpr size_t kMovedRows = 14;
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
 struct Range {
     const char* id;
     uintptr_t address;
     size_t size;
 };
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
 
 std::vector<Site> allSites() {
     std::vector<Site> all;
@@ -55,17 +48,6 @@ std::vector<Range> allRanges() {
     for (const Site& site : allSites()) ranges.push_back({site.id, site.address, sizeOf(site)});
     for (const NeedTableSite& site : anim_stream_sites::kNeedTable) ranges.push_back({site.id, site.address, partner_sites::parseHex(site.expected).size()});
     return ranges;
-}
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-uint32_t dwordOf(const std::vector<uint8_t>& bytes, size_t at) {
-    return bytes[at] | bytes[at + 1] << 8 | bytes[at + 2] << 16 | static_cast<uint32_t>(bytes[at + 3]) << 24;
 }
 
 // Where the `call rel32` of a retargeted call site goes.

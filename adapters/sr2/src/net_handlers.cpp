@@ -36,13 +36,6 @@ bool g_installed[kSetCount] = {};
 rate_limit::RateLimit g_noSenderLimit;
 void* g_replayStartOriginal = nullptr;
 
-uintptr_t currentSession() { return readDword(sr2::kSessionPointer); }
-
-uintptr_t hostMember() {
-    const uintptr_t session = currentSession();
-    return session ? readDword(session + sr2::kSessionHostMemberOffset) : 0;
-}
-
 // ---- Race hold ----
 
 uint8_t& raceRemoteHold() { return byteField(sr2::kRaceHoldRemote, 0); }
@@ -109,7 +102,7 @@ void raceHoldLeft(uintptr_t leaver) {
 // RP4: misc_1c, the start handshake. A guest takes it only from the host.
 void __cdecl replayStart(const int8_t* payload, uintptr_t context) {
     const uintptr_t sender = activity_state::senderOf(context);
-    if (!net_handlers_rules::guestTakes(activity_state::isHost(), sender, hostMember())) {
+    if (!net_handlers_rules::guestTakes(activity_state::isHost(), sender, remote_players::hostMember())) {
         if (g_trace) logger::write("trace: replay: misc_1c from slot %u (not the host) dropped", net_handlers::memberSlot(sender));
         return;
     }
@@ -121,7 +114,7 @@ void __cdecl replayStart(const int8_t* payload, uintptr_t context) {
 // SL1: the human the session lost dialog names.
 uintptr_t __cdecl sessionLostHuman() {
     const bool host = activity_state::isHost();
-    const uintptr_t member = hostMember();
+    const uintptr_t member = remote_players::hostMember();
     const uintptr_t hostHuman = !host && member ? remote_players::humanOfMember(member) : 0;
     const uintptr_t chosen = net_handlers_rules::sessionLostChoice(host, hostHuman, partner_scope::partnerHuman());
     if (g_trace && !host) {

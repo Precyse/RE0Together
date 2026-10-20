@@ -24,8 +24,10 @@
 #include "../src/vehicle_seating_sites.h"
 #include "../src/zombie_uprising_rules.h"
 #include "../src/zombie_uprising_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -46,14 +48,6 @@ constexpr size_t kCallAtStart = 0;
 constexpr size_t kRowsOfSets[] = {9, 3, 3, 1, 8};
 constexpr uintptr_t kPartnerFractionCallOffset = 2;  // ZU3 starts with `mov ecx, eax`
 constexpr uintptr_t kFractionWorker = 0x4067B0;
-constexpr uintptr_t kPartnerNameGetter = 0x8CA380;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
@@ -64,13 +58,6 @@ std::vector<Site> ourSites() {
 size_t sizeOf(std::string_view hex) { return partner_sites::parseHex(hex).size(); }
 
 size_t sizeOf(const Site& site) { return sizeOf(site.expected); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
 
 bool isWritten(const Site& site) { return site.thunk != Thunk::None || !site.tail.empty(); }
 
@@ -178,7 +165,7 @@ void theCalls() {
     bool callees = true;
     for (const Call call : {Call{"ZU1", kCallAtStart, sr2::kRemotePlayerGetter}, Call{"ZU2", kCallAtStart, sr2::kRemotePlayerGetter},
                             Call{"ZU3", kPartnerFractionCallOffset, kFractionWorker}, Call{"ZU4", kCallAtStart, sr2::kPointInBox},
-                            Call{"ZU5", kCallAtStart, sr2::kPointInBox}, Call{"ZU6", kCallAtStart, kPartnerNameGetter}}) {
+                            Call{"ZU5", kCallAtStart, sr2::kPointInBox}, Call{"ZU6", kCallAtStart, sr2::kPartnerMemberGetter}}) {
         const Site* site = siteNamed(sites, call.id);
         const auto bytes = partner_sites::parseHex(site->expected);
         callees = callees && bytes[call.offset] == kCallOpcode && callTarget(*site, call.offset) == call.callee;

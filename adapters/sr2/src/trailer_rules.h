@@ -9,6 +9,7 @@
 
 #include "fnv1a.h"
 #include "force_join_names.h"
+#include "game_message.h"
 #include "version.h"
 
 // The pure rules of the version gate (unit tested): the trailer of join_req, join_acc and join_deny, whether a peer's
@@ -142,8 +143,7 @@ inline std::string tagFor(const Trailer& trailer) {
 
 // Where the sender's message goes on: how long a message with the trailer may be (the game's send function refuses a
 // message of 0x1FF bytes or more).
-constexpr size_t kSendLengthLimit = 0x1FF;
 
-inline bool fitsInSend(size_t length) { return length + version::kTrailerBytes < kSendLengthLimit; }
+inline bool fitsInSend(size_t length) { return length + version::kTrailerBytes < game_message::kSendLengthLimit; }
 
 }  // namespace trailer_rules

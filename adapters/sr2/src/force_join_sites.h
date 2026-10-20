@@ -88,8 +88,7 @@ constexpr uintptr_t kLanEntryAddressOffset = 0x45C;  // u32, network order
 constexpr size_t kMaxLanEntriesWalked = 0x40;        // the list cap at 0x812624
 constexpr uint32_t kLanServerIdMask = 0xFF;
 
-// A session's info (session +0xC) and its LAN flag (byte): an online session has it 0, so LAN guests cannot find it.
-constexpr uintptr_t kSessionInfoOffset = 0xC;
+// The LAN flag (byte) of a session's info (sr2::kSessionInfoOffset): an online session has it 0, so LAN guests cannot find it.
 constexpr uintptr_t kInfoLanFlagOffset = 0x47;
 
 // What the guest reads before it acts.

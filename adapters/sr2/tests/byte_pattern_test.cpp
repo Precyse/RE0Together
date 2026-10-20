@@ -2,17 +2,7 @@
 #include <cstdio>
 
 #include "../src/byte_pattern.h"
-
-namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-}  // namespace
+#include "check.h"
 
 int main() {
     const uint8_t expected[] = {0x89, 0x2D, 0x34, 0xC4};

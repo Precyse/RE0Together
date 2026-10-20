@@ -6,20 +6,15 @@
 #include <string>
 #include <vector>
 
+#include "../src/ascii_text.h"
 #include "../src/content_hash_rules.h"
 #include "../src/script_override_rules.h"
+#include "check.h"
 
 namespace {
 
 using content_hash_rules::File;
 using content_hash_rules::Result;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 using Bytes = std::vector<uint8_t>;
 
@@ -84,8 +79,8 @@ int main() {
     check(content_hash_rules::compute(dll, {"a.lua"}, readerOf(files)).hash != hashOf(scriptFirst),
           "dinput8.dll comes before the scripts");
 
-    check(content_hash_rules::compute(dll, {script_override_rules::lowered("A.LUA"), script_override_rules::lowered("B.Lua"),
-                                            script_override_rules::lowered("UG_LIB.lua")},
+    check(content_hash_rules::compute(dll, {ascii_text::lowered("A.LUA"), ascii_text::lowered("B.Lua"),
+                                            ascii_text::lowered("UG_LIB.lua")},
                                       readerOf(files)).hash == result.hash,
           "names are the lower case ones script_override keeps, so a file's case does not change the hash");
 

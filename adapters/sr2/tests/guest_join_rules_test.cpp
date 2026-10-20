@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "../src/guest_join_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -13,13 +14,6 @@ using guest_join_rules::Machine;
 using guest_join_rules::Step;
 
 constexpr uint64_t kSecond = 1000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 Inputs ready(uint64_t seconds) {
     Inputs in;
@@ -41,7 +35,6 @@ Decision startAndJoin(Machine& machine) {
     found.match = 2;
     return machine.update(found);
 }
-
 
 // The LAN path (steam transport): no login, the host's address is checked, the search is stopped after the dialog.
 void lanPath() {

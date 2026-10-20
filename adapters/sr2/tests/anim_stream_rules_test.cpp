@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../src/anim_stream_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -23,13 +24,6 @@ constexpr uintptr_t kMemberP2 = 0x2C00000;
 constexpr uintptr_t kMemberP3 = 0x2C10000;
 constexpr uintptr_t kSession = 0x2D00000;
 constexpr uintptr_t kNextSession = 0x2D10000;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void theRecipients() {
     check(recipient(kRequest, false) == Recipient::Host && recipient(kRequest, true) == Recipient::Host, "a request goes to the host, with or without a handler sender");

@@ -28,19 +28,13 @@ std::mutex g_lock;
 join_admission_rules::WaitingJoiners g_waiting;
 bool g_trace = false;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 bool admissionBusy() {
-    return join_admission_rules::busy(readDword(sr2::kAdmissionAcceptDialog), byteAt(sr2::kAdmissionDeferred),
+    return join_admission_rules::busy(readDword(sr2::kAdmissionAcceptDialog), readByte(sr2::kAdmissionDeferred),
                                       readDword(sr2::kFriendsQueryCallback));
 }
 
 void sendWait(uintptr_t member) {
-    const join_admission_rules::Message message = join_admission_rules::waitMessage(byteAt(sr2::kSetupResponseWideFlag) != 0);
+    const join_admission_rules::Message message = join_admission_rules::waitMessage(readByte(sr2::kSetupResponseWideFlag) != 0);
     guest_call::call(sr2::kSendToMember, {.esi = static_cast<uint32_t>(member)},
                      {static_cast<uint32_t>(reinterpret_cast<uintptr_t>(message.bytes.data())),
                       static_cast<uint32_t>(message.length), 0, 0});
@@ -56,7 +50,7 @@ void __cdecl admissionGate(GuestFrame* frame) {
         return;
     }
     uint32_t& offset = *reinterpret_cast<uint32_t*>(args[kOffsetArg]);
-    const uint8_t request = byteAt(args[kPayloadArg] + offset);
+    const uint8_t request = readByte(args[kPayloadArg] + offset);
     ++offset;
     {
         std::lock_guard<std::mutex> lock(g_lock);

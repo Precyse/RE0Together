@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "../src/net_handlers_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -18,13 +19,6 @@ constexpr uintptr_t kFourth = 0xB3;
 constexpr uintptr_t kHumanSecond = 0xA1;
 constexpr uintptr_t kHumanThird = 0xA2;
 constexpr size_t kNone = partner_rules::kNone;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 // The shipped game's remote hold byte: set by the first hold, cleared by a release; the set is loaded and unloaded around it.
 struct ShippedRace {

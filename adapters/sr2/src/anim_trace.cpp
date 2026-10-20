@@ -56,7 +56,7 @@ void __cdecl traceStreamingSync(GuestFrame* frame) {
     const uintptr_t payload = frame->args[kPayloadArg];
     const uintptr_t context = frame->args[kContextArg];
     const uint8_t sub = readByte(payload);
-    const uint16_t group = anim_stream_state::readWord(payload + sr2::kStreamingGroupOffset);
+    const uint16_t group = readWord(payload + sr2::kStreamingGroupOffset);
     const unsigned from = anim_stream_state::slotOfMember(activity_state::senderOf(context));
     std::string detail;
     std::string answer;

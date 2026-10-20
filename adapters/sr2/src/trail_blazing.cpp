@@ -66,16 +66,14 @@ double readDouble(uintptr_t address) {
     return value;
 }
 
-float readFloat(uintptr_t address) { return std::bit_cast<float>(readDword(address)); }
-
 // The game's own "is in a vehicle" test (0x9B8C50 with no particular vehicle).
 bool riding(uintptr_t human) {
     return (guest_call::call(sr2::kHumanInVehicle, {.edi = 0, .esi = static_cast<uint32_t>(human)}) & 0xFF) != 0;
 }
 
 void startEffect(uintptr_t human) {
-    guest_call::call(sr2::kHumanEffect, {},
-                     {static_cast<uint32_t>(human + sr2::kHumanEffectComponentOffset), sr2::kTrailStartEffectId, kEffectMode, kEffectNoFlags});
+    guest_call::call(sr2::kInventoryApply, {},
+                     {static_cast<uint32_t>(human + sr2::kHumanInventoryOffset), sr2::kTrailStartEffectId, kEffectMode, kEffectNoFlags});
 }
 
 void putOut(uintptr_t human, uint32_t flag) {

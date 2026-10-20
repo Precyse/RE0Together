@@ -26,6 +26,7 @@
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
 #include "../src/vehicle_seating_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
 
@@ -45,18 +46,9 @@ constexpr size_t kSetCount = 4;
 constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint8_t kCallOpcode = 0xE8;
 constexpr uint8_t kJumpOpcode = 0xE9;
-constexpr uint8_t kNop = 0x90;
-constexpr uint8_t kShortJumpOpcode = 0xEB;
 constexpr uint8_t kObjectTail = 6;                 // TB7: the short jump over the dead bytes
 constexpr uintptr_t kObjectLoopNext = 0x58DC80;    // TB7: where the loop goes on
 constexpr size_t kObjectCallBytes = 13;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
@@ -180,7 +172,7 @@ void theObjectBlock() {
     check(callTarget(block, kObjectCallBytes - kBranchBytes) == sr2::kTrailLightObjectNear, "TB7's bytes end in a call of 0x58D9B0");
     const auto written = partner_replacement::replacementFor(block, kThunk);
     const size_t tailAt = kBranchBytes;
-    check(written.size() == kBranchBytes + 2 && written[0] == kCallOpcode && written[tailAt] == kShortJumpOpcode && written[tailAt + 1] == kObjectTail,
+    check(written.size() == kBranchBytes + 2 && written[0] == kCallOpcode && written[tailAt] == kJmpShort && written[tailAt + 1] == kObjectTail,
           "TB7 is written as a call and EB 06");
     check(block.address + tailAt + 2 + written[tailAt + 1] == kObjectLoopNext, "the tail of TB7 lands on 0x58DC80, past the dead bytes");
 }

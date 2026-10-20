@@ -26,8 +26,10 @@
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
 #include "../src/vehicle_seating_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -43,19 +45,10 @@ constexpr uintptr_t kThunk = 0x10004000;
 constexpr size_t kLongJumpIfZeroBytes = 6;  // je rel32
 constexpr size_t kTestAlAlBytes = 2;
 constexpr size_t kShortJumpBytes = 2;
-constexpr uint8_t kNop = 0x90;
-constexpr uint8_t kShortJump = 0xEB;
 constexpr uint8_t kTestAl = 0x84;
 constexpr uint8_t kTestAlOperand = 0xC0;
 constexpr uint8_t kTwoByteOpcode = 0x0F;
 constexpr uint8_t kJumpIfZeroLong = 0x84;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
@@ -63,16 +56,7 @@ std::vector<Site> ourSites() {
     return all;
 }
 
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
 bool isCheck(const Site& site) { return site.kind == Kind::Bytes; }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
 
 size_t setSize(std::string_view name) {
     for (const fuzz_sites::Set& set : fuzz_sites::kSets) {
@@ -80,13 +64,6 @@ size_t setSize(std::string_view name) {
     }
     return 0;
 }
-
-uint32_t dwordOf(const std::vector<uint8_t>& bytes, size_t at) {
-    return bytes[at] | bytes[at + 1] << 8 | bytes[at + 2] << 16 | static_cast<uint32_t>(bytes[at + 3]) << 24;
-}
-
-// Where the call of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) { return site.address + kBranchBytes + dwordOf(partner_sites::parseHex(site.expected), 1); }
 
 void theRows() {
     const std::vector<Site> sites = ourSites();
@@ -180,7 +157,7 @@ void theRiotBlock() {
     const uintptr_t jeEnd = block->address + je + kLongJumpIfZeroBytes;
     check(written[je] == kTwoByteOpcode && written[je + 1] == kJumpIfZeroLong && jeEnd + dwordOf(written, je + 2) == skips->address,
           "FZ20: the je lands on the next human (FZc2)");
-    check(written[jmp] == kShortJump && block->address + jmp + kShortJumpBytes + written[jmp + 1] == joins->address,
+    check(written[jmp] == kJmpShort && block->address + jmp + kShortJumpBytes + written[jmp + 1] == joins->address,
           "FZ20: the jmp lands where the rioter joins (FZc1)");
     check(std::all_of(written.begin() + static_cast<std::ptrdiff_t>(jmp + kShortJumpBytes), written.end(), [](uint8_t byte) { return byte == kNop; }),
           "FZ20: nops to the end of the block");

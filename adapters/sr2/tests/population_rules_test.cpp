@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../src/population_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -16,13 +17,6 @@ constexpr uint32_t kTrafficBase = 0x1A;
 constexpr uint32_t kHumansBase = 0x96;
 constexpr uint32_t kParkedBase = 0x0C;
 constexpr float kClusterRadius = 160.0f;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 Point at(float x) { return {x, 0, 0}; }
 

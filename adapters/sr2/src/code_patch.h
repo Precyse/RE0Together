@@ -13,6 +13,14 @@ struct CodePatch {
 
 inline constexpr uint8_t kCallRel32 = 0xE8;
 inline constexpr uint8_t kJmpRel32 = 0xE9;
+inline constexpr uint8_t kNop = 0x90;
+inline constexpr uint8_t kJeShort = 0x74;
+inline constexpr uint8_t kJmpShort = 0xEB;
+
+// The four bytes of `value`, lowest first (an immediate or a pointer in the exe).
+inline std::vector<uint8_t> littleEndian(uint32_t value) {
+    return {static_cast<uint8_t>(value), static_cast<uint8_t>(value >> 8), static_cast<uint8_t>(value >> 16), static_cast<uint8_t>(value >> 24)};
+}
 
 // `call rel32` or `jmp rel32` (`opcode`) placed at `from`, reaching `to`.
 inline std::array<uint8_t, 5> relativeBranch(uint8_t opcode, uintptr_t from, uintptr_t to) {

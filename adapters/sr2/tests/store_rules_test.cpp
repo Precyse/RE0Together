@@ -3,6 +3,7 @@
 
 #include "../src/sr2_addresses.h"
 #include "../src/store_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -12,13 +13,6 @@ constexpr uintptr_t kMember = 0x02C41234;
 constexpr uint32_t kBothHiddenBits = 0x14;
 constexpr uint32_t kSomeFlags = 0x00000081;
 constexpr uint32_t kOneHiddenBit = 0x10;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void testLevelMenuRoute() {
     check(store_rules::levelMenuRoute(kMember) == Route::Member, "a known owner member gets the menu request alone");

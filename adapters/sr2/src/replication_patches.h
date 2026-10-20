@@ -9,11 +9,6 @@
 // verified and applied together.
 namespace replication_patches {
 
-inline std::vector<uint8_t> littleEndian(uint32_t value) {
-    return {static_cast<uint8_t>(value), static_cast<uint8_t>(value >> 8), static_cast<uint8_t>(value >> 16),
-            static_cast<uint8_t>(value >> 24)};
-}
-
 // N=1 entry -> jmp to the N=8 twin; the twin's first bytes are checked too.
 inline void addEntryPatches(std::vector<CodePatch>& out) {
     for (const replication_sites::EntrySite& site : replication_sites::kEntries) {
@@ -41,7 +36,7 @@ inline void addSetNamePatches(std::vector<CodePatch>& out) {
 }
 
 inline std::vector<CodePatch> replicationPatches() {
-    std::vector<CodePatch> patches = branchPatches(replication_sites::kJeShort, replication_sites::kJmpShort);
+    std::vector<CodePatch> patches = branchPatches(kJeShort, kJmpShort);
     addEntryPatches(patches);
     addSetNamePatches(patches);
     return patches;

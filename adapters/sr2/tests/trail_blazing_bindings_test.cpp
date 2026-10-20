@@ -3,6 +3,7 @@
 
 #include "../src/trail_blazing.h"
 #include "../src/trail_blazing_sites.h"
+#include "check.h"
 
 namespace logger {
 void write(const char*, ...) {}
@@ -12,17 +13,6 @@ void writeUnlessRepeated(const char*, ...) {}
 namespace debug_stats {
 void setError(const char*, ...) {}
 }  // namespace debug_stats
-
-namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-}  // namespace
 
 int main() {
     bool allBound = true;

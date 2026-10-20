@@ -9,6 +9,7 @@
 namespace diversion_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -99,11 +100,6 @@ inline constexpr Site kPhaseB[] = {
     {"DVP7", Kind::HookEntry, 0x65ABA0, "83 EC 40 8B 0D D4 03 17 02", Thunk::SnatchWaypointPerRemote, ""},
     {"DVM6", Kind::JumpOut, 0x66BFB7, "33 FF 8D 6C 24 1C 8B 74 BC 18 85 F6 74 7C 8B 86 00 0F 00 00 85 C0 75 36 8B 4D 00 85 C9 74 06 8B 81 00 0F 00 00 50 8D 56 14 52 E8 0A 5A E4 FF 83 C4 08 83 F8 FF 74 0E 69 C0 A8 00 00 00 03 05 94 6C 52 02 75 09 C6 83 48 05 00 00 00 EB 3C 8B 8B 44 05 00 00 8B 40 54 6B C9 64 8B 53 04 3B 44 0A 50 0F 94 C0 20 83 48 05 00 00 80 BB 49 05 00 00 00 74 17 84 C0 75 0B 6A 01 56 53 E8 69 FD FF FF EB 08 53 8B CE E8 5F FC FF FF 83 C7 01 83 ED 04 83 FF 02 0F 82 6D FF FF FF", Thunk::MayhemDistrictAllPlayers, ""},
     {"DVK7", Kind::JumpOut, 0x666ECE, "5F 5E 5D 5B 83 C4 34 C3", Thunk::TraffickingExtraSeats, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

@@ -8,8 +8,11 @@
 #include <vector>
 
 #include "../src/revive_sites.h"
+#include "../src/sr2_addresses.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -20,16 +23,6 @@ constexpr uintptr_t kClearance = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr size_t kRevivedRows = 12;
 constexpr size_t kNotorietyRows = 4;
-constexpr uintptr_t kPartnerGetter = 0x9D7BD0;
-constexpr uintptr_t kWaitingQuery = 0x8CBDB0;
-constexpr uintptr_t kTeamSees = 0x55DEC0;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> setOf(std::span<const Site> sites) { return {sites.begin(), sites.end()}; }
 
@@ -38,22 +31,6 @@ std::vector<Site> allSites() {
     const std::vector<Site> notoriety = setOf(revive_sites::kNotoriety);
     all.insert(all.end(), notoriety.begin(), notoriety.end());
     return all;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 // The ids of every site table of the other milestones.
@@ -149,13 +126,13 @@ int main() {
     const Site* rm1 = siteNamed(sites, "RM1");
     check(rw2 && rm1 && rw2->kind == Kind::JumpOut && rm1->kind == Kind::JumpOut && sizeOf(*rw2) == kBranchBytes && sizeOf(*rm1) == kBranchBytes,
           "RW2 and RM1 are 5 byte jump outs");
-    check(callTarget(*siteNamed(sites, "RW1")) == kWaitingQuery && callTarget(*siteNamed(sites, "RW3")) == kWaitingQuery,
+    check(callTarget(*siteNamed(sites, "RW1")) == sr2::kWaitingToRespawn && callTarget(*siteNamed(sites, "RW3")) == sr2::kWaitingToRespawn,
           "RW1 and RW3 each call the waiting query 0x8CBDB0");
-    check(callTarget(*siteNamed(sites, "RA1")) == kPartnerGetter && callTarget(*siteNamed(sites, "RA2")) == kPartnerGetter &&
-              callTarget(*siteNamed(sites, "RA3")) == kPartnerGetter && callTarget(*siteNamed(sites, "RK1")) == kPartnerGetter &&
-              callTarget(*siteNamed(sites, "NV1")) == kPartnerGetter,
+    check(callTarget(*siteNamed(sites, "RA1")) == sr2::kRemotePlayerGetter && callTarget(*siteNamed(sites, "RA2")) == sr2::kRemotePlayerGetter &&
+              callTarget(*siteNamed(sites, "RA3")) == sr2::kRemotePlayerGetter && callTarget(*siteNamed(sites, "RK1")) == sr2::kRemotePlayerGetter &&
+              callTarget(*siteNamed(sites, "NV1")) == sr2::kRemotePlayerGetter,
           "RA1 to RA3, RK1 and NV1 each call the partner getter 0x9D7BD0");
-    check(callTarget(*siteNamed(sites, "NW1")) == kTeamSees, "NW1 calls the team sees test 0x55DEC0");
+    check(callTarget(*siteNamed(sites, "NW1")) == sr2::kTeamSeesHuman, "NW1 calls the team sees test 0x55DEC0");
     check(siteNamed(sites, "RA1")->thunk == siteNamed(sites, "RA2")->thunk && siteNamed(sites, "RA1")->thunk != siteNamed(sites, "RA3")->thunk,
           "RA1 and RA2 share the anchor thunk, RA3 has the one that logs");
     check(siteNamed(sites, "RK1")->thunk == partner_sites::Thunk::MatchRemoteEsi, "RK1 reuses the existing MatchRemoteEsi call replacement");

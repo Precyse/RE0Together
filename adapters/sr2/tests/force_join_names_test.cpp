@@ -3,19 +3,13 @@
 #include <string>
 
 #include "../src/force_join_names.h"
+#include "check.h"
 
 namespace {
 
 constexpr size_t kCapacity = 0x40;
 const std::string kBrowserTag = "cfv003-1A2B3C4D";
 const std::string kToken = "109775241012345678";
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

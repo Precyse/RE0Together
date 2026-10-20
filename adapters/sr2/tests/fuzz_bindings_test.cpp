@@ -6,6 +6,7 @@
 
 #include "../src/fuzz_patches.h"
 #include "../src/fuzz_sites.h"
+#include "check.h"
 
 namespace logger {
 void write(const char*, ...) {}
@@ -17,13 +18,6 @@ void setError(const char*, ...) {}
 }  // namespace debug_stats
 
 namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 const partner_sites::Site* siteNamed(std::string_view id) {
     for (const fuzz_sites::Set& set : fuzz_sites::kSets) {

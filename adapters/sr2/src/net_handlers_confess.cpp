@@ -50,13 +50,9 @@ double distanceLimit() {
 int32_t cashOf(uintptr_t human) { return static_cast<int32_t>(readDword(human + sr2::kHumanCashOffset)); }
 
 size_t remotesWithHuman(Remote (&out)[kMaxRemotes]) {
-    remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
-    size_t count = 0;
-    for (size_t i = 0; i < snapshot.pairing.count; ++i) {
-        const partner_rules::Remote& remote = snapshot.pairing.items[i];
-        if (remote.human) out[count++] = {remote.human, {remote.member, remote.slot}};
-    }
+    partner_rules::Remote paired[kMaxRemotes];
+    const size_t count = remote_players::remotesWithHuman(paired, kMaxRemotes);
+    for (size_t i = 0; i < count; ++i) out[i] = {paired[i].human, {paired[i].member, paired[i].slot}};
     return count;
 }
 

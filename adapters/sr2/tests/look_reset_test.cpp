@@ -5,7 +5,9 @@
 #include "../src/look_reset_rules.h"
 #include "../src/partner_sites.h"
 #include "../src/player_cap_patches.h"
+#include "check.h"
 #include "juiced_targets.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -16,20 +18,6 @@ constexpr uintptr_t kResetThunk = 0x10008000;
 constexpr uintptr_t kTraceThunk = 0x10008100;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uint32_t kFourPlayers = 4;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-const CodePatch* patchAt(const std::vector<CodePatch>& patches, uintptr_t address) {
-    for (const CodePatch& patch : patches) {
-        if (patch.address == address) return &patch;
-    }
-    return nullptr;
-}
 
 std::vector<uint8_t> callTo(uintptr_t address, uintptr_t thunk) {
     const uint32_t to = static_cast<uint32_t>(thunk - (address + 5));

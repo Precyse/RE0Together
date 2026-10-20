@@ -6,17 +6,11 @@
 #include <string>
 
 #include "../src/join_file.h"
+#include "check.h"
 
 namespace {
 
 constexpr unsigned long long kHundredNsPerSecond = 10000000ULL;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void write(const std::wstring& path, const std::string& text) { std::ofstream(path, std::ios::trunc) << text; }
 

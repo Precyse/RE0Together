@@ -23,6 +23,13 @@ struct Result {
     size_t patched;
 };
 
+// Checks each set of a table against the exe and records in `matched` which agree; logs each as "<label>: set <name> ...".
+// True when at least one set matches. `matched` has one entry per set.
+bool matchSets(const char* label, std::span<const partner_sites::Set> sets, std::span<bool> matched);
+
+// Writes each set that `matchSets` found matching, on its own: a set that cannot be written leaves the others alone.
+void installMatchedSets(const char* label, std::span<const partner_sites::Set> sets, std::span<const bool> matched, Binder binder);
+
 // Writes every site. Nothing is written when a thunk is missing or a site differs; the hooks are queued after the code edits.
 Result install(std::span<const partner_sites::Site> sites, Binder binder);
 

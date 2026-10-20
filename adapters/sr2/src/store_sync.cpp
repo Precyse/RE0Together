@@ -92,7 +92,7 @@ void send(const Route route, uintptr_t member, GuestFrame* frame) {
 // LM1: the human the owner's compare is given in place of get_remote_player. Any remote owner is "the partner"; anyone else (the local
 // player, nobody) leaves the game's default partner, which is not the owner, so the menu opens here.
 uintptr_t __cdecl activityOwnerIfRemote() {
-    const uintptr_t owner = guest_call::call(sr2::kActivityOwnerHuman, {});
+    const uintptr_t owner = guest_call::call(sr2::kMissionOwnerHuman, {});
     if (g_trace && !remote_players::isRemotePlayerHuman(owner)) {
         logger::write("trace: activity level: owner 0x%X not remote, menu here", static_cast<unsigned>(owner));
     }
@@ -101,7 +101,7 @@ uintptr_t __cdecl activityOwnerIfRemote() {
 
 // LM2: the menu request (act 0x0B), sent to the member that owns the activity only.
 void __cdecl sendToActivityOwner(GuestFrame* frame) {
-    const uintptr_t owner = guest_call::call(sr2::kActivityOwnerHuman, {});
+    const uintptr_t owner = guest_call::call(sr2::kMissionOwnerHuman, {});
     const uintptr_t member = remote_players::memberOfHuman(owner);
     const Route route = store_rules::levelMenuRoute(member);
     if (g_trace && route == Route::Member) {
@@ -115,7 +115,7 @@ void __cdecl sendToActivityOwner(GuestFrame* frame) {
 void __cdecl sendAnswerToHost(GuestFrame* frame) {
     const uintptr_t session = readDword(sr2::kSessionPointer);
     const bool isHost = session != 0 && readByte(session + sr2::kSessionHostFlagOffset) != 0;
-    const uintptr_t hostMember = session != 0 ? readDword(session + sr2::kSessionHostMemberOffset) : 0;
+    const uintptr_t hostMember = remote_players::hostMember();
     const Route route = store_rules::answerRoute(isHost, hostMember);
     if (g_trace && route == Route::Member) {
         logger::write("trace: activity level: answer %s to the host member 0x%X", frame->returnAddress == sr2::kLevelChoiceSendReturn ? "choice" : "cancel",

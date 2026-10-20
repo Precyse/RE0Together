@@ -12,8 +12,10 @@
 #include "../src/diversion_sites.h"
 #include "../src/partner_replacement.h"
 #include "../src/walk_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -22,34 +24,13 @@ using partner_sites::Site;
 
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
-constexpr uint8_t kShortJump = 0xEB;
 constexpr uintptr_t kShortJumpBytes = 2;
 constexpr uintptr_t kNearJumpIfNotEqualBytes = 6;  // 0F 85 rel32
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
 
 std::vector<Site> allSites() {
     std::vector<Site> all;
     for (const walk_sites::Set& set : walk_sites::kSets) all.insert(all.end(), set.sites.begin(), set.sites.end());
     return all;
-}
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-uint32_t dwordOf(const std::vector<uint8_t>& bytes, size_t at) {
-    return bytes[at] | bytes[at + 1] << 8 | bytes[at + 2] << 16 | static_cast<uint32_t>(bytes[at + 3]) << 24;
 }
 
 // Where the `call rel32` or `jmp rel32` at `at` bytes into the checked bytes of `site` goes.
@@ -105,7 +86,7 @@ void theJoins() {
             continue;
         }
         const auto replacement = partner_replacement::replacementFor(*site, 0x10000000);
-        const auto jump = std::find(replacement.begin() + kBranchBytes, replacement.end(), kShortJump);
+        const auto jump = std::find(replacement.begin() + kBranchBytes, replacement.end(), kJmpShort);
         const uintptr_t at = static_cast<uintptr_t>(jump - replacement.begin());
         const bool ok = jump != replacement.end() && jump + 1 != replacement.end() &&
                         site->address + at + kShortJumpBytes + *(jump + 1) == join.address;

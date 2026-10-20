@@ -16,7 +16,6 @@
 //   the entry of the spawn group create, checked for the hook that refuses a create the pools cannot fill ("Spawn budget").
 namespace player_cap_patches {
 
-constexpr uint8_t kNop = 0x90;
 
 // The imm8 of `and ebx, imm8`: the co-op flag then yields `maxPlayers` instead of 2 once the block adds 12 back.
 inline uint8_t sessionInfoMask(uint32_t maxPlayers) {

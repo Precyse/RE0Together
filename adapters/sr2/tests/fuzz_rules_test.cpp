@@ -5,6 +5,7 @@
 #include <set>
 
 #include "../src/fuzz_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -18,13 +19,6 @@ constexpr uint32_t kSweepRolls = 300;
 constexpr double kRadiusSquared = 100.0;
 constexpr float kWindow = 4.0f;
 constexpr uint32_t kCrimeKey = 0x3A;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void theRoll() {
     const uint32_t first = fuzz_rules::nextRoll(1);

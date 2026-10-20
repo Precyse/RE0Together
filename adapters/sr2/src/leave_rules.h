@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "game_message.h"
+
 // The pure rules of the member leave path (milestone 5i, section 8 and milestone 9 N2; unit tested): when a member leaves,
 // the game's 2-player code lets every machine take over its objects and rename the ids it created into the machine's own
 // handle space, which with 3 or more players makes the machines disagree. Here the machine that owns a record decides its
@@ -12,14 +14,11 @@
 namespace leave_rules {
 
 constexpr uint8_t kDestroyMessage = 0x0F;  // rop_destroy: remove the record with an id (0x2A is rop_new_owner)
-constexpr size_t kHeaderBytes = 3;         // message id and payload length; the wide header (byte [0xE8C084]) has one more
-constexpr size_t kWideHeaderBytes = 4;
-constexpr size_t kMaxMessageBytes = 0x200;  // the game builds it in a 0x500 byte buffer and refuses to send 0x1FF or more
 constexpr uint32_t kLastUnusableState = 7;  // a member is sent to once its state is above this
 
 // A message ready for the game's send: the bytes, and how many of them.
 struct Message {
-    std::array<uint8_t, kMaxMessageBytes> bytes{};
+    std::array<uint8_t, game_message::kMaxMessageBytes> bytes{};
     size_t length = 0;
 };
 
@@ -28,7 +27,7 @@ struct Message {
 // then appends its own payload at `length` (its vtable +0x14).
 inline Message destroyMessage(uint32_t sessionValue, uint8_t recordClass, uint16_t oldId, bool wideHeader) {
     Message message;
-    size_t at = wideHeader ? kWideHeaderBytes : kHeaderBytes;
+    size_t at = wideHeader ? game_message::kWideHeaderBytes : game_message::kHeaderBytes;
     message.bytes[0] = kDestroyMessage;
     for (size_t i = 0; i < sizeof(sessionValue); ++i) message.bytes[at++] = static_cast<uint8_t>(sessionValue >> (8 * i));
     message.bytes[at++] = recordClass;
@@ -40,7 +39,7 @@ inline Message destroyMessage(uint32_t sessionValue, uint8_t recordClass, uint16
 
 // The message with its payload length written (the bytes after the 3 byte header).
 inline Message sealed(Message message) {
-    const uint16_t payload = static_cast<uint16_t>(message.length - kHeaderBytes);
+    const uint16_t payload = static_cast<uint16_t>(message.length - game_message::kHeaderBytes);
     message.bytes[1] = static_cast<uint8_t>(payload);
     message.bytes[2] = static_cast<uint8_t>(payload >> 8);
     return message;

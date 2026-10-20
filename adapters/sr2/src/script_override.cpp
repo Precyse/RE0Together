@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 
+#include "ascii_text.h"
 #include "log.h"
 #include "paths.h"
 #include "script_override_rules.h"
@@ -14,12 +15,6 @@ namespace {
 
 std::set<std::string> g_names;
 bool g_trace = false;
-
-std::string narrow(const wchar_t* text) {
-    std::string out;
-    for (; *text; ++text) out.push_back(*text < 0x80 ? static_cast<char>(*text) : '?');
-    return out;
-}
 
 }  // namespace
 
@@ -38,7 +33,7 @@ size_t scan(bool trace) {
     if (search == INVALID_HANDLE_VALUE) return 0;
     do {
         if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-        g_names.insert(script_override_rules::lowered(narrow(found.cFileName)));
+        g_names.insert(ascii_text::lowered(ascii_text::narrow(found.cFileName)));
     } while (FindNextFileW(search, &found));
     FindClose(search);
     if (trace) {

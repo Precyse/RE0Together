@@ -11,6 +11,9 @@ constexpr uintptr_t kSessionPoolSetup = 0x7F91C0;     // sizes the connection an
 constexpr uintptr_t kRemotePlayerGetter = 0x9D7BD0;   // first human that is not the local player, or null
 constexpr uintptr_t kPlayerSlotAllocator = 0x9D7C10;  // refuses a slot index >= kMaxPlayers
 constexpr uintptr_t kJoinQueueAdd = 0x810220;         // stdcall(session, request); queues a join request
+constexpr uintptr_t kJoinReqHandler = 0x815BC0;       // cdecl(payload, ctx): the join_req message handler
+constexpr uintptr_t kBuildAddressRecord = 0x7FB3D0;   // writes an address record (the new_conn record builder calls it)
+constexpr uintptr_t kMapSender = 0x7FA070;            // cdecl(address, kind): the member of a sender, or 0
 
 // Net limits that net_set_mode writes per mode.
 constexpr uintptr_t kMaxSessionPlayers = 0xE8C434;
@@ -157,7 +160,8 @@ constexpr uintptr_t kDuplicateSenderCall = 0x815EAE;     // call kFindDuplicateM
 constexpr uintptr_t kFindDuplicateMember = 0x80FEB0;     // returns the matching member or 0
 constexpr uintptr_t kMemberSourceIpOffset = 0x28;        // the real UDP source of a remote member
 constexpr uintptr_t kMemberSourcePortOffset = 0x2C;      // word
-constexpr uintptr_t kSenderPortOffset = 4;               // word, in the sender block (the IP is at 0)
+constexpr uintptr_t kSenderIpOffset = 0;                 // dword, in the sender block
+constexpr uintptr_t kSenderPortOffset = 4;               // word, in the sender block
 
 // Late joiners (milestone 5h). The member state change callback (0x8CB840) queues the host's objects for a member that
 // becomes ready only on the host; a guest takes the branch at kGuestMemberBranch.
@@ -220,7 +224,6 @@ constexpr uintptr_t kClassDestroyPayloadSlot = 0x14; // thiscall(handle, message
 constexpr uintptr_t kSessionValueOffset = 8;         // dword in the session that every destroy message starts with
 constexpr uintptr_t kDestroyWideHeaderFlag = 0xE8C084;  // byte: the rop_destroy header is 4 bytes
 
-constexpr uintptr_t kSendMessage = 0x814670;         // cdecl(buffer, length, 0, 0), ESI = member
 constexpr uintptr_t kIsHumanHandle = 0x9D7DD0;       // ECX = handle: the object when it is a human, else 0
 constexpr uintptr_t kVehicleOfHandle = 0xA009C0;     // ECX = handle: the object when it is a vehicle, else 0
 constexpr uintptr_t kExitVehicle = 0x9CAF90;         // cdecl(0, 0): the local player leaves its vehicle
@@ -437,7 +440,7 @@ constexpr uintptr_t kCutsceneEndRestoreResume = 0x6C563C;
 constexpr uintptr_t kHumanRenderInstanceOffset = 0x5E0;
 constexpr uintptr_t kRenderHiddenWordOffset = 0x244;   // word: bit 3 = hidden
 constexpr uint16_t kRenderHiddenBit = 8;
-constexpr uintptr_t kHumanCharInstanceOffset = 0x13B0;
+constexpr uintptr_t kHumanCharInstanceOffset = 0x13B0;  // pointer to the human's character instance
 constexpr uintptr_t kCharInstanceSkinOffset = 8;       // the skin composite object, 0 = none
 constexpr uintptr_t kCharInstanceIndexOffset = 0x10;   // the pool index
 constexpr uintptr_t kHumanTypeOffset = 0xD4;
@@ -477,8 +480,6 @@ constexpr uintptr_t kStreamingIdOffset = 3;
 constexpr uintptr_t kStreamingSlotOffset = 7;
 constexpr uintptr_t kStreamingCountOffset = 0xB;
 constexpr uintptr_t kStreamingListOffset = 0xF;
-constexpr uintptr_t kMessageHeaderBytes = 3;               // the id and the length before a payload
-constexpr uintptr_t kMessageHeaderWithRelBytes = 4;
 constexpr uintptr_t kAnimPendingList = 0xEB8148;           // dword: the pending list, {u16 group, u32 id at +4} of 8 bytes
 constexpr uintptr_t kAnimPendingCapacity = 0xEB814C;
 constexpr uintptr_t kAnimPendingCount = 0xEB8150;
@@ -629,7 +630,6 @@ constexpr uintptr_t kNotorietyGuestMaxOffset = 0x34;   // record: the guest max 
 constexpr size_t kNotorietyLockIndexes = 2;
 constexpr int32_t kNotorietyNoLock = -1;
 constexpr uintptr_t kTeamSeesHuman = 0x55DEC0;         // eax = team, cdecl(human): AL = the team sees it
-constexpr uintptr_t kObjectOfHandleUnlessKind5 = 0xAE28F0;  // ecx = a handle: the object, 0 when stale or when its kind (+0x4C) is 5
 constexpr uintptr_t kVehicleClassTests[] = {0xAB5140, 0xAB5190, 0xAB51D0};  // eax = vehicle: AL = class 2, 3 or 4 (air and water)
 // Milestone 16 wave 2: followers and NPC AI (docs/SR2_NOTES.md, "Homies, followers and NPC AI (milestone 16 wave 2)"). The functions the
 // thunks call, the NPC list and the fields of a human they read; a player human has kind 1 at +0x3CC, an NPC human kind 2.
@@ -640,7 +640,7 @@ constexpr uintptr_t kSquaredDistanceTeam = 0x404A20;   // the same function, byt
 constexpr uintptr_t kEffectiveLeader = 0x98E750;       // edx = human: its second leader when valid and alive, else its leader, else itself
 constexpr uintptr_t kNpcTargetOf = 0x43A620;           // eax = NPC: the human it targets, 0 for none
 constexpr uintptr_t kNpcHostileTest = 0x43A190;        // eax = NPC; cdecl(target, 0), the caller pops; AL
-constexpr uintptr_t kNpcArmedTest = 0x55AE30;          // stdcall(NPC + kNpcArmedStateOffset, 1, 0, 0, 0), pops 0x14
+constexpr uintptr_t kNpcArmedTest = 0x55AE30;          // stdcall(NPC + kHumanInventoryOffset, 1, 0, 0, 0), pops 0x14
 constexpr uintptr_t kDismissFollowers = 0x98F460;      // edi = human; cdecl(flag), the caller pops: dismisses its followers, a remote human's owner is told
 constexpr uintptr_t kUnlinkAttachment = 0x56BEE0;      // eax = attachment: unlinks it from the list 0x140A1F8
 constexpr uintptr_t kSameLeaderTeam = 0x421740;        // eax = human; cdecl(other), the caller pops; AL = both have the same team leader
@@ -661,7 +661,6 @@ constexpr uint8_t kHumanKindPlayer = 1;
 constexpr uint8_t kHumanKindNpc = 2;
 constexpr uintptr_t kHumanTeamByteOffset = 0x3CE;      // byte: compared with the team nibble of a spawn record
 constexpr uintptr_t kSpawnRecordTeamOffset = 0xA;      // byte of a spawn record; the low nibble, signed, is the team
-constexpr uintptr_t kNpcArmedStateOffset = 0x10C4;
 constexpr uint32_t kObjectTypeHuman = 1;
 constexpr uint32_t kHumanInactiveFlags = 0x0B;         // +0x80 & this is 0 for a human that is in play
 constexpr uint32_t kHumanHiddenBit = 0x10;
@@ -669,7 +668,7 @@ constexpr float kTeamOddsRangeSquared = 400.0f;        // 20 m: the team odds co
 // Mission flow (milestone 16 W2): the start request and its prompts, the replay prompt, the mission bonus counters.
 constexpr uintptr_t kStartRequest = 0x6A8680;          // ecx = &mission id; cdecl(flag byte), the caller pops: asks for (flag 0) or starts (flag 1) the mission
 constexpr uintptr_t kStartReply = 0x6A83C0;            // cdecl(reason), the caller pops: mssn_req with the no-mission id; 0 = decline or cancel, 1 = busy, 2 = low respect
-constexpr uintptr_t kMissionOwnerHuman = 0x6A80C0;     // eax out: the human the owner handle names, 0 when it is stale
+constexpr uintptr_t kMissionOwnerHuman = 0x6A80C0;     // eax out: the human the owner handle (0x2527CA0) names, 0 when it is stale; reads globals only
 constexpr uintptr_t kMissionPartnerHuman = 0x6A8100;   // eax out: the human the partner handle names, 0 when it is stale
 constexpr uintptr_t kBonusAward = 0x6A9640;            // edx = human; cdecl(position, text, flag): the mission bonus line, act 7 to the guests
 constexpr uintptr_t kStartPromptDialog = 0x2527C94;    // dword: the accept prompt of this machine, 0 when closed
@@ -695,7 +694,6 @@ constexpr uintptr_t kVehicleSeatsDeclaredOffset = 0x84D8;  // byte: 1 = the vehi
 constexpr uintptr_t kVehicleSeatCountOffset = 0x6CE8;      // dword: the seat count when the byte above is 1
 constexpr uintptr_t kVehicleComponentOffset = 0x84EC;      // pointer to the component whose vtable +0x20 the mission exit calls (stdcall(0))
 constexpr uintptr_t kComponentStopSlot = 0x20;             // vtable offset of that call
-constexpr uintptr_t kVehicleOfHandleChecked = 0xAE28F0;    // ECX = handle: the vehicle or 0
 constexpr uintptr_t kHumanInVehicle = 0x9B8C50;            // ESI = human, EDI = vehicle: AL = 1 when settled in it
 constexpr uintptr_t kReleaseHeld = 0x69DDA0;               // EDX = human: releases the human it holds (+0xEA8)
 constexpr uintptr_t kMissionExitPartnerDone = 0x6A4E85;    // the mission exit after the default partner's stop (SE3 resumes here)
@@ -729,7 +727,6 @@ constexpr uintptr_t kStreakCoatSize = 0x140B278;      // dword[2]
 constexpr uintptr_t kStreakCoatBuffer = 0x140B280;    // dword[2]
 constexpr size_t kStreakRemoteEntry = 1;
 constexpr uintptr_t kStreakCoatLoad = 0x610780;       // cdecl(human), AL out: loads the coat morph of that human
-constexpr uintptr_t kHumanCharacterOffset = 0x13B0;   // pointer to the human's character instance
 constexpr uintptr_t kCharacterIdOffset = 0x10;        // dword: the id a built character record and its instance share
 
 // Tow truck and fraud: tests the game keeps in functions of their own.
@@ -774,7 +771,7 @@ constexpr uintptr_t kMayhemDisarm = 0x66B4C0;         // EAX = level, stdcall(hu
 constexpr uintptr_t kMayhemDestroyerOffset = 0x30;    // a destruction record: the human that destroyed it
 constexpr uintptr_t kMayhemCredit = 0x668240;         // ESI = human handle, cdecl(0, amount, human, 0)
 constexpr uintptr_t kMayhemComplication = 0x9C8C20;   // cdecl(human, flag)
-constexpr uintptr_t kVehicleObjectOf = 0xAE28F0;      // ECX = handle: the vehicle object, 0 for anything else; no stack arguments
+constexpr uintptr_t kVehicleObjectOf = 0xAE28F0;      // ECX = handle: the object, 0 when the handle is stale or its kind (+0x4C) is 5; no stack arguments
 constexpr uintptr_t kTraffickingDealerSource = 0x58;  // instance: object that knows the dealer; vtable +0x2C tests, +0x34 returns it
 constexpr uintptr_t kDealerSourceHasSlot = 0x2C;
 constexpr uintptr_t kDealerSourceGetSlot = 0x34;
@@ -809,7 +806,6 @@ constexpr uint32_t kExeTimeDateStamp = 0x49904C37;
 
 // Store, garage and activity level menus (milestone 16 wave 2).
 constexpr uintptr_t kPointInBox = 0xBE9890;             // ECX = point, EAX = box centre, ESI = orientation; cdecl(two box arguments), AL out
-constexpr uintptr_t kActivityOwnerHuman = 0x6A80C0;     // the human of the activity owner handle (0x2527CA0); reads globals only
 constexpr uintptr_t kStoreEnterHideResume = 0x740243;   // after the partner hide of the store entry (0x74021C)
 constexpr uintptr_t kStoreExitShowResume = 0x7407E1;    // after the partner unhide of the store exit (0x7407BA)
 constexpr uintptr_t kGarageHideResume = 0xA6D03C;       // after the partner re-hide of the host's garage (0xA6D015)
@@ -836,7 +832,7 @@ constexpr uint32_t kMiscCompletionSub = 7;              // a client's activity c
 // Zombie Uprising for 3 to 4 players (milestone 17 wave 3; docs/SR2_NOTES.md, "Zombie Uprising for 3 to 4 players (milestone 17 wave 3)").
 constexpr uintptr_t kRecruitSetMode = kSnatchSetupBoth;       // recruit_set_mode's worker: ECX = human, cdecl(mode), 0 none, 1 friendly gang
 constexpr uintptr_t kCharacterDontRegenerate = 0x9694A0;      // EDI = human, stdcall(flag), pops its argument
-constexpr uintptr_t kEvacuateFromVehicles = 0xB076C0;         // EDI = human, cdecl(flag)
+constexpr uintptr_t kEvacuateFromVehicles = 0xB076C0;         // EDI = human, cdecl(flag); the protect start calls it with 1
 constexpr uintptr_t kZombieStartMarkerOffset = 0x418;         // zombie level: the start marker record
 constexpr uintptr_t kMarkerPositionOffset = 0x1C;             // marker: the vec3 position
 constexpr uintptr_t kMarkerOrientationOffset = 0x28;          // marker: the orientation
@@ -858,14 +854,12 @@ constexpr uintptr_t kFuzzRioterSkips = 0x5CE7BF;          // where the rioter lo
 constexpr uint32_t kFuzzSpawnPointSlot = 0x8;             // [esp + 8] at the spawn point's partner getter call: the point's vec3
 // Milestone 17 wave 3: Crowd Control (M17_W3_CROWD.md). The calls the level start and end make for the local player and "the partner",
 // the fields they read and the addresses the jump outs resume at.
-constexpr uintptr_t kCrowdGiveWeapon = 0xB71CF0;        // ECX = human; cdecl(weapon, 1, -1, 0, 0), the caller pops
 constexpr uintptr_t kSyncIgnoreEquipOnGrab = 0x9E0710;  // stdcall(human, flag): sync flag ignore_equip_on_grab (+0x18E8 bit 3), tells the owner
 constexpr uintptr_t kForceBeerMuscles = 0x9676E0;       // stdcall(human, flag): force flag beer_muscles (+0x110C bit 25)
-constexpr uintptr_t kInventoryEquip = 0x55A930;         // stdcall(inventory, value, 1, 0)
-constexpr uintptr_t kProtectStartVehicle = 0xB076C0;    // EDI = human; cdecl(1)
+constexpr uintptr_t kInventoryApply = 0x55A930;         // stdcall(inventory, id, 1, 0): the weapon equip and the torch effect are cases of it
 constexpr uintptr_t kReleaseHeldAtEnd = 0x9B2240;       // ECX = human; cdecl(1): lets go of what the human holds
 constexpr uintptr_t kHumanHeldOffset = 0xEA8;           // handle of the human (or celebrity) this human holds, 0 for none
-constexpr uintptr_t kHumanInventoryOffset = 0x10C4;     // the inventory of a human (the same offset as kNpcArmedStateOffset)
+constexpr uintptr_t kHumanInventoryOffset = 0x10C4;     // the inventory of a human
 constexpr uintptr_t kCrowdWeaponOffset = 0x74;          // level: the bean bag gun
 constexpr uintptr_t kCrowdEventIndexOffset = 0x7C;      // level: the running event
 constexpr uintptr_t kCrowdEventStride = 0x16C8;         // [level + 4]: one record per event
@@ -879,8 +873,6 @@ constexpr uintptr_t kResumeCrowdStartFlags = 0x5AD9C4;
 constexpr uintptr_t kResumeCrowdRelease = 0x5ADF19;
 constexpr uintptr_t kResumeCrowdEndFlags = 0x5AE224;
 // Trail Blazing (milestone 17 wave 3): the torch activity for every remote (docs/SR2_NOTES.md, "Trail Blazing (milestone 17 wave 3)").
-constexpr uintptr_t kHumanEffect = 0x55A930;                // stdcall(component, id, 1, 0)
-constexpr uintptr_t kHumanEffectComponentOffset = 0x10C4;   // human: the component the effect is started on
 constexpr uint32_t kTrailStartEffectId = 0;
 constexpr uintptr_t kTrailStartCheck = 0x9C3A90;            // EDX = human: AL
 constexpr uintptr_t kTrailStartStep = 0x9C3B00;             // cdecl(human)

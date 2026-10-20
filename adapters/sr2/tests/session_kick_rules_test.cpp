@@ -4,6 +4,7 @@
 #include <string>
 
 #include "../src/session_kick_rules.h"
+#include "check.h"
 
 namespace {
 
@@ -20,13 +21,6 @@ constexpr uintptr_t kMemberD = 0x5000;
 constexpr int32_t kClose = sr2::kDialogActionClose;
 constexpr int32_t kForcedClose = 1;
 constexpr int32_t kNavigate = 3;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 MemberInfo remote(uintptr_t address, uint8_t slot) { return {address, slot, 0, false}; }
 MemberInfo local(uint8_t slot) { return {kLocalMember, slot, 0, true}; }

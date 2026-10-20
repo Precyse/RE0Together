@@ -3,15 +3,9 @@
 #include <set>
 
 #include "../src/replication_patches.h"
+#include "check.h"
 
 namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 template <typename Sites, typename Key>
 bool allDistinct(const Sites& sites, Key key) {
@@ -31,7 +25,7 @@ bool entriesAreConsistent() {
 }
 
 bool branchesAreShortJe() {
-    for (const CodePatch& patch : replication_patches::branchPatches(replication_sites::kJeShort, replication_sites::kJmpShort)) {
+    for (const CodePatch& patch : replication_patches::branchPatches(kJeShort, kJmpShort)) {
         if (patch.expected.size() != 2 || patch.expected[0] != 0x74 || patch.expected[1] == 0 ||
             patch.replacement.size() != 1 || patch.replacement[0] != 0xEB) {
             return false;
@@ -65,7 +59,7 @@ int main() {
     check(writes == 32 + 24 + 2, "58 sites are written, the 24 twins only checked");
     check(lengthsFit, "no replacement is longer than the bytes it was checked against");
 
-    const auto back = replication_patches::branchPatches(replication_sites::kJmpShort, replication_sites::kJeShort);
+    const auto back = replication_patches::branchPatches(kJmpShort, kJeShort);
     check(back.size() == 32 && back[0].expected[0] == 0xEB && back[0].replacement[0] == 0x74, "branches revert to je");
 
     const auto jump = relativeBranch(kJmpRel32, 0x846B20, 0x845F80);

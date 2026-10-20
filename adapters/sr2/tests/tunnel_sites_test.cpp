@@ -6,8 +6,10 @@
 #include <string_view>
 
 #include "../src/tunnel_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -20,20 +22,6 @@ constexpr uintptr_t kJuicedMargin = 16;
 constexpr uintptr_t kTunnelMargin = 0x100;  // from the five call retargets S1 to S5
 constexpr size_t kExpectedSites = 21;       // S1..S6, A1, five L1, four function entries, five LAN entries
 constexpr size_t kWrittenSites = 10;        // S1, S2, S4, S5, A1 and the five L1 calls
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-const CodePatch* patchAt(const std::vector<CodePatch>& patches, uintptr_t address) {
-    for (const CodePatch& patch : patches) {
-        if (patch.address == address) return &patch;
-    }
-    return nullptr;
-}
 
 std::vector<uint8_t> callTo(uintptr_t from, uintptr_t to) {
     const auto call = relativeBranch(kCallRel32, from, to);

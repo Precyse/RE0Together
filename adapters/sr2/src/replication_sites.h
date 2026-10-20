@@ -21,9 +21,6 @@ struct EntrySite {
     std::array<uint8_t, kEntryProbeBytes> n8Bytes;
 };
 
-constexpr uint8_t kJeShort = 0x74;
-constexpr uint8_t kJmpShort = 0xEB;
-
 // A short "je" that picks the peer index: the member's session slot when the co-op flag is clear, 0 when it is set.
 // Becoming a "jmp" makes co-op use the slot too.
 struct BranchSite {

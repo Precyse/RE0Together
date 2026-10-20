@@ -1,11 +1,9 @@
 // Thunks of FUZZ (milestone 17 wave 3): the level, the crime weapons, the crime area, the cameraman, the crime targets, the crime
 // vehicle and the riot know "the partner" and the local player only. Each runs for every remote where the game ran for the one default
 // partner. With fewer than two remotes, or a pairing that cannot be trusted, each does what the replaced call did.
-#include <bit>
 #include <cmath>
 #include <cstring>
 
-#include "diversion_remotes.h"
 #include "diversion_stubs.h"
 #include "diversion_trace.h"
 #include "fpu_guard.h"
@@ -16,7 +14,7 @@
 #include "memory.h"
 #include "partner_identity.h"
 #include "partner_scope.h"
-#include "party_ai_rules.h"
+#include "party_ai_remotes.h"
 #include "rate_limit.h"
 #include "squared_distance.h"
 #include "sr2_addresses.h"
@@ -24,6 +22,7 @@
 
 namespace {
 
+using party_ai_remotes::Remotes;
 using partner_sites::Thunk;
 
 // The spawn point stub assembles the slot plus the return address.
@@ -43,27 +42,6 @@ rate_limit::RateLimit g_pointLimit;
 rate_limit::RateLimit g_spawnLimit;
 
 bool tracing() { return activity_state::tracing(); }
-
-// The remote player humans now, which of them the game's getters answer by default, and whether a thunk takes the shipped path.
-class Remotes {
-public:
-    Remotes() {
-        diversion_remotes::take(view_);
-        humans_ = party_ai_rules::remoteHumansOf(view_.snapshot.pairing);
-        shipped_ = party_ai_rules::shippedPath(view_.snapshot.pairing.trusted, humans_.count);
-    }
-
-    const party_ai_rules::HumanList& humans() const { return humans_; }
-    bool shipped() const { return shipped_; }
-    uintptr_t defaultHuman() const { return view_.defaultHuman(); }
-
-private:
-    diversion_remotes::View view_;
-    party_ai_rules::HumanList humans_;
-    bool shipped_;
-};
-
-float floatAt(uintptr_t address) { return std::bit_cast<float>(readDword(address)); }
 
 // Calls `call(human, expanded)` for the human the game passed (the shipped path) or for every remote human; the last result is the
 // function's result in eax. `expanded` is true for the remotes of a game with more than one.
@@ -224,10 +202,10 @@ void __cdecl rioterNearAnyRemote(BlockFrame* frame) {
     const uintptr_t given = *callerSlot(frame, sr2::kFuzzRioterPartnerSlot);
     double radiusSquared;
     std::memcpy(&radiusSquared, callerSlot(frame, sr2::kFuzzRioterRadiusSlot), sizeof(radiusSquared));
-    const float heightWindow = floatAt(sr2::kFuzzRioterHeightWindow);
+    const float heightWindow = readFloat(sr2::kFuzzRioterHeightWindow);
     const auto nearTo = [&](uintptr_t player) {
         const float distance = squared_distance::between(sr2::kSquaredDistanceTeam, static_cast<uint32_t>(player + sr2::kObjectPositionOffset), rioterPosition);
-        const float heightGap = std::fabs(static_cast<float>(floatAt(rioter + sr2::kObjectPositionYOffset) - floatAt(player + sr2::kObjectPositionYOffset)));
+        const float heightGap = std::fabs(static_cast<float>(readFloat(rioter + sr2::kObjectPositionYOffset) - readFloat(player + sr2::kObjectPositionYOffset)));
         return fuzz_rules::rioterNear(distance, radiusSquared, heightGap, heightWindow);
     };
 

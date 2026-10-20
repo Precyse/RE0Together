@@ -10,6 +10,7 @@
 namespace walk_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -71,11 +72,6 @@ inline constexpr Site kMayhemBlocks[] = {
     {"MB2", Kind::CallBlock, 0x66C56F, "83 44 90 5C 01", Thunk::MayhemCountDestruction, ""},
     {"MB3", Kind::JumpOut, 0x66BB88, "83 C6 04 83 6C 24 14 01 0F 85 5C FF FF FF", Thunk::MayhemPayRemotes, ""},
     {"MB4", Kind::CallBlock, 0x66C6BC, "8D 04 C0 C1 E0 06 8D 9C 30 B4 00 00 00", Thunk::MayhemScoreBlock, "90 90 90 90 90 90 90 90"},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

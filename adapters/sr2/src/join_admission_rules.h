@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "game_message.h"
 #include "sr2_addresses.h"
 
 // The pure rules of the join admission (milestone 9, unit tested). The game's host admits one joiner at a time: a second
@@ -32,12 +33,11 @@ struct Message {
 };
 
 inline Message waitMessage(bool wideHeader) {
-    constexpr size_t kHeaderBytes = 3;
     constexpr uint8_t kTypeRequest = 0;
     Message message;
-    message.length = (wideHeader ? kHeaderBytes + 1 : kHeaderBytes) + 2;
+    message.length = (wideHeader ? game_message::kWideHeaderBytes : game_message::kHeaderBytes) + 2;
     message.bytes[0] = sr2::kSetupResponseId;
-    message.bytes[1] = static_cast<uint8_t>(message.length - kHeaderBytes);
+    message.bytes[1] = static_cast<uint8_t>(message.length - game_message::kHeaderBytes);
     message.bytes[message.length - 2] = kTypeRequest;
     message.bytes[message.length - 1] = sr2::kSetupResponseWait;
     return message;

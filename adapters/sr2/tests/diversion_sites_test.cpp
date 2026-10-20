@@ -17,8 +17,10 @@
 #include "../src/session_kick_sites.h"
 #include "../src/vehicle_pool_references.h"
 #include "../src/vehicle_pool_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -29,38 +31,13 @@ constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr uintptr_t kFraudZoneTail = 0x64A0C3;   // pop ebx, pop esi, ret of the zone test
 constexpr uintptr_t kCarryOtherTail = 0x656D7F;  // what the carried count function does for any other human
-constexpr uint8_t kShortJumpIfZero = 0x74;
-constexpr uint8_t kShortJump = 0xEB;
 constexpr uintptr_t kShortJumpBytes = 2;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
 
 std::vector<Site> allSites() {
     std::vector<Site> all;
     for (const diversion_sites::Set& set : diversion_sites::kSets) all.insert(all.end(), set.sites.begin(), set.sites.end());
     return all;
 }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-uint32_t dwordOf(const std::vector<uint8_t>& bytes, size_t at) {
-    return bytes[at] | bytes[at + 1] << 8 | bytes[at + 2] << 16 | static_cast<uint32_t>(bytes[at + 3]) << 24;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) { return site.address + kBranchBytes + dwordOf(partner_sites::parseHex(site.expected), 1); }
 
 uintptr_t shortJumpTarget(uintptr_t at, uint8_t displacement) { return at + kShortJumpBytes + displacement; }
 
@@ -113,11 +90,11 @@ void theWrittenJumps() {
 
     const Site* zone = siteNamed(sites, "DVF1");
     const auto zoneTail = partner_replacement::replacementFor(*zone, 0x10000000);
-    check(zoneTail[kBranchBytes] == kShortJump && shortJumpTarget(zone->address + kBranchBytes, zoneTail[kBranchBytes + 1]) == kFraudZoneTail,
+    check(zoneTail[kBranchBytes] == kJmpShort && shortJumpTarget(zone->address + kBranchBytes, zoneTail[kBranchBytes + 1]) == kFraudZoneTail,
           "DVF1: the thunk's answer goes to the pop ebx, pop esi, ret at 0x64A0C3");
     const Site* coat = siteNamed(sites, "DVS6");
     const auto coatTail = partner_replacement::replacementFor(*coat, 0x10000000);
-    check(coatTail[kBranchBytes] == kShortJump &&
+    check(coatTail[kBranchBytes] == kJmpShort &&
               shortJumpTarget(coat->address + kBranchBytes, coatTail[kBranchBytes + 1]) == coat->address + sizeOf(*coat),
           "DVS6: the jump skips the nops to the end of the replaced block");
 
@@ -127,7 +104,7 @@ void theWrittenJumps() {
     }
     check(carry && carry->kind == Kind::CallBlock && carry->thunk == partner_sites::Thunk::SnatchCarryOfEsi, "AC46 (DVP9a) is a call block of the carry thunk");
     const auto carryTail = partner_replacement::replacementFor(*carry, 0x10000000);
-    check(carryTail[kBranchBytes] == kShortJumpIfZero &&
+    check(carryTail[kBranchBytes] == kJeShort &&
               shortJumpTarget(carry->address + kBranchBytes, carryTail[kBranchBytes + 1]) == kCarryOtherTail && carryTail[kBranchBytes + 2] == 0xC2 &&
               carryTail[kBranchBytes + 3] == 4 && carryTail[kBranchBytes + 4] == 0,
           "AC46: jz to 0x656D7F for another human, else ret 4 with the count in eax");

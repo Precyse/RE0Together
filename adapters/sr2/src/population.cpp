@@ -38,12 +38,6 @@ Point readPoint(uintptr_t address) {
     return point;
 }
 
-float readFloat(uintptr_t address) {
-    float value = 0;
-    memcpy(&value, reinterpret_cast<const void*>(address), sizeof(value));
-    return value;
-}
-
 // The remote players of the session now, in ascending owner slot, with the role of this machine.
 struct Remotes {
     uintptr_t humans[partner_rules::kMaxWalked];

@@ -56,19 +56,6 @@ Vec3 vec3At(uintptr_t address) {
     return value;
 }
 
-float floatAt(uintptr_t address) { return std::bit_cast<float>(readDword(address)); }
-
-// The remotes that have a human, in ascending slot order; how many were written to `out`.
-size_t remotesWithHuman(Remote* out, size_t capacity) {
-    remote_players::Snapshot snapshot;
-    remote_players::take(snapshot);
-    size_t count = 0;
-    for (size_t i = 0; i < snapshot.pairing.count && count < capacity; ++i) {
-        if (snapshot.pairing.items[i].human) out[count++] = snapshot.pairing.items[i];
-    }
-    return count;
-}
-
 // ZU1: the wave start's four calls for every remote human, in the shipped order. Rank 0 is the shipped partner spot.
 void __cdecl startEachRemote(GuestFrame* frame) {
     FpuGuard guard;
@@ -78,7 +65,7 @@ void __cdecl startEachRemote(GuestFrame* frame) {
     double partnerOffset = 0;
     readMemory(sr2::kZombiePartnerStartOffset, &partnerOffset, sizeof(partnerOffset));
     Remote remotes[kMaxRemotes];
-    const size_t count = remotesWithHuman(remotes, kMaxRemotes);
+    const size_t count = remote_players::remotesWithHuman(remotes, kMaxRemotes);
     for (size_t rank = 0; rank < count; ++rank) {
         const uint32_t human = static_cast<uint32_t>(remotes[rank].human);
         const Vec3 spot = rules::startSpot(markerPosition, static_cast<float>(partnerOffset), static_cast<uint32_t>(rank));
@@ -98,7 +85,7 @@ void __cdecl startEachRemote(GuestFrame* frame) {
 // ZU2: the wave end gives every remote human back its regeneration and its followers.
 void __cdecl endEachRemote(GuestFrame*) {
     Remote remotes[kMaxRemotes];
-    const size_t count = remotesWithHuman(remotes, kMaxRemotes);
+    const size_t count = remote_players::remotesWithHuman(remotes, kMaxRemotes);
     uintptr_t humans[kMaxRemotes];
     for (size_t i = 0; i < count; ++i) {
         humans[i] = remotes[i].human;
@@ -115,10 +102,10 @@ void __cdecl endEachRemote(GuestFrame*) {
 void __cdecl waveHealthAverage(GuestFrame* frame) {
     FpuGuard guard;
     Remote remotes[kMaxRemotes];
-    const size_t count = remotesWithHuman(remotes, kMaxRemotes);
+    const size_t count = remote_players::remotesWithHuman(remotes, kMaxRemotes);
     float fractions[kMaxRemotes];
     for (size_t i = 0; i < count; ++i) {
-        fractions[i] = rules::healthFraction(floatAt(remotes[i].human + sr2::kHumanHealthOffset),
+        fractions[i] = rules::healthFraction(readFloat(remotes[i].human + sr2::kHumanHealthOffset),
                                              static_cast<int32_t>(readDword(remotes[i].human + sr2::kHumanMaxHealthOffset)));
     }
     const float local = std::bit_cast<float>(frame->args[kLocalFractionArg]);

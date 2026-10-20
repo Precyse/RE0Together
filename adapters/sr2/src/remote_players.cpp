@@ -158,6 +158,26 @@ bool isRemoteMember(uintptr_t member) {
     return false;
 }
 
+uintptr_t hostMember() {
+    const uintptr_t session = readDword(sr2::kSessionPointer);
+    return session ? readDword(session + sr2::kSessionHostMemberOffset) : 0;
+}
+
+uintptr_t localMember() {
+    const uintptr_t session = readDword(sr2::kSessionPointer);
+    return session ? readDword(session + sr2::kSessionLocalMemberOffset) : 0;
+}
+
+size_t remotesWithHuman(partner_rules::Remote* out, size_t capacity) {
+    Snapshot snapshot;
+    take(snapshot);
+    size_t count = 0;
+    for (size_t i = 0; i < snapshot.pairing.count && count < capacity; ++i) {
+        if (snapshot.pairing.items[i].human) out[count++] = snapshot.pairing.items[i];
+    }
+    return count;
+}
+
 size_t remoteHumanCount() {
     Snapshot snapshot;
     take(snapshot);

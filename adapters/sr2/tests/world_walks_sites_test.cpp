@@ -27,8 +27,10 @@
 #include "../src/vehicle_pool_sites.h"
 #include "../src/vehicle_seating_sites.h"
 #include "../src/world_walks_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -47,19 +49,10 @@ constexpr size_t kCheckRows = 3;
 constexpr size_t kSetCount = 7;
 constexpr uintptr_t kThunk = 0x10004000;
 constexpr uint8_t kCallOpcode = 0xE8;
-constexpr uint8_t kShortJumpIfEqual = 0x74;
-constexpr uint8_t kNop = 0x90;
 constexpr uintptr_t kPoseSelectNormalState = 0x96F1C6;  // PD2b
 constexpr uintptr_t kPoseSelectReturn = 0x96F1C1;       // PD2a
 constexpr uintptr_t kAmbulanceHandler = 0x5F7E70;
 constexpr uintptr_t kCompletionHandler = 0x8CA660;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 std::vector<Site> ourSites() {
     std::vector<Site> all;
@@ -71,26 +64,12 @@ size_t sizeOf(std::string_view hex) { return partner_sites::parseHex(hex).size()
 
 size_t sizeOf(const Site& site) { return sizeOf(site.expected); }
 
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
 size_t setSize(size_t index) { return world_walks_sites::kSets[index].sites.size(); }
 
 // The dword a pointer swap row holds.
 uintptr_t pointerIn(const Site& site) {
     const auto bytes = partner_sites::parseHex(site.expected);
     return bytes[0] | bytes[1] << 8 | bytes[2] << 16 | static_cast<uintptr_t>(bytes[3]) << 24;
-}
-
-// Where the `call rel32` at the start of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
 }
 
 // Every site table of the other milestones.
@@ -200,7 +179,7 @@ void thePoseBlock() {
     const auto written = partner_replacement::replacementFor(block, kThunk);
     check(written.size() == kPoseBlockBytes && written[0] == kCallOpcode, "PD2 is written as a call and its tail, 14 bytes");
     const uintptr_t branchAt = block.address + kBranchBytes + 3;  // after `cmp eax, -1`
-    check(tail[3] == kShortJumpIfEqual && branchAt + 2 + tail[4] == kPoseSelectNormalState && kPoseSelectNormalState == siteNamed(sites, "PD2b")->address,
+    check(tail[3] == kJeShort && branchAt + 2 + tail[4] == kPoseSelectNormalState && kPoseSelectNormalState == siteNamed(sites, "PD2b")->address,
           "the je of the tail lands on PD2b, the normal state");
     check(block.address + kPoseBlockBytes == kPoseSelectReturn && kPoseSelectReturn == siteNamed(sites, "PD2a")->address,
           "the byte after the block is PD2a, which returns eax");

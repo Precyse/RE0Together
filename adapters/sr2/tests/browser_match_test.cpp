@@ -3,17 +3,11 @@
 #include <string>
 
 #include "../src/browser_match.h"
+#include "check.h"
 
 namespace {
 
 const std::string kTag = "cfv003-1A2B3C4D-555";
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 }  // namespace
 

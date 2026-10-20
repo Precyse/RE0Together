@@ -2,17 +2,7 @@
 #include <cstdio>
 
 #include "../src/pool_size.h"
-
-namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-}  // namespace
+#include "check.h"
 
 int main() {
     constexpr uint32_t kCpu = 0x228000;

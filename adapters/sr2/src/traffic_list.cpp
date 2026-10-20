@@ -25,8 +25,7 @@ population_rules::Point positionOf(uintptr_t object) {
 namespace traffic_list {
 
 bool localSlot(uint8_t& slot) {
-    const uintptr_t session = readDword(sr2::kSessionPointer);
-    const uintptr_t local = session ? readDword(session + sr2::kSessionLocalMemberOffset) : 0;
+    const uintptr_t local = remote_players::localMember();
     if (!local) return false;
     slot = readByte(local + sr2::kMemberSlotOffset);
     return true;

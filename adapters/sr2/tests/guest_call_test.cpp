@@ -2,15 +2,9 @@
 #include <cstdio>
 
 #include "../src/guest_call.h"
+#include "check.h"
 
 namespace {
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 // eax = ecx + edx + esi + [esp+4] - [esp+8]; leaves edi = 7 and ebx = 9. The caller pops the arguments.
 void __declspec(naked) callerPops() {

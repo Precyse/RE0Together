@@ -5,19 +5,13 @@
 #include <set>
 
 #include "../src/char_types_rules.h"
+#include "check.h"
 
 namespace {
 
 using namespace char_types_rules;
 
 constexpr uint32_t kPoolIndices = 12;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void theTypeNumbers() {
     check(remoteTypeNumber(2, 3, 4) == 2 && remoteTypeNumber(1, 3, 4) == 3 && remoteTypeNumber(0, 3, 4) == 4,

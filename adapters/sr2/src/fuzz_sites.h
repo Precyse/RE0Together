@@ -10,6 +10,7 @@
 namespace fuzz_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -65,11 +66,6 @@ inline constexpr Site kRiot[] = {
      "84 C0 0F 84 00 01 00 00 EB 3B 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90"},
     {"FZc1", Kind::Bytes, sr2::kFuzzRioterJoins, "D9 EE 6A 00", Thunk::None, ""},
     {"FZc2", Kind::Bytes, sr2::kFuzzRioterSkips, "8B B6 60 11 00 00", Thunk::None, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

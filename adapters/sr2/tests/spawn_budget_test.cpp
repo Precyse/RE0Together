@@ -11,7 +11,9 @@
 #include "../src/rate_limit.h"
 #include "../src/spawn_budget_rules.h"
 #include "../src/trace_sites.h"
+#include "check.h"
 #include "juiced_targets.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -19,20 +21,6 @@ constexpr uintptr_t kThunk = 0x10002000;
 constexpr uintptr_t kJuicedMargin = 16;
 constexpr uintptr_t kNearbyMargin = 0x500;  // no milestone 4 site closer to the group create
 constexpr uint32_t kFourPlayers = 4;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
-const CodePatch* patchAt(const std::vector<CodePatch>& patches, uintptr_t address) {
-    for (const CodePatch& patch : patches) {
-        if (patch.address == address) return &patch;
-    }
-    return nullptr;
-}
 
 // A made-up free list: node -> its link.
 uint32_t countList(const std::map<uintptr_t, uintptr_t>& links, uintptr_t head, uint32_t limit) {

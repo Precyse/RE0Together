@@ -8,8 +8,10 @@
 
 #include "../src/multiplayer_sites.h"
 #include "../src/partner_replacement.h"
+#include "check.h"
 #include "juiced_targets.h"
 #include "other_sites.h"
+#include "site_lookup.h"
 
 namespace {
 
@@ -20,13 +22,6 @@ constexpr uintptr_t kJuicedMargin = 16;
 constexpr size_t kBranchBytes = 5;
 constexpr uintptr_t kThunk = 0x10004000;
 
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
-
 std::vector<Site> allSites() {
     std::vector<Site> all;
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) all.insert(all.end(), phase.sites.begin(), phase.sites.end());
@@ -34,36 +29,11 @@ std::vector<Site> allSites() {
     return all;
 }
 
-size_t sizeOf(const Site& site) { return partner_sites::parseHex(site.expected).size(); }
-
-const Site* siteNamed(const std::vector<Site>& sites, std::string_view id) {
-    for (const Site& site : sites) {
-        if (id == site.id) return &site;
-    }
-    return nullptr;
-}
-
-// Where the `call rel32` of a retargeted call site goes.
-uintptr_t callTarget(const Site& site) {
-    const auto bytes = partner_sites::parseHex(site.expected);
-    const uint32_t displacement = bytes[1] | bytes[2] << 8 | bytes[3] << 16 | static_cast<uint32_t>(bytes[4]) << 24;
-    return site.address + kBranchBytes + displacement;
-}
-
 size_t phaseSize(std::string_view name) {
     for (const multiplayer_sites::Phase& phase : multiplayer_sites::kPhases) {
         if (name == phase.name) return phase.sites.size();
     }
     return 0;
-}
-
-bool idsAndAddressesAreUnique(const std::vector<Site>& sites) {
-    std::set<std::string_view> ids;
-    std::set<uintptr_t> addresses;
-    for (const Site& site : sites) {
-        if (!ids.insert(site.id).second || !addresses.insert(site.address).second) return false;
-    }
-    return true;
 }
 
 bool sitesDoNotOverlap(const std::vector<Site>& sites) {

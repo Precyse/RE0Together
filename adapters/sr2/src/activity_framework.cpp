@@ -26,17 +26,11 @@ const uintptr_t g_declineHandler = sr2::kDeclineHandler;
 
 activity_rules::DeclineTally g_declineTally;
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 // AF5: the member that invites this machine to a race is remembered for the answer, which is sent from a dialog (the
 // sender scope of milestone 9 only covers the handler).
 void __cdecl rememberRaceInviter(GuestFrame* frame) {
     const uint32_t* args = frame->args;
-    if (byteAt(args[kBufferArg]) != sr2::kRaceSubInvite) return;
+    if (readByte(args[kBufferArg]) != sr2::kRaceSubInvite) return;
     const uintptr_t member = activity_state::senderOf(args[kContextArg]);
     if (remote_players::isRemoteMember(member)) activity_state::setRacePeer(member);
 }

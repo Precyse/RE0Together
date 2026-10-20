@@ -4,17 +4,11 @@
 #include <string>
 
 #include "../src/hud_rules.h"
+#include "check.h"
 
 namespace {
 
 using hud_rules::RemoteTurns;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 constexpr size_t kOneRemote = 1;
 constexpr size_t kTwoRemotes = 2;

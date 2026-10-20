@@ -11,6 +11,7 @@
 namespace net_handlers_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -63,11 +64,6 @@ inline constexpr Site kConfessLock[] = {
 // The session lost dialog (0x8CBA50) names the host's human on a guest.
 inline constexpr Site kSessionLost[] = {
     {"SL1", Kind::RetargetCall, 0x8CBACD, "E8 FE C0 10 00", Thunk::SessionLostHuman, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

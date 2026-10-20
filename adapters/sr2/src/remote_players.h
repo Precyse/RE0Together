@@ -54,6 +54,13 @@ uintptr_t memberOfHuman(uintptr_t human);
 // True when `member` is a member of the session other than the local one.
 bool isRemoteMember(uintptr_t member);
 
+// The host member and this machine's own member of the session, 0 outside a session.
+uintptr_t hostMember();
+uintptr_t localMember();
+
+// The remotes that have a human, in ascending slot order, at most `capacity` of them; how many were written to `out`.
+size_t remotesWithHuman(partner_rules::Remote* out, size_t capacity);
+
 // How many remote player humans there are.
 size_t remoteHumanCount();
 

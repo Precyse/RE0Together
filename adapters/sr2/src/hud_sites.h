@@ -10,6 +10,7 @@
 namespace hud_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -51,11 +52,6 @@ inline constexpr Site kWaypointScope[] = {
     {"GP2", Kind::RetargetCall, 0x767945, "E8 F6 CD 0A 00", Thunk::SendWaypointToScope, ""},
     {"GP3", Kind::RetargetCall, 0x7712F3, "E8 48 34 0A 00", Thunk::SendWaypointToScope, ""},
     {"GP4", Kind::RetargetCall, 0x7713B4, "E8 87 33 0A 00", Thunk::SendWaypointToScope, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {

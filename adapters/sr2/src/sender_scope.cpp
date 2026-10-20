@@ -40,12 +40,6 @@ private:
     uintptr_t previous_;
 };
 
-uint8_t byteAt(uintptr_t address) {
-    uint8_t value = 0;
-    readMemory(address, &value, sizeof(value));
-    return value;
-}
-
 const char* joinMessageName(uint8_t id) {
     switch (id) {
         case sr2::kMessageJoinReq: return "join_req";
@@ -59,7 +53,7 @@ const char* joinMessageName(uint8_t id) {
 // The member a message came from, as the dispatcher itself reads it: a member whose live byte is clear is forgotten.
 uintptr_t senderOf(uintptr_t context) {
     const uintptr_t member = context ? readDword(context + sr2::kMessageContextMemberOffset) : 0;
-    return member && byteAt(member + sr2::kMemberLiveOffset) ? member : 0;
+    return member && readByte(member + sr2::kMemberLiveOffset) ? member : 0;
 }
 
 // Calls the dispatcher at `original` with the getters answering `member` when it is a remote one. Returns its eax.
@@ -80,7 +74,7 @@ uint32_t runScoped(const GuestFrame* frame, void* original, uintptr_t member) {
 
 // The join messages are the only ones logged: the others are far too frequent.
 void traceJoinMessage(uintptr_t message, uintptr_t context) {
-    const uint8_t id = byteAt(message + sr2::kMessageIdOffset);
+    const uint8_t id = readByte(message + sr2::kMessageIdOffset);
     const char* name = joinMessageName(id);
     if (!name) return;
     uint16_t length = 0;
@@ -100,7 +94,6 @@ void __cdecl scopeDispatch(GuestFrame* frame) {
 void __cdecl scopeInOrder(GuestFrame* frame) {
     frame->regs.eax = runScoped(frame, g_inOrderOriginal, frame->regs.edx);
 }
-
 
 // LK1, LK2: the look handlers (cdecl(payload, context)) resolve the human by the net id in the payload. The payload is
 // made to name the sender's own human before the handler queues the look, which is applied later outside the sender scope.
@@ -124,7 +117,7 @@ bool lookUnchanged(const uint32_t* args, uintptr_t member, uintptr_t human, send
         !readMemory(args[kBufferArg], payload, length)) {
         return false;
     }
-    const uint8_t slot = byteAt(member + sr2::kMemberSlotOffset);
+    const uint8_t slot = readByte(member + sr2::kMemberSlotOffset);
     const sender_scope_rules::LookKey key{readDword(member + sr2::kMemberSessionOffset), slot, kind};
     const sender_scope_rules::Look look{readDword(human + sr2::kObjectHandleOffset), sender_scope_rules::lookDigest(payload, length)};
     {

@@ -6,18 +6,12 @@
 
 #include "../src/anim_trace_rules.h"
 #include "../src/player_sites.h"
+#include "check.h"
 
 namespace {
 
 using anim_trace_rules::NeedRow;
 using anim_trace_rules::Slot;
-
-int g_failures = 0;
-
-void check(bool ok, const char* what) {
-    std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) ++g_failures;
-}
 
 void theNeedTable() {
     const NeedRow rows[] = {{0x2BF, true, 0}, {0x2C5, false, 0x06}, {0, false, 0}, {0x2FE, true, 0x01}, {0x2C6, false, 0}};

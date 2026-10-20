@@ -1,7 +1,6 @@
 // Calls and loops of the diversions that run once per remote: the game's code does for the local player and "the partner"
 // what every remote now gets: activity weapons, followers, setup, vehicle preparation, credit and the Snatch delivery. Phase B
 // adds the Mayhem district test for every player and the extra Trafficking seats.
-#include <bit>
 
 #include "activity_state.h"
 #include "diversion_remotes.h"
@@ -134,13 +133,11 @@ void __cdecl stopVehicles(JumpFrame* frame) {
 
 // DVP8: the Snatch delivery test runs for the local player against the first marker and for every remote against the second.
 // A player delivers when its distance to the marker is within 2.0 in a vehicle and 3.5 on foot, and the marker accepts.
-float floatAt(uintptr_t address) { return std::bit_cast<float>(readDword(address)); }
-
 void deliverIfInRange(uintptr_t level, uintptr_t player, size_t rank) {
     const uintptr_t marker = readDword(level + sr2::kSnatchMarkerOffset + sizeof(uint32_t) * diversion_rules::deliveryMarker(rank));
     if (!marker || (readByte(marker + sr2::kSnatchMarkerFlagsOffset) & sr2::kSnatchMarkerClosedBit) != 0) return;
     const bool inVehicle = readDword(player + sr2::kHumanVehicleOffset) != 0;
-    const float radius = floatAt(inVehicle ? sr2::kSnatchRadiusInVehicle : sr2::kSnatchRadiusOnFoot);
+    const float radius = readFloat(inVehicle ? sr2::kSnatchRadiusInVehicle : sr2::kSnatchRadiusOnFoot);
     if (!diversion_rules::inDeliveryRange(remote_players::positionOf(player), remote_players::positionOf(marker), radius)) return;
     guest_call::call(sr2::kSnatchDeliver, {}, {static_cast<uint32_t>(level), static_cast<uint32_t>(player)});
 }

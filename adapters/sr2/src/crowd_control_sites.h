@@ -10,6 +10,7 @@
 namespace crowd_control_sites {
 
 using partner_sites::Kind;
+using partner_sites::Set;
 using partner_sites::Site;
 using partner_sites::Thunk;
 
@@ -43,11 +44,6 @@ inline constexpr Site kEnd[] = {
     {"CR14", Kind::JumpOut, 0x5ADF00, "85 FF 74 15 83 BF A8 0E 00 00 00 74 0C 6A 01 8B CF E8 2A 43 40 00 83 C4 04", Thunk::EachRemoteReleaseHeld, ""},
     {"CR15", Kind::JumpOut, 0x5AE17C, "8B 0D 3C 04 17 02 8B C1 85 C0 0F 84 98 00 00 00 8B 15 D4 03 17 02 3B C2 75 14 8B 80 94 12 00 00 3B C1 0F 84 80 00 00 00 85 C0 75 EA EB 7A 85 C0 74 76 8A 0D 49 8B 52 02 84 C9 74 2A 8B 0D 3C 04 17 02 8B C1 85 C0 74 1E 8B 15 D4 03 17 02 8D 9B 00 00 00 00 3B C2 75 10 8B 80 94 12 00 00 3B C1 74 04 85 C0 75 EE 33 C0 6A 00 50 E8 24 25 43 00 8A 15 49 8B 52 02 84 D2 74 24 8B 0D 3C 04 17 02 8B C1 85 C0 74 18 8B 15 D4 03 17 02 3B C2 75 10 8B 80 94 12 00 00 3B C1 74 04 85 C0 75 EE 33 C0 6A 00 50 E8 BC 94 3B 00", Thunk::EachRemoteCrowdEndFlags, ""},
     {"CR16", Kind::RetargetCall, 0x5AE6B6, "E8 C5 CD 42 00", Thunk::TeleportLocalOrEachRemote, ""},
-};
-
-struct Set {
-    const char* name;
-    std::span<const Site> sites;
 };
 
 inline constexpr Set kSets[] = {
