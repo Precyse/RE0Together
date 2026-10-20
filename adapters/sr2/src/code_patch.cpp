@@ -37,12 +37,16 @@ bool writeBytes(const CodePatch& patch, const uint8_t* bytes, size_t size) {
     return true;
 }
 
-// Puts back the original bytes of the first `count` patches.
-void revertFirst(const std::vector<CodePatch>& patches, size_t count) {
+// Puts back the original bytes of the first `count` patches, each one even when an earlier one could not be written. False (and logged)
+// when some could not: the code is then partly reverted.
+bool revertFirst(const std::vector<CodePatch>& patches, size_t count) {
+    bool allBack = true;
     for (size_t i = 0; i < count; ++i) {
         const CodePatch& patch = patches[i];
-        if (!patch.replacement.empty()) writeBytes(patch, patch.expected.data(), patch.replacement.size());
+        if (!patch.replacement.empty() && !writeBytes(patch, patch.expected.data(), patch.replacement.size())) allBack = false;
     }
+    if (!allBack) logger::write("code patch: set partly reverted, the exe code is in a mixed state");
+    return allBack;
 }
 
 }  // namespace
@@ -64,4 +68,4 @@ bool applyCodePatches(const std::vector<CodePatch>& patches) {
     return true;
 }
 
-void revertCodePatches(const std::vector<CodePatch>& patches) { revertFirst(patches, patches.size()); }
+bool revertCodePatches(const std::vector<CodePatch>& patches) { return revertFirst(patches, patches.size()); }

@@ -1,5 +1,7 @@
 // Code patches against a buffer in the test's own memory: all or nothing on apply, and the revert that site_installer uses when a hook of
 // the set cannot be installed.
+#include <windows.h>
+
 #include <cstdint>
 #include <initializer_list>
 #include <utility>
@@ -51,10 +53,29 @@ void theMismatchWritesNothing() {
     check(codeIs({0x8B, 0x45, 0x08, 0x90, 0x90, 0xC3}), "and nothing is written");
 }
 
+// An address that is no longer mapped: VirtualProtect refuses it, as it can refuse a page of the exe.
+CodePatch unwritablePatch() {
+    void* page = VirtualAlloc(nullptr, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(page);
+    VirtualFree(page, 0, MEM_RELEASE);
+    return {"gone", address, {0x90}, {0xCC}};
+}
+
+void theRevertReportsAWriteThatFailsAndGoesOn() {
+    resetCode();
+    const std::vector<CodePatch> written = {patchAt(0, {0x8B, 0x45, 0x08}, {0xE9, 0x01, 0x02})};
+    check(applyCodePatches(written), "the first patch is written");
+    const std::vector<CodePatch> patches = {unwritablePatch(), written[0]};
+    check(!revertCodePatches(patches), "a revert with a write that fails says so");
+    check(codeIs({0x8B, 0x45, 0x08, 0x90, 0x90, 0xC3}), "and still puts back the patches after the one that failed");
+    check(revertCodePatches(written), "a revert that writes everything says so");
+}
+
 }  // namespace
 
 int main() {
     theApplyAndRevert();
     theMismatchWritesNothing();
+    theRevertReportsAWriteThatFailsAndGoesOn();
     return g_failures == 0 ? 0 : 1;
 }

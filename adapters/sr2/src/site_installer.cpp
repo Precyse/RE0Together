@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "code_patch.h"
+#include "debug_stats.h"
 #include "hooks.h"
 #include "log.h"
 #include "partner_replacement.h"
@@ -102,7 +103,7 @@ Result install(std::span<const Site> sites, Binder binder) {
         }
         logger::write("sites: hook %s failed, the set is taken back", site->id);  // all or nothing, hooks included
         for (const uintptr_t address : hooked) hooks::remove(address);
-        revertCodePatches(patches);
+        if (!revertCodePatches(patches)) debug_stats::setError("a code patch set is partly reverted");
         return {false, 0};
     }
     return {true, sites.size()};
