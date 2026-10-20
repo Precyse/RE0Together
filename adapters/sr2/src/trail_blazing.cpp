@@ -171,6 +171,7 @@ void __cdecl objectsEachRemote(BlockFrame* frame) {
 
 // TB8: while the course runs, a remote in water is put out and fails the level for everyone (the byte at [esp + 0x13]).
 void __cdecl waterFailEachRemote(JumpFrame* frame) {
+    FpuGuard guard;
     if (readDword(frame->regs.ebp + sr2::kTrailLevelStateOffset) != sr2::kTrailLevelRunning) return;
     uint8_t* failByte = reinterpret_cast<uint8_t*>(gameSlot(frame, sr2::kTrailFailByteSlot));
     partner_scope::eachRemoteHuman([&](uintptr_t human) {
