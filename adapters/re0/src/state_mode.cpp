@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "boss_handover.h"
 #include "contact_net.h"
 #include "demo_skip.h"
 #include "door_follow.h"
@@ -59,6 +60,8 @@ void enableAll(NetClient& net) {
     if (room_move::enable()) ++enabled;
     if (door_follow::enable()) ++enabled;
     if (demo_skip::enable()) ++enabled;
+    // After the enemy observer: a room that changes hands is seen after the observer's own hand-over.
+    if (!boss_handover::enable()) logger::write("adapter: boss hand-over unavailable");
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }
