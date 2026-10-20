@@ -49,6 +49,43 @@ int main() {
         check(tally.declinedAll(kRequest, kSecond, both, 0), "no remote required: nothing to wait for");
     }
 
+    {
+        // The leave rule (replay wait, start request, zombie request): a member that leaves without answering counts as a decline.
+        const uintptr_t three[] = {kSecond, kThird, kFourth};
+        DeclineTally tally;
+        tally.declinedAll(kRequest, kSecond, three, 3);
+        const DeclineTally::LeaveOutcome partial = tally.leave(kRequest, kThird, three, 3);
+        check(partial.staying == 2 && !partial.ends, "P3 leaves, P2 declined and P4 has not: the wait goes on");
+        const uintptr_t left[] = {kSecond, kFourth};
+        const DeclineTally::LeaveOutcome last = tally.leave(kRequest, kFourth, left, 2);
+        check(last.staying == 1 && last.ends, "P4 leaves too, only P2 stays and has declined: the decline completes");
+    }
+    {
+        DeclineTally tally;
+        tally.declinedAll(kRequest, kSecond, both, 2);
+        check(tally.leave(kRequest, kThird, both, 2).ends, "P2 declined, P3 leaves unanswered: the other remote left has declined, so the request ends");
+    }
+    {
+        DeclineTally tally;
+        check(!tally.leave(kRequest, kThird, both, 2).ends, "a leave with nobody declined only counts");
+        check(tally.declinedAll(kRequest, kSecond, both, 2), "the remote that declines afterwards ends the request");
+    }
+    {
+        DeclineTally tally;
+        const uintptr_t one[] = {kSecond};
+        const DeclineTally::LeaveOutcome only = tally.leave(kRequest, kSecond, one, 1);
+        check(only.staying == 0 && !only.ends, "the only remote leaving is the game's own teardown");
+        const uintptr_t twice[] = {kSecond, kThird, kSecond};
+        check(tally.leave(kRequest, kSecond, twice, 3).staying == 1, "a leaver listed twice is dropped both times");
+        check(tally.leave(kRequest, kFourth, both, 2).staying == 2, "a leaver that is not listed drops nobody");
+        check(tally.leave(kRequest, kSecond, both, 0).staying == 0, "an empty list stays empty");
+    }
+    {
+        DeclineTally earlier;
+        earlier.leave(kRequest, kThird, both, 2);
+        check(!earlier.declinedAll(kOtherRequest, kSecond, both, 2), "a leaver of an earlier request does not count for a new one");
+    }
+
     check(!activity_rules::blocksCompetitiveStart(0) && !activity_rules::blocksCompetitiveStart(1) &&
               activity_rules::blocksCompetitiveStart(2),
           "cat and mouse and death tag start with one remote, not with two");

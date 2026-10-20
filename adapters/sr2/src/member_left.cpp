@@ -1,5 +1,6 @@
 #include "member_left.h"
 
+#include "activity_declines.h"
 #include "cutscene_sync.h"
 #include "mission_flow.h"
 #include "net_handlers.h"
@@ -19,6 +20,7 @@ void __cdecl memberLeft(uintptr_t leaver) {
     mission_flow::memberLeft(leaver);
     revive_state::memberLeft(leaver);
     net_handlers::memberLeft(leaver);
+    activity_declines::memberLeft(leaver);
 }
 
 // Replaces the clear of the pause byte and the resume in the member left callback; ebx is the leaver.

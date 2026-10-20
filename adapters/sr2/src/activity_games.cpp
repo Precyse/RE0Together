@@ -2,6 +2,7 @@
 // Chop Shop and the two competitive diversions.
 #include <atomic>
 
+#include "activity_declines.h"
 #include "activity_rules.h"
 #include "activity_state.h"
 #include "activity_thunks.h"
@@ -23,13 +24,11 @@ constexpr size_t kContextArg = 1;
 constexpr uint8_t kZombieAnswerAccept = 3;
 
 void* g_derbyOriginal = nullptr;
-void* g_zombieAnswerOriginal = nullptr;
 void* g_catAndMouseOriginal = nullptr;
 void* g_deathTagOriginal = nullptr;
 
 // The member that asked for the zombie activity, until the start takes it as the partner.
 std::atomic<uintptr_t> g_zombieRequester{0};
-activity_rules::DeclineTally g_zombieTally;
 
 enum CompetitiveDiversion : size_t { kCatAndMouse, kDeathTag, kCompetitiveDiversions };
 diversion_rules::EdgeLog<kCompetitiveDiversions> g_competitiveLog;
@@ -107,17 +106,9 @@ void __cdecl zombieAnswerGate(GuestFrame* frame) {
     const uint32_t* args = frame->args;
     const uint32_t dialog = readDword(sr2::kZombieDialog);
     if (activity_state::isHost() && dialog && readByte(args[kBufferArg]) != kZombieAnswerAccept) {
-        uintptr_t required[activity_rules::kMaxMembers];
-        const size_t count = activity_state::remoteMembersInGame(required);
-        const uintptr_t member = activity_state::senderOf(args[kContextArg]);
-        const bool all = g_zombieTally.declinedAll(dialog, member, required, count);
-        if (activity_state::tracing()) {
-            logger::write("trace: zombie request declined by member 0x%X, %s", static_cast<unsigned>(member),
-                          all ? "every remote has declined" : "waiting for the others");
-        }
-        if (!all) return;
+        if (!activity_declines::zombieDeclined(dialog, activity_state::senderOf(args[kContextArg]))) return;
     }
-    frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(g_zombieAnswerOriginal), frame->regs,
+    frame->regs.eax = guest_call::call(reinterpret_cast<uintptr_t>(*activity_declines::zombieAnswerOriginal()), frame->regs,
                                        {args[kBufferArg], args[kContextArg]});
 }
 
@@ -193,7 +184,7 @@ partner_thunks::Binding bindGames(Thunk thunk) {
         case Thunk::DerbyParticipantsOnly: return {reinterpret_cast<void*>(&derbyStub), &g_derbyOriginal};
         case Thunk::RecordZombieRequester: return {reinterpret_cast<void*>(&recordZombieRequester), nullptr};
         case Thunk::ZombiePartner: return {reinterpret_cast<void*>(&zombiePartner), nullptr};
-        case Thunk::ZombieAnswerGate: return {reinterpret_cast<void*>(&zombieAnswerStub), &g_zombieAnswerOriginal};
+        case Thunk::ZombieAnswerGate: return {reinterpret_cast<void*>(&zombieAnswerStub), activity_declines::zombieAnswerOriginal()};
         case Thunk::BlockCatAndMouse: return {reinterpret_cast<void*>(&catAndMouseStub), &g_catAndMouseOriginal};
         case Thunk::BlockDeathTag: return {reinterpret_cast<void*>(&deathTagStub), &g_deathTagOriginal};
         default: return {nullptr, nullptr};

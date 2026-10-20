@@ -40,6 +40,23 @@ public:
     // How many members have declined the current request.
     size_t declinedCount() const { return count_; }
 
+    // What a member that leaves without answering does to the request `key`: it counts as a decline. `inGame` are the remote members
+    // in the game, the leaver among them or not.
+    struct LeaveOutcome {
+        size_t staying;  // the members of `inGame` except the leaver
+        bool ends;       // members stay and every one of them has declined: the leaver's missing answer was the last one needed
+    };
+    // With no member staying the game's own leave teardown ends the request, so it does not end here.
+    LeaveOutcome leave(uint32_t key, uintptr_t leaver, const uintptr_t* inGame, size_t count) {
+        uintptr_t staying[kMaxMembers];
+        size_t stay = 0;
+        for (size_t i = 0; i < count && stay < kMaxMembers; ++i) {
+            if (inGame[i] != leaver) staying[stay++] = inGame[i];
+        }
+        const bool all = declinedAll(key, leaver, staying, stay);
+        return {stay, stay > 0 && all};
+    }
+
 private:
     bool has(uintptr_t member) const {
         for (size_t i = 0; i < count_; ++i) {

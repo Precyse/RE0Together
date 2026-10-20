@@ -83,43 +83,6 @@ void theReplayAndKeys() {
           "a new wait dialog for the same mission starts the tally over");
 }
 
-// The leave rule as mission_flow::memberLeft applies it: the leaver is dropped from the required set and counted as a decline.
-bool leaveCancels(activity_rules::DeclineTally& tally, uint32_t key, uintptr_t leaver, const uintptr_t* inGame, size_t count) {
-    uintptr_t remaining[activity_rules::kMaxMembers];
-    const size_t stay = rules::withoutMember(inGame, count, leaver, remaining);
-    return rules::replayLeaveCancels(stay, tally.declinedAll(key, leaver, remaining, stay));
-}
-
-void theReplayLeaveRule() {
-    uintptr_t out[activity_rules::kMaxMembers];
-    const uintptr_t three[] = {kSecond, kThird, kHost};
-    check(rules::withoutMember(three, 3, kThird, out) == 2 && out[0] == kSecond && out[1] == kHost, "the leaver is dropped, the order kept");
-    check(rules::withoutMember(three, 3, kLocal, out) == 3 && out[2] == kHost, "a leaver that is not listed drops nobody");
-    const uintptr_t twice[] = {kSecond, kThird, kSecond};
-    check(rules::withoutMember(twice, 3, kSecond, out) == 1 && out[0] == kThird, "a leaver listed twice is dropped both times");
-    check(rules::withoutMember(three, 0, kSecond, out) == 0, "an empty list stays empty");
-    check(rules::replayLeaveCancels(1, true) && !rules::replayLeaveCancels(1, false) && !rules::replayLeaveCancels(0, true),
-          "a leave cancels only with remotes left that all declined");
-
-    const uintptr_t both[] = {kSecond, kThird};
-    const uint32_t dialog = rules::declineKey(1, kMission);
-    activity_rules::DeclineTally tally;
-    check(!tally.declinedAll(dialog, kSecond, both, 2), "the first of two declines is withheld");
-    check(leaveCancels(tally, dialog, kThird, both, 2), "the other one leaving ends the wait");
-
-    activity_rules::DeclineTally nobody;
-    check(!leaveCancels(nobody, dialog, kThird, both, 2), "a leave with nobody declined only counts");
-    check(nobody.declinedAll(dialog, kSecond, both, 2), "the remote that declines afterwards ends the wait");
-
-    activity_rules::DeclineTally single;
-    const uintptr_t one[] = {kSecond};
-    check(!leaveCancels(single, dialog, kSecond, one, 1), "the only remote leaving is the game's own teardown");
-
-    activity_rules::DeclineTally earlier;
-    leaveCancels(earlier, dialog, kThird, both, 2);
-    check(!earlier.declinedAll(rules::declineKey(2, kMission), kSecond, both, 2), "a leaver of an earlier wait does not count for a new one");
-}
-
 void theNamesAndFlags() {
     char16_t out[kNameCapacity];
     const std::u16string_view one[] = {u"Ana"};
@@ -151,7 +114,6 @@ int main() {
     thePromptAndAccept();
     thePairRemote();
     theReplayAndKeys();
-    theReplayLeaveRule();
     theNamesAndFlags();
     return g_failures == 0 ? 0 : 1;
 }

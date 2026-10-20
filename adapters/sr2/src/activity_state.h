@@ -20,6 +20,24 @@ int32_t runningActivityType();
 // The member a message came from: [ctx+4] of the context a message handler gets, 0 when there is none.
 uintptr_t senderOf(uintptr_t context);
 
+// The decline of a request from a member that left, laid out as the game's answer handlers read a decline message: the reason byte
+// (0 = MISSION_PARTNER_DECLINED), a cursor at 0 and the message context whose member sits at +4. The handlers take the parts by address.
+class LeaverDecline {
+public:
+    explicit LeaverDecline(uintptr_t leaver) { context_[1] = static_cast<uint32_t>(leaver); }
+
+    uint32_t message() const { return addressOf(message_); }
+    uint32_t cursor() const { return addressOf(&cursor_); }
+    uint32_t context() const { return addressOf(context_); }
+
+private:
+    static uint32_t addressOf(const void* part) { return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(part)); }
+
+    uint8_t message_[1] = {0};
+    uint32_t cursor_ = 0;
+    uint32_t context_[2] = {0, 0};
+};
+
 // The remote members that are in the game, written to `members`; their count.
 size_t remoteMembersInGame(uintptr_t (&members)[activity_rules::kMaxMembers]);
 

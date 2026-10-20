@@ -346,22 +346,19 @@ void replayWaitLeaverDeclines(uintptr_t leaver) {
     if (!activity_state::isHost() || readByte(sr2::kReplayAsker) == 0 || readDword(sr2::kReplayDialog) == 0) return;
     uintptr_t inGame[activity_rules::kMaxMembers];
     const size_t count = activity_state::remoteMembersInGame(inGame);
-    uintptr_t remaining[activity_rules::kMaxMembers];
-    const size_t stay = rules::withoutMember(inGame, count, leaver, remaining);
-    if (stay == 0) return;
-    bool declinedAll = false;
+    activity_rules::DeclineTally::LeaveOutcome outcome{};
     size_t declined = 0;
     {
         const std::lock_guard<std::mutex> lock(g_replayTallyLock);
-        declinedAll = g_replayTally.declinedAll(readDword(sr2::kReplayDialog), leaver, remaining, stay);
+        outcome = g_replayTally.leave(readDword(sr2::kReplayDialog), leaver, inGame, count);
         declined = g_replayTally.declinedCount();
     }
-    const bool cancel = rules::replayLeaveCancels(stay, declinedAll);
+    if (outcome.staying == 0) return;
     if (g_trace) {
         logger::write("trace: mission flow: slot %u left the replay wait: counted as a decline, %zu declined, %zu remaining -> %s",
-                      mission_flow::slotOf(leaver), declined, stay, cancel ? "cancelled" : "still waiting");
+                      mission_flow::slotOf(leaver), declined, outcome.staying, outcome.ends ? "cancelled" : "still waiting");
     }
-    if (cancel) guest_call::call(sr2::kReplayCancel, {});
+    if (outcome.ends) guest_call::call(sr2::kReplayCancel, {});
 }
 
 PARTNER_WRAP_STUB(startPromptAnswerStub, startPromptAnswer, 0)

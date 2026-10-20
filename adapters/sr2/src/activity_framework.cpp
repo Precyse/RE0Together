@@ -1,12 +1,12 @@
 // Thunks of the activity framework: the race invite memory, the start request handshake, the cleanup message and the start
 // position.
+#include "activity_declines.h"
 #include "activity_rules.h"
 #include "activity_state.h"
 #include "activity_thunks.h"
 #include "guest_call.h"
 #include "log.h"
 #include "memory.h"
-#include "mission_flow_rules.h"
 #include "partner_scope.h"
 #include "remote_players.h"
 #include "script_override.h"
@@ -24,8 +24,6 @@ void* g_raceRequestOriginal = nullptr;
 
 const uintptr_t g_declineHandler = sr2::kDeclineHandler;
 
-activity_rules::DeclineTally g_declineTally;
-
 // AF5: the member that invites this machine to a race is remembered for the answer, which is sent from a dialog (the
 // sender scope of milestone 9 only covers the handler).
 void __cdecl rememberRaceInviter(GuestFrame* frame) {
@@ -36,20 +34,10 @@ void __cdecl rememberRaceInviter(GuestFrame* frame) {
 }
 
 // AF6: a decline, busy or low respect reply cancels the start for everyone only once every remote member in the game
-// has declined. Nonzero: run the game's decline handler.
+// has declined (activity_declines). Nonzero: run the game's decline handler.
 uint32_t __cdecl declineEnds(uintptr_t context) {
     const uintptr_t member = activity_state::senderOf(context);
-    if (!member) return 1;
-    uintptr_t required[activity_rules::kMaxMembers];
-    const size_t count = activity_state::remoteMembersInGame(required);
-    const uint32_t pending = readDword(sr2::kPendingMissionId);
-    const uint32_t key = mission_flow_rules::declineKey(readDword(sr2::kStartWaitDialog), pending);
-    const bool all = g_declineTally.declinedAll(key, member, required, count);
-    if (activity_state::tracing()) {
-        logger::write("trace: start declined by member 0x%X for request %u, %s", static_cast<unsigned>(member), pending,
-                      all ? "every remote has declined, the start ends" : "the start goes on");
-    }
-    return all ? 1 : 0;
+    return !member || activity_declines::startDeclined(member) ? 1 : 0;
 }
 
 // The host's decline branch called the handler with edx = the buffer and (cursor, context) on the stack, which the
