@@ -94,6 +94,23 @@ public:
         }
     }
 
+    // The item at `key` is known to have left the floor.
+    bool consumed(const Key& key) const {
+        for (const Entry& entry : entries_) {
+            if (entry.consumed && sameItem(entry.key, key)) return true;
+        }
+        return false;
+    }
+
+    // Every consumed item: the takes since the last save or load, oldest first.
+    std::vector<Key> consumedKeys() const {
+        std::vector<Key> keys;
+        for (const Entry& entry : entries_) {
+            if (entry.consumed) keys.push_back(entry.key);
+        }
+        return keys;
+    }
+
     // A save or a load makes the game's own data current.
     void clear() { entries_.clear(); }
 

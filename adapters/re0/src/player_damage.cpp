@@ -6,11 +6,13 @@
 #include <vector>
 
 #include "character_owner.h"
+#include "crash_dump.h"
 #include "debug_stats.h"
 #include "game.h"
 #include "game_tick.h"
 #include "hooks.h"
 #include "log.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -56,6 +58,21 @@ void __fastcall onDeathDetour(void* think, void* edx, void* player) {
     }
 }
 
+// State mode: the dead character's puppet never runs its death states (its think is held), and those states are what ask for the
+// game over screen on the owner's machine. The survivor asks the engine's own game over request for the dead character; the
+// request returns at once when the Dead phase is already current or requested.
+void requestGameOver(uintptr_t dead) {
+    const uintptr_t gameOver = game::readPointer(game::kGameOverGlobal);
+    if (!gameOver) return;
+    __try {
+        game::callThiscall<void>(game::kGameOverRequestFunction, reinterpret_cast<void*>(gameOver),
+                                 reinterpret_cast<void*>(dead), game::kGameOverCauseDeath);
+    } __except (crash_dump::reportCaught(GetExceptionInformation(), "player_damage: game over request")) {
+        return;
+    }
+    logger::write("player_damage: game over requested for the dead partner");
+}
+
 void applyPendingDeaths() {
     std::vector<uint8_t> batch;
     {
@@ -71,6 +88,7 @@ void applyPendingDeaths() {
         g_originalOnDeath(reinterpret_cast<void*>(think), nullptr, reinterpret_cast<void*>(player));
         debug_stats::count(debug_stats::Counter::DeathsApplied);
         logger::write("player_damage: remote character %u died", id);
+        if (state_mode::on()) requestGameOver(player);
     }
 }
 

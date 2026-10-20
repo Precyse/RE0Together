@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <vector>
 
 #include "item_ledger_rule.h"
 
@@ -45,11 +46,18 @@ Resolution resolveTake(const Take& take);
 void resetTake();
 
 // An item was put on the floor, by anyone and from any source: whatever the ledger holds for that spot is gone with it.
-// Host only (ignored elsewhere). Any thread.
+// Every machine keeps the journal; only the host grants from it. Any thread.
 void notePut(const Key& key);
 
-// An item left the floor, taken by anyone (own take or a FLOOR_TAKE): it is consumed. Host only. Any thread.
+// An item left the floor, taken by anyone (own take or a FLOOR_TAKE): it is consumed. Any thread.
 void noteTaken(const Key& key);
+
+// Any thread: the items taken since the last save or load, which JOIN_EXTRAS tells a joiner.
+std::vector<Key> consumed();
+
+// Game thread, guest: the host's journal of takes arrives with the join snapshot; a take of one of those items ends at once
+// instead of asking the host.
+void adoptConsumed(const std::vector<Key>& keys);
 
 // A save or a load makes the game's own data current: forget the journal. Any thread.
 void clear();

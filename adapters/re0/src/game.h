@@ -423,6 +423,14 @@ constexpr uint32_t kSpawnRecordCount = 0x4e8;
 constexpr uintptr_t kSpawnRecordKindOffset = 0x4;
 constexpr uintptr_t kSpawnRecordIdOffset = 0x10;
 
+// state mode: phase 16 (session; docs/RE0_NOTES.md "State mode: session")
+// The game over request: thiscall on the sGameOver singleton (player, cause) ret 8, called by the death states of the think
+// (0x5036f0, 0x503840, 0x503a90), the GameOver script op and the up-cut. It returns at once when the room phase is already Dead
+// (0xe) or requested to be, otherwise it requests that phase. Cause 0 is a death.
+constexpr uintptr_t kGameOverGlobal = 0xdce11c;  // sGameOver*
+constexpr uintptr_t kGameOverRequestFunction = 0x5adca0;
+constexpr int32_t kGameOverCauseDeath = 0;
+
 // state mode: phase 15 (boss hand-over; docs/RE0_NOTES.md "State mode: boss hand-over")
 // The boss classes the hand-over covers: uEnemy31 (Proto-Tyrant), 37 and 38 (Stinger), 46 (Queen Leech), all Observer
 // policy. Marcus (43) and the second Queen Leech form (47) stay Legacy until phase 18. Each has the engine's unit move at

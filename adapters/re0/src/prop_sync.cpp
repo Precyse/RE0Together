@@ -390,4 +390,8 @@ std::vector<prop_rule::Record> commits() {
     return g_journal.records();
 }
 
+void adoptCommits(const std::vector<prop_rule::Record>& records) {
+    for (const prop_rule::Record& record : records) applyCommit(record);
+}
+
 }  // namespace prop_sync

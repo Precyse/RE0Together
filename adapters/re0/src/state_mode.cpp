@@ -11,6 +11,7 @@
 #include "flag_sequencer.h"
 #include "game_tick.h"
 #include "item_ledger.h"
+#include "join_extras.h"
 #include "log.h"
 #include "pose_capture.h"
 #include "prop_sync.h"
@@ -18,6 +19,7 @@
 #include "room_authority.h"
 #include "room_move.h"
 #include "scene.h"
+#include "session_ready.h"
 #include "slow_frame.h"
 #include "state_net.h"
 #include "weapon_fx_capture.h"
@@ -25,7 +27,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 16;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip, prop sync, boss hand-over
+constexpr unsigned kModuleCount = 18;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip, prop sync, boss hand-over, join extras, session ready
 
 std::atomic<bool> g_on{false};
 
@@ -64,6 +66,9 @@ void enableAll(NetClient& net) {
     if (prop_sync::enable()) ++enabled;
     // After the enemy observer: a room that changes hands is seen after the observer's own hand-over.
     if (boss_handover::enable()) ++enabled;
+    // The session handshake last: it reads the claims, commits, ledger and flag serial that the modules above keep.
+    if (join_extras::enable()) ++enabled;
+    if (session_ready::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }

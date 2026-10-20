@@ -108,6 +108,10 @@ enum class Counter : size_t {
     PropMovesApplied,
     PropMovesRefused,
     PropCommits,
+    SessionReadySent,
+    SessionReadyEchoes,
+    SessionReadyRefused,
+    SaveWaits,
     Count
 };
 

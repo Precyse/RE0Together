@@ -63,6 +63,19 @@ void sendClaims(const std::vector<AuthMessage>& claims) {
     for (const AuthMessage& claim : claims) state_net::send(room_authority_wire::kMsgClaim, true, proto::bytesOf(claim));
 }
 
+// Hands one message to the table under the lock; a refusal is counted and logged.
+void apply(uint16_t type, uint8_t sender, const AuthMessage& message) {
+    std::lock_guard lock(g_mutex);
+    g_assigning = sender != message.owner;
+    const Outcome outcome = g_table.onMessage(room_authority_wire::tableKind(type), sender, message);
+    g_assigning = false;
+    const auto reason = authority::rejectReason(outcome);
+    if (!reason) return;
+    reject_counters::count(type, *reason);
+    logger::write("room_authority: scene 0x%02x owner slot %d epoch %u (refused %s)", static_cast<unsigned>(message.id),
+                  shownSlot(g_table.ownerOf(message.id)), g_table.epochOf(message.id), reject_counters::name(*reason));
+}
+
 // Net thread, through the frame router: any peer may send; the table's own sender rules judge the message.
 void onMessage(const GameFrame& frame) {
     AuthMessage message;
@@ -71,15 +84,7 @@ void onMessage(const GameFrame& frame) {
         logger::writeUnlessRepeated("room_authority: type 0x%04x from slot %u refused malformed", frame.type, frame.slot);
         return;
     }
-    std::lock_guard lock(g_mutex);
-    g_assigning = frame.slot != message.owner;
-    const Outcome outcome = g_table.onMessage(room_authority_wire::tableKind(frame.type), frame.slot, message);
-    g_assigning = false;
-    const auto reason = authority::rejectReason(outcome);
-    if (!reason) return;
-    reject_counters::count(frame.type, *reason);
-    logger::write("room_authority: scene 0x%02x owner slot %d epoch %u (refused %s)", static_cast<unsigned>(message.id),
-                  shownSlot(g_table.ownerOf(message.id)), g_table.epochOf(message.id), reject_counters::name(*reason));
+    apply(frame.type, frame.slot, message);
 }
 
 // The own character is in the loaded room; a host without a peer yet already plays its chosen character.
@@ -162,13 +167,15 @@ void onSession(const SessionSnapshot& session) {
     sendClaims(claims);
 }
 
-void resendClaims() {
-    std::vector<AuthMessage> claims;
-    {
-        std::lock_guard lock(g_mutex);
-        claims = g_table.claimsOf(g_local);
-    }
-    sendClaims(claims);
+std::vector<room_authority_wire::AuthMessage> claims() {
+    std::lock_guard lock(g_mutex);
+    return g_table.claimsOf(g_local);
+}
+
+void resendClaims() { sendClaims(claims()); }
+
+void applyClaims(uint8_t sender, const std::vector<room_authority_wire::AuthMessage>& batch) {
+    for (const AuthMessage& claim : batch) apply(room_authority_wire::kMsgClaim, sender, claim);
 }
 
 bool runsHere(uint16_t sceneId) {

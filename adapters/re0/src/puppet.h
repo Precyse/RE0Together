@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "net_client.h"
+#include "peer_sight.h"
 #include "stream_clock.h"
 
 // Receiver side of partner_mode=state (docs/RE0_NOTES.md "Pose puppet"): the remote-owned character is a puppet. Its
@@ -32,6 +33,10 @@ void onFrame(const GameFrame& frame);
 
 // The room (scene id) named by the newest pose of the driving peer, scene::kNone before the first one. Any thread.
 uint16_t ownerRoom();
+
+// What the newest pose of peer `slot` says (room, load serial, think group and state, arrival), or nothing before its first
+// pose or when `slot` is not the driving peer. Any thread.
+std::optional<peer_sight::Sight> latestPose(uint8_t slot);
 
 // A copy of the clock this machine keeps for peer `slot` (the one the puppet, weapon effects and enemy streams of that
 // peer are shown by), or nothing before the peer's first message. Any thread.

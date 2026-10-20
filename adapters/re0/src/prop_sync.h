@@ -24,4 +24,8 @@ event_rule::PropOwner triggerOwner(uint16_t scene, uint8_t unit);
 // Any thread: the commits this machine knows (the newest per box); what a joining guest is told.
 std::vector<prop_rule::Record> commits();
 
+// Guest: the commits a joining host told (JOIN_EXTRAS) are taken like the host's PROP_COMMIT messages: the journal knows who
+// pushed each box, and a box of the loaded room ends at its committed pose.
+void adoptCommits(const std::vector<prop_rule::Record>& records);
+
 }  // namespace prop_sync

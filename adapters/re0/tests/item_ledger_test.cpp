@@ -130,6 +130,24 @@ void testBounded() {
           "the oldest entry was dropped");
 }
 
+void testConsumedJournal() {
+    rule::Ledger ledger;
+    ledger.request(herbAt(kSpot), kGuest, kStart);
+    check(!ledger.consumed(herbAt(kSpot)), "a grant is not a consumed item");
+    ledger.taken(herbAt(kSpot));
+    ledger.taken({kScene, kAmmo, {500.0f, 0.0f, 0.0f}});
+    check(ledger.consumed(herbAt(kSpot)), "a taken item is consumed");
+    check(!ledger.consumed(herbAt({kSpot[0] + rule::kSameItemDistance * 2, kSpot[1], kSpot[2]})), "an item far away is not");
+    check(ledger.consumedKeys().size() == 2, "the journal lists the consumed items");
+    ledger.put(herbAt(kSpot));
+    check(!ledger.consumed(herbAt(kSpot)) && ledger.consumedKeys().size() == 1, "a put at the spot makes it takeable again");
+    rule::Ledger joiner;
+    for (const rule::Key& key : ledger.consumedKeys()) joiner.taken(key);
+    check(joiner.consumed({kScene, kAmmo, {500.0f, 0.0f, 0.0f}}), "a joiner that adopts the journal knows the item is gone");
+    ledger.clear();
+    check(ledger.consumedKeys().empty(), "a save forgets the journal");
+}
+
 void testHoldGrantedAfterAnswer() {
     rule::TakeHold hold;
     check(hold.step(kStart, std::nullopt) == Step::Submit, "an idle hold asks to submit");
@@ -208,6 +226,7 @@ int main() {
     testPutForgets();
     testClearOnSave();
     testBounded();
+    testConsumedJournal();
     testHoldGrantedAfterAnswer();
     testHoldRefused();
     testHoldTimesOut();

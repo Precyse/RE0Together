@@ -21,6 +21,13 @@ void submitLocal(const std::vector<flag_diff::Change>& changes);
 // a gap in their numbers).
 std::vector<flag_diff::Change> collect(const flag_diff::Words& words);
 
+// Game thread, host: the serial of the last commit issued, 0 before the first (what JOIN_EXTRAS tells a joiner).
+uint32_t issuedSerial();
+
+// Game thread, guest: the join snapshot just applied held every commit up to `serial`; the next one in order is
+// serial + 1 and older ones are duplicates. Call after `reset` (flag_sync::applySnapshot).
+void adoptSerial(uint32_t serial);
+
 // Game thread: forget the order and the unanswered proposals (the link dropped, or a snapshot replaced the flags).
 void reset();
 
