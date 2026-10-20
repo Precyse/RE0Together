@@ -102,6 +102,38 @@ void testLead() {
     check(rule::leadsHere(false, false), "nobody follows: the machine that has it leads");
 }
 
+void testBusyThreads() {
+    constexpr uint32_t kStart = 100000;
+    rule::Activity thread;
+    check(!thread.busy(kStart), "a thread that has done nothing is not busy");
+    thread.note(OpRole::Run, kStart);
+    thread.note(OpRole::Wait, kStart + 10);
+    check(!thread.busy(kStart + 20), "a thread that only polls (Run and Wait ops) is never busy");
+    check(!thread.busy(kStart + 60000), "however long it runs");
+    for (const OpRole role : {OpRole::LeaderOnly, OpRole::Body, OpRole::Switch}) {
+        rule::Activity acting;
+        acting.note(role, kStart);
+        check(acting.busy(kStart) && acting.busy(kStart + rule::kBusyHoldMs - 1), "a message, door, body or switch op makes it busy");
+        check(!acting.busy(kStart + rule::kBusyHoldMs), "it stops being busy after the hold");
+    }
+    rule::Activity message;
+    message.note(rule::roleOf(rule::op::kMes), kStart);
+    check(message.busy(kStart + 1), "Mes is busy");
+    message.note(rule::roleOf(rule::op::kWait), kStart + 1500);
+    check(message.busy(kStart + 1999), "a wait between busy ops does not end the busy time");
+    message.note(rule::roleOf(rule::op::kMes), kStart + 1900);
+    check(message.busy(kStart + 3000), "a long message that is dispatched every frame keeps it busy");
+    check(!message.busy(kStart + 1900 + rule::kBusyHoldMs), "and it ends the hold after the last one");
+    rule::Activity wrapped;
+    constexpr uint32_t kNearWrap = 0xfffffff0u;
+    wrapped.note(OpRole::LeaderOnly, kNearWrap);
+    check(wrapped.busy(kNearWrap + 100) && !wrapped.busy(kNearWrap + rule::kBusyHoldMs), "the hold survives the clock wrapping");
+    check(!rule::makesBusy(rule::roleOf(rule::op::kFrame)) && !rule::makesBusy(rule::roleOf(5000)),
+          "Frame and unknown opcodes do not");
+    check(rule::makesBusy(rule::roleOf(rule::op::kDoor)) && rule::makesBusy(rule::roleOf(rule::op::kSubMove)),
+          "doors and body ops do");
+}
+
 void testStartFate() {
     using rule::StartFate;
     check(rule::startFate(kRoom, kRoom, false, 0) == StartFate::Apply, "same room: follow");
@@ -218,6 +250,7 @@ int main() {
     testSubjects();
     testBodyRun();
     testClimbPlacement();
+    testBusyThreads();
     testStartFate();
     testObstacleTriggers();
     testWire();

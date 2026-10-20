@@ -15,6 +15,7 @@ constexpr uint8_t kResultKilled = 3;  // wire only: the leader's thread vanished
 
 constexpr int64_t kStallMs = 3000;          // a followed op still running this long after the leader finished it ends
 constexpr int64_t kPendingStartMs = 10000;  // a start for a room this machine is still loading waits this long
+constexpr uint32_t kBusyHoldMs = 2000;       // a thread stays busy this long after an op that does something (the waits between are short)
 
 // Who may fire a trigger. Local conditions read only the controlled character (its zone, pad, inventory, the entry it
 // came in by, the item it is using): each machine keeps its own character controlled, so they fire where that player
@@ -132,6 +133,29 @@ constexpr OpRole roleOf(uint16_t opcode) {
             return opcode >= kUpCutFirst && opcode <= kUpCutLast ? OpRole::LeaderOnly : OpRole::Run;
     }
 }
+
+// ---- Busy threads (partner_mode=state: what a door follow and the host's save gate ask) ----
+// A led or followed thread is busy while it does something the players see or the save captures: its current op is a
+// message, door, item screen, equip or other LeaderOnly op, a Body op or a Switch. A thread that only polls (Run ops
+// and waits: looping room threads, a flag watcher) is never busy, however long it runs. The waits between a script's
+// busy ops are short, so a busy op keeps the thread busy for kBusyHoldMs.
+constexpr bool makesBusy(OpRole role) { return role == OpRole::LeaderOnly || role == OpRole::Body || role == OpRole::Switch; }
+
+class Activity {
+public:
+    // The thread is at an op of `role` at `nowMs` (called every time its dispatch runs, so a long message counts).
+    void note(OpRole role, uint32_t nowMs) {
+        if (!makesBusy(role)) return;
+        seen_ = true;
+        lastMs_ = nowMs;
+    }
+
+    bool busy(uint32_t nowMs) const { return seen_ && nowMs - lastMs_ < kBusyHoldMs; }
+
+private:
+    bool seen_ = false;
+    uint32_t lastMs_ = 0;
+};
 
 // ---- Body ops (partner_mode=state, docs/RE0_NOTES.md "State mode: scripts and cutscenes") ----
 // A Body op names the character it writes with a subject word (the first operand, the third for CharPoint): 0x20000 the

@@ -46,10 +46,11 @@ constexpr size_t kStepsHeaderSize = 4;
 // Net thread: EVENT_START and EVENT_STEPS from the peer.
 void onFrame(const GameFrame& frame);
 
-// Game thread: this machine leads a room script thread that is still running.
+// Game thread: this machine leads a room script thread that is busy (event_rule::Activity: at a message, door, body or
+// other op that does something, or did within the last 2 s); a thread that only polls does not count.
 bool leadsAny();
 
-// Game thread: this machine follows a room script thread the peer leads that is still running.
+// Game thread: this machine follows a room script thread the peer leads that is busy (same meaning).
 bool followsAny();
 
 // Hooks the trigger start, the opcode dispatch and the script update.

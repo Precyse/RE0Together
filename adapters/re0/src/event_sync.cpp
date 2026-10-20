@@ -26,6 +26,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "party_mode.h"
+#include "pose_wire.h"
 #include "prop_sync.h"
 #include "protocol.h"
 #include "scene.h"
@@ -70,6 +71,7 @@ struct Slot {
     bool announced = false;               // Leads: the peer has the thread, so it gets the steps too
     Character subject = Character::Unknown;  // the character the script treats as the player
     bool partnerFollows = true;           // no TraceOff in this thread yet
+    event_rule::Activity activity;        // when the thread last was at an op that does something (leadsAny / followsAny)
     uint32_t ran = 0, skipped = 0, waitsSkipped = 0, branches = 0, forced = 0, jumps = 0;
     int64_t maxLagMs = 0;
 };
@@ -369,6 +371,7 @@ int stepOver(uintptr_t thread, const Slot& slot, uint32_t pc, uint16_t opcode) {
 int runLeading(void* self, void* edx, uintptr_t thread, Slot& slot) {
     const uint32_t pc = pcOf(thread);
     const uint16_t opcode = opcodeAt(thread);
+    if (state_mode::on()) slot.activity.note(event_rule::roleOf(opcode), pose_wire::clockMs());
     switch (event_rule::roleOf(opcode)) {
         case OpRole::Switch: {
             slot.subject = character_owner::other(slot.subject);
@@ -443,6 +446,8 @@ int takeLeadersStep(uintptr_t thread, Slot& slot, const QueuedStep& queued) {
 
 int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
     QueuedStep queued;
+    // The pc stays on the op the leader is still running, so a long message of the leader's keeps this thread busy.
+    if (state_mode::on()) slot.activity.note(event_rule::roleOf(opcodeAt(thread)), pose_wire::clockMs());
     if (!frontStep(queueId(slot), queued)) return event_rule::kResultYield;  // the leader has not finished this op yet
     if (queued.step.result == event_rule::kResultKilled) {
         popStep(queueId(slot));
@@ -727,19 +732,21 @@ void onFrame(const GameFrame& frame) {
     }
 }
 
-bool leadsAny() {
+namespace {
+
+bool anyBusy(Role role) {
+    const uint32_t now = pose_wire::clockMs();
     for (const Slot& slot : g_slots) {
-        if (slot.role == Role::Leads) return true;
+        if (slot.role == role && slot.activity.busy(now)) return true;
     }
     return false;
 }
 
-bool followsAny() {
-    for (const Slot& slot : g_slots) {
-        if (slot.role == Role::Follows) return true;
-    }
-    return false;
-}
+}  // namespace
+
+bool leadsAny() { return anyBusy(Role::Leads); }
+
+bool followsAny() { return anyBusy(Role::Follows); }
 
 bool enable(NetClient& net) {
     g_net = &net;
