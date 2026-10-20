@@ -30,13 +30,6 @@ PING_BYTES = 20
 PONG_BYTES = 120
 JOIN_REQUEST_BYTES = 115
 MIN_PINGS = 3
-USABLE_LAST_OCTETS = 254
-
-
-def virtual_address(steam_id):
-    """The dotted 10.a.b.c of a SteamID64 (tunnel_rules::virtualAddress)."""
-    account = steam_id & 0xFFFFFFFF
-    return f"10.{(account >> 16) & 0xFF}.{(account >> 8) & 0xFF}.{1 + (account & 0xFF) % USABLE_LAST_OCTETS}"
 
 
 class Process:
@@ -97,8 +90,8 @@ def main():
     failures = []
     work = Path(tempfile.mkdtemp(prefix="cf_tunnel_adapter_"))
     ping_file, pong_file = work / "ping.bin", work / "pong.bin"
-    own = virtual_address(fake_launcher.DEFAULT_LOCAL_ID)
-    peer = virtual_address(fake_launcher.DEFAULT_PEER_ID)
+    own = wire.virtual_address(fake_launcher.DEFAULT_LOCAL_ID)
+    peer = wire.virtual_address(fake_launcher.DEFAULT_PEER_ID)
 
     launcher, standin = exchange(["--role", "host", "--record", ping_file], "guest", failures, "guest send path")
     pings = datagrams(launcher, HOST_SLOT, wire.dotted(wire.BROADCAST), PING_BYTES)
