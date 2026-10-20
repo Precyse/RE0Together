@@ -55,6 +55,14 @@ void theRemoteVehicle() {
     check(!vehicle_seating_rules::isRemoteVehicle(kCarHandle, std::span<const uint32_t>{}), "without remotes nothing is a remote's car");
 }
 
+void theRidingPassenger() {
+    check(vehicle_seating_rules::ridesVehicle(kCarHandle, kCarHandle), "a human in the customised car rides it");
+    check(!vehicle_seating_rules::ridesVehicle(0x9999, kCarHandle), "a human in another car does not");
+    check(!vehicle_seating_rules::ridesVehicle(0, kCarHandle), "a human on foot does not ride a car");
+    check(!vehicle_seating_rules::ridesVehicle(0, 0), "on foot never matches vehicle 0: nobody is pulled out of nothing");
+    check(!vehicle_seating_rules::ridesVehicle(kCarHandle, 0), "no customised car matches nobody");
+}
+
 void theCheckpointHolder() {
     const std::array<uint8_t, 2> paired{1, 2};
     check(vehicle_seating_rules::restoreHolderSlot(2, paired) == 2, "a remembered slot that is still paired is kept");
@@ -80,6 +88,7 @@ int main() {
     theSeatCount();
     theTraffickingSeat();
     theRemoteVehicle();
+    theRidingPassenger();
     theCheckpointHolder();
     theTraceFilter();
     return g_failures == 0 ? 0 : 1;

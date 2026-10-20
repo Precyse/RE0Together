@@ -11,6 +11,7 @@
 #include "revive_state.h"
 #include "sr2_addresses.h"
 #include "thunk_frame.h"
+#include "vehicle_seating_rules.h"
 
 namespace {
 
@@ -22,6 +23,7 @@ constexpr size_t kLuaMaxFollowers = 1;
 constexpr size_t kLuaDismissAll = 2;
 constexpr size_t kLuaMeleeOnly = 3;
 constexpr size_t kFirstRemote = 0;
+constexpr size_t kExitFunctionCarArg = 13;  // B4: the exit function's [esp + 0x1C], seen from the six arguments pushed for the call (6 + 7 dwords)
 
 void* g_goDownOriginal = nullptr;
 void* g_luaOriginals[kLuaNativeCount] = {};
@@ -173,17 +175,20 @@ uintptr_t __cdecl remoteIfTeamDown(uintptr_t human) {
 // B3 (probe G): 1 when the passenger is a remote player human.
 uint32_t __cdecl isRemoteHuman(uintptr_t human) { return remote_players::isRemotePlayerHuman(human) ? 1 : 0; }
 
-// B4 (probe G): every remote riding in the local player's vehicle is teleported out of the customised car. Logs where
-// each remote ends up.
+// B4 (probe G): every remote riding in the customised car is teleported out with the six arguments of the local player's
+// teleport. The car is the object the exit function keeps at [esp + 0x1C] (its handle at +0x44), read from the stub's frame: the
+// local player has been teleported out of it by then, so its own vehicle handle can no longer name the car. Logs where each remote
+// ends up.
 void __cdecl teleportPassengers(const uint32_t* args) {
     FpuGuard guard;
-    const uintptr_t local = remote_players::localHuman();
-    const uint32_t vehicle = read32(local + sr2::kHumanVehicleOffset);
+    const uintptr_t car = args[kExitFunctionCarArg];
+    if (!car) return;
+    const uint32_t vehicle = read32(car + sr2::kObjectHandleOffset);
     remote_players::Snapshot snapshot;
     remote_players::take(snapshot);
     for (size_t i = 0; i < snapshot.pairing.count; ++i) {
         const uintptr_t human = snapshot.pairing.items[i].human;
-        if (!human || read32(human + sr2::kHumanVehicleOffset) != vehicle) continue;
+        if (!human || !vehicle_seating_rules::ridesVehicle(read32(human + sr2::kHumanVehicleOffset), vehicle)) continue;
         guest_call::call(sr2::kTeleportHuman, {.ecx = human}, {args[0], args[1], args[2], args[3], args[4], args[5]});
         const partner_rules::Vec3 at = remote_players::positionOf(human);
         logger::write("trace: probe G: remote 0x%X at %.1f %.1f %.1f after the customisation exit teleport",

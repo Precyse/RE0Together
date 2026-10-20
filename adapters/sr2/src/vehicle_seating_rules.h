@@ -41,6 +41,10 @@ constexpr bool isRemoteVehicle(uint32_t handle, std::span<const uint32_t> remote
     return handle != 0 && std::find(remoteVehicleHandles.begin(), remoteVehicleHandles.end(), handle) != remoteVehicleHandles.end();
 }
 
+// True when a human whose vehicle handle is `humanVehicle` rides in the vehicle `vehicle`. A vehicle of 0 is nobody's vehicle, so a human on foot
+// never matches it.
+constexpr bool ridesVehicle(uint32_t humanVehicle, uint32_t vehicle) { return vehicle != 0 && humanVehicle == vehicle; }
+
 // The remembered checkpoint holder while that session slot is still paired with a remote, else the default.
 constexpr int32_t restoreHolderSlot(int32_t remembered, std::span<const uint8_t> pairedSlots) {
     const bool slotFits = remembered >= 0 && remembered <= UINT8_MAX;
