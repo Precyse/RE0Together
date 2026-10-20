@@ -55,7 +55,7 @@ void sendPose(const pose_wire::Pose& pose) {
 }
 
 void afterMove(uintptr_t player) {
-    if (player != ownedPlayer() || !join_sync::caughtUp()) return;
+    if (player != ownedPlayer() || !join_sync::placed()) return;
     const uint32_t now = pose_wire::clockMs();
     if (!g_sampleTimer.due(now)) return;
     pose_wire::Pose pose;

@@ -44,6 +44,7 @@ std::mutex g_mutex;
 pose_timeline::Timeline g_timeline;  // guarded by g_mutex
 int g_sourceSlot = kNoSlot;          // guarded by g_mutex
 uint32_t g_ownerRoomSeq = 0;         // guarded by g_mutex: the sequence of the pose g_ownerRoom came from
+peer_sight::Sight g_latestSight{};   // guarded by g_mutex: the newest pose (by sequence); valid while g_ownerRoom is not scene::kNone
 std::array<stream_clock::StreamClock, kMaxPeerSlots> g_clocks;  // one per peer slot, guarded by g_mutex
 
 // Game thread only.
@@ -332,6 +333,7 @@ void onFrame(const GameFrame& frame) {
         if (g_ownerRoom == scene::kNone || stream_clock::after(pose->seq, g_ownerRoomSeq)) {
             g_ownerRoomSeq = pose->seq;
             g_ownerRoom = pose->room;
+            g_latestSight = {pose->room, pose->loadSerial, pose->group, pose->state, arrival};
         }
         g_hasPose = true;
         debug_stats::count(Counter::PosesReceived);
@@ -339,6 +341,12 @@ void onFrame(const GameFrame& frame) {
         g_timeline.addEvent(clock, *event, arrival);
         debug_stats::count(Counter::MotionEventsReceived);
     }
+}
+
+std::optional<peer_sight::Sight> latestPose(uint8_t slot) {
+    std::lock_guard lock(g_mutex);
+    if (static_cast<int>(slot) != g_sourceSlot || g_ownerRoom == scene::kNone) return std::nullopt;
+    return g_latestSight;
 }
 
 std::optional<stream_clock::StreamClock> clockFor(uint8_t slot) {

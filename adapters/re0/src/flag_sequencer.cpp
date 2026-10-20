@@ -141,6 +141,10 @@ std::vector<Change> collect(const Words& words) {
     return character_owner::isHost() ? collectAsHost(words) : collectAsGuest(words);
 }
 
+uint32_t issuedSerial() { return g_hostOrder.serial(); }
+
+void adoptSerial(uint32_t serial) { g_guestOrder.adopt(serial); }
+
 void reset() { g_guestOrder.reset(); }
 
 }  // namespace flag_sequencer

@@ -50,6 +50,9 @@ class HostOrder {
 public:
     Commit issue(uint8_t origin, std::vector<Change> changes) { return {++serial_, origin, std::move(changes)}; }
 
+    // The serial of the last commit issued, 0 before the first.
+    uint32_t serial() const { return serial_; }
+
 private:
     uint32_t serial_ = 0;
 };
@@ -67,6 +70,12 @@ public:
     }
     uint32_t expected() const { return last_ + 1; }
     void reset() { hasLast_ = false; }
+
+    // The join snapshot held every commit up to `serial` (the host's last when it read the flags): the next one is serial + 1.
+    void adopt(uint32_t serial) {
+        last_ = serial;
+        hasLast_ = true;
+    }
 
 private:
     Verdict take(uint32_t serial, Verdict verdict) {
@@ -138,6 +147,9 @@ public:
         }
         return receipt;
     }
+
+    // The snapshot just applied held every commit up to `serial`.
+    void adopt(uint32_t serial) { tracker_.adopt(serial); }
 
     void reset() {
         tracker_.reset();

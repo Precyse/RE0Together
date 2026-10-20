@@ -141,6 +141,8 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"demo skips sent/applied", format(L"%u / %u", total(s, Counter::DemoSkipsSent), total(s, Counter::DemoSkipsApplied)), false});
     lines.push_back({L"prop moves sent/applied/refused", format(L"%u / %u / %u", total(s, Counter::PropMovesSent), total(s, Counter::PropMovesApplied), total(s, Counter::PropMovesRefused)), false});
     lines.push_back({L"prop commits", format(L"%u", total(s, Counter::PropCommits)), false});
+    lines.push_back({L"session ready sent/echoed/refused", format(L"%u / %u / %u", total(s, Counter::SessionReadySent), total(s, Counter::SessionReadyEchoes), total(s, Counter::SessionReadyRefused)), false});
+    lines.push_back({L"saves waited", format(L"%u", total(s, Counter::SaveWaits)), false});
     lines.push_back({L"hit request sent/s", format(L"%u", rate(s, Counter::HitRequestSent)), false});
     lines.push_back({L"hit request recv/s", format(L"%u", rate(s, Counter::HitRequestReceived)), false});
     lines.push_back({L"hit applied sent/s", format(L"%u", rate(s, Counter::HitAppliedSent)), false});

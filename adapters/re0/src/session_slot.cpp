@@ -6,6 +6,7 @@
 
 #include "character_owner.h"
 #include "debug_overlay.h"
+#include "debug_stats.h"
 #include "floor_items_sync.h"
 #include "game.h"
 #include "game_state.h"
@@ -14,8 +15,10 @@
 #include "net_pad.h"
 #include "protocol.h"
 #include "room_phase.h"
+#include "save_gate.h"
 #include "save_redirect.h"
 #include "session_rule.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -84,6 +87,15 @@ bool __fastcall loadAltDetour(void* self, void* edx, int32_t slot, int32_t arg) 
     return accepted;
 }
 
+// State mode: the host's save waits until the partner stands in plain gameplay.
+bool partnerSettled() {
+    const save_gate_rule::Verdict verdict = save_gate::check();
+    if (verdict == save_gate_rule::Verdict::Plain) return true;
+    debug_stats::count(debug_stats::Counter::SaveWaits);
+    logger::writeUnlessRepeated("session_slot: save waits for plain gameplay (%s)", save_gate_rule::name(verdict));
+    return false;
+}
+
 // Only the in-game save screen is a player's save; the game also saves on its own at boot.
 bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
     const auto route = session_rule::saveRoute(isPlayerSlot(slot), game_state::roomPhase(), session_slot::guestSession(),
@@ -94,6 +106,7 @@ bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
         return false;
     }
     const bool coop = route == session_rule::SaveRoute::CoopSlot;
+    if (coop && state_mode::on() && !partnerSettled()) return false;
     const int32_t target = coop ? kCoopSlot : slot;
     if (coop && slot != target) logger::write("session_slot: save to slot %d kept in the co-op slot %d", slot, target);
     const bool accepted = g_originalSave(self, edx, target);

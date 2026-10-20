@@ -49,6 +49,9 @@ void onFrame(const GameFrame& frame);
 // Game thread: this machine leads a room script thread that is still running.
 bool leadsAny();
 
+// Game thread: this machine follows a room script thread the peer leads that is still running.
+bool followsAny();
+
 // Hooks the trigger start, the opcode dispatch and the script update.
 bool enable(NetClient& net);
 

@@ -94,6 +94,27 @@ void testSerialTracker() {
     check(wrapping.accept(0) == rule::Verdict::InOrder, "serials wrap");
 }
 
+void testJoinSerial() {
+    rule::HostOrder host;
+    check(host.serial() == 0, "a host that issued nothing reports serial 0");
+    host.issue(kHost, {});
+    host.issue(kHost, {});
+    check(host.serial() == 2, "the host reports the serial of its last commit");
+
+    Words words{};
+    rule::GuestOrder guest;
+    guest.adopt(host.serial());
+    check(!guest.receive({2, kHost, {setBits(kWord, kBit)}}, kGuest, words).apply, "a commit the snapshot held is a duplicate");
+    check(words[kWord] == 0, "a duplicate changes nothing");
+    const rule::Receipt next = guest.receive({3, kHost, {setBits(kWord, kBit)}}, kGuest, words);
+    check(next.apply && !next.gap, "the commit after the adopted serial is in order");
+    check(guest.receive({5, kHost, {}}, kGuest, words).gap, "a skipped serial after the adopted one is a gap");
+
+    rule::GuestOrder fresh;
+    fresh.adopt(0);
+    check(fresh.receive({1, kHost, {}}, kGuest, words).apply, "adopting serial 0 expects the first commit");
+}
+
 void testLedger() {
     rule::ProposalLedger ledger;
     ledger.proposed({setBits(kWord, kBit)});
@@ -193,6 +214,7 @@ int main() {
     testWire();
     testHostOrder();
     testSerialTracker();
+    testJoinSerial();
     testLedger();
     testRaceEndsAtTheHostsOrder();
     testHostClearAfterGuestSet();

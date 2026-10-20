@@ -734,6 +734,13 @@ bool leadsAny() {
     return false;
 }
 
+bool followsAny() {
+    for (const Slot& slot : g_slots) {
+        if (slot.role == Role::Follows) return true;
+    }
+    return false;
+}
+
 bool enable(NetClient& net) {
     g_net = &net;
     return hooks::install("sEventScript::startTriggerThread", game::kStartTriggerThreadFunction,

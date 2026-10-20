@@ -83,11 +83,22 @@ std::optional<rule::Answer> answerInFlight() {
     return g_received->answer;
 }
 
+bool journalSaysTaken(const Key& key) {
+    std::lock_guard lock(g_mutex);
+    return g_ledger.consumed(key);
+}
+
 // Starts the pickup's request. True when one went to the host.
 bool submit(const Take& take) {
     const Key key{take.scene, take.itemId, take.pos};
     if (character_owner::isHost()) {
         g_hold.settle(decide(key, character_owner::localSlot()).answer);
+        return false;
+    }
+    if (journalSaysTaken(key)) {
+        logger::write("item_ledger: take scene 0x%04x item 0x%02x refused (taken) from the journal", key.scene, key.itemId);
+        debug_stats::count(Counter::TakesRefused);
+        g_hold.settle(rule::Answer::Taken);
         return false;
     }
     ++g_requestSeq;
@@ -134,15 +145,23 @@ Resolution resolveTake(const Take& take) {
 void resetTake() { g_hold.reset(); }
 
 void notePut(const Key& key) {
-    if (!character_owner::isHost()) return;
     std::lock_guard lock(g_mutex);
     g_ledger.put(key);
 }
 
 void noteTaken(const Key& key) {
-    if (!character_owner::isHost()) return;
     std::lock_guard lock(g_mutex);
     g_ledger.taken(key);
+}
+
+std::vector<Key> consumed() {
+    std::lock_guard lock(g_mutex);
+    return g_ledger.consumedKeys();
+}
+
+void adoptConsumed(const std::vector<Key>& keys) {
+    std::lock_guard lock(g_mutex);
+    for (const Key& key : keys) g_ledger.taken(key);
 }
 
 void clear() {
