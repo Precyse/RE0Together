@@ -136,6 +136,7 @@ std::vector<Line> build(const Snapshot& s) {
     lines.push_back({L"door follows sent/accepted/rejected", format(L"%u / %u / %u", total(s, Counter::DoorFollowsSent), total(s, Counter::DoorFollowsAccepted), total(s, Counter::DoorFollowsRejected)), false});
     lines.push_back({L"contact hits sent/applied/dropped", format(L"%u / %u / %u", total(s, Counter::ContactHitsSent), total(s, Counter::ContactHitsApplied), total(s, Counter::ContactHitsDropped)), false});
     lines.push_back({L"leases granted/started/ended/refused poses", format(L"%u / %u / %u / %u", total(s, Counter::LeasesGranted), total(s, Counter::LeasesStarted), total(s, Counter::LeasesEnded), total(s, Counter::LeasePosesRefused)), false});
+    lines.push_back({L"boss hand-overs/cancelled/frozen", format(L"%u / %u / %u", total(s, Counter::BossHandOvers), total(s, Counter::BossCancels), total(s, Counter::BossFrozen)), false});
     lines.push_back({L"event body ops skipped", format(L"%u", total(s, Counter::EventBodyOpsSkipped)), false});
     lines.push_back({L"demo skips sent/applied", format(L"%u / %u", total(s, Counter::DemoSkipsSent), total(s, Counter::DemoSkipsApplied)), false});
     lines.push_back({L"prop moves sent/applied/refused", format(L"%u / %u / %u", total(s, Counter::PropMovesSent), total(s, Counter::PropMovesApplied), total(s, Counter::PropMovesRefused)), false});

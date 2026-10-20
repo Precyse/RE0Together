@@ -423,6 +423,12 @@ constexpr uint32_t kSpawnRecordCount = 0x4e8;
 constexpr uintptr_t kSpawnRecordKindOffset = 0x4;
 constexpr uintptr_t kSpawnRecordIdOffset = 0x10;
 
+// state mode: phase 15 (boss hand-over; docs/RE0_NOTES.md "State mode: boss hand-over")
+// The boss classes the hand-over covers: uEnemy31 (Proto-Tyrant), 37 and 38 (Stinger), 46 (Queen Leech), all Observer
+// policy. Marcus (43) and the second Queen Leech form (47) stay Legacy until phase 18. Each has the engine's unit move at
+// slot 8 (0x526b30, the CharPause path), its own update at slot 41 and setAction at slot 63 (0x4cc670; 0x4bbc70 for 46).
+constexpr std::array<uintptr_t, 4> kBossVtables = {0xcbfe58, 0xcc08c0, 0xcc5ae8, 0xcc3248};
+
 // state mode: phase 7 (enemy observers, docs/RE0_NOTES.md "State mode: enemy observers")
 // Slot 8 of all 38 enemy vtables and both players: fastcall(this), no stack arguments. When sGameInfo +0x50 bit 0 (the
 // CharPause bit, script op 160; tested at 0x526c7d) is set it runs only slot 31 (motion), the root-motion cancel and

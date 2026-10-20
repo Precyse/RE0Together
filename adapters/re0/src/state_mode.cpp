@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "boss_handover.h"
 #include "contact_net.h"
 #include "demo_skip.h"
 #include "door_follow.h"
@@ -24,7 +25,7 @@
 
 namespace {
 
-constexpr unsigned kModuleCount = 15;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip, prop sync
+constexpr unsigned kModuleCount = 16;  // load serial observer, pose capture, puppet, room authority, flag sequencer, weapon fx capture, weapon fx replay, contact net, enemy lease, enemy observer, item ledger, room move, door follow, demo skip, prop sync, boss hand-over
 
 std::atomic<bool> g_on{false};
 
@@ -61,6 +62,8 @@ void enableAll(NetClient& net) {
     if (door_follow::enable()) ++enabled;
     if (demo_skip::enable()) ++enabled;
     if (prop_sync::enable()) ++enabled;
+    // After the enemy observer: a room that changes hands is seen after the observer's own hand-over.
+    if (boss_handover::enable()) ++enabled;
     logger::write("state_mode: on, %u modules enabled", enabled);
     if (enabled < kModuleCount) logger::write("adapter: state mode unavailable");
 }
