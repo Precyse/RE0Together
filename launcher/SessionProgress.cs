@@ -70,13 +70,15 @@ public static class StepCodec
 }
 
 /// <summary>How much of the host's save a guest has received: bytes arrived over the sizes announced so far. Fed from the
-/// FILE_BEGIN and FILE_CHUNK frames the session passes on; 0 before the first FILE_BEGIN.</summary>
+/// FILE_BEGIN and FILE_CHUNK frames the session passes on; 0 before the first FILE_BEGIN. A file the host sends again (a
+/// failed transfer, a rejoin) under a new transfer id replaces its earlier transfer instead of adding to the total.</summary>
 public sealed class SaveProgressMeter
 {
     private const int PercentScale = 100;
 
     private readonly Dictionary<uint, long> _sizes = new();
     private readonly Dictionary<uint, long> _received = new();
+    private readonly Dictionary<string, uint> _transferOf = new();
 
     public int Percent
     {
@@ -87,9 +89,16 @@ public sealed class SaveProgressMeter
         }
     }
 
-    /// <summary>A file starts (or starts again): its size joins the total and its received bytes restart.</summary>
-    public void OnBegin(uint id, uint size)
+    /// <summary>A file starts (or starts again): its size joins the total and its received bytes restart; an earlier transfer of
+    /// the same file no longer counts.</summary>
+    public void OnBegin(uint id, string name, uint size)
     {
+        if (_transferOf.Remove(name, out var earlier))
+        {
+            _sizes.Remove(earlier);
+            _received.Remove(earlier);
+        }
+        _transferOf[name] = id;
         _sizes[id] = size;
         _received[id] = 0;
     }

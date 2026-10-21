@@ -376,7 +376,7 @@ public sealed partial class App
     /// <summary>The save the host sends, as it arrives: the meter behind "Receiving save 40%".</summary>
     private void OnFileFrame(ulong sender, Frame frame)
     {
-        if (frame.Type == Msg.FileBegin && FileMessages.TryParseBegin(frame.Payload, out var begin)) _saveMeter.OnBegin(begin.Id, begin.Size);
+        if (frame.Type == Msg.FileBegin && FileMessages.TryParseBegin(frame.Payload, out var begin)) _saveMeter.OnBegin(begin.Id, begin.Name, begin.Size);
         else if (frame.Type == Msg.FileChunk && FileMessages.TryParseChunk(frame.Payload, out var chunk)) _saveMeter.OnChunk(chunk.Id, chunk.Data.Length);
     }
 

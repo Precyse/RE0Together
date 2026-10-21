@@ -59,18 +59,26 @@ public static class SessionProgressTests
         Check.That(meter.Percent == 0, "0 before the first FILE_BEGIN");
         meter.OnChunk(1, 50);
         Check.That(meter.Percent == 0, "a chunk of a file never announced counts for nothing");
-        meter.OnBegin(1, 100);
-        meter.OnBegin(2, 300);
+        meter.OnBegin(1, "a", 100);
+        meter.OnBegin(2, "b", 300);
         meter.OnChunk(1, 100);
         Check.That(meter.Percent == 25, "bytes over the sum of the announced sizes");
         meter.OnChunk(2, 150);
         Check.That(meter.Percent == 62, "a second file adds to both");
         meter.OnChunk(2, 5000);
         Check.That(meter.Percent == 100, "capped at 100");
-        meter.OnBegin(1, 100);
+        meter.OnBegin(1, "a", 100);
         Check.That(meter.Percent == 100, "a file announced again restarts only itself");
         meter.OnChunk(1, 100);
         Check.That(meter.Percent == 100, "and completes again");
+
+        var resent = new SaveProgressMeter();
+        resent.OnBegin(1, "a", 100);
+        resent.OnChunk(1, 50);
+        resent.OnBegin(2, "a", 100);
+        Check.That(resent.Percent == 0, "a file sent again under a new transfer id replaces its earlier transfer");
+        resent.OnChunk(2, 100);
+        Check.That(resent.Percent == 100, "so the resent set still reaches 100");
     }
 
     private static void Is(StepInputs inputs, SessionStep expected, string what) =>
