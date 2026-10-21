@@ -83,8 +83,10 @@ With the game as host the fake starts the two launchers itself (`launcher\test\c
 | `t11_boss` | `run t11_boss`; `run t11_boss --seat host --round door`, `--round vanish` | both |
 | `t12_items` | `run t12_items --scratch`, `run t12_items --seat host` | both |
 | `t13_death_save` | `run t13_death_save --scratch` | guest |
-| `t14_link` | `run t14_link` (the shaper: `--delay-ms 40 --jitter-ms 30 --loss 0.02` is built in) | guest |
+| `t14_link` | `run t14_link` (its own shaping, `latency_ms 40 jitter_ms 30 loss 0.02` on the fake's outgoing frames, is built in) | guest |
 | `record` | `run record` (Enter marks the start and end of a pose clip) | guest |
+
+Any scenario can run over an impaired link: `--link <profile>` (`lan`, `good_wifi`, `bad_wifi`, `mobile_tether`, `transatlantic`, `hell`; `tools\re0\fake_peer\profiles.json`) shapes both directions, `--delay-ms`, `--jitter-ms` and `--loss` change single settings on top, and `--seed N` repeats a run. A run without `--seed` picks one; it is printed at the start and written as `link profile <name> seed <N>` in `report.txt`. Reliable frames only get delay (and stalls); unreliable frames get loss with bursts, reorder, duplicates and the bandwidth cap.
 
 Scenarios that change the save's state need `--scratch` on a scratch save and say so first. Run in this order to fill the recordings later scenarios replay: `t2_echo`, `t4_join`, `t9_rooms`, `t5_observe`, `t8_contact`, `t12_items`, `t10_props`, `t7_flags`, `t13_death_save`, `t11_boss`, `t14_link`; a scenario with no recording for something skips that gate and names the run that fills it. `python tools\re0\fake_peer gates <scenario> [--seat host]` prints a scenario's gates, `library build` re-indexes the recordings.
 

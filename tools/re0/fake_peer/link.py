@@ -1,11 +1,10 @@
 """Transports to the game's side of the session, heartbeats, the link shaper and the receive dispatch.
 
 `BridgeLink` connects to a launcher's loopback bridge as a second adapter (real launchers, or a hand-started one).
+Frames go through the link shaper in both directions (shaper.py).
 `StandinLink` listens as the game's own launcher (the game is the guest; no launcher runs): WELCOME, PEER_UP, heartbeats,
 PEER_DOWN and a new epoch on request. Both give the same `Link` surface: `send`, `session`, `on_frame`.
 """
-import heapq
-import random
 import socket
 import threading
 import time
@@ -13,8 +12,10 @@ from collections import Counter, defaultdict
 
 from fake_peer import wire
 from fake_peer.library import IN, OUT
+from fake_peer.shaper import Shaper, TimedQueue
 from fake_peer.wire import Frame, Msg
 
+FRAME_OVERHEAD_BYTES = 8  # length prefix, type, flags and slot: what a frame costs on the wire besides its payload
 HEARTBEAT_S = 1.0
 IDLE_POLL_S = 0.002
 CONNECT_RETRY_S = 0.25
@@ -25,54 +26,6 @@ FAKE_STEAM_ID = 76561190000000001
 FAKE_NAME = "fake peer"
 GAME_ID = "re0"
 GAME_PORT = 27960
-
-
-class ShaperConfig:
-    def __init__(self, delay_ms=0.0, jitter_ms=0.0, loss=0.0):
-        self.delay_ms, self.jitter_ms, self.loss = delay_ms, jitter_ms, loss
-
-
-class Shaper:
-    """Delay, jitter and loss for the frames the fake sends, plus `cut` and `stall` windows (a Steam link that stalls)."""
-
-    def __init__(self, config=None, rng=None, clock=time.monotonic):
-        self.config = config or ShaperConfig()
-        self._rng = rng or random.Random()
-        self._clock = clock
-        self._cut_until = 0.0
-        self._stall_until = 0.0
-        self._last_reliable_due = 0.0
-
-    def cut(self, seconds):
-        """Unreliable frames dropped, reliable ones held, until the window ends; then the held ones go in order."""
-        self._cut_until = self._clock() + seconds
-
-    def stall(self, seconds):
-        """Everything held until the window ends, then sent at once."""
-        self._stall_until = self._clock() + seconds
-
-    def idle(self):
-        c = self.config
-        now = self._clock()
-        return not (c.delay_ms or c.jitter_ms or c.loss) and now >= self._cut_until and now >= self._stall_until
-
-    def plan(self, reliable):
-        """The monotonic time to send a frame, or None to drop it."""
-        now = self._clock()
-        if now < self._stall_until:
-            return self._ordered(reliable, self._stall_until)
-        if now < self._cut_until:
-            return self._ordered(True, self._cut_until) if reliable else None
-        if not reliable and self._rng.random() < self.config.loss:
-            return None
-        due = now + (self.config.delay_ms + self._rng.uniform(0.0, self.config.jitter_ms)) / 1000.0
-        return self._ordered(reliable, due)
-
-    def _ordered(self, reliable, due):
-        if reliable:
-            due = max(due, self._last_reliable_due)
-            self._last_reliable_due = due
-        return due
 
 
 class SessionInfo:
@@ -108,9 +61,8 @@ class Link:
         self.rejected = None
         self._sock = None
         self._send_lock = threading.Lock()
-        self._queue = []
-        self._queue_lock = threading.Lock()
-        self._order = 0
+        self._outgoing = TimedQueue()
+        self._incoming = TimedQueue()
         self._stop = threading.Event()
         self._heartbeats_off_until = 0.0
         self._last_heartbeat = 0.0
@@ -129,16 +81,14 @@ class Link:
             self.counts["refused_send"] += 1
             self.journal.note(f"refused to send {wire.type_name(frame.type)}")
             return False
-        if self.shaper.idle() and not self._queue:
+        if self.shaper.out.idle() and not self._outgoing:
             return self._write(frame)
-        due = self.shaper.plan(bool(flags & wire.FLAG_RELIABLE))
-        if due is None:
+        dues = self.shaper.out.plan(bool(flags & wire.FLAG_RELIABLE), FRAME_OVERHEAD_BYTES + len(frame.payload))
+        if not dues:
             self.counts["shaped_drop"] += 1
             self.journal.note(f"shaper dropped {wire.type_name(frame.type)}")
-            return True
-        with self._queue_lock:
-            self._order += 1
-            heapq.heappush(self._queue, (due, self._order, frame))
+        for due in dues:
+            self._outgoing.push(due, frame)
         return True
 
     def _write(self, frame, journal=True):
@@ -158,14 +108,12 @@ class Link:
         return True
 
     def pump(self):
-        """Sends the shaped frames that are due; called by the sender thread."""
+        """Sends and delivers the shaped frames that are due; called by the sender thread."""
         now = time.monotonic()
-        while True:
-            with self._queue_lock:
-                if not self._queue or self._queue[0][0] > now:
-                    return
-                _, _, frame = heapq.heappop(self._queue)
+        for frame in self._outgoing.pop_due(now):
             self._write(frame)
+        for frame in self._incoming.pop_due(now):
+            self._deliver(frame)
 
     def _sender_loop(self):
         while not self._stop.is_set():
@@ -204,10 +152,22 @@ class Link:
         elif frame.type == Msg.REJECT:
             self.rejected = frame.payload.decode("utf-8", "replace")
         elif frame.type >= wire.FIRST_GAME_TYPE:
-            self._deliver(frame)
+            self._shape_incoming(frame)
             return
         if frame.type != Msg.HEARTBEAT:
             self.journal.frame(IN, frame)
+
+    def _shape_incoming(self, frame):
+        """The game's frame goes through the inbound shaper: straight to the modules, later, twice or never."""
+        if self.shaper.inbound.idle() and not self._incoming:
+            self._deliver(frame)
+            return
+        dues = self.shaper.inbound.plan(bool(frame.flags & wire.FLAG_RELIABLE), FRAME_OVERHEAD_BYTES + len(frame.payload))
+        if not dues:
+            self.counts["shaped_drop_in"] += 1
+            self.journal.note(f"shaper dropped incoming {wire.type_name(frame.type)}")
+        for due in dues:
+            self._incoming.push(due, frame)
 
     def _deliver(self, frame):
         self.journal.frame(IN, frame)

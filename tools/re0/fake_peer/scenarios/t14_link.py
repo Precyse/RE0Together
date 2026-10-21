@@ -11,7 +11,7 @@ ROWS = "T14"
 SEATS = ("guest",)
 SCRATCH_SEATS = ()
 SUMMARY = "echo under --delay-ms 40 --jitter-ms 30 --loss 0.02, then a 1 s stall; fresh channel and SLOW_FRAME lines"
-SHAPE = dict(delay_ms=40.0, jitter_ms=30.0, loss=0.02)
+SHAPE = dict(latency_ms=40.0, jitter_ms=30.0, loss=0.02)
 STALL_S = 1.0
 PLAY_S = 120.0
 LOAD_WAIT_S = 600.0
@@ -26,7 +26,7 @@ def delay_follows_shaper(evidence):
     if not delays:
         return Result(MISSING, "no puppet motion line")
     mean = sum(delays) / len(delays)
-    expected = BASE_DELAY_MS + SHAPE["delay_ms"]
+    expected = BASE_DELAY_MS + SHAPE["latency_ms"]
     return Result(PASS if abs(mean - expected) <= DELAY_SLACK_MS else FAIL, f"mean delay {mean:.0f} ms, shaper expects about {expected:.0f}")
 
 

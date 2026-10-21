@@ -1,6 +1,7 @@
 """The scenario context and the run: builds the fake machine (link, peer, modules), starts launchers and log tails, hands the
 scenario a small blocking API, and ends with the gates, the report and the run folder. Network work runs on threads owned
 here; scenario code never touches sockets."""
+import random
 import re
 import shutil
 import sys
@@ -19,11 +20,13 @@ from fake_peer.contact import Contact
 from fake_peer.enemies import Enemies
 from fake_peer.launchers import Launchers, Ports, find_launcher
 from fake_peer.library import FILLED_BY, Journal, Library, wall_ms
-from fake_peer.link import BridgeLink, Dispatcher, Shaper, ShaperConfig, StandinLink, GAME_PORT
+from fake_peer.impair import make_params
+from fake_peer.link import BridgeLink, Dispatcher, StandinLink, GAME_PORT
 from fake_peer.logwatch import DumpWatch, FileTail, LogStore, SOURCE_ADAPTER, SOURCE_HOST, SOURCE_JOIN
 from fake_peer.peer import Peer, RemoteView
 from fake_peer.rooms import Rooms
 from fake_peer.session import SessionFlows
+from fake_peer.shaper import OUT, Shaper
 from fake_peer.sources import Sources
 from fake_peer.story import Story
 from fake_peer.world import Flags, Items, Props
@@ -37,6 +40,8 @@ ADAPTER_LOG = Path("coop") / "adapter.log"
 FAKE_PEER_DIR = Path("coop") / "fake_peer"
 MODE_LINE = re.compile(r"^config: partner_mode=(input|state)")
 SEATS = ("guest", "host")
+SEED_LIMIT = 1 << 32
+CLI_LINK_SETTINGS = {"delay_ms": "latency_ms", "jitter_ms": "jitter_ms", "loss": "loss"}
 TRANSPORTS = ("launchers", "standin", "bridge")
 DEFAULT_TRANSPORT = {"guest": "launchers", "host": "standin"}
 
@@ -62,7 +67,10 @@ class Options:
         self.fake_character = values.get("fake_character")
         self.delay = values.get("delay", 1.0)
         self.offset_x = values.get("offset_x", 150.0)
-        self.shaper = ShaperConfig(values.get("delay_ms", 0.0), values.get("jitter_ms", 0.0), values.get("loss", 0.0))
+        self.link = values.get("link")
+        self.seed = values["seed"] if values.get("seed") is not None else random.SystemRandom().randrange(SEED_LIMIT)
+        overrides = {setting: values[key] for key, setting in CLI_LINK_SETTINGS.items() if values.get(key) is not None}
+        self.link_params = make_params(self.link, **overrides)
         self.ports = values.get("ports") or Ports()
         self.status = values.get("status", True)
         self.input_mode = values.get("input_mode", False)
@@ -105,7 +113,7 @@ class Context:
             self.run_dir.mkdir(parents=True, exist_ok=True)
         self.journal = Journal(self.run_dir / library_module.FRAMES_FILE if self.run_dir else None)
         self.store = LogStore()
-        self.shaper = Shaper(options.shaper)
+        self.shaper = Shaper(options.link_params, options.seed)
         self.marks = {}
         self.input_mode = options.input_mode
         self.started_ms = wall_ms()
@@ -253,6 +261,10 @@ class Context:
     def say(self, text):
         print(text, flush=True)
 
+    def link_note(self):
+        """The run's link model: repeat a run with the same `--link` and `--seed`."""
+        return f"link profile {self.options.link or 'none'} seed {self.options.seed}"
+
     def wait(self, seconds):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
@@ -307,14 +319,15 @@ class Context:
         with self.lock:
             self.sources.use(name, **opts)
 
-    def shape(self, cut=None, stall=None, **config):
-        """Link shaper: `cut=S` or `stall=S` seconds, or delay_ms / jitter_ms / loss for the rest of the run."""
+    def shape(self, cut=None, stall=None, direction=OUT, **config):
+        """Link shaper: `cut=S` or `stall=S` seconds, or model settings (latency_ms, jitter_ms, loss, ...) for the rest of
+        the run, on the fake's outgoing frames, the game's incoming ones (`direction="in"`) or both (`"both"`)."""
         if cut:
-            self.shaper.cut(cut)
+            self.shaper.cut(cut, direction)
         if stall:
-            self.shaper.stall(stall)
-        for name, value in config.items():
-            setattr(self.shaper.config, name, value)
+            self.shaper.stall(stall, direction)
+        if config:
+            self.shaper.configure(direction, **config)
 
     def drop(self, seconds):
         """Stand-in only: the heartbeats stop too, so the adapter's own 5 s link timeout fires."""
@@ -389,6 +402,7 @@ class Context:
             report.add(gate_id, gate_engine.MANUAL, f"{question}: {self._ask(question)}")
         if self.dispatcher.malformed or self.dispatcher.faults:
             report.notes.append(f"malformed frames {dict(self.dispatcher.malformed)} faults {dict(self.dispatcher.faults)}")
+        report.notes.append(self.link_note())
         return report
 
     @staticmethod
@@ -428,6 +442,7 @@ def run_scenario(scenario, options):
     if options.seat in scenario.SCRATCH_SEATS:
         ctx.say("scratch: this run changes the save's state")
     try:
+        ctx.say(ctx.link_note())
         ctx.start()
         ctx.wait_ready()
         ctx.say("ready")

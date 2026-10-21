@@ -3,6 +3,7 @@ import argparse
 import sys
 
 from fake_peer import golden, library, selftest
+from fake_peer.impair import load_profiles
 from fake_peer.launchers import Ports
 from fake_peer.runner import SEATS, TRANSPORTS, Options, output_root, run_scenario
 from fake_peer.scenarios import ORDER, REGISTRY
@@ -26,9 +27,11 @@ def build_parser():
     run.add_argument("--fake-character", choices=CHARACTER_NAMES)
     run.add_argument("--delay", type=float, default=1.0, help="echo delay in seconds")
     run.add_argument("--offset-x", type=float, default=150.0, help="echo offset in game units")
-    run.add_argument("--delay-ms", type=float, default=0.0)
-    run.add_argument("--jitter-ms", type=float, default=0.0)
-    run.add_argument("--loss", type=float, default=0.0)
+    run.add_argument("--link", choices=sorted(load_profiles()), help="link profile for both directions (impair.py, profiles.json)")
+    run.add_argument("--seed", type=int, help="seed of the link model; a run without one picks a seed and prints it")
+    run.add_argument("--delay-ms", type=float, help="one-way delay on top of the profile")
+    run.add_argument("--jitter-ms", type=float)
+    run.add_argument("--loss", type=float)
     run.add_argument("--seconds", type=float, help="length of the scenario's timed phases")
     run.add_argument("--round", choices=("door", "vanish"), help="t11_boss as the host: which round to play")
     gates = commands.add_parser("gates", help="print the gate table of a scenario")
@@ -73,7 +76,8 @@ def options_from(args):
     return Options(scenario=args.scenario, seat=args.seat, transport=args.transport, bridge_port=args.bridge_port,
                    game_dir=args.game_dir, launcher=args.launcher, save_source=args.save_source, out=args.out, scratch=args.scratch,
                    fake_character=args.fake_character, delay=args.delay, offset_x=args.offset_x, delay_ms=args.delay_ms,
-                   jitter_ms=args.jitter_ms, loss=args.loss, seconds=args.seconds, round=args.round, ports=Ports())
+                   jitter_ms=args.jitter_ms, loss=args.loss, link=args.link, seed=args.seed, seconds=args.seconds,
+                   round=args.round, ports=Ports())
 
 
 def main(argv=None):

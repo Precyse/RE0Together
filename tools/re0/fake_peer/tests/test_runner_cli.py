@@ -72,7 +72,22 @@ class ScenarioTableTests(unittest.TestCase):
     def test_the_parser_reads_a_run_command(self):
         args = cli.build_parser().parse_args(["run", "t7_flags", "--seat", "host", "--scratch", "--delay-ms", "40"])
         options = cli.options_from(args)
-        self.assertEqual((options.scenario, options.seat, options.scratch, options.shaper.delay_ms), ("t7_flags", "host", True, 40.0))
+        self.assertEqual((options.scenario, options.seat, options.scratch, options.link_params.latency_ms), ("t7_flags", "host", True, 40.0))
+
+    def test_link_and_seed_flags_build_the_link_model(self):
+        args = cli.build_parser().parse_args(["run", "t14_link", "--link", "hell", "--seed", "77", "--loss", "0.5"])
+        options = cli.options_from(args)
+        self.assertEqual((options.link, options.seed, options.link_params.latency_ms, options.link_params.loss), ("hell", 77, 200.0, 0.5))
+
+    def test_a_run_without_a_seed_picks_one_and_reports_it(self):
+        ctx = make_context("guest")
+        self.assertIsInstance(ctx.options.seed, int)
+        self.assertEqual(ctx.link_note(), f"link profile none seed {ctx.options.seed}")
+        self.assertIn(ctx.link_note(), ctx.build_report().notes)
+
+    def test_an_unknown_link_profile_is_refused(self):
+        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+            cli.build_parser().parse_args(["run", "t14_link", "--link", "nope"])
 
     def test_every_gate_of_every_scenario_has_a_describable_matcher(self):
         for module in ORDER:
@@ -119,10 +134,13 @@ class ContextTests(unittest.TestCase):
     def test_marks_and_the_shaper_api(self):
         ctx = make_context("guest")
         ctx.mark("cut")
-        ctx.shape(cut=1.0, delay_ms=40.0)
+        ctx.shape(cut=1.0, latency_ms=40.0)
         self.assertIn("cut", ctx.marks)
-        self.assertEqual(ctx.shaper.config.delay_ms, 40.0)
+        self.assertEqual(ctx.shaper.out.params.latency_ms, 40.0)
+        self.assertEqual(ctx.shaper.inbound.params.latency_ms, 0.0)
         self.assertFalse(ctx.shaper.idle())
+        ctx.shape(direction="both", loss=0.1)
+        self.assertEqual((ctx.shaper.out.params.loss, ctx.shaper.inbound.params.loss), (0.1, 0.1))
         self.assertEqual(ctx.duration(120.0), 120.0)
         ctx.options.seconds = 5.0
         self.assertEqual(ctx.duration(120.0), 5.0)

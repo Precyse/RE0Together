@@ -1,6 +1,5 @@
-"""Transports against a socket that plays the launcher or the game, and the link shaper."""
+"""Transports against a socket that plays the launcher or the game, with and without a shaped link."""
 import queue
-import random
 import socket
 import threading
 import time
@@ -8,53 +7,10 @@ import unittest
 
 from fake_peer import wire
 from fake_peer.library import Journal
-from fake_peer.link import BridgeLink, GAME_PORT, Shaper, ShaperConfig, StandinLink
+from fake_peer.impair import make_params
+from fake_peer.link import BridgeLink, GAME_PORT, StandinLink
+from fake_peer.shaper import IN, Shaper
 from fake_peer.wire import Msg
-
-
-class FakeClock:
-    def __init__(self):
-        self.now = 100.0
-
-    def __call__(self):
-        return self.now
-
-
-class ShaperTests(unittest.TestCase):
-    def test_an_idle_shaper_has_nothing_to_do(self):
-        self.assertTrue(Shaper().idle())
-        self.assertFalse(Shaper(ShaperConfig(delay_ms=40.0)).idle())
-
-    def test_delay_and_jitter_move_the_send_time(self):
-        clock = FakeClock()
-        shaper = Shaper(ShaperConfig(delay_ms=40.0, jitter_ms=30.0), random.Random(1), clock)
-        for _ in range(20):
-            due = shaper.plan(reliable=False)
-            self.assertTrue(clock.now + 0.04 <= due <= clock.now + 0.07)
-
-    def test_loss_drops_unreliable_frames_only(self):
-        clock = FakeClock()
-        shaper = Shaper(ShaperConfig(loss=1.0), random.Random(1), clock)
-        self.assertIsNone(shaper.plan(reliable=False))
-        self.assertIsNotNone(shaper.plan(reliable=True))
-
-    def test_a_cut_drops_unreliable_and_holds_reliable_in_order(self):
-        clock = FakeClock()
-        shaper = Shaper(clock=clock)
-        shaper.cut(2.0)
-        self.assertIsNone(shaper.plan(reliable=False))
-        first, second = shaper.plan(reliable=True), shaper.plan(reliable=True)
-        self.assertEqual(first, clock.now + 2.0)
-        self.assertLessEqual(first, second)
-        clock.now += 2.5
-        self.assertTrue(shaper.idle())
-
-    def test_a_stall_holds_everything_until_it_ends(self):
-        clock = FakeClock()
-        shaper = Shaper(clock=clock)
-        shaper.stall(1.0)
-        self.assertEqual(shaper.plan(reliable=False), clock.now + 1.0)
-        self.assertEqual(shaper.plan(reliable=True), clock.now + 1.0)
 
 
 class Launcher:
@@ -112,6 +68,39 @@ class BridgeLinkTests(unittest.TestCase):
         while frame.type != Msg.ROOM_STATE:  # heartbeats come first
             frame = launcher.received.get(timeout=3)
         self.assertEqual((frame.payload, frame.slot), (b"room", 0))
+
+    def test_the_inbound_shaper_drops_unreliable_and_delays_reliable_frames_from_the_game(self):
+        launcher = Launcher()
+        self.addCleanup(launcher.close)
+        got = queue.Queue()
+        shaper = Shaper(make_params(loss=1.0, latency_ms=150.0), seed=5)
+        link = BridgeLink(launcher.port, Journal(), got.put, shaper)
+        self.addCleanup(link.close)
+        link.start()
+        deadline = time.monotonic() + 3
+        while not link.session.ready and time.monotonic() < deadline:
+            time.sleep(0.02)
+        launcher.send(Msg.POSE_STATE, b"lost")
+        launcher.conn.sendall(wire.encode_frame(Msg.ROOM_STATE, b"kept", flags=wire.FLAG_RELIABLE, slot=0))
+        started = time.monotonic()
+        self.assertEqual(got.get(timeout=3).payload, b"kept")
+        self.assertGreaterEqual(time.monotonic() - started, 0.1)
+        self.assertTrue(got.empty())
+        self.assertEqual(link.counts["shaped_drop_in"], 1)
+
+    def test_a_one_way_cut_on_the_inbound_side_leaves_the_outgoing_frames_alone(self):
+        launcher = Launcher()
+        self.addCleanup(launcher.close)
+        shaper = Shaper()
+        shaper.cut(30.0, IN)
+        link = BridgeLink(launcher.port, Journal(), lambda frame: None, shaper)
+        self.addCleanup(link.close)
+        link.start()
+        link.send(Msg.ROOM_STATE, b"out", flags=0)
+        frame = launcher.received.get(timeout=3)
+        while frame.type != Msg.ROOM_STATE:
+            frame = launcher.received.get(timeout=3)
+        self.assertEqual(frame.payload, b"out")
 
     def test_the_games_own_port_is_refused(self):
         with self.assertRaises(ValueError):
