@@ -31,8 +31,10 @@ export function play(el, recipe, { keep = false, dir, index } = {}) {
   if (isReduced()) return Promise.resolve();
   if (dir !== undefined) el.style.setProperty('--dir', String(dir));
   if (index !== undefined) el.style.setProperty('--i', String(index));
-  el.classList.remove(cls);
-  void el.offsetWidth;
+  if (el.classList.contains(cls)) {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+  }
   el.classList.add(cls);
   if (!hasRunningAnimation(el)) {
     if (!keep) el.classList.remove(cls);

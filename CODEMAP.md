@@ -167,10 +167,14 @@ The WebView2 page (page spec: SPEC 2, 3, 6 of the launcher web UI). No build ste
 | web/js/perf.js | debug overlay: frame p95, long tasks, state apply time | `createPerf` |
 | web/js/segments.js, web/js/topbar.js | sliding-pill segmented control; the top bar | `createSegments` |
 | web/js/notice.js | the notice row (also used by session screens) | `createNotice` |
-| web/js/home.js, lobbies.js, settings.js, drawer.js, modal.js | browse screens (stubs until their commit) | |
+| web/js/home.js, rail.js, friends.js, codefield.js | Home: the 296 px hero with the action row and notice, the games rail (sliding selection, Up / Down), FRIENDS PLAYING cards (keyed, staggered), the lobby code row (shake on `codeRefused`) | `home.create`, `createRail`, `createFriends`, `createCodeField` |
+| web/js/lobbies.js, dropdown.js, format.js | Lobbies tab (filter, game dropdown, 56 px rows, skeleton then reveal); the painted dropdown (menu-dropdown recipe, keyboard); `pingText` | `createDropdown`, `pingText` |
+| web/js/modal.js, popup-lobby.js, popup-options.js, popup-header.js, confirm.js | modal layer (scrim + modal recipe), lobby popup (roster tints, facts, reel and digit roll), options popup (read-only for a guest), the shared art header, the close confirmation | `modal.create`, `createConfirm`, `createPopupHeader` |
+| web/js/settings.js, toggle.js | Settings view: Launcher section, one section per game (middle-ellipsis folder path); the switch | `settings.create`, `createToggle` |
+| web/js/drawer.js, art.js | footer strip with the newest event and the log (last 500 lines, rises by transform); images that hide on failure, avatars | `drawer.create`, `createImage`, `createAvatar` |
 | web/js/joining.js, session.js, select.js, mini-main.js | stubs for the session builder | |
-| web/dev/mock.js | dev transport: `?fixture=` / `?sequence=`, `&frame=`, `&reduced=1`, `&smoke=`, `window.__sent`, `html[data-ready]`; fixtures in `dev/fixtures`, sequences in `dev/sequences`, smoke scripts in `dev/smoke`, art copy in `dev/art` (git-ignored) | `createTransport` |
-| tools/launcher_web/render.py | headless Edge screenshots of fixtures and sequences (throwaway profile and server), `--smoke`, `--dump-dom`, `--perf`, `--prepare-art` | |
+| web/dev/mock.js | dev transport: `?fixture=` / `?sequence=`, `&frame=`, `&reduced=1`, `&smoke=`, `window.__sent`, `html[data-ready]`; fixtures in `dev/fixtures`, sequences in `dev/sequences` (`{ keys, transitions?, events?, ms }`), smoke scripts in `dev/smoke`, a fixture's `smoke` / `events` run after its last state, art copy in `dev/art` (git-ignored) | `createTransport` |
+| tools/launcher_web/render.py, perf.py | headless Edge screenshots of fixtures and sequences (throwaway profile and server), `--frames` (ms or `%` of a sequence), `--reduced`, `--smoke`, `--dump-dom`, `--prepare-art`; `perf.py` reads the perf overlay in real time over the DevTools socket (needs `websockets`) | |
 
 ## launcher/web (session)
 

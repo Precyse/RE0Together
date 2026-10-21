@@ -12,7 +12,8 @@ svg { display: block; flex: none; }
 
 #app { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--bg); }
 #screens { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-.screen { position: absolute; inset: 0; background: var(--bg); }
+.screen { position: absolute; inset: 0; }
+.z-top { z-index: 2; background: var(--bg); }
 
 .caption { font-size: var(--fs-caption); font-weight: 700; letter-spacing: var(--ls-caption); color: var(--muted); text-transform: uppercase; }
 .mono { font-family: var(--font-mono); }
@@ -124,3 +125,4 @@ svg { display: block; flex: none; }
 
 .drag { app-region: drag; }
 .no-drag, .drag button, .drag input, .drag .seg { app-region: no-drag; }
+.select-trigger:disabled .select-arrow { visibility: hidden; }

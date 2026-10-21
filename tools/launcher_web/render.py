@@ -1,7 +1,7 @@
 """Headless screenshots of the launcher page without the launcher.
 
 python tools/launcher_web/render.py <key...> --out <dir> [--size 840x540] [--frames 0,62,125,187,250 | 0%,25%,50%,75%,100%]
-       [--reduced] [--smoke <name>] [--dump-dom] [--perf] [--prepare-art]
+       [--reduced] [--smoke <name>] [--dump-dom] [--prepare-art]
 
 A key is a fixture (launcher/web/dev/fixtures/<key>.js) or a sequence (dev/sequences/<key>.js). The page is served from 127.0.0.1 on a free port by
 a throwaway server, drawn by headless Edge with a new empty profile folder; both are stopped when the run ends. Never starts the launcher.
@@ -27,8 +27,7 @@ STEAM_DEFAULT = r"C:\Program Files (x86)\Steam"
 APP_IDS = [339340, 9480, 3280350]
 ART_FILES = {"capsule.jpg": ["library_600x900.jpg", "library_capsule.jpg"], "hero.jpg": ["library_hero.jpg"], "logo.png": ["logo.png"]}
 OUTFIT_SOURCE = os.path.join(os.environ.get("APPDATA", ""), "CoopLauncher", "art", "re0")
-SMOKE_DUMP = re.compile(r'<pre id="smoke">(.*?)</pre>', re.S)
-PERF_DUMP = re.compile(r'<pre id="perf"[^>]*>(.*?)</pre>', re.S)
+SMOKE_DUMP = re.compile(r'<pre id="smoke"[^>]*>(.*?)</pre>', re.S)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -99,7 +98,7 @@ def frame_list(spec, key):
     return out
 
 
-def run_edge(args, url, size, png, dump):
+def run_edge(url, size, png, dump):
     profile = tempfile.mkdtemp(prefix="coop-web-edge-")
     command = [EDGE, "--headless=new", f"--user-data-dir={profile}", "--force-device-scale-factor=1", "--hide-scrollbars",
                f"--window-size={size[0]},{size[1]}", f"--virtual-time-budget={VIRTUAL_TIME_MS}", "--disable-extensions",
@@ -124,7 +123,6 @@ def main():
     parser.add_argument("--reduced", action="store_true")
     parser.add_argument("--smoke", default="")
     parser.add_argument("--dump-dom", action="store_true")
-    parser.add_argument("--perf", action="store_true")
     parser.add_argument("--prepare-art", action="store_true")
     args = parser.parse_args()
     if args.prepare_art:
@@ -141,24 +139,23 @@ def main():
             frames = frame_list(args.frames, key) if args.frames else [None]
             for frame in frames:
                 query = f"{kind}={key}" + (f"&frame={frame}" if frame is not None else "") + ("&reduced=1" if args.reduced else "") \
-                    + (f"&smoke={args.smoke}" if args.smoke else "") + ("&perf=1" if args.perf else "")
+                    + (f"&smoke={args.smoke}" if args.smoke else "")
                 url = f"http://127.0.0.1:{server.server_port}/{page}?{query}"
                 name = key + (f"_{frame}" if frame is not None else "") + ("_reduced" if args.reduced else "") + (f"_{args.smoke}" if args.smoke else "")
                 png = os.path.join(args.out, name + ".png")
-                if args.dump_dom or args.smoke or args.perf:
-                    dom = run_edge(args, url, size, None, True)
-                    for label, pattern in (("smoke", SMOKE_DUMP), ("perf", PERF_DUMP)):
-                        found = pattern.search(dom)
-                        if found and (label == "smoke" and args.smoke or label == "perf" and args.perf):
-                            with open(os.path.join(args.out, f"{name}_{label}.txt"), "w", encoding="utf8") as handle:
-                                handle.write(found.group(1))
-                            print(f"{name} {label}:\n{found.group(1)}")
+                if args.dump_dom or args.smoke:
+                    dom = run_edge(url, size, None, True)
+                    found = SMOKE_DUMP.search(dom) if args.smoke else None
+                    if found:
+                        with open(os.path.join(args.out, f"{name}_smoke.txt"), "w", encoding="utf8") as handle:
+                            handle.write(found.group(1))
+                        print(f"{name} smoke:")
+                        print(found.group(1))
                     if args.dump_dom:
                         with open(os.path.join(args.out, name + ".html"), "w", encoding="utf8") as handle:
                             handle.write(dom)
-                else:
-                    run_edge(args, url, size, png, False)
-                    print(png)
+                run_edge(url, size, png, False)
+                print(png)
     finally:
         server.shutdown()
 
