@@ -277,7 +277,7 @@ internal sealed class GameRail : Control
         var quiet = Interpolate.Lerp(Theme.Dim, Theme.Muted, Math.Clamp(1 - Math.Abs(_slide - index), 0, 1));
         Draw.Wrapped(g, sub, Theme.Small, quiet, new Rectangle(textX, y, textWidth, Theme.Small.Height));
         y += Theme.Small.Height + NameSubGap;
-        var statusColor = status.NeedsAttention && !locked ? Theme.Armed : quiet;
+        var statusColor = locked || !status.NeedsAttention ? quiet : status.HasProblem ? Theme.Problem : Theme.Armed;
         Draw.Wrapped(g, status.Line, Theme.Small, statusColor, new Rectangle(textX, y, textWidth, statusHeight));
     }
 

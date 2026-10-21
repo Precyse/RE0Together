@@ -180,6 +180,9 @@ public sealed class MainForm : ChromelessForm
         _optionsSection.Controls.Add(_options);
         _playersSection.Controls.Add(_players);
         _pane.Controls.AddRange([_playersSection, _optionsSection, _session.Panel, _hero]);
+        _hero.Bleed = _session.Panel.CaptionBand;
+        _session.Panel.Backdrop = _hero.PaintBleed;
+        _hero.ArtChanged += _session.Panel.Invalidate;
 
         // The pane and the settings swap inside one panel: a control first shown after start-up is re-ordered among
         // its siblings, which must never let it dock against the rail. Docking runs from the last control added, so the

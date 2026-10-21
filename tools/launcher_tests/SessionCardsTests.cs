@@ -43,7 +43,7 @@ public static class SessionCardsTests
         Check.That(two[0].Detail == "Rebecca" && two[1].Detail == "Billy", "seats: characters in seat order");
         Check.That(two[0].Ping == "" && two[1].Ping == "42 ms", "seats: a ping on remote seats only");
         Check.That(two[0].AvatarId == 1 && two[1].AvatarId == 2, "seats: the avatar is the player's id");
-        Check.That(two[0].Status == "In game" && two[0].Lamp == Theme.Live, "seats: status and lamp come from StatusText");
+        Check.That(two[0].Status == "In game" && two[0].Lamp == Theme.Connected, "seats: status and lamp come from StatusText");
 
         var receiving = SessionCards.Seats(InLobby(Host(), Guest(SessionStep.ReceivingSave, percent: 40)), Re0Characters, 2);
         Check.That(receiving[1].Progress is { } share && Math.Abs(share - 0.4) < 1e-9 && receiving[0].Progress == null, "seats: progress only while receiving the save");

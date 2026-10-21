@@ -72,7 +72,7 @@ internal sealed class NoticeRow : Panel
         base.OnPaint(e);
         if (_notice == null) return;
         var g = e.Graphics;
-        Draw.Lamp(g, Theme.Armed, 0, Height / 2);
+        Draw.Lamp(g, Theme.Problem, 0, Height / 2);
         var textX = Theme.LampSize + LampGap;
         var right = (_notice.Action != null ? _action.Left : _notice.Report ? _report.Left : Width) - Theme.Gap;
         Draw.Text(g, _notice.Words, Theme.Strong, Theme.Text, new Rectangle(textX, 0, Math.Max(0, right - textX), Height));

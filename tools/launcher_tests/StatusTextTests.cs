@@ -74,9 +74,10 @@ public static class StatusTextTests
         Check.That(StatusText.Seat(Partner(rtt: 20)) == "Connected", "a peer that answers but publishes nothing is connected");
         Check.That(StatusText.Seat(Partner()) == "In lobby", "otherwise in lobby");
 
-        Check.That(StatusText.SeatLamp(Partner(step: SessionStep.InGame)) == Theme.Live, "in game: red");
+        Check.That(StatusText.SeatLamp(Partner(step: SessionStep.InGame)) == Theme.Connected, "in game: green");
         Check.That(StatusText.SeatLamp(Partner(step: SessionStep.InGame, held: true)) == Theme.Armed, "in game but held: amber");
-        Check.That(StatusText.SeatLamp(Partner(step: SessionStep.InGame, silent: true)) == Theme.Armed, "in game but silent: amber");
+        Check.That(StatusText.SeatLamp(Partner(step: SessionStep.InGame, silent: true)) == Theme.Problem, "in game but silent: red");
+        Check.That(StatusText.SeatLamp(Partner(step: SessionStep.GameClosed)) == Theme.Problem, "game closed: red");
         Check.That(StatusText.SeatLamp(Partner(step: SessionStep.Lobby)) == Theme.Armed, "any other member: amber");
         Check.That(StatusText.SeatLamp(Partner(rtt: 10)) == Theme.Armed, "connected without a step: amber");
     }
@@ -84,8 +85,8 @@ public static class StatusTextTests
     private static void TopBar()
     {
         Show(new AppStatus(AppState.Idle), "Idle", Theme.Dim, "idle");
-        Show(new AppStatus(AppState.Offline), "Offline", Theme.Dim, "offline");
-        Show(new AppStatus(AppState.Offline) { Offline = OfflineReason.SteamNotRunning }, "Steam not running", Theme.Dim, "Steam not running");
+        Show(new AppStatus(AppState.Offline), "Offline", Theme.Problem, "offline");
+        Show(new AppStatus(AppState.Offline) { Offline = OfflineReason.SteamNotRunning }, "Steam not running", Theme.Problem, "Steam not running");
         Show(new AppStatus(AppState.Connecting), "Connecting", Theme.Armed, "connecting");
         Show(new AppStatus(AppState.Rejoining, 5) { RejoinAttempt = 2 }, "Reconnecting 2", Theme.Armed, "reconnecting with the attempt");
         Show(new AppStatus(AppState.Rejoining, 5), "Reconnecting", Theme.Armed, "reconnecting before the first attempt");
@@ -93,8 +94,8 @@ public static class StatusTextTests
         Show(new AppStatus(AppState.Hosting, 5), "Hosting", Theme.Armed, "hosting");
         Show(new AppStatus(AppState.Joined, 5), "Joined", Theme.Armed, "joined");
         Show(new AppStatus(AppState.GameRunning, 5), "Game running", Theme.Armed, "game running");
-        Show(new AppStatus(AppState.PeerConnected, 5, 42), "Connected 42 ms", Theme.Live, "connected with the ping");
-        Show(new AppStatus(AppState.PeerConnected, 5), "Connected", Theme.Live, "connected without a ping");
+        Show(new AppStatus(AppState.PeerConnected, 5, 42), "Connected 42 ms", Theme.Connected, "connected with the ping");
+        Show(new AppStatus(AppState.PeerConnected, 5), "Connected", Theme.Connected, "connected without a ping");
 
         Show(new AppStatus(AppState.Joined, 5) { Step = SessionStep.CheckingBuild }, "Checking build", Theme.Armed, "checking build");
         Show(new AppStatus(AppState.Joined, 5) { Step = SessionStep.ReceivingSave, SavePercent = 40 }, "Receiving save 40%", Theme.Armed, "receiving save");
@@ -104,18 +105,18 @@ public static class StatusTextTests
         var held = new AppStatus(AppState.PeerConnected, 5, 42) { Players = [Self(), Partner(held: true)] };
         Show(held, "Partner reconnecting", Theme.Armed, "a seat held");
         var silent = new AppStatus(AppState.PeerConnected, 5, 42) { Players = [Self(), Partner(silent: true)] };
-        Show(silent, "Partner not responding", Theme.Armed, "a seat silent");
+        Show(silent, "Partner not responding", Theme.Problem, "a seat silent");
         var both = new AppStatus(AppState.PeerConnected, 5, 42) { Players = [Self(), Partner(silent: true), Partner(held: true)] };
         Show(both, "Partner reconnecting", Theme.Armed, "held before silent");
         var save = held with { Step = SessionStep.ReceivingSave, SavePercent = 10 };
         Show(save, "Receiving save 10%", Theme.Armed, "the local step comes before a held seat");
 
         var refused = new AppStatus(AppState.Idle) { Refusal = new Refusal(RefusalKind.LobbyFull, "", "re0", 7) };
-        Show(refused, "Lobby full", Theme.Armed, "a refusal replaces the state");
+        Show(refused, "Lobby full", Theme.Problem, "a refusal replaces the state");
         Check.That(StatusText.Format(refused, GameCondition.Exited) == "Game exited", "a game problem comes before a refusal");
         Check.That(StatusText.Format(held, GameCondition.Unlinked) == "Game not linked", "a game problem comes before the state");
         Check.That(StatusText.Format(held, GameCondition.NotStarted) == "Game did not start", "game did not start");
-        Check.That(StatusText.Lamp(new AppStatus(AppState.PeerConnected, 5, 42), GameCondition.Exited) == Theme.Armed, "a game problem is amber even when connected");
+        Check.That(StatusText.Lamp(new AppStatus(AppState.PeerConnected, 5, 42), GameCondition.Exited) == Theme.Problem, "a game problem is red even when connected");
     }
 
     private static void Show(AppStatus status, string words, System.Drawing.Color lamp, string what)

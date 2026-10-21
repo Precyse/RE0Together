@@ -62,7 +62,7 @@ internal sealed class FieldBox : Panel
         base.OnPaint(e);
         var baseColor = Input.Focused ? Theme.Text : Theme.Line;
         var border = new Rectangle(_shakeX, 0, Width, Height);
-        Draw.Border(e.Graphics, border, Interpolate.Lerp(baseColor, Theme.Armed, _refused));
+        Draw.Border(e.Graphics, border, Interpolate.Lerp(baseColor, Theme.Problem, _refused));
     }
 
     private void Shake(int offset)

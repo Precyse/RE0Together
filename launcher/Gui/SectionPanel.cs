@@ -31,6 +31,12 @@ internal sealed class SectionPanel : Panel
         }
     }
 
+    /// <summary>Painted under the caption across the section's width (the hero art running on into the first section).</summary>
+    public Action<Graphics, int>? Backdrop { get; set; }
+
+    /// <summary>The band above the content that holds the caption.</summary>
+    public int CaptionBand => Padding.Top;
+
     public string Title
     {
         get => _title;
@@ -77,6 +83,7 @@ internal sealed class SectionPanel : Panel
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        Backdrop?.Invoke(e.Graphics, Width);
         Draw.Caption(e.Graphics, _title, Theme.Muted, new Point(Theme.SectionPadX, Theme.SectionPadY));
         if (BottomLine) Draw.HorizontalLine(e.Graphics, 0, Width, Height - 1);
     }

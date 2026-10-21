@@ -11,7 +11,8 @@ public static class StatusText
     /// local step (checking build, receiving save, starting game) and a partner that is held or silent come before the state.</summary>
     public static string Format(AppStatus status, GameCondition condition = GameCondition.Fine) => Describe(status, condition).Words;
 
-    /// <summary>Red only while connected; amber for everything in progress, held, silent, refused or wrong; grey at rest.</summary>
+    /// <summary>Green while connected; red for a problem (refused, game exited or unlinked, partner silent, Steam missing);
+    /// amber for everything in progress or held; grey at rest.</summary>
     internal static Color Lamp(AppStatus status, GameCondition condition = GameCondition.Fine) => Describe(status, condition).Lamp;
 
     public static string Refusal(Refusal refusal) => refusal.Kind switch
@@ -62,16 +63,21 @@ public static class StatusText
         return player.RttMs != null ? "Connected" : "In lobby";
     }
 
-    /// <summary>Red for a member who is in game and neither held nor silent, amber for every other member.</summary>
-    internal static Color SeatLamp(PlayerSlot player) =>
-        player.Step == SessionStep.InGame && !player.Held && !player.Silent ? Theme.Live : Theme.Armed;
+    /// <summary>Red for a silent member or one whose game closed or was refused, amber for a held one, green for one in game,
+    /// amber for every other member.</summary>
+    internal static Color SeatLamp(PlayerSlot player)
+    {
+        if (player.Held) return Theme.Armed;
+        if (player.Silent || player.Step is SessionStep.GameClosed or SessionStep.Refused) return Theme.Problem;
+        return player.Step == SessionStep.InGame ? Theme.Connected : Theme.Armed;
+    }
 
     private static Display Describe(AppStatus status, GameCondition condition) => condition switch
     {
-        GameCondition.Exited => new Display("Game exited", Theme.Armed),
-        GameCondition.Unlinked => new Display("Game not linked", Theme.Armed),
-        GameCondition.NotStarted => new Display("Game did not start", Theme.Armed),
-        _ when status.Refusal is { } refusal => new Display(Refusal(refusal), Theme.Armed),
+        GameCondition.Exited => new Display("Game exited", Theme.Problem),
+        GameCondition.Unlinked => new Display("Game not linked", Theme.Problem),
+        GameCondition.NotStarted => new Display("Game did not start", Theme.Problem),
+        _ when status.Refusal is { } refusal => new Display(Refusal(refusal), Theme.Problem),
         _ => DescribeState(status),
     };
 
@@ -81,18 +87,18 @@ public static class StatusText
         return status.State switch
         {
             AppState.Idle => new Display("Idle", Theme.Dim),
-            AppState.Offline => new Display(status.Offline == OfflineReason.SteamNotRunning ? "Steam not running" : "Offline", Theme.Dim),
+            AppState.Offline => new Display(status.Offline == OfflineReason.SteamNotRunning ? "Steam not running" : "Offline", Theme.Problem),
             AppState.Connecting => new Display("Connecting", Theme.Armed),
             AppState.Rejoining => new Display(status.RejoinAttempt > 0 ? $"Reconnecting {status.RejoinAttempt}" : "Reconnecting", Theme.Armed),
             AppState.WaitingForHost => new Display($"Waiting for host {TimeSpan.FromSeconds(status.SecondsLeft).ToString(TimeLeftFormat)}", Theme.Armed),
             _ when status.Step is SessionStep.CheckingBuild or SessionStep.ReceivingSave or SessionStep.StartingGame =>
                 new Display(Step(status.Step, status.SavePercent), Theme.Armed),
             _ when partners.Any(player => player.Held) => new Display("Partner reconnecting", Theme.Armed),
-            _ when partners.Any(player => player.Silent) => new Display("Partner not responding", Theme.Armed),
+            _ when partners.Any(player => player.Silent) => new Display("Partner not responding", Theme.Problem),
             AppState.Hosting => new Display("Hosting", Theme.Armed),
             AppState.Joined => new Display("Joined", Theme.Armed),
             AppState.GameRunning => new Display("Game running", Theme.Armed),
-            _ => new Display(status.RttMs is { } rtt ? $"Connected {rtt} ms" : "Connected", Theme.Live),
+            _ => new Display(status.RttMs is { } rtt ? $"Connected {rtt} ms" : "Connected", Theme.Connected),
         };
     }
 }

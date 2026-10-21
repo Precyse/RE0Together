@@ -16,7 +16,8 @@ internal static class Theme
     public static readonly Color Text = ColorTranslator.FromHtml("#ececec");
     public static readonly Color Muted = ColorTranslator.FromHtml("#8b9197");
     public static readonly Color Dim = ColorTranslator.FromHtml("#5b6168");
-    public static readonly Color Live = ColorTranslator.FromHtml("#e5202e");
+    public static readonly Color Connected = ColorTranslator.FromHtml("#2ea043");
+    public static readonly Color Problem = ColorTranslator.FromHtml("#e5202e");
     public static readonly Color Armed = ColorTranslator.FromHtml("#f2a900");
 
     public static readonly Font Body = new("Segoe UI", 9.75f);

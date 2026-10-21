@@ -17,7 +17,10 @@ internal sealed record GameStatus(
     public bool UpdateAvailable => Mod.State == ModState.UpdateAvailable;
 
     /// <summary>The row's line is drawn in the amber state colour.</summary>
-    public bool NeedsAttention => GameFound && (Mod.State is ModState.UpdateAvailable or ModState.Modified || !BuildSupported || MissingRequirement != null);
+    public bool NeedsAttention => HasProblem || GameFound && Mod.State == ModState.UpdateAvailable;
+
+    /// <summary>Something stops or endangers play: a modified mod, an unsupported game build or a missing required file.</summary>
+    public bool HasProblem => GameFound && (Mod.State == ModState.Modified || !BuildSupported || MissingRequirement != null);
 
     /// <summary>Hosting needs the game, its mod (an update or a repair is applied by the start itself), a supported game build
     /// and every required file.</summary>
