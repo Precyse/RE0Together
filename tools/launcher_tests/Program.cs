@@ -58,6 +58,9 @@ public static class Program
         LoopbackBridgeTests.Run();
         GameStatusTests.Run();
         SessionCardsTests.Run();
+        CardStateTests.Run();
+        SpinnerTests.Run();
+        SelectModelTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }

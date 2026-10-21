@@ -16,7 +16,8 @@ internal static class MotionLayer
 
     /// <summary>Paints <paramref name="paint"/> (which draws into the rectangle it is given) as the layer inside
     /// <paramref name="bounds"/>. <paramref name="background"/> fills the offscreen first: text drawn by TextRenderer needs
-    /// an opaque background to keep ClearType. The scale origin defaults to the centre of the bounds.</summary>
+    /// an opaque background to keep ClearType; a transparent one (art over a backdrop) leaves the layer see-through. The scale
+    /// origin defaults to the centre of the bounds.</summary>
     public static void Paint(Graphics g, Rectangle bounds, Layer layer, Color background,
         Action<Graphics, Rectangle> paint, Point? origin = null)
     {
@@ -48,7 +49,8 @@ internal static class MotionLayer
     {
         using (var g = Graphics.FromImage(bitmap))
         {
-            Draw.Fill(g, background, new Rectangle(Point.Empty, size));
+            if (background.A == 0) g.Clear(Color.Transparent);
+            else Draw.Fill(g, background, new Rectangle(Point.Empty, size));
             g.SetClip(new Rectangle(margin, margin, content.Width, content.Height));
             paint(g, new Rectangle(margin, margin, content.Width, content.Height));
         }
