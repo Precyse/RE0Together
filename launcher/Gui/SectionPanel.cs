@@ -9,6 +9,7 @@ internal sealed class SectionPanel : Panel
     private static readonly int CaptionGap = Theme.Scale(26);
 
     private string _title;
+    private bool _bottomLine = true;
 
     public SectionPanel(string title)
     {
@@ -18,7 +19,17 @@ internal sealed class SectionPanel : Panel
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.OptimizedDoubleBuffer, true);
     }
 
-    public bool BottomLine { get; set; } = true;
+    /// <summary>The separator under the section; the lowest section of a pane goes without one.</summary>
+    public bool BottomLine
+    {
+        get => _bottomLine;
+        set
+        {
+            if (_bottomLine == value) return;
+            _bottomLine = value;
+            Invalidate();
+        }
+    }
 
     public string Title
     {

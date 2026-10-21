@@ -28,7 +28,7 @@ public sealed class MainForm : ChromelessForm
     private readonly SessionSection _session;
     private readonly SectionPanel _optionsSection = new("Options") { Dock = DockStyle.Top };
     private readonly OptionsRows _options = new();
-    private readonly SectionPanel _playersSection = new("Players") { Dock = DockStyle.Top, BottomLine = false };
+    private readonly SectionPanel _playersSection = new("Players") { Dock = DockStyle.Top };
     private readonly PlayerCards _players;
     private readonly Panel _pane = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg, AutoScroll = true };
     private readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
@@ -465,20 +465,26 @@ public sealed class MainForm : ChromelessForm
         else if (status.State is not (AppState.Rejoining or AppState.WaitingForHost))
             _players.Show(SessionCards.Seats(status, status.SeatCharacters.Count > 0 ? status.SeatCharacters : GameOptions.SeatCharacters(game, hostValues),
                 status.Seats > 0 ? status.Seats : GameOptions.Seats(game, hostValues)));
-        OrderSections(free);
+        var sections = SectionsTopToBottom(free);
+        OrderSections(free, sections);
         Fit(_optionsSection);
         Fit(_playersSection);
+        var lowest = sections.LastOrDefault(section => section.FittedHeight > 0);
+        foreach (var section in sections) section.BottomLine = section != lowest;
     }
 
-    /// <summary>Idle: Session, Options, Players. In a session: Session, Players, Options. Docking stacks the control with the
-    /// highest child index at the top, and Tab follows the same order.</summary>
-    private void OrderSections(bool free)
+    /// <summary>Idle: Session, Options, Players. In a session: Session, Players, Options.</summary>
+    private SectionPanel[] SectionsTopToBottom(bool free) => free
+        ? [_session.Panel, _optionsSection, _playersSection]
+        : [_session.Panel, _playersSection, _optionsSection];
+
+    /// <summary>Stacks the hero and the sections. Docking stacks the control with the highest child index at the top, and
+    /// Tab follows the same order.</summary>
+    private void OrderSections(bool free, SectionPanel[] sections)
     {
         if (_orderedForFree == free) return;
         _orderedForFree = free;
-        Control[] topToBottom = free
-            ? [_hero, _session.Panel, _optionsSection, _playersSection]
-            : [_hero, _session.Panel, _playersSection, _optionsSection];
+        Control[] topToBottom = [_hero, .. sections];
         for (var i = 0; i < topToBottom.Length; i++)
         {
             _pane.Controls.SetChildIndex(topToBottom[i], topToBottom.Length - 1 - i);
