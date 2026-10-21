@@ -7,8 +7,8 @@ namespace CoopLauncher;
 /// <summary>One zip to send when something goes wrong: report.txt (launcher build, OS, each game's folder, build and mod state, what
 /// was left out and why), the launcher's settings and every log it kept, and from each game's coop folder the adapter log and ini, the
 /// game's status file, the logs and crash dumps of the other player's machine, and this machine's crash dumps. Never the join file
-/// (it holds the session password). One file that cannot be read is listed in report.txt and skipped; each entry is cut to its last
-/// <see cref="MaxLogEntryBytes"/>.</summary>
+/// (it holds the session password). One file that cannot be read is listed in report.txt and skipped; each log is cut to its last
+/// <see cref="MaxLogEntryBytes"/>, every other file (a crash dump cannot be read without its start) goes whole.</summary>
 public static class ReportBundle
 {
     public const int MaxLogEntryBytes = 8 * 1024 * 1024;
@@ -16,7 +16,8 @@ public static class ReportBundle
     private const string FilePrefix = "report-";
     private const string ManifestName = "report.txt";
     private const string SettingsEntryName = "settings.json";
-    private const string LogPattern = "*.log";
+    private const string LogExtension = ".log";
+    private const string LogPattern = "*" + LogExtension;
     private static readonly string[] GameFilePatterns = { "*adapter.log", "*adapter.ini", "peer_*", "crash-*.dmp" };
 
     /// <summary>Writes the zip next to the launcher log and returns its path; null when it could not be written.</summary>
@@ -82,8 +83,8 @@ public static class ReportBundle
     private static bool IsJoinFile(GameProfile game, string file) =>
         game.JoinFile != null && Path.GetFileName(file).Equals(Path.GetFileName(game.JoinFile), StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The zip's entries: each file is read without locking it, cut to its last <see cref="MaxLogEntryBytes"/>, and
-    /// recorded as included, truncated or skipped for report.txt.</summary>
+    /// <summary>The zip's entries: each file is read without locking it, a log cut to its last <see cref="MaxLogEntryBytes"/>,
+    /// and recorded as included, truncated or skipped for report.txt.</summary>
     private sealed class Entries(ZipArchive zip)
     {
         private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
@@ -114,7 +115,7 @@ public static class ReportBundle
             try
             {
                 using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                var cut = Math.Max(0, source.Length - MaxLogEntryBytes);
+                var cut = entryName.EndsWith(LogExtension, StringComparison.OrdinalIgnoreCase) ? Math.Max(0, source.Length - MaxLogEntryBytes) : 0;
                 source.Seek(cut, SeekOrigin.Begin);
                 entry = zip.CreateEntry(entryName, CompressionLevel.Optimal);
                 using (var target = entry.Open()) source.CopyTo(target);

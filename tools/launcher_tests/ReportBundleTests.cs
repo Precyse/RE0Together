@@ -3,7 +3,7 @@ using CoopLauncher;
 
 namespace LauncherTests;
 
-/// <summary>ReportBundle on a temp data folder and a temp game folder: the manifest, the status file, no join file, the size cap, and a locked file skipped and listed.</summary>
+/// <summary>ReportBundle on a temp data folder and a temp game folder: the manifest, the status file, no join file, the size cap on logs (dumps go whole), and a locked file skipped and listed.</summary>
 public static class ReportBundleTests
 {
     private const string GameId = "cf_report_game";
@@ -29,6 +29,7 @@ public static class ReportBundleTests
         var big = new byte[ReportBundle.MaxLogEntryBytes + 100];
         for (var i = 0; i < big.Length; i++) big[i] = (byte)(i % 251);
         File.WriteAllBytes(Path.Combine(coop, "adapter.log"), big);
+        File.WriteAllBytes(Path.Combine(coop, "crash-2.dmp"), big);
 
         var profile = new GameProfile(GameId, "Report Game", 1, "cf_report_not_running.exe", 2, 1, [], "coop/adapter.ini",
             AdapterLog: "coop/adapter.log", JoinFile: "coop/join.txt", StatusFile: "coop/status.txt");
@@ -58,6 +59,8 @@ public static class ReportBundleTests
             stream.ReadExactly(bytes);
             Check.That(bytes.AsSpan().SequenceEqual(big.AsSpan(100)), "the cut keeps the last bytes");
         }
+
+        Check.That(zip.GetEntry($"{GameId}/crash-2.dmp")!.Length == big.Length, "a crash dump is never cut (it cannot be read without its start)");
 
         Check.That(!names.Contains($"{GameId}/peer_2_locked.log"), "a locked file is not in the report");
         var manifest = Read(zip.GetEntry("report.txt")!);
