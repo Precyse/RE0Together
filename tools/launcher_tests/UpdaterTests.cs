@@ -16,6 +16,7 @@ public static class UpdaterTests
             InterruptedReplaceIsRolledBack(Path.Combine(dir, "interrupted"));
             FinishedReplaceDeletesBackups(Path.Combine(dir, "finished"));
             SuccessfulReplaceKeepsBackupsUntilRecover(Path.Combine(dir, "success"));
+            UpdateLockIsHeldByOneProcessAtATime(Path.Combine(dir, "locked"));
         }
         finally
         {
@@ -100,5 +101,22 @@ public static class UpdaterTests
 
         Check.That(Read(root, "a.txt") == "new a" && Read(root, "sub/c.txt") == "new c", "replace installs the package");
         Check.That(Read(root, "a.txt.old") == "old a", "replace keeps the original as .old for the running copy");
+    }
+
+    private static bool LockFromAnotherThread(string root) =>
+        Task.Run(() =>
+        {
+            using var handle = Updater.TryAcquireLock(root);
+            return handle != null;
+        }).Result;
+
+    private static void UpdateLockIsHeldByOneProcessAtATime(string root)
+    {
+        using (var held = Updater.TryAcquireLock(root))
+        {
+            Check.That(held != null, "the update lock is free at first");
+            Check.That(!LockFromAnotherThread(root), "a second update waits out the one under way");
+        }
+        Check.That(LockFromAnotherThread(root), "the update lock is free again once released");
     }
 }

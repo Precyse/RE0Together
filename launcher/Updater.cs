@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace CoopLauncher;
 
@@ -19,6 +21,8 @@ public static class Updater
     private const string WorkDirPrefix = "coop-launcher-update-";
     private const string ExtractedDirName = "files";
     private const int DownloadTimeoutSeconds = 300;
+    private const string LockNamePrefix = @"Local\CoopLauncherUpdate-";
+    private const int LockNameHashChars = 16;
 
     /// <summary>True after a newer package was installed in this process: the files on disk are newer than the running copy.</summary>
     public static bool Staged { get; private set; }
@@ -40,6 +44,12 @@ public static class Updater
         if (FindPackageRoot() is not { } root)
         {
             Log.Info("Updates install only from the packaged launcher");
+            return false;
+        }
+        using var gate = TryAcquireLock(root);
+        if (gate == null)
+        {
+            Log.Info("Another launcher is updating, skipped");
             return false;
         }
         try
@@ -109,6 +119,25 @@ public static class Updater
             return;
         }
         foreach (var file in Directory.EnumerateFiles(root, "*" + OldSuffix, SearchOption.AllDirectories)) Quietly(() => File.Delete(file));
+    }
+
+    /// <summary>Takes the update lock of a package, or null when another process (a window staging, a command-line start) holds it.
+    /// The lock keeps a start-up <see cref="Recover"/> from rolling back a replace that is under way in another process. Dispose
+    /// releases it, on the thread that took it.</summary>
+    internal static IDisposable? TryAcquireLock(string root)
+    {
+        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(root).ToLowerInvariant())));
+        var mutex = new Mutex(initiallyOwned: false, LockNamePrefix + digest[..LockNameHashChars]);
+        try
+        {
+            if (mutex.WaitOne(0)) return new LockHandle(mutex);
+        }
+        catch (AbandonedMutexException)
+        {
+            return new LockHandle(mutex);
+        }
+        mutex.Dispose();
+        return null;
     }
 
     /// <summary>The folder two levels above the exe, or null when not running from the packaged layout.</summary>
@@ -192,6 +221,19 @@ public static class Updater
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+        }
+    }
+
+    private sealed class LockHandle : IDisposable
+    {
+        private readonly Mutex _mutex;
+
+        public LockHandle(Mutex mutex) => _mutex = mutex;
+
+        public void Dispose()
+        {
+            _mutex.ReleaseMutex();
+            _mutex.Dispose();
         }
     }
 }
