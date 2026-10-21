@@ -25,7 +25,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | Guest leaves mid-room | done | `partner_think.cpp`, `character_owner.cpp` | Billy returns to partner AI |
 | Host leaves or crashes | done, unverified live | `state_sync.cpp`, `partner_hud.cpp` | "Host left: not saved" toast and status line, saves refused; the guest keeps playing the session copy (new lobby code for the guest: launcher section) |
 | Save ownership: host saves, guest receives | done | `session_slot.cpp`, `save_redirect.cpp`, `SaveSyncCoordinator.cs` | SAVE_CHANGED resends on every host save |
-| Guest saves at a typewriter | done, unverified live | `session_slot.cpp` | refused with a toast; whether the ribbon is spent before the request is not known (RE0_NOTES, QoL pass) |
+| Guest saves at a typewriter | done, unverified live | `session_slot.cpp` | refused with a toast; the ribbon is spent after the request, so a refusal keeps it (RE0_NOTES) |
 | Launcher build mismatch | done | `launcher/BuildCheck.cs` | |
 | Game build mismatch (Steam updates re0hd.exe) | missing | `launcher/SteamLibrary.cs`, `GameProfile.cs`, `adapters/re0/src/init.cpp` | adapter hardcodes build 17178773 addresses; nothing checks the installed build |
 
@@ -80,7 +80,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 ## Top 10 (missing or partial), ranked by player impact over effort
 
 ### 1. A guest's typewriter save goes nowhere (S, new) (done, unverified live, QoL pass 2026-10-06)
-- **Root change:** on a guest, refuse the Save room phase's save request (the hook on 0x613390 already sees it) and toast "Only the host can save"; check first whether the ink ribbon is taken before 0x613390 runs and, if so, refuse at the typewriter interaction instead so the ribbon stays.
+- **Root change:** on a guest, refuse the Save room phase's save request (the hooks on 0x6134c0 and 0x613500 see it; 0x613390 is the load request) and toast "Only the host can save"; the ribbon is spent only when the save GUI ends with result 2, so the refusal costs none.
 - **Files:** `adapters/re0/src/session_slot.cpp`, `docs/RE0_NOTES.md` (where the ribbon is consumed).
 - **Verify:** `tools/re0/fake_session.py --guest` makes the game the guest; save at a typewriter; adapter.log shows the refusal, slot 20 in `coop\session` keeps its hash, ribbon count unchanged.
 

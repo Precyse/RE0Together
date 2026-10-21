@@ -80,14 +80,14 @@ Seen in: RE0: Change phase 9 requested from 0x4fed48 / 0x50395e.
 Shape: menus need a few confirms to reach gameplay (logos, title, load list, continue). Their meaning is simple (Enter on defaults) even when their code is not.
 Find it: the input device the game polls (DirectInput GetDeviceState for RE0) and the data call the menu ends in (the load request with the cursor slot).
 Replicate: tap Enter from the input proxy while outside gameplay and mute the real keys; hook the data call to force the session's value (the host's slot). Wait for the host to be in game first.
-Seen in: RE0: virtual_keys (DirectInput8 proxy), session_slot (0x6134c0 / 0x613500), auto_join.
+Seen in: RE0: virtual_keys (DirectInput8 proxy), session_slot (the load request 0x613390), auto_join.
 
 ## Late join = older save + live snapshot  [persistence, world-state]
 Shape: the joiner can only load a saved state; the host's live state has moved on (room, inventories, flags, AI-driven partner).
 Find it: reuse the existing sync modules' read/apply points.
 Replicate: after the joiner loads, request a snapshot; apply flags and inventories, travel through the host's last door (engine transition as teleport), place the partner; hold the joiner's own state broadcasts until caught up.
 Seen in: RE0: join_sync. The same request doubles as resync on demand (a file or a persisting desync re-asks for the snapshot and applies it like the first), and changes the game keeps only in memory (floor items dropped after the last save) travel as a journal cleared at every save or load, replayed idempotently (a put is skipped where the item already is).
-Traps: a guest that plays a session copy must refuse its own saves (they are deleted with the session); refuse at the save request, and check where the game spends the save's resource (RE0 ink ribbon, unchecked).
+Traps: a guest that plays a session copy must refuse its own saves (they are deleted with the session); refuse at the save request (RE0: 0x6134c0 / 0x613500; the ink ribbon is spent only after it, on the GUI's result), and know that the game's save screen retries a refused request every frame instead of cancelling.
 
 ## Areas are records; move a member with the engine's own record calls  [state-transition, world-state]
 Shape: the engine keeps a small pool of area records (the loaded area plus dormant ones a party member was left in); each character points at its record. Writing the pointer or position by hand leaves callbacks and registries half-updated.

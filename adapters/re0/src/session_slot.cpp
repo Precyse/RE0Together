@@ -33,12 +33,12 @@ constexpr int32_t kCoopSlot = kPlayerSlots - 1;  // every save made during a ses
 
 bool isPlayerSlot(int32_t slot) { return slot >= 0 && slot < kPlayerSlots; }
 
-using LoadRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot, int32_t arg);
-using SaveRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot);
+using SaveRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot, int32_t arg);
+using LoadRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot);
 
-LoadRequestFn g_originalLoad = nullptr;
-LoadRequestFn g_originalLoadAlt = nullptr;
 SaveRequestFn g_originalSave = nullptr;
+SaveRequestFn g_originalSaveCopy = nullptr;
+LoadRequestFn g_originalLoad = nullptr;
 
 struct Announcement {
     int32_t slot;
@@ -75,16 +75,9 @@ void onSaveOrLoad(int32_t slot) {
     floor_items_sync::clearJournal();
 }
 
-bool __fastcall loadDetour(void* self, void* edx, int32_t slot, int32_t arg) {
+bool __fastcall loadDetour(void* self, void* edx, int32_t slot) {
     const int32_t chosen = chooseSlot(slot);
-    const bool accepted = g_originalLoad(self, edx, chosen, arg);
-    if (accepted) onSaveOrLoad(chosen);
-    return accepted;
-}
-
-bool __fastcall loadAltDetour(void* self, void* edx, int32_t slot, int32_t arg) {
-    const int32_t chosen = chooseSlot(slot);
-    const bool accepted = g_originalLoadAlt(self, edx, chosen, arg);
+    const bool accepted = g_originalLoad(self, edx, chosen);
     if (accepted) onSaveOrLoad(chosen);
     return accepted;
 }
@@ -105,12 +98,13 @@ bool partnerSettled() {
     return false;
 }
 
-// Only the in-game save screen is a player's save; the game also saves on its own at boot.
-bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
+// Only the in-game save screen is a player's save; the game also saves the system data (slot 0x15) on its own.
+// A refused request is retried by the save screen every frame, so the refusal log line is written once per episode.
+bool routeSave(SaveRequestFn original, void* self, void* edx, int32_t slot, int32_t arg) {
     const auto route = session_rule::saveRoute(isPlayerSlot(slot), game_state::roomPhase(), session_slot::guestSession(),
                                                net_pad::active());
     if (route == session_rule::SaveRoute::Refuse) {
-        logger::write("session_slot: guest save of slot %d refused", slot);
+        logger::writeUnlessRepeated("session_slot: guest save of slot %d refused", slot);
         debug_overlay::toast("Only the host can save", kRefusedToastSeconds);
         return false;
     }
@@ -118,9 +112,17 @@ bool __fastcall saveDetour(void* self, void* edx, int32_t slot) {
     if (coop && state_mode::on() && !partnerSettled()) return false;
     const int32_t target = coop ? kCoopSlot : slot;
     if (coop && slot != target) logger::write("session_slot: save to slot %d kept in the co-op slot %d", slot, target);
-    const bool accepted = g_originalSave(self, edx, target);
+    const bool accepted = original(self, edx, target, arg);
     if (accepted) onSaveOrLoad(target);
     return accepted;
+}
+
+bool __fastcall saveDetour(void* self, void* edx, int32_t slot, int32_t arg) {
+    return routeSave(g_originalSave, self, edx, slot, arg);
+}
+
+bool __fastcall saveCopyDetour(void* self, void* edx, int32_t slot, int32_t arg) {
+    return routeSave(g_originalSaveCopy, self, edx, slot, arg);
 }
 
 }  // namespace
@@ -156,18 +158,18 @@ bool guestSession() { return save_redirect::servingSession() && !character_owner
 bool hostInGame() { return room_phase::isGameplay(g_hostPhase.load()); }
 
 bool enable() {
-    return hooks::install("save load request", game::kSaveLoadRequestFunction, reinterpret_cast<void*>(&loadDetour),
-                          reinterpret_cast<void**>(&g_originalLoad)) &&
-           hooks::install("save load request (alt)", game::kSaveLoadAltRequestFunction,
-                          reinterpret_cast<void*>(&loadAltDetour), reinterpret_cast<void**>(&g_originalLoadAlt)) &&
-           hooks::install("save request", game::kSaveRequestFunction, reinterpret_cast<void*>(&saveDetour),
-                          reinterpret_cast<void**>(&g_originalSave));
+    return hooks::install("save request", game::kSaveRequestFunction, reinterpret_cast<void*>(&saveDetour),
+                          reinterpret_cast<void**>(&g_originalSave)) &&
+           hooks::install("save request (copy)", game::kSaveCopyRequestFunction, reinterpret_cast<void*>(&saveCopyDetour),
+                          reinterpret_cast<void**>(&g_originalSaveCopy)) &&
+           hooks::install("load request", game::kLoadRequestFunction, reinterpret_cast<void*>(&loadDetour),
+                          reinterpret_cast<void**>(&g_originalLoad));
 }
 
 void uninstall() {
-    hooks::remove(game::kSaveLoadRequestFunction);
-    hooks::remove(game::kSaveLoadAltRequestFunction);
     hooks::remove(game::kSaveRequestFunction);
+    hooks::remove(game::kSaveCopyRequestFunction);
+    hooks::remove(game::kLoadRequestFunction);
 }
 
 }  // namespace session_slot
