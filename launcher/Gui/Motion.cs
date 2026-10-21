@@ -392,13 +392,11 @@ public readonly record struct Tween(double From, double To, long StartMs, int Du
     public bool DoneAt(long nowMs) => nowMs - StartMs >= DurationMs;
 }
 
-/// <summary>The animation engine (UI thread only): one frame timer at the display's refresh rate drives every tween and
+/// <summary>The animation engine (UI thread only): one frame pacer locked to the display's refresh (FramePacer) drives every tween and
 /// stops when none is left. Tweens are keyed by owner and channel; starting one replaces the running one. Nothing here
 /// blocks input.</summary>
 public static class Motion
 {
-    private const int DefaultRefreshHz = 60;
-    private const int VerticalRefreshIndex = 116;
     private const uint GetClientAreaAnimation = 0x1042;
     private const int MillisecondsPerSecond = 1000;
 
@@ -427,7 +425,7 @@ public static class Motion
     private static readonly HashSet<Control> _watched = new();
     private static readonly HashSet<Form> _watchedForms = new();
     private static readonly long _ticksPerSecond = Stopwatch.Frequency;
-    private static System.Windows.Forms.Timer? _timer;
+    private static FramePacer? _pacer;
     private static volatile bool _systemStale = true;
     private static bool _systemReduced;
 
@@ -451,7 +449,7 @@ public static class Motion
     /// <summary>The loops registered and not cancelled, shown or not.</summary>
     public static int Loops => _loops.Count;
 
-    internal static bool TimerRunning => _timer is { Enabled: true };
+    internal static bool TimerRunning => _pacer is { Running: true };
 
     /// <summary>Moves a value from one number to another and reports it every frame, then once with <paramref name="to"/>
     /// before <paramref name="done"/>. A tween on the same owner and channel is replaced (callers start from
@@ -611,24 +609,11 @@ public static class Motion
 
     private static void StartTimer()
     {
-        _timer ??= CreateTimer();
-        if (!_timer.Enabled) _timer.Start();
+        _pacer ??= new FramePacer(SynchronizationContext.Current, Step);
+        _pacer.Start();
     }
 
-    private static void StopTimer() => _timer?.Stop();
-
-    private static System.Windows.Forms.Timer CreateTimer()
-    {
-        var timer = new System.Windows.Forms.Timer { Interval = FrameIntervalMs() };
-        timer.Tick += (_, _) => Step();
-        return timer;
-    }
-
-    private static int FrameIntervalMs()
-    {
-        var hz = RefreshRate();
-        return Math.Max(1, MillisecondsPerSecond / (hz > 1 ? hz : DefaultRefreshHz));
-    }
+    private static void StopTimer() => _pacer?.Stop();
 
     private static bool SystemReduced()
     {
@@ -639,28 +624,6 @@ public static class Motion
         return _systemReduced;
     }
 
-    private static int RefreshRate()
-    {
-        var screen = GetDC(IntPtr.Zero);
-        try
-        {
-            return GetDeviceCaps(screen, VerticalRefreshIndex);
-        }
-        finally
-        {
-            ReleaseDC(IntPtr.Zero, screen);
-        }
-    }
-
     [DllImport("user32.dll")]
     private static extern bool SystemParametersInfo(uint action, uint param, ref int value, uint winIni);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetDC(IntPtr window);
-
-    [DllImport("user32.dll")]
-    private static extern int ReleaseDC(IntPtr window, IntPtr dc);
-
-    [DllImport("gdi32.dll")]
-    private static extern int GetDeviceCaps(IntPtr dc, int index);
 }
