@@ -8,23 +8,27 @@ namespace CoopLauncher.Gui;
 /// has them.</summary>
 internal sealed class OptionsRows : Panel
 {
-    private const int Columns = 2;
     private static readonly int MinLabelWidth = Theme.Scale(110);
     private static readonly int LabelPad = Theme.Scale(8);
     private static readonly int ColumnGap = Theme.Scale(24);
 
     private readonly List<FlatSelect> _selects = new();
     private readonly bool _settingsOptions;
+    private readonly int _columns;
+    private readonly Color _background;
     private string? _shownFor;
     private int _labelWidth;
 
     public event Action? Changed;
 
-    /// <summary>The grid of the session options, or (settingsOptions) of the options the settings view shows.</summary>
-    public OptionsRows(bool settingsOptions = false)
+    /// <summary>The grid of the session options, or (settingsOptions) of the options the settings view shows, in this many
+    /// columns of label and dropdown, on this background.</summary>
+    public OptionsRows(bool settingsOptions = false, int columns = 2, Color? background = null)
     {
         _settingsOptions = settingsOptions;
-        BackColor = Theme.Bg;
+        _columns = columns;
+        _background = background ?? Theme.Bg;
+        BackColor = _background;
         Dock = DockStyle.Top;
         Height = 0;
     }
@@ -33,7 +37,7 @@ internal sealed class OptionsRows : Panel
     /// the game offers it.</summary>
     public void Show(GameProfile game, string? gameDir, IReadOnlyDictionary<string, string>? hostValues = null)
     {
-        var options = (game.Options ?? []).Where(option => option.Settings == _settingsOptions && !GameOptions.InCharacterSelect(game, option)).ToList();
+        var options = OptionsOf(game, _settingsOptions);
         var shown = options.Select(option => ShownValue(game, option, gameDir, hostValues)).ToList();
         var key = $"{game.Id}|{gameDir}|{string.Join(',', shown)}";
         if (_shownFor == key) return;
@@ -53,14 +57,17 @@ internal sealed class OptionsRows : Panel
         }
 
         var rows = new List<Control>();
-        for (var start = 0; start < cells.Count; start += Columns * 2)
+        for (var start = 0; start < cells.Count; start += _columns * 2)
         {
-            if (rows.Count > 0) rows.Add(ControlRow.Spacer(Theme.Gap));
-            rows.Add(GridRow(cells.Skip(start).Take(Columns * 2).ToList()));
+            if (rows.Count > 0) rows.Add(Spacer());
+            rows.Add(GridRow(cells.Skip(start).Take(_columns * 2).ToList()));
         }
         ControlRow.Stack(this, rows.ToArray());
         Height = rows.Sum(row => row.Height);
     }
+
+    /// <summary>Whether the game has options this grid shows (the options of its character select are not among them).</summary>
+    public static bool Has(GameProfile game, bool settingsOptions = false) => OptionsOf(game, settingsOptions).Count > 0;
 
     /// <summary>Lists are locked while a session is open.</summary>
     public void SetLocked(bool locked)
@@ -68,18 +75,36 @@ internal sealed class OptionsRows : Panel
         foreach (var select in _selects) select.Enabled = !locked;
     }
 
-    /// <summary>Label, list, gap, label, list; a row with one option leaves the second column empty.</summary>
+    private static List<GameOption> OptionsOf(GameProfile game, bool settingsOptions) =>
+        (game.Options ?? []).Where(option => option.Settings == settingsOptions && !GameOptions.InCharacterSelect(game, option)).ToList();
+
+    /// <summary>Label, list, then for each further column a gap, label, list; a row with fewer options leaves the last columns empty.</summary>
     private TableLayoutPanel GridRow(List<Control> cells)
     {
-        while (cells.Count < Columns * 2) cells.Add(new Panel { BackColor = Theme.Bg });
-        return ControlRow.Create(new[] { cells[0], cells[1], new Panel { BackColor = Theme.Bg }, cells[2], cells[3] },
-            _labelWidth, -1, ColumnGap, _labelWidth, -1);
+        while (cells.Count < _columns * 2) cells.Add(new Panel { BackColor = _background });
+        var controls = new List<Control> { cells[0], cells[1] };
+        var widths = new List<int> { _labelWidth, -1 };
+        for (var column = 1; column < _columns; column++)
+        {
+            controls.AddRange([new Panel { BackColor = _background }, cells[column * 2], cells[column * 2 + 1]]);
+            widths.AddRange([ColumnGap, _labelWidth, -1]);
+        }
+        var row = ControlRow.Create(controls.ToArray(), widths.ToArray());
+        row.BackColor = _background;
+        return row;
     }
 
-    private static Label Caption(string text) => new()
+    private Panel Spacer()
+    {
+        var spacer = ControlRow.Spacer(Theme.Gap);
+        spacer.BackColor = _background;
+        return spacer;
+    }
+
+    private Label Caption(string text) => new()
     {
         Text = text, AutoSize = false, Font = Theme.Body, ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleLeft,
-        BackColor = Theme.Bg, AutoEllipsis = true,
+        BackColor = _background, AutoEllipsis = true,
     };
 
     /// <summary>The value the option reads: the host's when a host value is given and offered, else the player's own.</summary>

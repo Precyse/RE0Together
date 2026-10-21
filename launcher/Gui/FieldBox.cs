@@ -1,6 +1,6 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>A one-line text field: dark well, 1px line border that turns white while focused. <see cref="Refuse"/> marks
+/// <summary>A one-line text field: a card-grey well, 1px line border that turns white while focused. <see cref="Refuse"/> marks
 /// the entered text as refused: the border turns amber, the field shakes, and the amber is held and then fades back
 /// (error-state-shake with the panel's own shake-x); typing clears it at once.</summary>
 internal sealed class FieldBox : Panel
@@ -9,8 +9,8 @@ internal sealed class FieldBox : Panel
     private const string RevertChannel = "revert";
 
     private static readonly int InsetX = Theme.Scale(10);
-    private static readonly int InsetY = Theme.Scale(9);
 
+    private readonly int _insetY;
     private readonly System.Windows.Forms.Timer _hold = new() { Interval = Durations.ErrorHold };
     private int _shakeX;
     private double _refused;
@@ -18,17 +18,19 @@ internal sealed class FieldBox : Panel
     public TextBox Input { get; } = new()
     {
         BorderStyle = BorderStyle.None,
-        BackColor = Theme.Bg,
+        BackColor = Theme.Card,
         ForeColor = Theme.Text,
-        Font = Theme.Mono,
         Dock = DockStyle.Fill,
     };
 
-    public FieldBox()
+    /// <summary>A field of this height whose text is set in this font, centred in it.</summary>
+    public FieldBox(int height, Font font)
     {
-        Height = Theme.ControlHeight;
-        BackColor = Theme.Bg;
-        Padding = new Padding(InsetX, InsetY, InsetX, 0);
+        Height = height;
+        Input.Font = font;
+        _insetY = (height - font.Height) / 2;
+        BackColor = Theme.Card;
+        Padding = new Padding(InsetX, _insetY, InsetX, 0);
         Controls.Add(Input);
         Input.GotFocus += (_, _) => Invalidate();
         Input.LostFocus += (_, _) => Invalidate();
@@ -69,7 +71,7 @@ internal sealed class FieldBox : Panel
     {
         if (_shakeX == offset) return;
         _shakeX = offset;
-        Padding = new Padding(InsetX + offset, InsetY, InsetX - offset, 0);
+        Padding = new Padding(InsetX + offset, _insetY, InsetX - offset, 0);
         Invalidate();
     }
 

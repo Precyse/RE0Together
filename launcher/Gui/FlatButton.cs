@@ -2,8 +2,8 @@ namespace CoopLauncher.Gui;
 
 internal enum ButtonKind { Normal, Primary, Ghost, Icon }
 
-/// <summary>A flat, squared button: Primary is the one white action, Normal a raised card, Ghost an outline, Icon a bare
-/// glyph (Theme.Icon) over whatever is behind it, on a card fill while hovered or active. The fill and
+/// <summary>A flat, squared button: Primary is the one white action, Normal a raised card, Ghost an outline and Icon a bare
+/// glyph (Theme.Icon), both transparent over whatever is behind them, on a card fill while hovered (Icon: or active). The fill and
 /// ink fade to their hover colours (controls.css .15s); a press snaps to a darker fill. It takes keyboard focus (Tab),
 /// clicks on Space and Enter, and is a dialog button (default button while focused).</summary>
 internal sealed class FlatButton : Control, IButtonControl
@@ -12,9 +12,12 @@ internal sealed class FlatButton : Control, IButtonControl
     private const double PressDarken = 0.35;
     private const int IconFillAlpha = 220;
 
+    /// <summary>The rest fill of a ghost: the selection grey at no alpha, so the hover fades the alpha only.</summary>
+    private static readonly Color Clear = Color.FromArgb(0, Theme.Selection);
+
     private static readonly int ArrowGap = Theme.Scale(8);
 
-    private readonly ButtonKind _kind;
+    private ButtonKind _kind;
     private bool _hovered;
     private bool _pressed;
     private double _hover;
@@ -22,17 +25,27 @@ internal sealed class FlatButton : Control, IButtonControl
 
     public FlatButton(string text, ButtonKind kind)
     {
-        _kind = kind;
         Text = kind == ButtonKind.Primary ? text.ToUpperInvariant() : text;
         Height = Theme.ControlHeight;
         Cursor = Cursors.Hand;
         TabStop = true;
         AccessibleRole = AccessibleRole.PushButton;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
-                 | ControlStyles.ResizeRedraw | ControlStyles.Selectable | ControlStyles.StandardClick, true);
-        if (kind != ButtonKind.Icon) return;
-        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        BackColor = Color.Transparent;
+                 | ControlStyles.ResizeRedraw | ControlStyles.Selectable | ControlStyles.StandardClick
+                 | ControlStyles.SupportsTransparentBackColor, true);
+        Kind = kind;
+    }
+
+    /// <summary>The look of the button; it can change while the button lives (a friend's game becoming the selected one).</summary>
+    public ButtonKind Kind
+    {
+        get => _kind;
+        set
+        {
+            _kind = value;
+            BackColor = value is ButtonKind.Icon or ButtonKind.Ghost ? Color.Transparent : Theme.Bg;
+            Invalidate();
+        }
     }
 
     /// <summary>An Icon button whose panel is open reads at full ink.</summary>
@@ -156,7 +169,7 @@ internal sealed class FlatButton : Control, IButtonControl
             return;
         }
         var (fill, ink, outline) = Colors();
-        e.Graphics.Clear(Parent?.BackColor ?? Theme.Bg);
+        if (_kind != ButtonKind.Ghost) e.Graphics.Clear(Parent?.BackColor ?? Theme.Bg);
         Draw.Fill(e.Graphics, fill, ClientRectangle);
         if (outline is { } line) Draw.Border(e.Graphics, ClientRectangle, line);
         var font = _kind == ButtonKind.Primary ? Theme.Primary : Theme.Strong;
@@ -221,19 +234,18 @@ internal sealed class FlatButton : Control, IButtonControl
 
     private (Color Fill, Color Ink, Color? Outline) Colors()
     {
-        var parent = Parent?.BackColor ?? Theme.Bg;
-        if (!Enabled) return _kind == ButtonKind.Primary ? (Theme.Selection, Theme.Muted, null) : (parent, Theme.Dim, Theme.Line);
-        var (restFill, restInk, outline) = Palette(parent, hovered: false);
-        var (hoverFill, hoverInk, _) = Palette(parent, hovered: true);
+        if (!Enabled) return _kind == ButtonKind.Primary ? (Theme.Selection, Theme.Muted, null) : (Clear, Theme.Dim, Theme.Line);
+        var (restFill, restInk, outline) = Palette(hovered: false);
+        var (hoverFill, hoverInk, _) = Palette(hovered: true);
         var fill = Interpolate.Lerp(restFill, hoverFill, _hover);
         if (_pressed) fill = Interpolate.Lerp(hoverFill, Theme.Bg, PressDarken);
         return (fill, Interpolate.Lerp(restInk, hoverInk, _hover), outline);
     }
 
-    private (Color Fill, Color Ink, Color? Outline) Palette(Color parent, bool hovered) => _kind switch
+    private (Color Fill, Color Ink, Color? Outline) Palette(bool hovered) => _kind switch
     {
         ButtonKind.Primary => hovered ? (Theme.Line, Theme.Text, null) : (Theme.Text, Theme.Bg, null),
-        ButtonKind.Ghost => (hovered ? Theme.Card : parent, Theme.Text, Theme.Line),
+        ButtonKind.Ghost => (hovered ? Theme.Selection : Clear, Theme.Text, Theme.Line),
         _ => (hovered ? Theme.CardHover : Theme.Card, Theme.Text, null),
     };
 }

@@ -61,6 +61,9 @@ internal sealed class GameRail : Control
 
     public GameStatus SelectedStatus => _selected >= 0 ? _games[_selected].Status : GameStatus.Unknown;
 
+    /// <summary>A game's artwork by id (the Lobbies tab and the popups show other games than the selected one).</summary>
+    public SteamArt? ArtOf(string gameId) => _games.FirstOrDefault(g => g.Profile.Id == gameId)?.Art;
+
     public GameStatus StatusOf(string gameId) => _games.FirstOrDefault(g => g.Profile.Id == gameId)?.Status ?? GameStatus.Unknown;
 
     public IEnumerable<GameProfile> Games => _games.Select(g => g.Profile);

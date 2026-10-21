@@ -1,11 +1,12 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>The launcher window, in the broadcast tool's operator look and without Windows' title bar: the top bar (which
-/// is the title bar), game rail, the selected game's hero, the Session section (its caption row holds the options cog), the Options section (open from the cog) and the Players section, and a log drawer; the
-/// settings view and the character select take the place of the right pane, one at a time. It only composes: what each part shows is worked out in
-/// <see cref="SessionCards"/> and <see cref="GameStatus"/>, session logic lives in App, the update path in
-/// <see cref="UpdateFlow"/>.</summary>
-public sealed class MainForm : ChromelessForm
+/// <summary>The launcher window, in the broadcast tool's operator look and without Windows' title bar: the top bar (which is the
+/// title bar) over one screen at a time, and a log footer on the home and lobbies screens. The screens are the home (game rail,
+/// hero, friends), the lobby browser, joining, hosting and the lobby, and the settings and character select views; popups and
+/// the mini window sit on top. This part holds the window's parts, their wiring and the actions; <c>MainForm.Screens.cs</c> works out
+/// which screen shows and fills it. What each part shows is worked out in <see cref="SessionCards"/>, <see cref="Screens"/>,
+/// <see cref="SessionScreens"/> and <see cref="GameStatus"/>, session logic lives in App, the update path in <see cref="UpdateFlow"/>.</summary>
+public sealed partial class MainForm : ChromelessForm
 {
     private const string WindowTitle = "Co-op Launcher";
     private const string ConfirmCloseText = "Leave the session and close?";
@@ -13,41 +14,41 @@ public sealed class MainForm : ChromelessForm
     private const string ConfirmStayLabel = "Stay";
     private const string DevBuildLabel = "Dev build";
     private const int WatchIntervalMs = 1000;
+    private const int KeptEvents = 50;
     private const long ModRefreshMinMs = 2000;
 
     private static readonly int WindowWidth = Theme.Scale(840);
     private static readonly int WindowHeight = Theme.Scale(600);
     private static readonly int MinimumHeight = Theme.Scale(540);
-    private static readonly int ScrollbarGutter = SystemInformation.VerticalScrollBarWidth;
-    private static readonly int IconButtonSize = Theme.Scale(28);
-    private const string SettingsGlyph = "";
 
     private readonly App _app;
     private readonly AvatarStore _avatars = new();
     private readonly TopBar _top = new();
-    private readonly GameRail _rail = new();
-    private readonly HeroBanner _hero = new();
-    private readonly SessionSection _session;
-    private readonly SectionPanel _optionsSection = new("Options") { Dock = DockStyle.Top };
-    private readonly OptionsRows _options = new();
-    private readonly FlatButton _optionsButton = new(SettingsGlyph, ButtonKind.Icon) { Size = new Size(IconButtonSize, IconButtonSize), AccessibleName = "Options" };
-    private bool _optionsOpen;
-    private readonly SectionPanel _playersSection = new("Players") { Dock = DockStyle.Top };
-    private readonly PlayerCards _players;
-    private readonly OutfitArtStore _art;
-    private readonly Panel _pane = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg, AutoScroll = true };
-    private readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
+    private readonly ScreenHost _host = new();
+    private readonly HomeScreen _home;
+    private readonly LobbiesScreen _lobbies;
+    private readonly JoiningScreen _joining;
+    private readonly SessionScreen _session;
+    private readonly SettingsView _settings;
+    private readonly CharacterSelectView _select;
+    private readonly ModalLayer _modal = new() { Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
     private readonly LogDrawer _drawer = new();
+    private readonly OutfitArtStore _art;
     private readonly GameWatch _watch = new();
     private readonly System.Windows.Forms.Timer _watchTimer = new() { Interval = WatchIntervalMs };
     private readonly UpdateFlow _update = new();
     private readonly string _buildLabel = BuildLabel();
     private readonly TaskScheduler _ui = TaskScheduler.FromCurrentSynchronizationContext();
-    private readonly SettingsView _settings;
-    private readonly CharacterSelectView _select;
+    private readonly List<string> _events = new();
+    private readonly List<GameProfile> _games = new();
 
-    /// <summary>The view that takes the place of the pane (settings or the character select), or null.</summary>
-    private Control? _view;
+    private MiniWindow? _mini;
+    private Tab _tab;
+    private Intent _intent;
+    private JoinTarget? _target;
+    private ScreenKind? _view;
+    private IReadOnlyList<LobbyRowModel> _lobbyRows = [];
+    private bool _watchingLobbies;
     private bool _applying;
     private bool _sessionOpen;
     private bool _refreshing;
@@ -57,8 +58,6 @@ public sealed class MainForm : ChromelessForm
     public MainForm(App app)
     {
         _app = app;
-        _session = new SessionSection(_avatars);
-        _players = new PlayerCards(_avatars) { Dock = DockStyle.Top };
         Text = WindowTitle;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         AutoScaleMode = AutoScaleMode.None;
@@ -68,11 +67,16 @@ public sealed class MainForm : ChromelessForm
         MinimumSize = SizeFromClientSize(new Size(WindowWidth, MinimumHeight));
         Size = SizeFromClientSize(new Size(WindowWidth, WindowHeight));
         WindowMemory.Restore(this);
-        NativeTheme.DarkScrollbars(_pane);
+        _home = new HomeScreen(_avatars);
         LoadGames();
-        _settings = new SettingsView(_rail.Games) { Visible = false };
+        _games.AddRange(Rail.Games);
+        _settings = new SettingsView(_games);
         _art = new OutfitArtStore(_ui);
-        _select = new CharacterSelectView(_art) { Visible = false };
+        _select = new CharacterSelectView(_art);
+        _lobbies = new LobbiesScreen(_avatars, Rail.ArtOf);
+        _lobbies.SetGames(_games);
+        _joining = new JoiningScreen(_avatars);
+        _session = new SessionScreen(_avatars, _art);
         BuildLayout();
         RefreshMods();
         Apply(app.Status);
@@ -80,6 +84,8 @@ public sealed class MainForm : ChromelessForm
     }
 
     protected override int CaptionHeight => _top.Height;
+
+    private GameRail Rail => _home.Rail;
 
     /// <summary>A second start of the launcher asks this window to come forward (called from any thread).</summary>
     public void BringForward() => OnUiThread(Raise);
@@ -98,16 +104,13 @@ public sealed class MainForm : ChromelessForm
         // from the log's history instead of being dropped.
         foreach (var line in Log.Subscribe(OnLogWritten)) _drawer.ShowLine(line);
         var events = Log.SubscribeEvents(OnEventLogged);
+        _events.AddRange(events.TakeLast(KeptEvents));
         if (events.Count > 0) _drawer.ShowEvent(events[^1]);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape && _view != null && ActiveControl is not FlatSelect { DroppedDown: true })
-        {
-            ShowView(null);
-            e.Handled = true;
-        }
+        if (e.KeyCode == Keys.Escape && ActiveControl is not FlatSelect { DroppedDown: true } && CloseOnEscape()) e.Handled = true;
         base.OnKeyDown(e);
     }
 
@@ -120,16 +123,15 @@ public sealed class MainForm : ChromelessForm
 
     private void WireEvents()
     {
-        _rail.SelectionChanged += OnRailSelected;
-        _options.Changed += () => Apply(_app.Status);
+        Rail.SelectionChanged += OnRailSelected;
         _select.Changed += () => Apply(_app.Status);
-        _players.SeatClicked += OpenSelect;
-        _optionsButton.Click += (_, _) =>
+        _top.Tabs.Picked += index =>
         {
-            _optionsOpen = !_optionsOpen;
+            _tab = (Tab)index;
             Apply(_app.Status);
         };
-        _top.SettingsButton.Click += (_, _) => ShowView(_view == null ? _settings : null);
+        _top.SettingsButton.Click += (_, _) => ShowView(ScreenKind.Settings);
+        _top.BackButton.Click += (_, _) => ShowView(null);
         _top.UpdateButton.Click += (_, _) => _update.Click();
         _update.Changed += () =>
         {
@@ -138,27 +140,14 @@ public sealed class MainForm : ChromelessForm
         _update.RestartRequested += RestartNow;
         _settings.GameFolderChanged += () => RefreshMods();
         _settings.UninstallRequested += UninstallMod;
-
-        _session.HostClicked += HostOrLaunch;
-        _session.ModClicked += () =>
-        {
-            if (_rail.Selected is { } game) InstallMod(game);
-        };
-        _session.JoinRequested += JoinTypedCode;
-        _session.FriendJoinClicked += _app.Join;
-        _session.RelaunchClicked += RelaunchGame;
-        _session.CopyClicked += CopyLobbyCode;
-        _session.LeaveClicked += _app.Leave;
-        _session.NoticeActionClicked += RunNoticeFix;
-        _session.NoticeReportClicked += () => SettingsView.CreateReport(_rail.Games);
-        _session.LayoutChanged += () => Fit(_session.Panel);
-        foreach (var section in new[] { _session.Panel, _optionsSection, _playersSection }) section.Resize += (_, _) => FitPane();
-        _pane.Resize += (_, _) => FitPane();
+        WireHome();
+        WireLobbies();
+        WireSession();
+        _modal.Dismissed += CloseModal;
 
         Shown += (_, _) => _update.Check(automatic: AppSettings.Current.CheckForUpdates);
         Activated += (_, _) => RefreshModsThrottled();
-        _watchTimer.Tick += (_, _) => WatchGame();
-        _watchTimer.Start();
+        _watchTimer.Tick += (_, _) => OnSecond();
         _app.AvatarLoaded += OnAvatarLoaded;
         _app.StatusChanged += OnStatusChanged;
         _app.InviteAccepted += OnInviteAccepted;
@@ -172,8 +161,50 @@ public sealed class MainForm : ChromelessForm
             _app.InviteAccepted -= OnInviteAccepted;
             Log.Unsubscribe(OnLogWritten);
             Log.UnsubscribeEvents(OnEventLogged);
+            _mini?.Dispose();
             _avatars.Dispose();
             _art.Dispose();
+        };
+    }
+
+    private void WireHome()
+    {
+        _home.HostClicked += HostOrLaunch;
+        _home.ModClicked += () =>
+        {
+            if (Rail.Selected is { } game) InstallMod(game);
+        };
+        _home.JoinRequested += JoinTypedCode;
+        _home.FriendJoinClicked += JoinFriend;
+        _home.OptionsClicked += ToggleOptions;
+        _home.CharactersClicked += () => ShowView(ScreenKind.Select);
+        _home.NoticeActionClicked += RunNoticeFix;
+        _home.NoticeReportClicked += () => SettingsView.CreateReport(_games);
+    }
+
+    private void WireLobbies()
+    {
+        _lobbies.Changed += () => Apply(_app.Status);
+        _lobbies.ActionClicked += RunLobbyAction;
+        _lobbies.Opened += OpenLobbyPopup;
+    }
+
+    private void WireSession()
+    {
+        _joining.CancelClicked += CancelSession;
+        _joining.FixClicked += RunNoticeFix;
+        _joining.StartAgainClicked += RelaunchGame;
+        _session.StartClicked += _app.StartGame;
+        _session.LeaveClicked += _app.Leave;
+        _session.CopyClicked += CopyLobbyCode;
+        _session.MiniClicked += StartMini;
+        _session.RelaunchClicked += RelaunchGame;
+        _session.NoticeActionClicked += RunNoticeFix;
+        _session.NoticeReportClicked += () => SettingsView.CreateReport(_games);
+        _session.SeatClicked += label =>
+        {
+            _select.FocusCharacter(label);
+            ShowView(ScreenKind.Select);
         };
     }
 
@@ -193,61 +224,20 @@ public sealed class MainForm : ChromelessForm
 
     private void BuildLayout()
     {
-        _session.Panel.CaptionAction = _optionsButton;
-        _playersSection.Controls.Add(_players);
-        // Docking stacks the control with the highest child index at the top: hero, Session, Options, Players.
-        Control[] topToBottom = [_hero, _session.Panel, _optionsSection, _playersSection];
-        _pane.Controls.AddRange(topToBottom.Reverse().ToArray());
-        for (var i = 0; i < topToBottom.Length; i++) topToBottom[i].TabIndex = i;
-        _hero.Bleed = _session.Panel.CaptionBand;
-        _session.Panel.Backdrop = _hero.PaintBleed;
-        _hero.ArtChanged += _session.Panel.Invalidate;
-
-        // The pane and the settings swap inside one panel: a control first shown after start-up is re-ordered among
-        // its siblings, which must never let it dock against the rail. Docking runs from the last control added, so the
-        // outer strips go in last.
-        _content.Controls.Add(_settings);
-        _content.Controls.Add(_select);
-        _content.Controls.Add(_pane);
-        Controls.Add(_content);
-        Controls.Add(_rail);
+        _host.Add(_home, ScreenKind.Home);
+        _host.Add(_lobbies, ScreenKind.Lobbies);
+        _host.Add(_joining, ScreenKind.Joining);
+        _host.Add(_session, ScreenKind.Hosting, ScreenKind.Lobby);
+        _host.Add(_settings, ScreenKind.Settings);
+        _host.Add(_select, ScreenKind.Select);
+        // Docking runs from the last control added, so the outer strips go in last.
+        Controls.Add(_modal);
+        Controls.Add(_host);
         Controls.Add(_drawer);
         Controls.Add(_top);
-        _rail.TabIndex = 0;
-        _content.TabIndex = 1;
-        _top.TabIndex = 2;
-        _drawer.TabIndex = 3;
-    }
-
-    /// <summary>Opens a view in the place of the pane with the panel reveal, or closes the open one (null) the same way back
-    /// onto the pane. The top bar button reads Back while a view is open.</summary>
-    private void ShowView(Control? view)
-    {
-        if (_view == view) return;
-        var previous = _view;
-        _view = view;
-        _top.ShowBack(view != null);
-        if (view != null)
-        {
-            if (previous != null) previous.Visible = false;
-            view.Visible = true;
-            _pane.Visible = false;
-            view.PerformLayout();
-            MotionOverlay.Play(view, Durations.PanelOpen, Easing.Out, Recipes.PanelIn, Theme.Bg);
-            return;
-        }
-        _pane.Visible = true;
-        _pane.PerformLayout();
-        var under = MotionOverlay.Capture(_pane);
-        MotionOverlay.Play(previous!, Durations.PanelClose, Easing.Out, Recipes.PanelOut, Theme.Bg, under);
-        previous!.Visible = false;
-    }
-
-    /// <summary>A seat card was clicked: the character select opens with the focus on the half that plays that character.</summary>
-    private void OpenSelect(string character)
-    {
-        _select.FocusCharacter(character);
-        ShowView(_select);
+        _host.TabIndex = 0;
+        _top.TabIndex = 1;
+        _drawer.TabIndex = 2;
     }
 
     /// <summary>Fills the rail with the games whose profile can be read; one unreadable profile is logged and skipped. The
@@ -259,23 +249,23 @@ public sealed class MainForm : ChromelessForm
             try
             {
                 var profile = GameProfile.Load(id);
-                _rail.Add(profile, new SteamArt(profile.SteamAppId));
+                Rail.Add(profile, new SteamArt(profile.SteamAppId));
             }
             catch (Exception e) when (e is IOException or System.Text.Json.JsonException or InvalidDataException or TypeInitializationException)
             {
                 Log.Info($"Game profile {id} unreadable: {e.Message}");
             }
         }
-        if (AppSettings.Current.LastGame is { } last) _rail.SelectGame(last);
+        if (AppSettings.Current.LastGame is { } last) Rail.SelectGame(last);
     }
 
-    /// <summary>The player picked a game: a refusal of the earlier one goes, the choice is remembered.</summary>
+    /// <summary>The player picked a game: an open view closes, a refusal of the earlier game goes, the choice is remembered.</summary>
     private void OnRailSelected(GameProfile game)
     {
         if (_applying) return;
+        _view = null;
         _app.ClearRefusal();
         AppSettings.Update(settings => settings.WithLastGame(game.Id));
-        ShowView(null);
         Apply(_app.Status);
     }
 
@@ -298,7 +288,7 @@ public sealed class MainForm : ChromelessForm
         _refreshing = true;
         _lastRefreshMs = Environment.TickCount64;
         GameFolders.Invalidate();
-        var games = _rail.Games.ToList();
+        var games = _games.ToList();
         Task.Run(() => games.Select(ReadStatus).OfType<(GameProfile, GameStatus)>().ToList()).ContinueWith(task =>
         {
             _refreshing = false;
@@ -325,38 +315,83 @@ public sealed class MainForm : ChromelessForm
     private void ShowStatuses(IEnumerable<(GameProfile Game, GameStatus Status)> statuses)
     {
         var refusal = _app.Status.Refusal;
-        var blocked = refusal?.GameId is { } id && !_rail.StatusOf(id).CanHost;
-        foreach (var (game, status) in statuses) _rail.SetStatus(game.Id, status);
-        if (blocked && refusal!.GameId is { } gameId && SessionCards.Resolved(refusal, _rail.StatusOf(gameId))) _app.ClearRefusal();
+        var blocked = refusal?.GameId is { } id && !Rail.StatusOf(id).CanHost;
+        foreach (var (game, status) in statuses) Rail.SetStatus(game.Id, status);
+        if (blocked && refusal!.GameId is { } gameId && SessionCards.Resolved(refusal, Rail.StatusOf(gameId))) _app.ClearRefusal();
         Apply(_app.Status);
     }
 
     // ---------------------------------------------------------------- actions
 
-    /// <summary>Once a second: notices the game of an open session exiting, or running without the adapter link.</summary>
-    private void WatchGame()
+    /// <summary>Once a second while a session is open or a lobby popup shows: notices the game of an open session exiting, or
+    /// running without the adapter link, and refreshes what counts time.</summary>
+    private void OnSecond()
     {
         var status = _app.Status;
-        var game = _rail.Games.FirstOrDefault(g => g.Id == status.GameId);
-        if (!_watch.Update(status, game, Environment.TickCount64)) return;
-        if (game != null && _watch.Condition == GameCondition.Exited) Log.Event($"{game.Name} exited");
-        if (game != null && _watch.Condition == GameCondition.Unlinked) Log.Info($"{game.Name} is running without the co-op link (started outside the launcher?)");
-        Apply(status);
+        var game = GameOf(status);
+        var changed = _watch.Update(status, game, Environment.TickCount64);
+        if (changed && game != null && _watch.Condition == GameCondition.Exited) Log.Event($"{game.Name} exited");
+        if (changed && game != null && _watch.Condition == GameCondition.Unlinked) Log.Info($"{game.Name} is running without the co-op link (started outside the launcher?)");
+        if (_modal.Panel is LobbyPopup popup) popup.Tick(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        if (changed || status.State is not (AppState.Idle or AppState.Offline)) Apply(status);
     }
 
     /// <summary>Starts the game again for the open session; the session folder is kept, so it catches up as it joins.</summary>
     private void RelaunchGame()
     {
-        var game = _rail.Games.FirstOrDefault(g => g.Id == _app.Status.GameId);
+        var game = GameOf(_app.Status);
         if (game != null) GameLauncher.Launch(game, GameFolders.Find(game));
     }
 
-    /// <summary>The session row's main button: opens a lobby, or for a game that matches its players itself starts the game.</summary>
+    /// <summary>The home hero's main button: opens a lobby, or for a game that matches its players itself starts the game.</summary>
     private void HostOrLaunch()
     {
-        if (_rail.Selected is not { } game) return;
-        if (!game.NativeSession) _app.Host(game.Id);
-        else if (GameFolders.Find(game) is { } gameDir) GameLauncher.LaunchWithOptions(game, gameDir, GameOptions.Current(game, gameDir));
+        if (Rail.Selected is not { } game) return;
+        if (game.NativeSession)
+        {
+            if (GameFolders.Find(game) is { } gameDir) GameLauncher.LaunchWithOptions(game, gameDir, GameOptions.Current(game, gameDir));
+            return;
+        }
+        _intent = Intent.Host;
+        _target = null;
+        _app.Host(game.Id);
+        Apply(_app.Status);
+    }
+
+    /// <summary>Asks to join a lobby: the joining screen shows at once for this target.</summary>
+    private void Join(JoinTarget target)
+    {
+        _intent = Intent.Join;
+        _target = target;
+        Log.Info($"Join requested for lobby {target.LobbyId}");
+        _app.Join(target.LobbyId);
+        Apply(_app.Status);
+    }
+
+    private void JoinTypedCode(string text)
+    {
+        if (!LobbyCode.TryParse(text, out var lobbyId))
+        {
+            _home.RefuseCode();
+            return;
+        }
+        Join(new JoinTarget(lobbyId, string.Empty, 0));
+    }
+
+    private void JoinFriend(ulong lobbyId)
+    {
+        var friend = _app.Status.FriendLobbies.FirstOrDefault(candidate => candidate.LobbyId == lobbyId);
+        Join(new JoinTarget(lobbyId, friend?.Name ?? string.Empty, friend?.FriendId ?? 0));
+    }
+
+    /// <summary>Cancel on the joining screen: the session is left, a refusal goes and the window returns to its tab.</summary>
+    private void CancelSession()
+    {
+        _app.Leave();
+        _app.ClearRefusal();
+        _intent = Intent.None;
+        _target = null;
+        Apply(_app.Status);
     }
 
     /// <summary>Installs, updates or repairs a game's mod; true when it was installed.</summary>
@@ -376,17 +411,6 @@ public sealed class MainForm : ChromelessForm
         RefreshMods();
     }
 
-    private void JoinTypedCode(string text)
-    {
-        if (!LobbyCode.TryParse(text, out var lobbyId))
-        {
-            _session.RefuseCode();
-            return;
-        }
-        Log.Info($"Join requested for lobby {lobbyId}");
-        _app.Join(lobbyId);
-    }
-
     private void CopyLobbyCode()
     {
         try
@@ -400,11 +424,11 @@ public sealed class MainForm : ChromelessForm
         }
     }
 
-    /// <summary>The notice row's fix button, for the refusal or the invite on show.</summary>
+    /// <summary>The fix button of a notice or of the joining screen, for the refusal or the invite on show.</summary>
     private void RunNoticeFix()
     {
         var status = _app.Status;
-        var game = _rail.Games.FirstOrDefault(g => g.Id == status.Refusal?.GameId) ?? _rail.Selected;
+        var game = _games.FirstOrDefault(g => g.Id == status.Refusal?.GameId) ?? Rail.Selected;
         switch (SessionCards.FixFor(status, _update.NewerBuild))
         {
             case NoticeFix.InstallMod or NoticeFix.UpdateMod when game != null:
@@ -417,9 +441,11 @@ public sealed class MainForm : ChromelessForm
                 if (SettingsView.BrowseFor(game)) RefreshMods();
                 break;
             case NoticeFix.JoinAgain when status.Refusal is { } refusal:
-                _app.Join(refusal.LobbyId);
+                Join(_target is { } target && target.LobbyId == refusal.LobbyId ? target : new JoinTarget(refusal.LobbyId, string.Empty, 0));
                 break;
-            case NoticeFix.Switch:
+            case NoticeFix.Switch when status.Invite is { } invite:
+                _intent = Intent.Join;
+                _target = new JoinTarget(invite.LobbyId, invite.FromName, invite.FromId);
                 _app.SwitchToInvite();
                 break;
         }
@@ -445,7 +471,13 @@ public sealed class MainForm : ChromelessForm
 
     private void OnLogWritten(string line) => OnUiThread(() => _drawer.ShowLine(line));
 
-    private void OnEventLogged(string message) => OnUiThread(() => _drawer.ShowEvent(message));
+    private void OnEventLogged(string message) => OnUiThread(() =>
+    {
+        _events.Add(message);
+        if (_events.Count > KeptEvents) _events.RemoveAt(0);
+        _drawer.ShowEvent(message);
+        Apply(_app.Status);
+    });
 
     private void OnUiThread(Action action)
     {
@@ -457,83 +489,5 @@ public sealed class MainForm : ChromelessForm
         {
             // The window closed between the check and the call; the log or status line has nowhere to go.
         }
-    }
-
-    // ---------------------------------------------------------------- showing a status
-
-    private void Apply(AppStatus status)
-    {
-        _applying = true;
-        try
-        {
-            if (status.GameId is { } lobbyGame) _rail.SelectGame(lobbyGame);
-            var free = status.State is AppState.Idle or AppState.Offline;
-            var condition = _watch.Condition;
-            _top.Show(_buildLabel, StatusText.Format(status, condition), StatusText.Lamp(status, condition));
-            _rail.Enabled = free;
-            _rail.SetRunning(status.State is AppState.GameRunning or AppState.PeerConnected ? status.GameId : null);
-            if (_rail.Selected is { } game) ApplyGame(status, game, free, condition);
-            _settings.ShowMods(_rail.StatusOf, free, Updater.Staged);
-            _update.SetFree(free);
-            _top.ShowUpdate(_update.Label, _update.Enabled);
-            if (_sessionOpen && free) RefreshMods();
-            _sessionOpen = !free;
-            FitPane();
-        }
-        finally
-        {
-            _applying = false;
-        }
-    }
-
-    private void ApplyGame(AppStatus status, GameProfile game, bool free, GameCondition condition)
-    {
-        var gameDir = GameFolders.Find(game);
-        var hostValues = GameOptions.HostValues(game, gameDir);
-        _hero.Show(game, _rail.SelectedArt!);
-        _players.Clickable = game.HasCharacterSelect;
-        if (game.HasCharacterSelect) _select.Show(game, gameDir, status, free);
-        else if (_view == _select) ShowView(null);
-        _options.Show(game, gameDir, free ? null : status.HostOptions);
-        _options.SetLocked(!free);
-        ShowOptions(_optionsOpen && _options.Height > 0);
-        _optionsButton.Visible = _options.Height > 0;
-        _session.Show(SessionCards.View(status, game, _rail.SelectedStatus, Updater.Staged,
-            condition is GameCondition.Exited or GameCondition.NotStarted, _update.NewerBuild, _rail.Games));
-        if (game.NativeSession) _players.Show([]);
-        else if (status.State is not (AppState.Rejoining or AppState.WaitingForHost))
-            _players.Show(SessionCards.Seats(status, status.SeatCharacters.Count > 0 ? status.SeatCharacters : GameOptions.SeatCharacters(game, hostValues),
-                status.Seats > 0 ? status.Seats : GameOptions.Seats(game, hostValues)));
-        SectionPanel[] sections = [_session.Panel, _optionsSection, _playersSection];
-        Fit(_optionsSection);
-        Fit(_playersSection);
-        var lowest = sections.LastOrDefault(section => section.FittedHeight > 0);
-        foreach (var section in sections) section.BottomLine = section != lowest;
-    }
-
-    /// <summary>Idle: Session, Options, Players. In a session: Session, Players, Options.</summary>
-    /// <summary>The options grid opens under the Session section from the cog on its caption row.</summary>
-    private void ShowOptions(bool open)
-    {
-        _optionsButton.Active = open;
-        if (open == _optionsSection.Controls.Contains(_options)) return;
-        if (open) _optionsSection.Controls.Add(_options);
-        else _optionsSection.Controls.Remove(_options);
-    }
-
-    /// <summary>Sizes a section to its content, tweening the height (card-resize) when it has to change.</summary>
-    private static void Fit(SectionPanel section)
-    {
-        if (section.FittedHeight != section.Height) section.FitToContent(animate: true);
-    }
-
-    /// <summary>The pane scrolls once its sections no longer fit the window; the scrollbar's gutter stays reserved while it is
-    /// hidden, so nothing shifts between games.</summary>
-    private void FitPane()
-    {
-        var content = _hero.Height + _session.Panel.Height + _optionsSection.Height + _playersSection.Height;
-        _pane.AutoScrollMinSize = new Size(0, content);
-        var gutter = content > _pane.ClientSize.Height ? 0 : ScrollbarGutter;
-        if (_pane.Padding.Right != gutter) _pane.Padding = new Padding(0, 0, gutter, 0);
     }
 }

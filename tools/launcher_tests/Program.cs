@@ -60,6 +60,8 @@ public static class Program
         SessionCardsTests.Run();
         CardStateTests.Run();
         SessionScreensTests.Run();
+        ScreensTests.Run();
+        LobbyRowsTests.Run();
         SpinnerTests.Run();
         SelectModelTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
