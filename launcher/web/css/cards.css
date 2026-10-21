@@ -1,0 +1,154 @@
+/* Spinner, step list and player cards. Component sizes live on the component (custom properties named --s-* and --c-*); colours and motion come from tokens.css. */
+
+/* ---- matrix spinner (orbit variant): ring dots pulse an #ececec layer over a #3a3f45 base ---- */
+.spin { --dot: 2px; display: inline-grid; grid-template-columns: repeat(4, var(--dot)); grid-auto-rows: var(--dot); gap: 2px; flex: none; }
+.spin-large { --dot: 3px; }
+.spin i { display: block; position: relative; background: var(--raised); border-radius: 50%; }
+.spin i.g { visibility: hidden; }
+.spin i:not(.g):not(.c)::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--text); opacity: 0;
+  animation: t-matrix var(--matrix-cycle) var(--matrix-ease) calc(var(--k) * var(--matrix-cycle) / 8) infinite;
+}
+@keyframes t-matrix { 0%, 45%, 100% { opacity: 0; } 15% { opacity: 1; } }
+
+/* ---- step list ---- */
+.steps { --s-glyph: 18px; --s-gap: 12px; --s-circle: 10px; --s-bar: 4px; --s-sub: 8px; --s-rows: 14px; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-rows); font-size: 14px; }
+.steps-tight { --s-rows: 12px; }
+.steps-small { --s-glyph: 12px; --s-gap: 8px; --s-circle: 8px; --s-bar: 3px; --s-sub: 5px; --s-rows: 5px; font-size: 12px; }
+.step { display: flex; flex-direction: column; gap: var(--s-sub); }
+.step[data-mark="pending"] { color: var(--muted); }
+.step[data-mark="active"] .step-text { font-weight: 600; }
+.step-main { display: flex; align-items: center; gap: var(--s-gap); min-width: 0; }
+.step-glyph { width: var(--s-glyph); height: var(--s-glyph); flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.step-circle { width: var(--s-circle); height: var(--s-circle); border: 1px solid var(--dim); border-radius: 50%; }
+.steps-small .ic-check { stroke-width: 2.6; }
+.step-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-trailing { font-size: 13px; font-weight: 400; }
+.steps-small .step-trailing { font-size: 12px; }
+.step-bar, .step-lines, .step-pairs { margin-left: calc(var(--s-glyph) + var(--s-gap)); }
+.step-bar { position: relative; height: var(--s-bar); background: var(--line); overflow: hidden; }
+.step-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--text); transform-origin: left center; transform: scaleX(var(--v, 0)); transition: transform var(--resize-dur) var(--resize-ease); }
+.step-bar.indeterminate .step-fill { width: 25%; transform: none; transition: none; animation: t-indeterminate var(--matrix-cycle) var(--matrix-ease) infinite; }
+@keyframes t-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(400%); } }
+.step-lines { display: flex; flex-direction: column; gap: 2px; }
+.step-line { font-size: 11px; color: var(--muted); white-space: pre; }
+.step-pairs { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 4px 16px; font: 12px var(--font-mono); }
+.step-pair { display: contents; }
+.step-pair-label { color: var(--muted); }
+
+.m-check { animation: t-check-fade var(--check-dur) var(--check-ease-out) both, t-check-rotate var(--check-dur) var(--check-ease-out) both, t-check-bob var(--check-dur) var(--check-bob-ease) both; }
+.m-check path { stroke-dasharray: 100; animation: t-check-draw var(--check-dur) var(--check-ease-out) var(--check-delay) both; }
+.m-cross-in { animation: t-fade-in 150ms ease both; }
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate { from { rotate: var(--check-rotate); } to { rotate: 0deg; } }
+@keyframes t-check-bob { from { translate: 0 var(--check-bob); } to { translate: 0 0; } }
+@keyframes t-check-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+
+/* ---- player cards ---- */
+.cards .t-digit, .steps .t-digit, .session .t-digit, .mini .t-digit { white-space: pre; }
+.cards { --c-fill: rgba(28, 31, 34, 0.92); --c-glow: 10px; --c-comet: 2px; --c-problem-pulse: 2000ms; --c-bloom: 1200ms; display: grid; gap: var(--c-gap, 12px); }
+.cards[data-layout="wide"] { --c-gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.cards[data-layout="tall"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cards[data-layout="tall"][data-count="pair"] { --c-gap: 14px; }
+.cards[data-layout="tall"][data-count="many"] { --c-gap: 10px; }
+.cards[data-layout="mini"], .cards[data-layout="miniPortrait"] { --c-fill: var(--card); --c-glow: 6px; --c-comet: 1px; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; height: 100%; }
+.cards[data-layout="mini"] { --c-gap: 6px; }
+.cards[data-layout="miniPortrait"] { --c-gap: 8px; }
+
+.card { position: relative; background: var(--c-fill); contain: layout paint; min-width: 0; }
+.card[data-clickable] { cursor: pointer; }
+.card[data-clickable]::after { content: ''; position: absolute; inset: 0; background: var(--text); opacity: 0; transition: opacity var(--hover-dur) var(--hover-ease); pointer-events: none; }
+.card[data-clickable]:hover::after { opacity: 0.06; }
+
+.fx { position: absolute; inset: 0; opacity: 0; transition: opacity var(--resize-dur) var(--resize-ease); pointer-events: none; }
+.card[data-local] .fx { inset: 1px; }
+.card[data-state="ingame"] .fx-ingame, .card[data-state="progress"] .fx-progress, .card[data-state="problem"] .fx-problem, .card[data-state="open"] .fx-open { opacity: 1; }
+.fx-ingame { --fx: var(--connected); --fx-tint: var(--tint-green); --fx-edge: 60%; --fx-glow: 0.35; }
+.fx-progress { --fx: var(--armed); --fx-tint: var(--tint-amber); --fx-edge: 35%; --fx-glow: 0.25; }
+.fx-problem { --fx: var(--problem); --fx-tint: var(--tint-red); --fx-edge: 80%; --fx-glow: 0.4; }
+.fx .tint { position: absolute; inset: 0; background: var(--fx-tint); }
+.fx .glow { position: absolute; inset: 0; box-shadow: inset 0 0 var(--c-glow) 0 var(--fx); opacity: var(--fx-glow); }
+.fx .edge { position: absolute; inset: 0; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fx) var(--fx-edge), transparent); }
+.fx-open { background: var(--bg); }
+.dashed, .comet { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.dashed rect, .comet rect { x: 0.5px; y: 0.5px; width: calc(100% - 1px); height: calc(100% - 1px); fill: none; }
+.dashed rect { stroke: var(--raised); stroke-dasharray: 4 3; }
+.comet rect { stroke: var(--armed); stroke-width: var(--c-comet); stroke-opacity: 0.3; stroke-dasharray: var(--len) calc(100 - var(--len)); stroke-dashoffset: var(--len); }
+.ring { position: absolute; inset: 0; border: 1px solid var(--text); opacity: 0; pointer-events: none; }
+.card[data-local] .ring { opacity: 1; }
+
+.m-bloom { animation: t-bloom var(--c-bloom) linear both; }
+.card[data-state="progress"] .fx-progress .glow { animation: t-breathe var(--matrix-cycle) var(--matrix-ease) infinite; }
+.card[data-state="progress"] .comet rect { animation: t-comet var(--matrix-cycle) linear infinite; }
+.card[data-state="problem"] .fx-problem .glow { animation: t-pulse-glow var(--c-problem-pulse) var(--matrix-ease) infinite; }
+@keyframes t-bloom {
+  0% { opacity: 0; animation-timing-function: var(--check-ease-out); }
+  41.67% { opacity: 0.9; animation-timing-function: ease-in-out; }
+  100% { opacity: 0.35; }
+}
+@keyframes t-breathe { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.35; } }
+@keyframes t-pulse-glow { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.6; } }
+@keyframes t-comet { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: calc(var(--len) - 100); } }
+html.reduced .comet { display: none; }
+
+.c-body { position: relative; display: flex; }
+.c-portrait { position: relative; flex: none; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--selection); color: var(--muted); font-weight: 700; }
+.c-portrait.host { background: var(--raised); }
+.c-initial { font-size: var(--c-initial, 30px); }
+.c-portrait:has(img:not([hidden])) .c-initial { visibility: hidden; }
+.c-avatar, .c-figure { position: absolute; inset: 0; width: 100%; height: 100%; }
+.c-avatar { object-fit: cover; }
+.c-figure { object-fit: contain; object-position: center bottom; }
+.card[data-state="problem"] .c-portrait { opacity: 0.5; }
+.card[data-state="open"] .c-portrait { background: transparent; border: 1px solid var(--line); }
+.card[data-state="open"] .c-initial, .card[data-state="open"] .c-avatar, .card[data-state="open"] .c-figure { display: none; }
+.c-dots { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 6px; }
+.card[data-state="open"] .c-dots { display: flex; }
+.c-dots i { position: relative; width: 6px; height: 6px; background: var(--raised); }
+.c-dots i::after { content: ''; position: absolute; inset: 0; background: var(--text); opacity: 0; animation: t-matrix var(--matrix-cycle) var(--matrix-ease) infinite; }
+.c-dots i:nth-child(2)::after { animation-delay: 400ms; }
+.c-dots i:nth-child(3)::after { animation-delay: 800ms; }
+html.reduced .c-dots i:first-child::after { opacity: 1; }
+
+.c-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.c-head { display: flex; align-items: baseline; gap: 8px; }
+.c-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--c-name, 14px); }
+.card[data-state="open"] .c-name { color: var(--muted); }
+.c-corner, .c-right { font-size: 11px; color: var(--muted); }
+.c-detail { color: var(--muted); font-size: var(--c-detail, 12px); }
+.c-state { display: flex; align-items: center; gap: 6px; font-size: var(--c-state, 12px); }
+.c-words { flex: 1; min-width: 0; }
+.c-foot { font-size: 11px; color: var(--muted); }
+.c-foot.mono { font-size: 12px; color: var(--text); }
+.c-bar { position: relative; height: 3px; background: var(--line); overflow: hidden; }
+.c-fill { position: absolute; inset: 0; background: var(--text); transform-origin: left center; transform: scaleX(var(--v, 0)); transition: transform var(--resize-dur) var(--resize-ease); }
+.cards:not([data-layout="mini"]) .c-right { display: none; }
+.cards[data-layout="mini"] .c-corner, .cards[data-layout="miniPortrait"] .c-corner, .cards[data-layout="miniPortrait"] .c-right { display: none; }
+
+.cards[data-layout="wide"] { --c-name: 16px; --c-detail: 13px; --c-initial: 30px; }
+.cards[data-layout="wide"] .c-body { align-items: center; gap: 16px; padding: 14px; }
+.cards[data-layout="wide"] .c-portrait { width: 84px; height: 112px; }
+.cards[data-layout="wide"] .c-text { gap: 6px; justify-content: center; }
+.cards[data-layout="wide"] .c-state { gap: 8px; }
+.cards[data-layout="wide"] .c-foot { display: none; }
+.cards[data-layout="wide"] .steps { margin-top: 2px; }
+
+.cards[data-layout="tall"] .c-body { flex-direction: column; padding: var(--c-pad); gap: var(--c-line); }
+.cards[data-layout="tall"] .c-text { gap: var(--c-line); }
+.cards[data-layout="tall"] .c-portrait { width: 100%; height: var(--c-portrait); }
+.cards[data-layout="tall"][data-count="pair"] { --c-pad: 12px; --c-line: 10px; --c-portrait: 200px; --c-name: 15px; --c-initial: 40px; }
+.cards[data-layout="tall"][data-count="many"] { --c-pad: 10px; --c-line: 8px; --c-portrait: 110px; --c-name: 14px; --c-initial: 30px; }
+.cards[data-layout="tall"] .c-bar { margin-top: calc(3px - var(--c-line)); }
+
+.cards[data-layout="mini"] { --c-name: 12px; --c-initial: 11px; }
+.cards[data-layout="mini"] .c-body { height: 100%; align-items: center; gap: 8px; padding: 6px 8px; }
+.cards[data-layout="mini"] .c-portrait { width: 26px; height: 26px; }
+.cards[data-layout="mini"] .c-detail, .cards[data-layout="mini"] .c-state, .cards[data-layout="mini"] .steps { display: none; }
+.cards[data-layout="mini"] .c-bar { position: absolute; left: 8px; right: 8px; bottom: 5px; }
+.cards[data-layout="mini"] .c-fill { background: var(--armed); }
+
+.cards[data-layout="miniPortrait"] { --c-name: 12px; --c-detail: 11px; --c-state: 11px; --c-initial: 13px; }
+.cards[data-layout="miniPortrait"] .c-body { height: 100%; align-items: center; gap: 10px; padding: 8px; }
+.cards[data-layout="miniPortrait"] .c-portrait { width: 40px; height: 52px; }
+.cards[data-layout="miniPortrait"] .c-text { gap: 2px; }
+.cards[data-layout="miniPortrait"] .c-foot, .cards[data-layout="miniPortrait"] .c-bar { display: none; }
