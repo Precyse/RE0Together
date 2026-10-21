@@ -25,10 +25,10 @@ export function create(ctx) {
   const backdrop = h('div', { class: 'hero-backdrop' }, heroArt.el, h('div', { class: 'hero-shade' }));
   const fade = h('div', { class: 'hero-fade' });
   const code = createCodeField(ctx);
-  const row = h('div', { class: 'hero-row' }, host, mod, code.el, options, characters);
+  const row = h('div', { class: 'hero-row' }, host, code.el, options);
   const noticeSlot = h('div', { class: 'hero-notice' });
   const dock = h('div', { class: 'hero-dock' }, row, noticeSlot);
-  const hero = h('section', { class: 'hero' }, fade, logo.el, dock);
+  const hero = h('section', { class: 'hero' }, fade, logo.el, h('div', { class: 'hero-corner' }, mod, characters), dock);
   const pane = h('div', { class: 'home-pane' });
   let layout = null;
 

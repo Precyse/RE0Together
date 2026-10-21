@@ -47,17 +47,19 @@
 .hero-fade { position: absolute; left: 0; right: 0; bottom: calc(var(--hero-fade-overlap) * -1); height: calc(var(--hero-fade-h) + var(--hero-fade-overlap)); background: linear-gradient(180deg, var(--shade-clear) 0%, var(--fade-mid) 54%, var(--bg) 100%); }
 .hero-logo { position: absolute; left: var(--hero-logo-left); top: var(--hero-logo-top); width: var(--hero-logo-w); height: var(--hero-logo-h); object-fit: contain; object-position: left bottom; }
 .hero-dock { position: absolute; left: var(--hero-pad); right: var(--hero-pad); bottom: var(--hero-row-bottom); display: flex; flex-direction: column; }
-.hero-row { display: flex; align-items: center; gap: var(--gap-row); }
+.hero-row { display: flex; align-items: center; gap: var(--gap); }
 .hero-row > .btn, .hero-row .code-input { height: var(--action-h); }
-.hero-host { width: var(--host-w); font-size: var(--fs-primary); }
+.hero-host { width: var(--host-w); flex: none; font-size: var(--fs-primary); }
 .hero-mod { width: var(--tool-w); }
+.hero-corner { position: absolute; top: var(--hero-logo-top); right: var(--hero-pad); display: flex; gap: var(--gap); }
+.hero-corner > .btn { height: var(--control-h); }
 .hero-icon { flex: none; }
-.hero-characters { padding: 0 14px 0 10px; gap: 6px; flex: none; }
+.hero-characters { padding: 0 14px 0 10px; gap: 6px; }
 .hero-notice { margin-top: var(--gap-row); }
 .hero-notice:has(> .notice[hidden]) { display: none; }
-.code-row { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--gap-row); }
-.code-label { margin-left: var(--gap); font-size: var(--fs-body); color: var(--muted); white-space: nowrap; }
-.code-input { flex: 1; min-width: 0; }
+.code-row { flex: 1; display: flex; align-items: center; gap: var(--gap); }
+.code-label { font-size: var(--fs-body); color: var(--muted); white-space: nowrap; }
+.code-input { flex: 1; min-width: calc(var(--code-digits) * 1ch + var(--field-chrome)); }
 .code-join { width: var(--join-w); height: var(--action-h); }
 
 .notice { display: flex; align-items: center; justify-content: flex-end; gap: var(--gap); height: var(--control-h); }

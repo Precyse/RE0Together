@@ -65,7 +65,9 @@
   --hero-logo-w: 240px;
   --hero-logo-h: 110px;
   --action-h: 44px;
-  --host-w: 140px;
+  --host-w: 120px;
+  --code-digits: 20;
+  --field-chrome: 26px;
   --join-w: 88px;
   --icon-btn: 44px;
   --gap: 8px;
