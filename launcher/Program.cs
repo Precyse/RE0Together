@@ -1,12 +1,16 @@
 using CoopLauncher;
 using CoopLauncher.Gui;
+using CoopLauncher.Web;
 
 internal static class Program
 {
+    private const string WebCheckFlag = "--webview-check";
+
     [STAThread]
     private static int Main(string[] args)
     {
         if (args.Length != 0) ParentConsole.Attach();
+        if (args is [WebCheckFlag]) return WebRuntime.Check();  // proves the web view loader works from the single-file exe, without a window
         var options = CliOptions.Parse(args);
         if (options == null)
         {

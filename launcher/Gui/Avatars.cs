@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace CoopLauncher.Gui;
@@ -151,7 +150,7 @@ internal sealed class AvatarStore : IDisposable
     public static void PaintPlaceholder(Graphics g, Rectangle box, string name)
     {
         Draw.Fill(g, Theme.Card, box);
-        var initial = name.Trim() is { Length: > 0 } trimmed ? new StringInfo(trimmed).SubstringByTextElements(0, 1).ToUpperInvariant() : "";
+        var initial = Initials.Of(name);
         if (initial.Length > 0) Draw.Centered(g, initial, Theme.Strong, Theme.Muted, box);
     }
 

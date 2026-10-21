@@ -1,5 +1,4 @@
 using System.Drawing.Drawing2D;
-using System.Globalization;
 
 namespace CoopLauncher.Gui;
 
@@ -36,7 +35,6 @@ internal sealed class CardPainter
 
     private const int TwoSeats = 2;
     private const string HostWord = "Host";
-    private const int PercentOfFull = 100;
     private const int HoverOverlayAlpha = 18;
 
     private static readonly int WideGap = Theme.Scale(12);
@@ -210,7 +208,7 @@ internal sealed class CardPainter
         var avatar = new Rectangle(rect.X + MiniPadX, rect.Y + (rect.Height - MiniAvatar) / 2, MiniAvatar, MiniAvatar);
         PaintPortrait(g, avatar, view, Theme.InitialSmall, background);
         var right = rect.Right - MiniPadX;
-        var rightText = RightText(view);
+        var rightText = view.Card.RightText;
         var rightWidth = rightText.Length == 0 ? 0 : Draw.Width(rightText, Theme.Mono);
         var line = new Rectangle(avatar.Right + MiniGapInside, rect.Y, Math.Max(0, right - rightWidth - CornerGap - avatar.Right - MiniGapInside), rect.Height);
         Draw.Text(g, view.Card.Name, Theme.NameSmall, view.Card.State == CardState.Open ? Theme.Muted : Theme.Text, line);
@@ -243,9 +241,6 @@ internal sealed class CardPainter
 
     // ---------------------------------------------------------------- parts
 
-    private static string RightText(CardView view) =>
-        view.Card.Progress is { } share ? $"{(int)Math.Round(share * PercentOfFull)}%" : view.Card.Countdown;
-
     /// <summary>The name at the left and the corner (you, the ping, the hold countdown) at the right, on one baseline.</summary>
     private static void PaintNameLine(Graphics g, Rectangle line, CardView view, Font nameFont, Color background)
     {
@@ -270,7 +265,7 @@ internal sealed class CardPainter
         }
         var right = row.Right;
         var percent = withBar && view.Bar != null;
-        var rightText = percent ? RightText(view) : view.Card.Footer;
+        var rightText = percent ? view.Card.RightText : view.Card.Footer;
         if (rightText.Length > 0)
         {
             var font = percent ? Theme.MonoStep : Theme.Small;
@@ -302,7 +297,7 @@ internal sealed class CardPainter
         Draw.Fill(g, fill, box);
         if (card.Figure != null) _art.Paint(g, box, card.Figure, FigureBox.Portrait, fill);
         else if (_avatars.Get(card.AvatarId) is { } avatar) PaintAvatar(g, avatar, box);
-        else Draw.Centered(g, Initial(card.Name), initialFont, Theme.Muted, box);
+        else Draw.Centered(g, Initials.Of(card.Name), initialFont, Theme.Muted, box);
         if (view.Edge.PortraitDim > 0) Draw.Fill(g, Color.FromArgb((int)Math.Round(255 * view.Edge.PortraitDim), Theme.Card), box);
     }
 
@@ -323,7 +318,4 @@ internal sealed class CardPainter
         for (var i = 0; i < DotCount; i++)
             Draw.Fill(g, Interpolate.Lerp(Theme.Raised, Theme.Text, edge.DotLevel(i)), new Rectangle(x + i * (DotSize + DotGap), y, DotSize, DotSize));
     }
-
-    private static string Initial(string name) =>
-        name.Trim() is { Length: > 0 } trimmed ? new StringInfo(trimmed).SubstringByTextElements(0, 1).ToUpperInvariant() : string.Empty;
 }

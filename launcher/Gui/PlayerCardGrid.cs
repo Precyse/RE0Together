@@ -6,7 +6,13 @@ namespace CoopLauncher.Gui;
 /// the hold countdown of the compact layouts. An open seat is a card in the Open state. Figure is the outfit cutout, shown
 /// instead of the Steam avatar.</summary>
 internal sealed record PlayerCard(ulong AvatarId, string Name, string Corner, string Detail, string Words, string Footer,
-    CardState State, bool Local, Figure? Figure, IReadOnlyList<StepRow> Steps, double? Progress, string Countdown);
+    CardState State, bool Local, Figure? Figure, IReadOnlyList<StepRow> Steps, double? Progress, string Countdown)
+{
+    private const int PercentOfFull = 100;
+
+    /// <summary>The text at the right of a compact card or a state row: the save percent while one arrives, else the hold countdown.</summary>
+    public string RightText => Progress is { } share ? $"{(int)Math.Round(share * PercentOfFull)}%" : Countdown;
+}
 
 /// <summary>The players of a session as cards in one of four layouts (see <see cref="CardLayout"/>): wide (two seats, one under
 /// the other), tall (two or four seats, two columns), mini and mini portrait (the always-on-top window). Each card is painted by

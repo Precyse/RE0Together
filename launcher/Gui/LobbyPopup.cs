@@ -9,11 +9,8 @@ namespace CoopLauncher.Gui;
 /// and the close button.</summary>
 internal sealed class LobbyPopup : Control
 {
-    private const string PlayersCaption = "PLAYERS {0}/{1}";
     private const string HostWord = "Host";
     private const string OpenWord = "Open";
-    private const string DefaultNetwork = "Steam";
-    private const string TransportKey = "transport";
     private const string BuildFormat = "Build {0}";
     private const string PingLabel = "Ping";
     private const string ModLabel = "Mod";
@@ -23,7 +20,6 @@ internal sealed class LobbyPopup : Control
     private const double LeftFraction = 1.2;
     private const double RightFraction = 1.0;
     private const int GridRows = 5;
-    private const int SecondsPerHour = 3600;
 
     private static readonly int PanelWidth = Theme.Scale(520);
     private static readonly int PadX = Theme.Scale(20);
@@ -82,8 +78,8 @@ internal sealed class LobbyPopup : Control
         _model = model;
         _mod = mod;
         var listing = model.Listing;
-        _seatCount = Math.Max(Math.Max(listing.MaxPlayers, listing.Roster.Count), 1);
-        _counter.Set(string.Format(CultureInfo.InvariantCulture, PlayersCaption, listing.Players, listing.MaxPlayers));
+        _seatCount = LobbyPopupModel.SeatCount(listing);
+        _counter.Set(LobbyPopupModel.Caption(listing));
         LobbyRows.Configure(_action, model.Action);
         Tick(unixNow);
         Size = new Size(PanelWidth, PreferredHeight());
@@ -92,15 +88,7 @@ internal sealed class LobbyPopup : Control
     }
 
     /// <summary>The Playing timer at this clock (Unix seconds); it rolls its digits.</summary>
-    public void Tick(long unixNow) => _playing.Set(PlayingText(_model.Listing.StartedUnix, unixNow));
-
-    /// <summary>The timer as <c>m:ss</c>, <c>h:mm:ss</c> past an hour, or empty when the game has not started.</summary>
-    public static string PlayingText(long startedUnix, long unixNow)
-    {
-        if (startedUnix <= 0) return string.Empty;
-        var seconds = Math.Max(0, unixNow - startedUnix);
-        return seconds >= SecondsPerHour ? SessionScreens.HoursMinutesSeconds(seconds) : SessionScreens.MinutesSeconds(seconds);
-    }
+    public void Tick(long unixNow) => _playing.Set(LobbyPopupModel.PlayingText(_model.Listing.StartedUnix, unixNow));
 
     protected override void OnResize(EventArgs e)
     {
@@ -139,25 +127,25 @@ internal sealed class LobbyPopup : Control
         var listing = _model.Listing;
         _counter.Paint(g, new Rectangle(_left.X, _left.Y, _left.Width, Theme.Label.Height), Theme.Label, Theme.Muted, BackColor);
         var y = _left.Y + Theme.Label.Height + CaptionGap;
-        var hostSeat = Math.Max(0, listing.Roster.ToList().FindIndex(entry => entry.Name == listing.HostName));
-        for (var seat = 0; seat < _seatCount; seat++, y += RosterRow + RosterGap)
+        foreach (var seat in LobbyPopupModel.Seats(listing))
         {
             var row = new Rectangle(_left.X, y, _left.Width, RosterRow);
             var avatar = new Rectangle(row.X, row.Y, RosterRow, RosterRow);
-            if (seat >= listing.Roster.Count && seat < listing.Players)
+            y += RosterRow + RosterGap;
+            if (seat.Kind == PopupSeatKind.Unnamed)
             {
                 Draw.Fill(g, Theme.Card, row);
                 Draw.Fill(g, Theme.Selection, avatar);
                 continue;
             }
-            if (seat >= listing.Roster.Count)
+            if (seat.Kind == PopupSeatKind.Open)
             {
                 Draw.Dashed(g, avatar, Theme.Raised);
                 Draw.Text(g, OpenWord, Theme.Body, Theme.Muted, new Rectangle(avatar.Right + RosterText, row.Y, row.Width, RosterRow));
                 continue;
             }
-            var entry = listing.Roster[seat];
-            var host = seat == hostSeat;
+            var entry = seat.Entry!;
+            var host = seat.Host;
             Draw.Fill(g, Theme.Card, row);
             Draw.Fill(g, CardStates.Tint(CardStates.OfStep(entry.Step)), row);
             Draw.Fill(g, host ? Theme.Raised : Theme.Selection, avatar);
@@ -173,7 +161,7 @@ internal sealed class LobbyPopup : Control
         var listing = _model.Listing;
         var labelWidth = GridLabels.Max(label => Draw.Width(label, Theme.StepSmall)) + GridLabelGap;
         var valueX = _right.X + labelWidth;
-        var gameOk = listing.GameBuild == 0 || listing.GameBuild == _mod.GameBuild;
+        var gameOk = LobbyPopupModel.GameOk(listing, _mod);
         for (var i = 0; i < GridRows; i++)
         {
             var row = new Rectangle(_right.X, _right.Y + i * GridPitch, _right.Width, GridPitch);
@@ -191,7 +179,7 @@ internal sealed class LobbyPopup : Control
                     PaintChecked(g, value, gameOk, listing.GameBuild > 0 ? string.Format(CultureInfo.InvariantCulture, BuildFormat, listing.GameBuild) : string.Empty, Theme.StepSmall);
                     break;
                 case 3:
-                    Draw.Text(g, NetworkOf(), Theme.StepSmall, Theme.Text, value);
+                    Draw.Text(g, LobbyPopupModel.Network(_model), Theme.StepSmall, Theme.Text, value);
                     break;
                 default:
                     _playing.Paint(g, value, Theme.MonoStep, Theme.Text, BackColor);
@@ -207,13 +195,5 @@ internal sealed class LobbyPopup : Control
         if (ok) Draw.Check(g, Theme.Connected, glyph, 1);
         else Draw.Cross(g, Theme.Problem, glyph);
         Draw.Text(g, text, font, Theme.Text, value with { X = glyph.Right + GlyphGap, Width = Math.Max(0, value.Width - GlyphSize - GlyphGap) });
-    }
-
-    /// <summary>The label of the host's transport option when the game has one, else Steam.</summary>
-    private string NetworkOf()
-    {
-        var option = _model.Game.Options?.FirstOrDefault(candidate => candidate.Key == TransportKey);
-        var value = option?.Values.FirstOrDefault(v => _model.Listing.HostOptions.TryGetValue(TransportKey, out var host) && v.Value == host);
-        return value?.Label ?? DefaultNetwork;
     }
 }

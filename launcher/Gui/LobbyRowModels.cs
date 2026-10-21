@@ -8,6 +8,9 @@ internal enum LobbyFilter { All, Friends }
 /// read Update), or Unavailable (a disabled Join: the lobby cannot be entered from here).</summary>
 internal enum LobbyAction { Join, Full, UpdateLauncher, UpdateMod, Unavailable }
 
+/// <summary>A lobby button as it is drawn: its label, whether it is the primary JOIN and whether it can be used.</summary>
+internal readonly record struct LobbyButton(string Label, bool Primary, bool Enabled);
+
 /// <summary>One row of the Lobbies tab, and the lobby popup's own look: the lobby, its game, what its button does and whether the
 /// host's mod build differs from the installed one (drawn red).</summary>
 internal sealed record LobbyRowModel(LobbyListing Listing, GameProfile Game, LobbyAction Action, bool ModDiffers);
@@ -59,6 +62,15 @@ internal static class LobbyRowModels
         if (!mod.GameFound || listing.GameBuild != 0 && listing.GameBuild != mod.GameBuild) return LobbyAction.Unavailable;
         return LobbyAction.Join;
     }
+
+    /// <summary>The button of a lobby: the primary JOIN, a disabled Full, Update (for both updates), or a disabled Join.</summary>
+    public static LobbyButton ButtonOf(LobbyAction action) => action switch
+    {
+        LobbyAction.Join => new LobbyButton("JOIN", Primary: true, Enabled: true),
+        LobbyAction.Full => new LobbyButton("Full", Primary: false, Enabled: false),
+        LobbyAction.UpdateLauncher or LobbyAction.UpdateMod => new LobbyButton("Update", Primary: false, Enabled: true),
+        _ => new LobbyButton("Join", Primary: false, Enabled: false),
+    };
 
     /// <summary>The ping column: <c>N ms</c>, empty while unknown.</summary>
     public static string Ping(LobbyListing listing) => listing.PingMs is { } ping ? string.Format(PingFormat, ping) : string.Empty;

@@ -1,7 +1,7 @@
 namespace CoopLauncher;
 
 /// <summary>The launcher's per-user folder (%AppData%\CoopLauncher, or the folder named by COOP_LAUNCHER_DATA, which tests
-/// and the UI harness point at a temp folder): its settings, its logs and the pictures it took from games.</summary>
+/// and the UI harness point at a temp folder): its settings, its logs, the pictures it took from games and the web view's data.</summary>
 public static class AppData
 {
     /// <summary>The timestamp every file the launcher names by time uses (archives, reports, peer logs).</summary>
@@ -13,6 +13,7 @@ public static class AppData
     private const string SettingsFileName = "settings.json";
     private const string LogsFolderName = "logs";
     private const string ArtFolderName = "art";
+    private const string WebViewFolderName = "webview2";
     private const string LogFileName = "launcher.log";
     private const string PreviousLogFileName = "launcher.prev.log";
 
@@ -24,6 +25,9 @@ public static class AppData
 
     /// <summary>Pictures taken from a game's files, one folder per game.</summary>
     public static string ArtDir => Path.Combine(Root, ArtFolderName);
+
+    /// <summary>The WebView2 user data folder (cache, cookies and the browser's own files of the window's page).</summary>
+    public static string WebViewDir => Path.Combine(Root, WebViewFolderName);
 
     /// <summary>The log of the run before this one.</summary>
     public static string PreviousLogFile => Path.Combine(LogsDir, PreviousLogFileName);

@@ -16,9 +16,14 @@ public static class Check
 
 public static class Program
 {
+    /// <summary>Setting this variable to <c>web</c> runs only the web window's suites (UiCommands, UiSnapshot, UiContract).</summary>
+    private const string OnlyVariable = "LAUNCHER_TESTS_ONLY";
+    private const string WebSuites = "web";
+
     [STAThread]
     public static int Main()
     {
+        if (Environment.GetEnvironmentVariable(OnlyVariable) == WebSuites) return RunWebSuites();
         ContentHashTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
@@ -64,7 +69,19 @@ public static class Program
         LobbyRowsTests.Run();
         SpinnerTests.Run();
         SelectModelTests.Run();
+        UiCommandsTests.Run();
+        UiSnapshotTests.Run();
+        UiContractTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
+        return Check.Failures == 0 ? 0 : 1;
+    }
+
+    private static int RunWebSuites()
+    {
+        UiCommandsTests.Run();
+        UiSnapshotTests.Run();
+        UiContractTests.Run();
+        if (Check.Failures == 0) Console.WriteLine("launcher_tests (web): all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
 }
