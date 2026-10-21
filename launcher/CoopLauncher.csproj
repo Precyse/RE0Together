@@ -14,8 +14,17 @@
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(LauncherUi)' == 'Classic'">
+    <DefineConstants>$(DefineConstants);CLASSIC_UI</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Steamworks.NET" Version="2024.8.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="web/**" Exclude="web/dev/**" LogicalName="web/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,5 +36,12 @@
     <Content Include="update.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="native/steam_api64.dll" Link="steam_api64.dll" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
+
+  <!-- The WebView2 package also references its WPF control, which this WinForms app never uses and which clashes on WindowsBase. -->
+  <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 
 </Project>
