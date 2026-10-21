@@ -12,10 +12,15 @@ public static class FileMessages
 {
     public const int HashSize = 32;
 
-    private const byte NoSlot = 0;
+    /// <summary>The manifest counts its names in one byte.</summary>
+    public const int MaxManifestNames = byte.MaxValue;
+
     private const int IdSize = 4;
     private const int BeginFixedSize = IdSize + 4 + HashSize + 1;
     private const int ChunkHeaderSize = IdSize + 4;
+
+    /// <summary>Whether the name fits the wire: ASCII only, at most 255 bytes (its length is one byte).</summary>
+    public static bool IsWireName(string name) => name.Length <= byte.MaxValue && name.All(char.IsAscii);
 
     public static Frame Begin(FileBegin begin)
     {
@@ -26,7 +31,7 @@ public static class FileMessages
         begin.Hash.CopyTo(p, IdSize + 4);
         p[BeginFixedSize - 1] = (byte)name.Length;
         name.CopyTo(p, BeginFixedSize);
-        return Make(Msg.FileBegin, p);
+        return Framing.Reliable(Msg.FileBegin, p);
     }
 
     public static Frame Chunk(uint id, uint offset, ReadOnlySpan<byte> data)
@@ -35,14 +40,14 @@ public static class FileMessages
         BinaryPrimitives.WriteUInt32LittleEndian(p, id);
         BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(IdSize), offset);
         data.CopyTo(p.AsSpan(ChunkHeaderSize));
-        return Make(Msg.FileChunk, p);
+        return Framing.Reliable(Msg.FileChunk, p);
     }
 
     public static Frame End(uint id)
     {
         var p = new byte[IdSize];
         BinaryPrimitives.WriteUInt32LittleEndian(p, id);
-        return Make(Msg.FileEnd, p);
+        return Framing.Reliable(Msg.FileEnd, p);
     }
 
     public static Frame Ack(uint id, bool ok)
@@ -50,7 +55,7 @@ public static class FileMessages
         var p = new byte[IdSize + 1];
         BinaryPrimitives.WriteUInt32LittleEndian(p, id);
         p[IdSize] = ok ? (byte)1 : (byte)0;
-        return Make(Msg.FileAck, p);
+        return Framing.Reliable(Msg.FileAck, p);
     }
 
     /// <summary>FILE_MANIFEST: u8 count, then per file u8 length + ascii name.</summary>
@@ -63,7 +68,7 @@ public static class FileMessages
             body.Add((byte)bytes.Length);
             body.AddRange(bytes);
         }
-        return Make(Msg.FileManifest, body.ToArray());
+        return Framing.Reliable(Msg.FileManifest, body.ToArray());
     }
 
     public static bool TryParseManifest(byte[] payload, out List<string> names)
@@ -122,6 +127,4 @@ public static class FileMessages
         ok = payload[IdSize] != 0;
         return true;
     }
-
-    private static Frame Make(ushort type, byte[] payload) => new(type, Framing.FlagReliable, NoSlot, payload);
 }

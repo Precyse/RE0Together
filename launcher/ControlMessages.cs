@@ -6,8 +6,6 @@ namespace CoopLauncher;
 /// <summary>Builders and parsers for launcher-owned control payloads (types below 0x0100).</summary>
 public static class ControlMessages
 {
-    private const byte NoSlot = 0;
-
     public static Frame Welcome(byte localSlot, byte hostSlot, byte maxPlayers, uint epoch, ulong localId)
     {
         var p = new byte[15];
@@ -16,7 +14,7 @@ public static class ControlMessages
         p[2] = maxPlayers;
         BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(3), epoch);
         BinaryPrimitives.WriteUInt64LittleEndian(p.AsSpan(7), localId);
-        return Make(Msg.Welcome, p);
+        return Framing.Reliable(Msg.Welcome, p);
     }
 
     public static Frame PeerUp(byte slot, ulong steamId, string name)
@@ -28,10 +26,10 @@ public static class ControlMessages
         BinaryPrimitives.WriteUInt64LittleEndian(p.AsSpan(1), steamId);
         p[9] = (byte)length;
         Array.Copy(nameBytes, 0, p, 10, length);
-        return Make(Msg.PeerUp, p);
+        return Framing.Reliable(Msg.PeerUp, p);
     }
 
-    public static Frame PeerDown(byte slot) => Make(Msg.PeerDown, [slot]);
+    public static Frame PeerDown(byte slot) => Framing.Reliable(Msg.PeerDown, [slot]);
 
     public static Frame Reject(string reason)
     {
@@ -39,7 +37,7 @@ public static class ControlMessages
         var p = new byte[1 + text.Length];
         p[0] = (byte)text.Length;
         text.CopyTo(p, 1);
-        return Make(Msg.Reject, p);
+        return Framing.Reliable(Msg.Reject, p);
     }
 
     public static Frame Ping(ulong micros) => MakeTimestamp(Msg.Ping, micros);
@@ -51,10 +49,10 @@ public static class ControlMessages
         var p = new byte[3];
         p[0] = slot;
         BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(1), rttMs);
-        return Make(Msg.PeerStats, p);
+        return Framing.Reliable(Msg.PeerStats, p);
     }
 
-    public static Frame Heartbeat() => Make(Msg.Heartbeat, []);
+    public static Frame Heartbeat() => Framing.Reliable(Msg.Heartbeat, []);
 
     public static bool TryParseHello(byte[] payload, out ushort proto, out string gameId)
     {
@@ -80,9 +78,6 @@ public static class ControlMessages
     {
         var p = new byte[8];
         BinaryPrimitives.WriteUInt64LittleEndian(p, micros);
-        return new Frame(type, Flags: 0, NoSlot, p);
+        return new Frame(type, Flags: 0, Framing.NoSlot, p);
     }
-
-    private static Frame Make(ushort type, byte[] payload) =>
-        new(type, Framing.FlagReliable, NoSlot, payload);
 }
