@@ -13,18 +13,25 @@ internal static class Program
             Console.Error.WriteLine(CliOptions.Usage);
             return 2;
         }
-        return args.Length != 0 ? RunCli(args, options) : RunWindow(args, options);  // tools and tests run several command-line launchers side by side
+        return args.Length != 0 ? RunCli(args, options) : RunWindow(options);  // tools and tests run several command-line launchers side by side
     }
 
-    private static int RunWindow(string[] args, CliOptions options)
+    /// <summary>The window opens first; a newer build is staged in the background and installed by the restart the player asks for.</summary>
+    private static int RunWindow(CliOptions options)
     {
-        using var instance = SingleInstance.Acquire();
-        if (instance == null) return 0;
-        return UpdateInstalled(args) ? 0 : GuiHost.Run(options, instance);
+        int result;
+        using (var instance = SingleInstance.Acquire())
+        {
+            if (instance == null) return 0;
+            result = GuiHost.Run(options, instance);
+        }
+        if (Updater.RestartRequested) Updater.RelaunchStaged();
+        return result;
     }
 
     private static int RunCli(string[] args, CliOptions options)
     {
+        using var cliRun = new Mutex(initiallyOwned: false, InstanceGuard.CliMutexName(Environment.ProcessId));  // no window start closes this run
         if (UpdateInstalled(args)) return 0;
         var app = new App(options);
         Console.CancelKeyPress += (_, e) =>

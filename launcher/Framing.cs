@@ -34,10 +34,14 @@ public static class Framing
     public const ushort ProtocolVersion = 1;
     public const byte FlagReliable = 1;
     public const byte SlotAll = 0xFF;
+    public const byte NoSlot = 0;
     public const int MaxFrameLen = 1 << 20;
 
     private const int LenFieldSize = 4;
     private const int WireHeaderSize = 4;
+
+    /// <summary>A launcher-owned reliable frame (no peer slot): what every control and file message builder returns.</summary>
+    public static Frame Reliable(ushort type, byte[] payload) => new(type, FlagReliable, NoSlot, payload);
 
     public static byte[] EncodeWire(Frame f)
     {

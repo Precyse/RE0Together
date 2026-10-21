@@ -5,15 +5,20 @@ namespace CoopLauncher;
 
 /// <summary>
 /// Guests send their diagnostics to the host: the lines their adapter appends to its log (LOG_APPEND) and any
-/// crash dump the adapter writes during the session (CRASH_DUMP). The host appends log lines to one file per peer
-/// and writes each dump as peer_&lt;id&gt;_&lt;name&gt;, both next to its own adapter log.
+/// crash dump the adapter writes during the session (CRASH_DUMP). The host appends log lines to one file per peer and
+/// session (peer_&lt;id&gt;_&lt;stamp&gt;.log, the newest <see cref="KeptPeerLogs"/> per peer are kept) and writes each dump as
+/// peer_&lt;id&gt;_&lt;name&gt;, both next to its own adapter log. A disk error on either side skips that pass and never reaches the loop.
 /// </summary>
 public sealed class LogForwarder
 {
+    /// <summary>Peer log files kept per peer on the host.</summary>
+    public const int KeptPeerLogs = 10;
+
     private const long SendIntervalMs = 2000;
     private const int MaxBytesPerSend = 32 * 1024;
     private const string PeerPrefix = "peer_";
     private const string DumpPattern = "crash-*.dmp";
+    private const string LogExtension = ".log";
     private const int DumpHeaderFixedSize = 1 + 4;  // u8 name length, u32 offset (the name sits between them)
 
     private sealed class DumpTransfer
@@ -29,6 +34,9 @@ public sealed class LogForwarder
     private readonly Func<ulong> _hostId;
     private readonly bool _isHost;
     private readonly HashSet<string> _knownDumps;
+    private readonly string _stamp = DateTime.Now.ToString(AppData.StampFormat);
+    private readonly HashSet<ulong> _prunedPeers = [];
+    private bool _failureLogged;
     private long _offset;
     private long _lastSendMs;
     private DumpTransfer? _dump;
@@ -56,13 +64,31 @@ public sealed class LogForwarder
     public void Pump()
     {
         if (_isHost) return;
-        SendDumpChunk();
-        var now = Environment.TickCount64;
-        if (now - _lastSendMs < SendIntervalMs) return;
-        _lastSendMs = now;
-        StartNewDump();
-        SendLogLines();
+        try
+        {
+            SendDumpChunk();
+            var now = Environment.TickCount64;
+            if (now - _lastSendMs < SendIntervalMs) return;
+            _lastSendMs = now;
+            StartNewDump();
+            SendLogLines();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            LogFailureOnce($"the adapter log could not be read ({e.Message})");
+        }
     }
+
+    /// <summary>The names of one peer's log files (the older peer_&lt;id&gt;.log and the per-session peer_&lt;id&gt;_&lt;stamp&gt;.log), not its dumps.</summary>
+    public static bool IsPeerLog(string fileName, ulong peer) =>
+        fileName.EndsWith(LogExtension, StringComparison.OrdinalIgnoreCase)
+        && (fileName.Equals($"{PeerPrefix}{peer}{LogExtension}", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith($"{PeerPrefix}{peer}_", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Of one peer's log file names, those beyond the newest <see cref="KeptPeerLogs"/> (the stamps sort by time; the older
+    /// unstamped name sorts first).</summary>
+    public static List<string> ExpiredPeerLogs(IEnumerable<string> peerLogNames) =>
+        peerLogNames.OrderDescending(StringComparer.OrdinalIgnoreCase).Skip(KeptPeerLogs).ToList();
 
     private void SendLogLines()
     {
@@ -70,7 +96,7 @@ public sealed class LogForwarder
         if (length < _offset) _offset = 0;
         if (length == _offset) return;
         var chunk = ReadFrom(_offset, (int)Math.Min(MaxBytesPerSend, length - _offset));
-        if (chunk.Length > 0 && _transport.Send(_hostId(), new Frame(Msg.LogAppend, Framing.FlagReliable, 0, chunk)))
+        if (chunk.Length > 0 && _transport.Send(_hostId(), Framing.Reliable(Msg.LogAppend, chunk)))
             _offset += chunk.Length;
     }
 
@@ -108,7 +134,7 @@ public sealed class LogForwarder
         name.CopyTo(payload, 1);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(1 + name.Length), (uint)_dump.Offset);
         _dump.Data.AsSpan(_dump.Offset, length).CopyTo(payload.AsSpan(DumpHeaderFixedSize + name.Length));
-        if (!_transport.Send(_hostId(), new Frame(Msg.CrashDump, Framing.FlagReliable, 0, payload))) return;
+        if (!_transport.Send(_hostId(), Framing.Reliable(Msg.CrashDump, payload))) return;
         _dump.Offset += length;
         if (_dump.Offset >= _dump.Data.Length) _dump = null;
     }
@@ -116,13 +142,46 @@ public sealed class LogForwarder
     private void OnFrame(ulong sender, Frame frame)
     {
         if (!_isHost || frame.Payload.Length == 0) return;
-        if (frame.Type == Msg.LogAppend)
+        try
         {
-            using var file = new FileStream(Path.Combine(_logDir, $"{PeerPrefix}{sender}.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-            file.Write(frame.Payload);
-            return;
+            Directory.CreateDirectory(_logDir);
+            if (frame.Type == Msg.LogAppend) AppendPeerLog(sender, frame.Payload);
+            else WriteDumpChunk(sender, frame.Payload);
         }
-        WriteDumpChunk(sender, frame.Payload);
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            LogFailureOnce($"a diagnostics file from {sender} could not be written ({e.Message})");
+        }
+    }
+
+    private void AppendPeerLog(ulong sender, byte[] lines)
+    {
+        using (var file = new FileStream(Path.Combine(_logDir, $"{PeerPrefix}{sender}_{_stamp}{LogExtension}"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+            file.Write(lines);
+        if (_prunedPeers.Add(sender)) PrunePeerLogs(sender);
+    }
+
+    private void PrunePeerLogs(ulong peer)
+    {
+        var names = Directory.GetFiles(_logDir, $"{PeerPrefix}{peer}*{LogExtension}").Select(Path.GetFileName).OfType<string>().Where(name => IsPeerLog(name, peer));
+        foreach (var expired in ExpiredPeerLogs(names))
+        {
+            try
+            {
+                File.Delete(Path.Combine(_logDir, expired));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Info($"Could not delete the old peer log {expired}: {e.Message}");
+            }
+        }
+    }
+
+    private void LogFailureOnce(string what)
+    {
+        if (_failureLogged) return;
+        _failureLogged = true;
+        Log.Info($"Diagnostics: {what}, skipping");
     }
 
     private void WriteDumpChunk(ulong sender, byte[] payload)

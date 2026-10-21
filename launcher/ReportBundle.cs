@@ -1,28 +1,37 @@
 using System.IO.Compression;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace CoopLauncher;
 
-/// <summary>One zip to send when something goes wrong: the launcher's logs, its build, and from each game's coop folder
-/// the adapter log and ini, the logs and crash dumps of the other player's machine, and this machine's crash dumps.</summary>
+/// <summary>One zip to send when something goes wrong: report.txt (launcher build, OS, each game's folder, build and mod state, what
+/// was left out and why), the launcher's settings and every log it kept, and from each game's coop folder the adapter log and ini, the
+/// game's status file, the logs and crash dumps of the other player's machine, and this machine's crash dumps. Never the join file
+/// (it holds the session password). One file that cannot be read is listed in report.txt and skipped; each entry is cut to its last
+/// <see cref="MaxLogEntryBytes"/>.</summary>
 public static class ReportBundle
 {
+    public const int MaxLogEntryBytes = 8 * 1024 * 1024;
+
     private const string FilePrefix = "report-";
-    private const string TimestampFormat = "yyyyMMdd-HHmmss";
+    private const string ManifestName = "report.txt";
+    private const string SettingsEntryName = "settings.json";
+    private const string LogPattern = "*.log";
     private static readonly string[] GameFilePatterns = { "*adapter.log", "*adapter.ini", "peer_*", "crash-*.dmp" };
 
     /// <summary>Writes the zip next to the launcher log and returns its path; null when it could not be written.</summary>
     public static string? Create(IEnumerable<GameProfile> games)
     {
-        var path = Path.Combine(AppData.LogsDir, $"{FilePrefix}{DateTime.Now.ToString(TimestampFormat)}.zip");
+        var path = Path.Combine(AppData.LogsDir, $"{FilePrefix}{DateTime.Now.ToString(AppData.StampFormat)}.zip");
         try
         {
             Directory.CreateDirectory(AppData.LogsDir);
             using (var zip = ZipFile.Open(path, ZipArchiveMode.Create))
             {
-                AddFile(zip, AppData.LogFile, Path.GetFileName(AppData.LogFile));
-                AddFile(zip, AppData.PreviousLogFile, Path.GetFileName(AppData.PreviousLogFile));
-                AddFile(zip, Path.Combine(AppContext.BaseDirectory, BuildCheck.VersionFile), BuildCheck.VersionFile);
-                foreach (var game in games) AddGame(zip, game);
+                var entries = new Entries(zip);
+                AddLauncherFiles(entries);
+                var gameLines = games.SelectMany(game => AddGame(entries, game)).ToList();
+                entries.WriteManifest(LauncherLines().Concat(gameLines));
             }
             Log.Info($"Report written: {path}");
             return path;
@@ -34,22 +43,106 @@ public static class ReportBundle
         }
     }
 
-    private static void AddGame(ZipArchive zip, GameProfile game)
+    private static IEnumerable<string> LauncherLines()
     {
-        if (game.AdapterLog == null || GameFolders.Find(game) is not { } gameDir) return;
-        var coopDir = Path.GetDirectoryName(Path.Combine(gameDir, game.AdapterLog))!;
-        if (!Directory.Exists(coopDir)) return;
-        foreach (var pattern in GameFilePatterns)
-            foreach (var file in Directory.EnumerateFiles(coopDir, pattern))
-                AddFile(zip, file, $"{game.Id}/{Path.GetFileName(file)}");
+        var build = BuildCheck.LocalBuild();
+        yield return $"Launcher build: {(build == BuildInfo.DevBuild ? "dev build" : build.ToString())}";
+        yield return $"OS: {RuntimeInformation.OSDescription}";
+        yield return $"Created: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
     }
 
-    /// <summary>Adds the file as it is now; a file the game still has open is read without locking it.</summary>
-    private static void AddFile(ZipArchive zip, string file, string entryName)
+    private static void AddLauncherFiles(Entries entries)
     {
-        if (!File.Exists(file)) return;
-        using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var entry = zip.CreateEntry(entryName, CompressionLevel.Optimal).Open();
-        source.CopyTo(entry);
+        foreach (var log in entries.Files(AppData.LogsDir, LogPattern)) entries.Add(log, Path.GetFileName(log));
+        entries.Add(AppData.SettingsFile, SettingsEntryName);
+        entries.Add(Path.Combine(AppContext.BaseDirectory, BuildCheck.VersionFile), BuildCheck.VersionFile);
+    }
+
+    /// <summary>Adds the game's files and returns its lines for report.txt.</summary>
+    private static List<string> AddGame(Entries entries, GameProfile game)
+    {
+        var gameDir = GameFolders.Find(game);
+        var lines = new List<string> { "", $"Game {game.Id} ({game.Name})", $"  folder: {gameDir ?? "not found"}" };
+        if (gameDir == null) return lines;
+        var mod = ModInstaller.Status(game, gameDir);
+        var build = GameBuilds.Installed(game, gameDir);
+        lines.Add($"  game build: {(build == GameBuilds.Unknown ? "unknown" : build.ToString())}");
+        lines.Add($"  mod: {mod.State}{(mod.Build == 0 ? "" : $", build {mod.Build}")}");
+        if (game.AdapterLog != null)
+        {
+            var coopDir = Path.GetDirectoryName(Path.Combine(gameDir, game.AdapterLog))!;
+            foreach (var pattern in GameFilePatterns)
+                foreach (var file in entries.Files(coopDir, pattern).Where(file => !IsJoinFile(game, file)))
+                    entries.Add(file, $"{game.Id}/{Path.GetFileName(file)}");
+        }
+        if (game.StatusFile != null) entries.Add(Path.Combine(gameDir, game.StatusFile), $"{game.Id}/{Path.GetFileName(game.StatusFile)}");
+        return lines;
+    }
+
+    private static bool IsJoinFile(GameProfile game, string file) =>
+        game.JoinFile != null && Path.GetFileName(file).Equals(Path.GetFileName(game.JoinFile), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The zip's entries: each file is read without locking it, cut to its last <see cref="MaxLogEntryBytes"/>, and
+    /// recorded as included, truncated or skipped for report.txt.</summary>
+    private sealed class Entries(ZipArchive zip)
+    {
+        private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _included = [];
+        private readonly List<string> _truncated = [];
+        private readonly List<string> _skipped = [];
+
+        /// <summary>The files of a folder that match the pattern (none for a missing folder); a folder that cannot be listed is recorded as skipped.</summary>
+        public IEnumerable<string> Files(string directory, string pattern)
+        {
+            if (!Directory.Exists(directory)) return [];
+            try
+            {
+                return Directory.GetFiles(directory, pattern);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _skipped.Add($"{Path.Combine(directory, pattern)}: {e.Message}");
+                return [];
+            }
+        }
+
+        /// <summary>Adds the file as it is now; a missing file is not an error, a file that cannot be read is listed as skipped.</summary>
+        public void Add(string file, string entryName)
+        {
+            if (!File.Exists(file) || !_names.Add(entryName)) return;
+            ZipArchiveEntry? entry = null;
+            try
+            {
+                using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var cut = Math.Max(0, source.Length - MaxLogEntryBytes);
+                source.Seek(cut, SeekOrigin.Begin);
+                entry = zip.CreateEntry(entryName, CompressionLevel.Optimal);
+                using (var target = entry.Open()) source.CopyTo(target);
+                _included.Add(entryName);
+                if (cut > 0) _truncated.Add($"{entryName}: first {cut} bytes left out");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                entry?.Delete();
+                _skipped.Add($"{entryName}: {e.Message}");
+            }
+        }
+
+        public void WriteManifest(IEnumerable<string> lines)
+        {
+            var text = new StringBuilder();
+            foreach (var line in lines) text.AppendLine(line);
+            AppendSection(text, "Included", _included);
+            AppendSection(text, "Truncated", _truncated);
+            AppendSection(text, "Skipped", _skipped);
+            using var writer = new StreamWriter(zip.CreateEntry(ManifestName, CompressionLevel.Optimal).Open(), new UTF8Encoding(false));
+            writer.Write(text.ToString());
+        }
+
+        private static void AppendSection(StringBuilder text, string title, List<string> items)
+        {
+            text.AppendLine().AppendLine($"{title} ({items.Count})");
+            foreach (var item in items) text.AppendLine($"  {item}");
+        }
     }
 }

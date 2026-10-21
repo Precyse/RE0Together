@@ -40,6 +40,20 @@ public static class Program
         BoxBlurTests.Run();
         AvatarTests.Run();
         TextChangeTests.Run();
+        FramingTests.Run();
+        InstanceGuardTests.Run();
+        UpdaterTests.Run();
+        ModInstallerTests.Run();
+        SaveSenderTests.Run();
+        SaveReceiverTests.Run();
+        SaveSyncTimeoutTests.Run();
+        SavePathsTests.Run();
+        AdapterSettingsTests.Run();
+        LogForwarderTests.Run();
+        AppSettingsTests.Run();
+        SteamLibraryTests.Run();
+        ReportBundleTests.Run();
+        LoopbackBridgeTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }

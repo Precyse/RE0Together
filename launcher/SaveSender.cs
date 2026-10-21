@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 
 namespace CoopLauncher;
 
-/// <summary>Host side of save sync: streams the profile's files to a peer, paced, and resends a file until it is ACKed ok.</summary>
+/// <summary>Host side of save sync: streams the profile's files to a peer, paced, and resends a file until it is ACKed ok. A set the
+/// guest could not take (too many names, a name that is not ASCII, a file over <see cref="SaveReceiver.MaxFileBytes"/>) is not sent
+/// at all, and a missing save folder is an empty set, so the guest never waits for something that cannot arrive.</summary>
 public sealed class SaveSender
 {
     private const double BytesPerSecond = 4 * 1024 * 1024;
@@ -28,6 +30,7 @@ public sealed class SaveSender
     private readonly string _sourceDir;
     private readonly ITransport _transport;
     private readonly List<Outgoing> _pending = [];
+    private readonly HashSet<string> _logged = [];
     private uint _nextId = 1;
     private double _credit;
     private long _lastPumpMs = Environment.TickCount64;
@@ -43,6 +46,11 @@ public sealed class SaveSender
     {
         _pending.RemoveAll(o => o.Peer == peer);
         var names = FileNames();
+        if (Unsendable(names) is { } reason)
+        {
+            LogOnce($"Save sync: not sending the save set to {peer}: {reason}");
+            return;
+        }
         if (_config.FilePattern != null)
         {
             _transport.Send(peer, FileMessages.Manifest(names));
@@ -56,8 +64,28 @@ public sealed class SaveSender
     public bool SendChanged(ulong peer, string name)
     {
         _pending.RemoveAll(o => o.Peer == peer && o.Name == name);
-        if (_config.FilePattern != null) _transport.Send(peer, FileMessages.Manifest(FileNames()));
+        var names = FileNames();
+        if (Unsendable(names) is { } reason)
+        {
+            LogOnce($"Save sync: not sending {name} to {peer}: {reason}");
+            return true;
+        }
+        if (_config.FilePattern != null) _transport.Send(peer, FileMessages.Manifest(names));
         return Enqueue(peer, name);
+    }
+
+    /// <summary>Why the guest could not take this set, or null when it can.</summary>
+    private string? Unsendable(IReadOnlyList<string> names)
+    {
+        if (names.Count > FileMessages.MaxManifestNames) return $"{names.Count} files, at most {FileMessages.MaxManifestNames} fit the manifest";
+        if (names.FirstOrDefault(name => !FileMessages.IsWireName(name)) is { } badName) return $"'{badName}' is not an ASCII name of at most {byte.MaxValue} characters";
+        var tooBig = names.FirstOrDefault(name => File.Exists(Path.Combine(_sourceDir, name)) && new FileInfo(Path.Combine(_sourceDir, name)).Length > SaveReceiver.MaxFileBytes);
+        return tooBig == null ? null : $"{tooBig} is over {SaveReceiver.MaxFileBytes} bytes";
+    }
+
+    private void LogOnce(string message)
+    {
+        if (_logged.Add(message)) Log.Info(message);
     }
 
     private bool Enqueue(ulong peer, string name)
@@ -73,7 +101,7 @@ public sealed class SaveSender
         {
             data = File.ReadAllBytes(path);
         }
-        catch (IOException e)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             Log.Info($"Save sync: {path} cannot be read yet ({e.Message})");
             return false;
@@ -83,11 +111,20 @@ public sealed class SaveSender
         return true;
     }
 
-    /// <summary>The profile's fixed list, or every file in the source folder that matches the profile's pattern.</summary>
-    private List<string> FileNames() =>
-        _config.FilePattern is { } pattern
-            ? Directory.GetFiles(_sourceDir, pattern).Select(Path.GetFileName).OfType<string>().Order().ToList()
-            : _config.SteamRemoteFiles;
+    /// <summary>The profile's fixed list, or every file in the source folder that matches the profile's pattern (none when the folder is missing).</summary>
+    private List<string> FileNames()
+    {
+        if (_config.FilePattern is not { } pattern) return _config.SteamRemoteFiles;
+        try
+        {
+            return Directory.GetFiles(_sourceDir, pattern).Select(Path.GetFileName).OfType<string>().Order().ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            LogOnce($"Save sync: {_sourceDir} cannot be read ({e.Message}), sending an empty set");
+            return [];
+        }
+    }
 
     public void OnAck(ulong peer, Frame frame)
     {
