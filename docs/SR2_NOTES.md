@@ -17,7 +17,7 @@ Hooks session create, GameSpy code (0x81A590, 0x8360F9, 0xC1BC76, 0xD2526F), mem
 
 ## Adapter (milestone 1)
 - Loads as `dinput8.dll` next to `SR2_pc.exe` (the exe imports DirectInput8; no such file ships).
-- Files: `<game>\coop\sr2_adapter.log` and `<game>\coop\sr2_adapter.ini` (`max_players` 2..8, default 4; `trace` 0/1, default 1; a `partner_experimental` line from an older ini is ignored and logged once as no longer used).
+- Files: `<game>\coop\sr2_adapter.log` and `<game>\coop\sr2_adapter.ini` (`max_players` 2..4, default 4; a larger value is logged once as `config: max_players N is above 4 ...` and 4 is used, until the over-4 player-cap audit is done, the 8-capable code paths stay; `trace` 0/1, default 1; a `partner_experimental` line from an older ini is ignored and logged once as no longer used).
 - Start-up check: PE time stamp, the first bytes of the five hooked functions, and the two `mov [limit], ebp` stores.
 - Hook: `net_set_mode`. Both limits are set to `max_players` by a thunk at the allocator-set activation call inside it (see "Replication"). `max_players` 2 patches nothing but the optional trace.
 - Trace (trace=1, read-only): `session_pool_setup` entry (with the limits it sees and whether `net_set_mode` is still running), `join_queue_add` (queue count before/after), and `player_slot_allocator` return value changes. The partner getter is traced by `partner_scope` (see "Partner logic").

@@ -50,6 +50,10 @@ DWORD WINAPI initThread(LPVOID) {
         const Config config = loadConfig();
         logger::write("config: max_players=%u trace=%d game_port=%u transport=%s", config.maxPlayers, config.trace ? 1 : 0,
                       config.gamePort, transportName(config.transport));
+        if (config.rejectedMaxPlayers != 0) {
+            logger::write("config: max_players %u is above %u, which is as many as is supported until the player cap audit, using %u",
+                          config.rejectedMaxPlayers, sr2::kMaxSupportedPlayers, sr2::kMaxSupportedPlayers);
+        }
         if (config.retiredPartnerExperimental) logger::write("config: partner_experimental is no longer used, ignored");
         if (!config.rejectedTransport.empty()) {
             logger::write("config: transport \"%s\" is neither %s nor %s, ignored", config.rejectedTransport.c_str(),

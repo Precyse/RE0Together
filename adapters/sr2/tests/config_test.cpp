@@ -10,7 +10,15 @@ int main() {
     check(parseConfig(" max_players = 2 \r\ntrace=0\r\n").maxPlayers == 2, "spaces and CRLF trimmed");
     check(!parseConfig("trace=0\n").trace, "trace off");
     check(parseConfig("max_players=1\n").maxPlayers == 2, "below 2 clamps to 2");
-    check(parseConfig("max_players=99\n").maxPlayers == 8, "above 8 clamps to 8");
+    check(parseConfig("max_players=4\n").maxPlayers == 4 && parseConfig("max_players=4\n").rejectedMaxPlayers == 0,
+          "4 is accepted as it is");
+    const Config five = parseConfig("max_players=5\n");
+    check(five.maxPlayers == 4 && five.rejectedMaxPlayers == 5, "5 uses 4 and is reported");
+    const Config eight = parseConfig("max_players=8\n");
+    check(eight.maxPlayers == 4 && eight.rejectedMaxPlayers == 8, "8 uses 4 and is reported");
+    check(parseConfig("max_players=99\n").maxPlayers == 4, "above 4 clamps to 4");
+    check(parseConfig("max_players=1\n").rejectedMaxPlayers == 0 && parseConfig("").rejectedMaxPlayers == 0,
+          "nothing is reported for 1 or for no value");
     check(parseConfig("max_players=abc\ntrace=x\n").maxPlayers == 4, "bad values keep the defaults");
     check(parseConfig("max_players=\nunknown=5\nnoequals\n").maxPlayers == 4, "empty value and unknown keys ignored");
     check(!parseConfig("").retiredPartnerExperimental, "no partner_experimental line, nothing to report");

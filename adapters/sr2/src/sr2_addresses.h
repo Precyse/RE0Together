@@ -32,6 +32,8 @@ constexpr uintptr_t kSessionJoinQueueCountOffset = 0x7EC;
 // Co-op ships with 2 players. The N=8 deltacomp instances that replace co-op's 1-peer ones hold up to 8.
 constexpr uint32_t kCoopDefaultPlayers = 2;
 constexpr uint32_t kMaxReplicatedPlayers = 8;
+// What the config accepts until the over-4 player-cap audit (per-slot tables, slot-encoded ids) is done.
+constexpr uint32_t kMaxSupportedPlayers = 4;
 
 // net_set_mode's co-op case: the npc limit store (mov [0xE8C43C], 150) and the allocator-set activation. Activation
 // reads the player limit, so the adapter's thunk replaces the call; the sets are loaded by name through
