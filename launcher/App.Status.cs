@@ -12,11 +12,15 @@ public sealed partial class App
     private LobbyView? _view;
     private ILobby? _publishedTo;
     private string _publishedStep = string.Empty;
+    private ILobby? _optionsPublishedTo;
+    private AppSettings? _optionsPublishedFrom;
+    private string _publishedOptions = string.Empty;
 
     private void PublishStatus()
     {
         var progress = LocalProgress();
         PublishStep(progress);
+        PublishOptions();
         var status = CurrentStatus(progress);
         if (status == Status) return;
         Status = status;
@@ -46,6 +50,22 @@ public sealed partial class App
         _publishedTo = lobby;
         _publishedStep = text;
         lobby.SetMemberData(MemberKey.Step, text);
+    }
+
+    /// <summary>Tells the lobby this player's own option values (the outfits it chose) when the lobby or the text changed; the
+    /// text is worked out again only when the settings were replaced (never every tick).</summary>
+    private void PublishOptions()
+    {
+        if (_lobby is not { IsReady: true } lobby || _profile == null) return;
+        var settings = AppSettings.Current;
+        if (ReferenceEquals(lobby, _optionsPublishedTo) && ReferenceEquals(settings, _optionsPublishedFrom)) return;
+        var text = GameOptions.Encode(GameOptions.OwnValues(_profile, _gameDir));
+        var sameTarget = ReferenceEquals(lobby, _optionsPublishedTo);
+        _optionsPublishedTo = lobby;
+        _optionsPublishedFrom = settings;
+        if (sameTarget && text == _publishedOptions) return;
+        _publishedOptions = text;
+        lobby.SetMemberData(MemberKey.Options, text);
     }
 
     private AppStatus CurrentStatus((SessionStep Step, int Percent) progress)
@@ -114,7 +134,8 @@ public sealed partial class App
                 var (step, percent) = isLocal ? local : PublishedStep(lobby, member);
                 return new PlayerSlot(
                     member.Id, member.Name, member.Id == hostId, isLocal, NativeJoin.Readable(lobby.MemberData(member, MemberKey.GameStatus)),
-                    step, percent, _session?.RttOf(member.Id), _session?.IsHeld(member.Id) ?? false, _session?.IsSilent(member.Id, nowMs) ?? false);
+                    step, percent, _session?.RttOf(member.Id), _session?.IsHeld(member.Id) ?? false, _session?.IsSilent(member.Id, nowMs) ?? false,
+                    lobby.MemberData(member, MemberKey.Options));
             })
             .ToList();
     }

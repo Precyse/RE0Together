@@ -8,10 +8,12 @@ public enum AppState { Idle, Connecting, Hosting, Joined, GameRunning, PeerConne
 public enum OfflineReason { None, SteamNotRunning }
 
 /// <summary>One lobby member as the window shows it. Status is what its game reports (rendezvous games), else empty; Step
-/// and Percent are what its launcher published (<see cref="SessionStep"/>); RttMs, Held and Silent come from the session.</summary>
+/// and Percent are what its launcher published (<see cref="SessionStep"/>); RttMs, Held and Silent come from the session;
+/// Options is the encoded option values its launcher published (<see cref="GameOptions.Decode"/>).</summary>
 public sealed record PlayerSlot(
     ulong Id, string Name, bool IsHost, bool IsLocal, string Status = "",
-    SessionStep Step = SessionStep.None, int Percent = 0, int? RttMs = null, bool Held = false, bool Silent = false);
+    SessionStep Step = SessionStep.None, int Percent = 0, int? RttMs = null, bool Held = false, bool Silent = false,
+    string Options = "");
 
 /// <summary>A friend hosting a lobby of a game this launcher knows.</summary>
 public sealed record FriendLobby(ulong FriendId, string Name, ulong LobbyId, string GameId);

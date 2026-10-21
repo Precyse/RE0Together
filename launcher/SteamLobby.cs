@@ -13,6 +13,7 @@ public sealed class SteamLobby : ILobby
     private const string KeyJoinSecret = "cf_join_pw";
     private const string KeyStatus = "cf_status";
     private const string KeyStep = "cf_step";
+    private const string KeyOptions = "cf_options";
     private const int JoinSecretMin = 100_000_000;  // nine digits
     private const int JoinSecretMax = 1_000_000_000;
     private const long AnswerTimeoutMs = 30_000;
@@ -111,7 +112,12 @@ public sealed class SteamLobby : ILobby
     public string MemberData(LobbyMember member, MemberKey key) =>
         _lobby.IsValid() ? Text(SteamMatchmaking.GetLobbyMemberData(_lobby, new CSteamID(member.Id), MemberDataKey(key))) : string.Empty;
 
-    private static string MemberDataKey(MemberKey key) => key == MemberKey.Step ? KeyStep : KeyStatus;
+    private static string MemberDataKey(MemberKey key) => key switch
+    {
+        MemberKey.Step => KeyStep,
+        MemberKey.Options => KeyOptions,
+        _ => KeyStatus,
+    };
 
     private void Track<T>(CallResult<T> result, SteamAPICall_t call) where T : struct
     {

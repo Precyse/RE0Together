@@ -2,9 +2,9 @@ namespace CoopLauncher;
 
 public sealed record LobbyMember(ulong Id, string Name);
 
-/// <summary>What a member publishes about itself: the game's own status line (rendezvous games), and its session step
-/// (<see cref="StepCodec"/>).</summary>
-public enum MemberKey { GameStatus, Step }
+/// <summary>What a member publishes about itself: the game's own status line (rendezvous games), its session step
+/// (<see cref="StepCodec"/>) and its own option values (<see cref="GameOptions.OwnValues"/>, encoded).</summary>
+public enum MemberKey { GameStatus, Step, Options }
 
 /// <summary>Membership source for a session. Polled from the main loop.</summary>
 public interface ILobby : IDisposable
