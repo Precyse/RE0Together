@@ -29,6 +29,8 @@ public static class Program
         SessionProgressTests.Run();
         RefusalTests.Run();
         FriendLobbiesTests.Run();
+        LobbyListingTests.Run();
+        LobbyDirectoryTests.Run();
         RetryScheduleTests.Run();
         PeerStatsTests.Run();
         StatusTextTests.Run();

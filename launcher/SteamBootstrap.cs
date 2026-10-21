@@ -31,6 +31,7 @@ public sealed class SteamBootstrap : IDisposable
             PendingInvite = (r.m_steamIDLobby.m_SteamID, r.m_steamIDFriend.m_SteamID);
         });
         _shutdown = Callback<SteamShutdown_t>.Create(_ => Lost = true);
+        SteamNetworkingUtils.InitRelayNetworkAccess();
         Log.Info($"Steam ready as {SteamFriends.GetPersonaName()} ({SteamUser.GetSteamID().m_SteamID})");
     }
 
@@ -52,7 +53,6 @@ public sealed class SteamBootstrap : IDisposable
     }
 
     public string PersonaName(ulong userId) => SteamFriends.GetFriendPersonaName(new CSteamID(userId)) ?? string.Empty;
-
 
     public void Dispose()
     {

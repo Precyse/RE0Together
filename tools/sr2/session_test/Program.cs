@@ -132,6 +132,8 @@ sealed class ScriptedLobby(ulong ownerId, List<LobbyMember> members, ulong id = 
         Revision++;
     }
 
+    public void SetLobbyData(LobbyKey key, string value) { }
+    public LobbyListing? Listing => null;
     public void SetMemberData(MemberKey key, string value) { }
     public string MemberData(LobbyMember member, MemberKey key) => string.Empty;
     public void Pump() { }

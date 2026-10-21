@@ -6,6 +6,10 @@ public sealed record LobbyMember(ulong Id, string Name);
 /// (<see cref="StepCodec"/>) and its own option values (<see cref="GameOptions.OwnValues"/>, encoded).</summary>
 public enum MemberKey { GameStatus, Step, Options }
 
+/// <summary>What the host keeps up to date in the lobby's own data: the roster (<see cref="RosterCodec"/>) and the start of play
+/// (Unix seconds); the rest of the lobby data is written once when it is created.</summary>
+public enum LobbyKey { Roster, Started }
+
 /// <summary>Membership source for a session. Polled from the main loop.</summary>
 public interface ILobby : IDisposable
 {
@@ -29,6 +33,12 @@ public interface ILobby : IDisposable
 
     /// <summary>Publishes one of our own values for the other members to read.</summary>
     void SetMemberData(MemberKey key, string value);
+
+    /// <summary>Publishes one of the lobby's own values for everyone to read; only the lobby's owner can.</summary>
+    void SetLobbyData(LobbyKey key, string value);
+
+    /// <summary>The lobby as its own data describes it (null until the lobby exists); read again when the data changes.</summary>
+    LobbyListing? Listing { get; }
 
     /// <summary>The value a member published, empty when it has none.</summary>
     string MemberData(LobbyMember member, MemberKey key);
