@@ -1,14 +1,16 @@
 namespace CoopLauncher.Gui;
 
-internal enum ButtonKind { Normal, Primary, Ghost }
+internal enum ButtonKind { Normal, Primary, Ghost, Icon }
 
-/// <summary>A flat, squared button: Primary is the one white action, Normal a raised card, Ghost an outline. The fill and
+/// <summary>A flat, squared button: Primary is the one white action, Normal a raised card, Ghost an outline, Icon a bare
+/// glyph (Theme.Icon) over whatever is behind it, on a card fill while hovered or active. The fill and
 /// ink fade to their hover colours (controls.css .15s); a press snaps to a darker fill. It takes keyboard focus (Tab),
 /// clicks on Space and Enter, and is a dialog button (default button while focused).</summary>
 internal sealed class FlatButton : Control, IButtonControl
 {
     private const string HoverChannel = "hover";
     private const double PressDarken = 0.35;
+    private const int IconFillAlpha = 220;
 
     private static readonly int ArrowGap = Theme.Scale(8);
 
@@ -16,6 +18,7 @@ internal sealed class FlatButton : Control, IButtonControl
     private bool _hovered;
     private bool _pressed;
     private double _hover;
+    private bool _active;
 
     public FlatButton(string text, ButtonKind kind)
     {
@@ -27,6 +30,21 @@ internal sealed class FlatButton : Control, IButtonControl
         AccessibleRole = AccessibleRole.PushButton;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw | ControlStyles.Selectable | ControlStyles.StandardClick, true);
+        if (kind != ButtonKind.Icon) return;
+        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent;
+    }
+
+    /// <summary>An Icon button whose panel is open reads at full ink.</summary>
+    public bool Active
+    {
+        get => _active;
+        set
+        {
+            if (_active == value) return;
+            _active = value;
+            Invalidate();
+        }
     }
 
     /// <summary>An arrow drawn before the label, or none.</summary>
@@ -129,6 +147,11 @@ internal sealed class FlatButton : Control, IButtonControl
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        if (_kind == ButtonKind.Icon)
+        {
+            PaintIcon(e.Graphics);
+            return;
+        }
         var (fill, ink, outline) = Colors();
         e.Graphics.Clear(Parent?.BackColor ?? Theme.Bg);
         Draw.Fill(e.Graphics, fill, ClientRectangle);
@@ -146,6 +169,18 @@ internal sealed class FlatButton : Control, IButtonControl
             Draw.Text(e.Graphics, Text, font, ink, new Rectangle(left + Theme.ArrowSize + ArrowGap, 0, textWidth, Height));
         }
         if (Focused && ShowFocusCues) Draw.Border(e.Graphics, Rectangle.Inflate(ClientRectangle, -1, -1), Theme.Text);
+    }
+
+    private void PaintIcon(Graphics g)
+    {
+        var lit = _active ? 1 : _hover;
+        if (Enabled && lit > 0)
+        {
+            using var fill = new SolidBrush(Color.FromArgb((int)(IconFillAlpha * lit), Theme.Card));
+            g.FillRectangle(fill, ClientRectangle);
+        }
+        Draw.Centered(g, Text, Theme.Icon, Enabled ? Theme.Text : Theme.Dim, ClientRectangle);
+        if (Focused && ShowFocusCues) Draw.Border(g, Rectangle.Inflate(ClientRectangle, -1, -1), Theme.Text);
     }
 
     private void SetHovered(bool hovered)

@@ -28,6 +28,7 @@ internal static class Theme
     public static readonly Font Primary = new("Segoe UI", 9.75f, FontStyle.Bold);
     public static readonly Font Mono = new("Consolas", 8.25f);
     public static readonly Font Code = new("Consolas", 15f, FontStyle.Bold);
+    public static readonly Font Icon = new("Segoe MDL2 Assets", 13f);
 
     public static readonly int LampSize = Scale(10);
     public static readonly int ControlHeight = Scale(36);

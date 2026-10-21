@@ -8,9 +8,10 @@ internal sealed class SectionPanel : Panel
 
     private static readonly int CaptionGap = Theme.Scale(26);
 
+    private Control? _captionAction;
+
     private string _title;
     private bool _bottomLine = true;
-    private bool _showCaption = true;
 
     public SectionPanel(string title)
     {
@@ -38,16 +39,18 @@ internal sealed class SectionPanel : Panel
     /// <summary>The band above the content that holds the caption.</summary>
     public int CaptionBand => Padding.Top;
 
-    /// <summary>A section whose content labels itself (a button) goes without the caption and its band.</summary>
-    public bool ShowCaption
+    /// <summary>A control kept at the right end of the caption row (not part of the stacked content).</summary>
+    public Control? CaptionAction
     {
-        get => _showCaption;
+        get => _captionAction;
         set
         {
-            if (_showCaption == value) return;
-            _showCaption = value;
-            Padding = Padding with { Top = Theme.SectionPadY + (value ? CaptionGap : 0) };
-            Invalidate();
+            if (_captionAction != null) Controls.Remove(_captionAction);
+            _captionAction = value;
+            if (value == null) return;
+            value.Dock = DockStyle.None;
+            Controls.Add(value);
+            PlaceCaptionAction();
         }
     }
 
@@ -67,7 +70,7 @@ internal sealed class SectionPanel : Panel
     {
         get
         {
-            var content = Controls.Cast<Control>().Sum(c => c.Height);
+            var content = Controls.Cast<Control>().Where(c => c.Dock == DockStyle.Top).Sum(c => c.Height);
             return content == 0 ? 0 : Padding.Top + content + Theme.SectionPadY;
         }
     }
@@ -92,13 +95,21 @@ internal sealed class SectionPanel : Panel
         var right = Math.Max(Theme.SectionPadX, Width - Theme.SectionPadX - Theme.ContentMaxWidth);
         if (Padding.Right != right) Padding = Padding with { Right = right };
         base.OnResize(e);
+        PlaceCaptionAction();
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         Backdrop?.Invoke(e.Graphics, Width);
-        if (_showCaption) Draw.Caption(e.Graphics, _title, Theme.Muted, new Point(Theme.SectionPadX, Theme.SectionPadY));
+        Draw.Caption(e.Graphics, _title, Theme.Muted, new Point(Theme.SectionPadX, Theme.SectionPadY));
         if (BottomLine) Draw.HorizontalLine(e.Graphics, 0, Width, Height - 1);
+    }
+
+    /// <summary>Right-aligned with the content, centred on the caption's line.</summary>
+    private void PlaceCaptionAction()
+    {
+        if (_captionAction is not { } action) return;
+        action.Location = new Point(Width - Padding.Right - action.Width, Theme.SectionPadY + Theme.Label.Height / 2 - action.Height / 2);
     }
 }
