@@ -8,11 +8,15 @@ public sealed record SeatCard(ulong AvatarId, string Name, string Role, string D
 /// <summary>The Players section: one card per seat in two columns. A card has the Steam avatar (or the name's initial), the
 /// name with the role on the right, the character, and the status with the ping on the right; a bar along the bottom edge
 /// shows the save transfer. Motion: a seat that changes player cross-fades its whole content (skeleton-reveal), status
-/// words swap, the ping rolls, the bar grows, and an avatar that arrives fades in over its placeholder. Lamps change at once.</summary>
+/// words swap, the ping rolls, the bar grows, and an avatar that arrives fades in over its placeholder. Lamps change at once.
+/// For a game with a character select the cards are clickable: a card fades to the card hover fill, shows a right arrow
+/// at its edge, and a click reports the character it shows.</summary>
 internal sealed class PlayerCards : Control
 {
     private const int Columns = 2;
     private const string PingSample = "9999 ms";
+    private const string HoverSuffix = "hover";
+    private const int NoSeat = -1;
 
     private static readonly int CardHeight = Theme.Scale(70);
     private static readonly int AvatarSize = Theme.Scale(48);
@@ -29,9 +33,12 @@ internal sealed class PlayerCards : Control
     private static readonly int LampGap = Theme.Scale(8);
     private static readonly int BarHeight = Theme.Scale(2);
     private static readonly int PingWidth = Draw.Width(PingSample, Theme.Mono);
+    private static readonly int ArrowInset = Theme.Scale(12);
 
     private readonly AvatarStore _avatars;
     private readonly List<Seat> _seats = new();
+    private bool _clickable;
+    private int _hoverSeat = NoSeat;
 
     private sealed class Seat
     {
@@ -63,18 +70,22 @@ internal sealed class PlayerCards : Control
         /// <summary>The save bar's shown share (0..1), or null for no bar.</summary>
         public double? Bar { get; set; }
 
+        /// <summary>0 = at rest, 1 = hovered (a clickable card).</summary>
+        public double Hover { get; set; }
+
         public StatusLine Status { get; }
         public StatusLine Ping { get; }
         public AvatarFade Avatar { get; }
         public string RevealChannel => _prefix + "reveal";
         public string BarChannel => _prefix + "bar";
+        public string HoverChannel => _prefix + HoverSuffix;
         private string StatusChannel => _prefix + "status";
         private string PingChannel => _prefix + "ping";
 
         public void Dispose()
         {
             Avatar.Dispose();
-            foreach (var channel in new[] { RevealChannel, BarChannel, StatusChannel, PingChannel }) Motion.Cancel(_owner, channel);
+            foreach (var channel in new[] { RevealChannel, BarChannel, HoverChannel, StatusChannel, PingChannel }) Motion.Cancel(_owner, channel);
         }
     }
 
@@ -84,6 +95,23 @@ internal sealed class PlayerCards : Control
         BackColor = Theme.Bg;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw, true);
+    }
+
+    /// <summary>Raised with the character a card shows (the card's detail line) when a clickable card is clicked.</summary>
+    public event Action<string>? SeatClicked;
+
+    /// <summary>The cards can be clicked: a hover fill, a right arrow, and <see cref="SeatClicked"/>.</summary>
+    public bool Clickable
+    {
+        get => _clickable;
+        set
+        {
+            if (_clickable == value) return;
+            _clickable = value;
+            SetHoverSeat(NoSeat);
+            Cursor = Cursors.Default;
+            Invalidate();
+        }
     }
 
     /// <summary>The height of the control for this many seats.</summary>
@@ -127,6 +155,49 @@ internal sealed class PlayerCards : Control
         g.Clear(BackColor);
         for (var i = 0; i < _seats.Count; i++) PaintSeat(g, _seats[i], CardRect(i));
     }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        SetHoverSeat(_clickable ? SeatAt(e.Location) : NoSeat);
+        base.OnMouseMove(e);
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        SetHoverSeat(NoSeat);
+        base.OnMouseLeave(e);
+    }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        if (_clickable && SeatAt(e.Location) is var index and not NoSeat && _seats[index].Card.Detail.Length > 0)
+            SeatClicked?.Invoke(_seats[index].Card.Detail);
+        base.OnMouseClick(e);
+    }
+
+    private int SeatAt(Point point)
+    {
+        for (var i = 0; i < _seats.Count; i++)
+            if (CardRect(i).Contains(point)) return i;
+        return NoSeat;
+    }
+
+    private void SetHoverSeat(int index)
+    {
+        if (index == _hoverSeat) return;
+        var previous = _hoverSeat;
+        _hoverSeat = index;
+        Cursor = index == NoSeat ? Cursors.Default : Cursors.Hand;
+        if (previous != NoSeat && previous < _seats.Count) FadeHover(_seats[previous], 0);
+        if (index != NoSeat) FadeHover(_seats[index], 1);
+    }
+
+    private void FadeHover(Seat seat, double target) =>
+        Motion.Animate(this, seat.HoverChannel, Motion.ValueOf(this, seat.HoverChannel) ?? seat.Hover, target, Durations.Hover, Easing.Css, amount =>
+        {
+            seat.Hover = amount;
+            Invalidate();
+        });
 
     private Rectangle CardRect(int index)
     {
@@ -202,9 +273,12 @@ internal sealed class PlayerCards : Control
     /// it was.</summary>
     private void PaintCard(Graphics g, Rectangle rect, Seat seat, SeatCard card, bool live)
     {
-        var fill = FillOf(card);
+        var hover = live && _clickable ? seat.Hover : 0;
+        var fill = Interpolate.Lerp(FillOf(card), Theme.CardHover, hover);
         Draw.Fill(g, fill, rect);
         Draw.Border(g, rect, Theme.Line);
+        if (live && _clickable && card.Detail.Length > 0)
+            Draw.Arrow(g, Interpolate.Lerp(Theme.Muted, Theme.Text, hover), new Point(rect.Right - ArrowInset - Theme.ArrowSize / 4, rect.Y + rect.Height / 2), ArrowDirection.Right);
 
         var avatar = new Rectangle(rect.X + AvatarX, rect.Y + AvatarY, AvatarSize, AvatarSize);
         if (card.Open) Draw.Border(g, avatar, Theme.Line);

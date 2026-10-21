@@ -50,6 +50,9 @@ internal sealed class FlatButton : Control, IButtonControl
     /// <summary>An arrow drawn before the label, or none.</summary>
     public ArrowDirection? Arrow { get; set; }
 
+    /// <summary>An arrow drawn after the label, or none. A button without a label draws its arrows next to each other.</summary>
+    public ArrowDirection? ArrowAfter { get; set; }
+
     public DialogResult DialogResult { get; set; }
 
     public void NotifyDefault(bool value)
@@ -157,18 +160,32 @@ internal sealed class FlatButton : Control, IButtonControl
         Draw.Fill(e.Graphics, fill, ClientRectangle);
         if (outline is { } line) Draw.Border(e.Graphics, ClientRectangle, line);
         var font = _kind == ButtonKind.Primary ? Theme.Primary : Theme.Strong;
-        if (Arrow is not { } arrow)
-        {
-            Draw.Centered(e.Graphics, Text, font, ink, ClientRectangle);
-        }
-        else
-        {
-            var textWidth = Draw.Width(Text, font);
-            var left = (Width - Theme.ArrowSize - ArrowGap - textWidth) / 2;
-            Draw.Arrow(e.Graphics, ink, new Point(left + Theme.ArrowSize / 2, Height / 2), arrow);
-            Draw.Text(e.Graphics, Text, font, ink, new Rectangle(left + Theme.ArrowSize + ArrowGap, 0, textWidth, Height));
-        }
+        PaintContent(e.Graphics, font, ink);
         if (Focused && ShowFocusCues) Draw.Border(e.Graphics, Rectangle.Inflate(ClientRectangle, -1, -1), Theme.Text);
+    }
+
+    /// <summary>The label with its arrows, together centred in the button.</summary>
+    private void PaintContent(Graphics g, Font font, Color ink)
+    {
+        if (Arrow == null && ArrowAfter == null)
+        {
+            Draw.Centered(g, Text, font, ink, ClientRectangle);
+            return;
+        }
+        var textWidth = Text.Length > 0 ? Draw.Width(Text, font) : 0;
+        var parts = new[] { Arrow != null ? Theme.ArrowSize : 0, textWidth, ArrowAfter != null ? Theme.ArrowSize : 0 };
+        var x = (Width - parts.Sum() - ArrowGap * (parts.Count(width => width > 0) - 1)) / 2;
+        if (Arrow is { } before)
+        {
+            Draw.Arrow(g, ink, new Point(x + Theme.ArrowSize / 2, Height / 2), before);
+            x += Theme.ArrowSize + ArrowGap;
+        }
+        if (textWidth > 0)
+        {
+            Draw.Text(g, Text, font, ink, new Rectangle(x, 0, textWidth, Height));
+            x += textWidth + ArrowGap;
+        }
+        if (ArrowAfter is { } after) Draw.Arrow(g, ink, new Point(x + Theme.ArrowSize / 2, Height / 2), after);
     }
 
     private void PaintIcon(Graphics g)

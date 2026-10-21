@@ -2,7 +2,7 @@ using System.Drawing.Imaging;
 
 namespace CoopLauncher.Gui;
 
-internal enum ArrowDirection { Up, Down, Left }
+internal enum ArrowDirection { Up, Down, Left, Right }
 
 /// <summary>Shared painting: text, lamps, separators and image placement.</summary>
 internal static class Draw
@@ -38,9 +38,9 @@ internal static class Draw
     private const TextFormatFlags Wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak
         | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
 
-    /// <summary>Text wrapped to the width, top-aligned in the bounds.</summary>
-    public static void Wrapped(Graphics g, string text, Font font, Color color, Rectangle bounds) =>
-        TextRenderer.DrawText(g, text, font, bounds, color, Wrap);
+    /// <summary>Text wrapped to the width, top-aligned in the bounds, left or right aligned.</summary>
+    public static void Wrapped(Graphics g, string text, Font font, Color color, Rectangle bounds, bool alignRight = false) =>
+        TextRenderer.DrawText(g, text, font, bounds, color, alignRight ? Wrap | TextFormatFlags.Right : Wrap);
 
     /// <summary>The height of the text wrapped to the width, capped at the given number of lines.</summary>
     public static int WrappedHeight(string text, Font font, int width, int maxLines) =>
@@ -66,6 +66,7 @@ internal static class Draw
         {
             ArrowDirection.Up => new[] { new Point(center.X - half, center.Y + tip), new Point(center.X + half, center.Y + tip), new Point(center.X, center.Y - tip) },
             ArrowDirection.Down => new[] { new Point(center.X - half, center.Y - tip), new Point(center.X + half, center.Y - tip), new Point(center.X, center.Y + tip) },
+            ArrowDirection.Right => new[] { new Point(center.X - tip, center.Y - half), new Point(center.X - tip, center.Y + half), new Point(center.X + tip, center.Y) },
             _ => new[] { new Point(center.X + tip, center.Y - half), new Point(center.X + tip, center.Y + half), new Point(center.X - tip, center.Y) },
         };
         using var brush = new SolidBrush(color);
@@ -96,25 +97,26 @@ internal static class Draw
         g.DrawRectangle(pen, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
     }
 
-    /// <summary>Fills the rectangle with the image, cropping whatever overflows (CSS object-fit: cover).</summary>
-    public static void Cover(Graphics g, Image image, Rectangle dest) =>
-        g.DrawImage(image, dest, CoverSource(image, dest), GraphicsUnit.Pixel);
+    /// <summary>Fills the rectangle with the image, cropping whatever overflows (CSS object-fit: cover), centred, or with
+    /// <paramref name="anchorTop"/> keeping the top of the image (a figure's head and chest).</summary>
+    public static void Cover(Graphics g, Image image, Rectangle dest, bool anchorTop = false) =>
+        g.DrawImage(image, dest, CoverSource(image, dest, anchorTop), GraphicsUnit.Pixel);
 
-    private static RectangleF CoverSource(Image image, Rectangle dest)
+    private static RectangleF CoverSource(Image image, Rectangle dest, bool anchorTop)
     {
         var scale = Math.Max((float)dest.Width / image.Width, (float)dest.Height / image.Height);
         var cropWidth = dest.Width / scale;
         var cropHeight = dest.Height / scale;
-        return new RectangleF((image.Width - cropWidth) / 2, (image.Height - cropHeight) / 2, cropWidth, cropHeight);
+        return new RectangleF((image.Width - cropWidth) / 2, anchorTop ? 0 : (image.Height - cropHeight) / 2, cropWidth, cropHeight);
     }
 
     /// <summary><see cref="Cover"/> drawn at the given opacity (0..1).</summary>
-    public static void Faded(Graphics g, Image image, Rectangle dest, float alpha)
+    public static void Faded(Graphics g, Image image, Rectangle dest, float alpha, bool anchorTop = false)
     {
         var matrix = new ColorMatrix { Matrix33 = alpha };
         using var attributes = new ImageAttributes();
         attributes.SetColorMatrix(matrix);
-        var source = CoverSource(image, dest);
+        var source = CoverSource(image, dest, anchorTop);
         g.DrawImage(image, dest, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
     }
 

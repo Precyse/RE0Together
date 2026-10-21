@@ -7,7 +7,7 @@ internal sealed class TopBar : Control
 {
     private const string BrandText = "CO-OP";
     private const string SettingsLabel = "Settings";
-    private const string SettingsCloseLabel = "Back";
+    private const string BackLabel = "Back";
     private const string StateChannel = "state";
 
     private static readonly int BarHeight = Theme.Scale(44);
@@ -40,13 +40,13 @@ internal sealed class TopBar : Control
     /// <summary>The one update button: Update to N, Downloading, Restart. Hidden while no newer build is offered.</summary>
     public FlatButton UpdateButton { get; } = new(string.Empty, ButtonKind.Ghost) { Width = UpdateButtonWidth, Height = ButtonHeight };
 
-    /// <summary>Opens and closes the settings view.</summary>
+    /// <summary>Opens the settings view, or closes whichever view is open.</summary>
     public FlatButton SettingsButton { get; } = new(SettingsLabel, ButtonKind.Ghost) { Width = SettingsButtonWidth, Height = ButtonHeight };
 
-    /// <summary>The settings view is open: its button reads Back.</summary>
-    public void ShowSettingsOpen(bool open)
+    /// <summary>A view (settings, character select) is open: the button reads Back.</summary>
+    public void ShowBack(bool open)
     {
-        SettingsButton.Text = open ? SettingsCloseLabel : SettingsLabel;
+        SettingsButton.Text = open ? BackLabel : SettingsLabel;
         SettingsButton.Arrow = open ? ArrowDirection.Left : null;
         SettingsButton.Invalidate();
     }

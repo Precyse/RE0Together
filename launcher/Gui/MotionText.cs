@@ -23,13 +23,15 @@ public static class TextChange
 
 /// <summary>One painted text slot whose text changes with the broadcast tool's motion: words swap (the old text leaves
 /// upward, the new one enters from below, text-states-swap) and numbers roll (the words stay still, each changed digit
-/// run re-enters from below, digit-roll-in). The owner calls <see cref="Paint"/> from its own paint.</summary>
+/// run re-enters from below, digit-roll-in). The owner calls <see cref="Paint"/> from its own paint. A wrapped slot draws
+/// its text over several lines (the bounds' height says how many) and only ever swaps words.</summary>
 internal sealed class StatusLine
 {
     private enum Phase { Rest, SwapOut, SwapIn, Digits }
 
     private readonly Control _owner;
     private readonly string _channel;
+    private readonly bool _wrapped;
     private string _text = string.Empty;
     private string _previous = string.Empty;
     private Phase _phase = Phase.Rest;
@@ -37,10 +39,11 @@ internal sealed class StatusLine
     private bool _started;
     private HashSet<int> _changedRuns = new();
 
-    public StatusLine(Control owner, string channel)
+    public StatusLine(Control owner, string channel, bool wrapped = false)
     {
         _owner = owner;
         _channel = channel;
+        _wrapped = wrapped;
     }
 
     public string Text => _text;
@@ -60,7 +63,7 @@ internal sealed class StatusLine
             return;
         }
 
-        var kind = TextChange.Classify(_text, text);
+        var kind = _wrapped ? TextChange.Kind.Words : TextChange.Classify(_text, text);
         _previous = _text;
         _text = text;
         if (kind == TextChange.Kind.Words) StartSwap();
@@ -159,9 +162,10 @@ internal sealed class StatusLine
             DrawText(g, piece, font, color, rect, alignRight);
     }
 
-    private static void DrawText(Graphics g, string text, Font font, Color color, Rectangle bounds, bool alignRight)
+    private void DrawText(Graphics g, string text, Font font, Color color, Rectangle bounds, bool alignRight)
     {
-        if (alignRight) Draw.TextRight(g, text, font, color, bounds);
+        if (_wrapped) Draw.Wrapped(g, text, font, color, bounds, alignRight);
+        else if (alignRight) Draw.TextRight(g, text, font, color, bounds);
         else Draw.Text(g, text, font, color, bounds);
     }
 }

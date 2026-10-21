@@ -4,7 +4,8 @@ namespace CoopLauncher.Gui;
 /// at once and reaches the adapter ini when the session launches the game. One grid shows the session options and another
 /// (in the settings view) the options marked for settings. A guest's grid shows the host's value of every host option. The
 /// grid is rebuilt only when the game, its folder or the shown host values change, so an open list is never disturbed by a
-/// status refresh.</summary>
+/// status refresh. The options of a game's character select (character and outfits) are not in the grid: the select view
+/// has them.</summary>
 internal sealed class OptionsRows : Panel
 {
     private const int Columns = 2;
@@ -32,7 +33,7 @@ internal sealed class OptionsRows : Panel
     /// the game offers it.</summary>
     public void Show(GameProfile game, string? gameDir, IReadOnlyDictionary<string, string>? hostValues = null)
     {
-        var options = (game.Options ?? []).Where(option => option.Settings == _settingsOptions).ToList();
+        var options = (game.Options ?? []).Where(option => option.Settings == _settingsOptions && !GameOptions.InCharacterSelect(game, option)).ToList();
         var shown = options.Select(option => ShownValue(game, option, gameDir, hostValues)).ToList();
         var key = $"{game.Id}|{gameDir}|{string.Join(',', shown)}";
         if (_shownFor == key) return;

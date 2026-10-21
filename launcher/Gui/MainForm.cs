@@ -2,7 +2,7 @@ namespace CoopLauncher.Gui;
 
 /// <summary>The launcher window, in the broadcast tool's operator look and without Windows' title bar: the top bar (which
 /// is the title bar), game rail, the selected game's hero, the Session section (its caption row holds the options cog), the Options section (open from the cog) and the Players section, and a log drawer; the
-/// settings view takes the place of the right pane. It only composes: what each part shows is worked out in
+/// settings view and the character select take the place of the right pane, one at a time. It only composes: what each part shows is worked out in
 /// <see cref="SessionCards"/> and <see cref="GameStatus"/>, session logic lives in App, the update path in
 /// <see cref="UpdateFlow"/>.</summary>
 public sealed class MainForm : ChromelessForm
@@ -34,6 +34,7 @@ public sealed class MainForm : ChromelessForm
     private bool _optionsOpen;
     private readonly SectionPanel _playersSection = new("Players") { Dock = DockStyle.Top };
     private readonly PlayerCards _players;
+    private readonly OutfitArtStore _art;
     private readonly Panel _pane = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg, AutoScroll = true };
     private readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
     private readonly LogDrawer _drawer = new();
@@ -43,7 +44,10 @@ public sealed class MainForm : ChromelessForm
     private readonly string _buildLabel = BuildLabel();
     private readonly TaskScheduler _ui = TaskScheduler.FromCurrentSynchronizationContext();
     private readonly SettingsView _settings;
-    private bool _settingsOpen;
+    private readonly CharacterSelectView _select;
+
+    /// <summary>The view that takes the place of the pane (settings or the character select), or null.</summary>
+    private Control? _view;
     private bool _applying;
     private bool _sessionOpen;
     private bool _refreshing;
@@ -67,6 +71,8 @@ public sealed class MainForm : ChromelessForm
         NativeTheme.DarkScrollbars(_pane);
         LoadGames();
         _settings = new SettingsView(_rail.Games) { Visible = false };
+        _art = new OutfitArtStore(_ui);
+        _select = new CharacterSelectView(_art) { Visible = false };
         BuildLayout();
         RefreshMods();
         Apply(app.Status);
@@ -97,9 +103,9 @@ public sealed class MainForm : ChromelessForm
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape && _settingsOpen && ActiveControl is not FlatSelect { DroppedDown: true })
+        if (e.KeyCode == Keys.Escape && _view != null && ActiveControl is not FlatSelect { DroppedDown: true })
         {
-            ShowSettings(false);
+            ShowView(null);
             e.Handled = true;
         }
         base.OnKeyDown(e);
@@ -116,12 +122,14 @@ public sealed class MainForm : ChromelessForm
     {
         _rail.SelectionChanged += OnRailSelected;
         _options.Changed += () => Apply(_app.Status);
+        _select.Changed += () => Apply(_app.Status);
+        _players.SeatClicked += OpenSelect;
         _optionsButton.Click += (_, _) =>
         {
             _optionsOpen = !_optionsOpen;
             Apply(_app.Status);
         };
-        _top.SettingsButton.Click += (_, _) => ShowSettings(!_settingsOpen);
+        _top.SettingsButton.Click += (_, _) => ShowView(_view == null ? _settings : null);
         _top.UpdateButton.Click += (_, _) => _update.Click();
         _update.Changed += () =>
         {
@@ -165,6 +173,7 @@ public sealed class MainForm : ChromelessForm
             Log.Unsubscribe(OnLogWritten);
             Log.UnsubscribeEvents(OnEventLogged);
             _avatars.Dispose();
+            _art.Dispose();
         };
     }
 
@@ -198,6 +207,7 @@ public sealed class MainForm : ChromelessForm
         // its siblings, which must never let it dock against the rail. Docking runs from the last control added, so the
         // outer strips go in last.
         _content.Controls.Add(_settings);
+        _content.Controls.Add(_select);
         _content.Controls.Add(_pane);
         Controls.Add(_content);
         Controls.Add(_rail);
@@ -209,24 +219,35 @@ public sealed class MainForm : ChromelessForm
         _drawer.TabIndex = 3;
     }
 
-    private void ShowSettings(bool open)
+    /// <summary>Opens a view in the place of the pane with the panel reveal, or closes the open one (null) the same way back
+    /// onto the pane. The top bar button reads Back while a view is open.</summary>
+    private void ShowView(Control? view)
     {
-        if (_settingsOpen == open) return;
-        _settingsOpen = open;
-        _top.ShowSettingsOpen(open);
-        if (open)
+        if (_view == view) return;
+        var previous = _view;
+        _view = view;
+        _top.ShowBack(view != null);
+        if (view != null)
         {
-            _settings.Visible = true;
+            if (previous != null) previous.Visible = false;
+            view.Visible = true;
             _pane.Visible = false;
-            _settings.PerformLayout();
-            MotionOverlay.Play(_settings, Durations.PanelOpen, Easing.Out, Recipes.PanelIn, Theme.Bg);
+            view.PerformLayout();
+            MotionOverlay.Play(view, Durations.PanelOpen, Easing.Out, Recipes.PanelIn, Theme.Bg);
             return;
         }
         _pane.Visible = true;
         _pane.PerformLayout();
         var under = MotionOverlay.Capture(_pane);
-        MotionOverlay.Play(_settings, Durations.PanelClose, Easing.Out, Recipes.PanelOut, Theme.Bg, under);
-        _settings.Visible = false;
+        MotionOverlay.Play(previous!, Durations.PanelClose, Easing.Out, Recipes.PanelOut, Theme.Bg, under);
+        previous!.Visible = false;
+    }
+
+    /// <summary>A seat card was clicked: the character select opens with the focus on the half that plays that character.</summary>
+    private void OpenSelect(string character)
+    {
+        _select.FocusCharacter(character);
+        ShowView(_select);
     }
 
     /// <summary>Fills the rail with the games whose profile can be read; one unreadable profile is logged and skipped. The
@@ -254,7 +275,7 @@ public sealed class MainForm : ChromelessForm
         if (_applying) return;
         _app.ClearRefusal();
         AppSettings.Update(settings => settings.WithLastGame(game.Id));
-        ShowSettings(false);
+        ShowView(null);
         Apply(_app.Status);
     }
 
@@ -470,6 +491,9 @@ public sealed class MainForm : ChromelessForm
         var gameDir = GameFolders.Find(game);
         var hostValues = GameOptions.HostValues(game, gameDir);
         _hero.Show(game, _rail.SelectedArt!);
+        _players.Clickable = game.HasCharacterSelect;
+        if (game.HasCharacterSelect) _select.Show(game, gameDir, status, free);
+        else if (_view == _select) ShowView(null);
         _options.Show(game, gameDir, free ? null : status.HostOptions);
         _options.SetLocked(!free);
         ShowOptions(_optionsOpen && _options.Height > 0);
