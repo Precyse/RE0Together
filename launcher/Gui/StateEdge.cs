@@ -85,6 +85,18 @@ internal sealed class StateEdge
     /// <summary>How much the portrait is dimmed (0..1): a card with a problem fades its portrait.</summary>
     public double PortraitDim => Current().Dim;
 
+    /// <summary>The opaque colour the card shows under its content (the fill with the tint over it): the background text
+    /// animations are drawn over.</summary>
+    public Color Surface
+    {
+        get
+        {
+            var look = Current();
+            var share = look.Tint.A / (double)OpaqueAlpha;
+            return Interpolate.Lerp(Color.FromArgb(OpaqueAlpha, look.Fill), Color.FromArgb(OpaqueAlpha, look.Tint), share);
+        }
+    }
+
     /// <summary>The glow at the given moment of a state's animation (0..1 alpha at the edge). Pure: Progress breathes between 15
     /// and 35 %, Problem pulses between 25 and 60 %, InGame follows the bloom; reduced motion shows the rest values.</summary>
     public static double GlowLevel(CardState state, double phase, double bloom, bool reduced) => state switch

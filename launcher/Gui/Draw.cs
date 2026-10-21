@@ -226,14 +226,7 @@ internal static class Draw
     }
 
     /// <summary>Art laid over a screen: covers the rectangle and is drawn at the opacity (0..1).</summary>
-    public static void Backdrop(Graphics g, Image image, Rectangle rect, float opacity)
-    {
-        var state = g.Save();
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.PixelOffsetMode = PixelOffsetMode.Half;
-        Faded(g, image, rect, opacity);
-        g.Restore(state);
-    }
+    public static void Backdrop(Graphics g, Image image, Rectangle rect, float opacity) => Faded(g, image, rect, opacity);
 
     /// <summary>A padlock (shackle over a body, 2 unit stroke) in the 18 by 22 unit box, scaled to the box's width.</summary>
     public static void Lock(Graphics g, Color color, Rectangle box)

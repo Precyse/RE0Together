@@ -9,9 +9,9 @@ internal sealed class StepList : Control
     public StepList(StepSize size)
     {
         _painter = new StepPainter(this, "steps", size);
-        BackColor = Color.Transparent;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent;
     }
 
     /// <summary>The gap between rows in pixels (14 on a large list unless set, 12 while hosting).</summary>
