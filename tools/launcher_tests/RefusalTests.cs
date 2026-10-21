@@ -10,6 +10,28 @@ public static class RefusalTests
         Builds();
         Entering();
         Creating();
+        Versions();
+        BuildDetails();
+    }
+
+    private static void Versions()
+    {
+        Check.That(RefusalVersions.Format(412, 410) == "412/410", "host over you");
+        Check.That(RefusalVersions.TryParse("412/410", out var host, out var you) && host == 412 && you == 410, "the text parses back");
+        Check.That(RefusalVersions.TryParse(RefusalVersions.Format(0, 7), out host, out you) && host == 0 && you == 7, "a dev build number round trips");
+        foreach (var bad in new[] { "", "412", "412/", "/410", "a/b", "1/2/3", "-1/2", "1.5/2", "412 / 410", "99999999999/1" })
+            Check.That(!RefusalVersions.TryParse(bad, out _, out _), $"'{bad}' is not a pair of numbers");
+    }
+
+    private static void BuildDetails()
+    {
+        var host = new BuildInfo(412, 900, null);
+        var local = new BuildInfo(410, 800, null);
+        Check.That(BuildInfo.Detail(BuildMismatch.LauncherBuild, host, local, 5, 4) == "412/410", "launcher builds");
+        Check.That(BuildInfo.Detail(BuildMismatch.GameBuild, host, local, 5, 4) == "900/800", "game builds");
+        Check.That(BuildInfo.Detail(BuildMismatch.ModFiles, host, local, 5, 4) == "5/4", "the host's mod build over the installed one");
+        Check.That(BuildInfo.Detail(BuildMismatch.ModNotInstalled, host, local, 5, 0) == "", "a missing mod has no pair");
+        Check.That(BuildInfo.Detail(BuildMismatch.None, host, local, 5, 4) == "", "no mismatch has none");
     }
 
     private static void Builds()

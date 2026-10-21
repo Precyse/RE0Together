@@ -12,6 +12,7 @@ public static class SessionProgressTests
     public static void Run()
     {
         Steps();
+        Gate();
         Codec();
         Meter();
     }
@@ -24,10 +25,30 @@ public static class SessionProgressTests
         Is(Started with { BuildCheckPending = true, SaveSyncPending = true, LaunchPending = true }, SessionStep.CheckingBuild, "build check comes first");
         Is(Started with { SaveSyncPending = true, LaunchPending = true }, SessionStep.ReceivingSave, "then the save");
         Is(Started with { LaunchPending = true, Bridged = true, BridgeReady = true }, SessionStep.StartingGame, "then the launch");
+        Is(Started with { LaunchPending = true, StartHeld = true }, SessionStep.Ready, "a launch held by the start gate: ready");
+        Is(Started with { StartHeld = true }, SessionStep.InGame, "a held start with no launch pending changes nothing");
+        Is(Started with { SaveSyncPending = true, LaunchPending = true, StartHeld = true }, SessionStep.ReceivingSave, "the save comes before the start gate");
+        Is(Started with { BuildCheckPending = true, LaunchPending = true, StartHeld = true }, SessionStep.CheckingBuild, "so does the build check");
+        Is(Started with { SessionStarted = false, LaunchPending = true, StartHeld = true }, SessionStep.Lobby, "and a session that has not started");
         Is(Started with { Bridged = true, BridgeReady = true }, SessionStep.InGame, "bridged with the adapter linked: in game");
         Is(Started with { Bridged = true, BridgeWasReady = true }, SessionStep.GameClosed, "the adapter link was there and is gone: game closed");
         Is(Started with { Bridged = true }, SessionStep.StartingGame, "bridged and the adapter never linked: starting game");
         Is(Started, SessionStep.InGame, "no bridge (the game's own transport): in game once started");
+    }
+
+    private static void Gate()
+    {
+        Check.That(StartGate.Open(true, held: false, requested: false, SessionStep.None, latched: false), "a host with nothing held (command line, game running) is open");
+        Check.That(!StartGate.Open(true, held: true, requested: false, SessionStep.None, latched: false), "a held host waits for START GAME");
+        Check.That(StartGate.Open(true, held: true, requested: true, SessionStep.None, latched: false), "and starts once it asked");
+        Check.That(!StartGate.Open(true, held: true, requested: false, SessionStep.InGame, latched: true), "the host's gate ignores what the host publishes");
+        Check.That(StartGate.Open(false, held: false, requested: false, SessionStep.None, latched: false), "a guest with nothing held is open");
+        Check.That(!StartGate.Open(false, held: true, requested: true, SessionStep.Ready, latched: false), "a held guest waits while the host is ready");
+        Check.That(StartGate.Open(false, held: true, requested: false, SessionStep.StartingGame, latched: false), "a guest starts when the host's game is starting");
+        Check.That(StartGate.Open(false, held: true, requested: false, SessionStep.InGame, latched: false), "or already running");
+        Check.That(StartGate.Open(false, held: true, requested: false, SessionStep.Lobby, latched: true), "a latched guest stays open when the host blinks");
+        foreach (var step in new[] { SessionStep.None, SessionStep.Lobby, SessionStep.CheckingBuild, SessionStep.ReceivingSave, SessionStep.GameClosed, SessionStep.Refused, SessionStep.Ready })
+            Check.That(!StartGate.Open(false, held: true, requested: false, step, latched: false), $"a guest does not start on the host's {step}");
     }
 
     private static void Codec()
@@ -56,15 +77,17 @@ public static class SessionProgressTests
     private static void Meter()
     {
         var meter = new SaveProgressMeter();
-        Check.That(meter.Percent == 0, "0 before the first FILE_BEGIN");
+        Check.That(meter.Percent == 0 && meter.CurrentFile == "" && meter.ReceivedBytes == 0 && meter.TotalBytes == 0, "0 before the first FILE_BEGIN, no file");
         meter.OnChunk(1, 50);
         Check.That(meter.Percent == 0, "a chunk of a file never announced counts for nothing");
         meter.OnBegin(1, "a", 100);
         meter.OnBegin(2, "b", 300);
         meter.OnChunk(1, 100);
         Check.That(meter.Percent == 25, "bytes over the sum of the announced sizes");
+        Check.That(meter.CurrentFile == "a" && meter.ReceivedBytes == 100 && meter.TotalBytes == 400, "the file, bytes in and bytes announced");
         meter.OnChunk(2, 150);
         Check.That(meter.Percent == 62, "a second file adds to both");
+        Check.That(meter.CurrentFile == "b" && meter.ReceivedBytes == 250, "the current file is the one that last received a chunk");
         meter.OnChunk(2, 5000);
         Check.That(meter.Percent == 100, "capped at 100");
         meter.OnBegin(1, "a", 100);
@@ -79,6 +102,13 @@ public static class SessionProgressTests
         Check.That(resent.Percent == 0, "a file sent again under a new transfer id replaces its earlier transfer");
         resent.OnChunk(2, 100);
         Check.That(resent.Percent == 100, "so the resent set still reaches 100");
+        Check.That(resent.CurrentFile == "a" && resent.TotalBytes == 100 && resent.ReceivedBytes == 100, "and counts the resent file once");
+
+        var restarted = new SaveProgressMeter();
+        restarted.OnBegin(1, "a", 100);
+        restarted.OnChunk(1, 10);
+        restarted.OnBegin(2, "a", 100);
+        Check.That(restarted.CurrentFile == "", "a file replaced before its new chunk is not the current one");
     }
 
     private static void Is(StepInputs inputs, SessionStep expected, string what) =>

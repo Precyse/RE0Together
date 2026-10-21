@@ -23,6 +23,43 @@ public static class MemberGraceTests
         ExpiryDue();
         HostAndTracking();
         HostGrace();
+        ExpireAllAndMsLeft();
+    }
+
+    private static void ExpireAllAndMsLeft()
+    {
+        var grace = new MemberGrace();
+        Check.That(grace.MsLeft(Guest, 5000, Peers) == 0, "a member that is not held has no time left");
+        grace.Update(Both, Present(Host), 1000, Peers);
+        Check.That(grace.MsLeft(Guest, 1000, Peers) == MemberGrace.PeerGraceMs, "the whole grace is left when the hold starts");
+        Check.That(grace.MsLeft(Guest, 4000, Peers) == MemberGrace.PeerGraceMs - 3000, "the grace counts down");
+        Check.That(grace.MsLeft(Guest, 1000 + MemberGrace.PeerGraceMs + 500, Peers) == 0, "never below 0");
+        Check.That(grace.MsLeft(Host, 4000, Peers) == 0, "a present member has none");
+
+        grace.ExpireAll();
+        Check.That(grace.MsLeft(Guest, 2000, Peers) == 0, "a released member has no time left");
+        Check.That(grace.ExpiryDue(2000, Peers), "a release makes the expiry due at once");
+        var released = grace.Update(Both, Present(Host), 2000, Peers);
+        Check.That(released.Expired.SequenceEqual([Guest]) && released.Held.Count == 0, "the next update expires a released member before its grace");
+        Check.That(!grace.ExpiryDue(2001, Peers) && grace.HeldIds.Count == 0, "and forgets it");
+
+        var several = new MemberGrace();
+        several.Update([Host, Guest, 3], Present(), 0, Peers);
+        several.ExpireAll();
+        Check.That(several.Update([Host, Guest, 3], Present(), 1, Peers).Expired.Count == 3, "every held member is released");
+
+        var returning = new MemberGrace();
+        returning.Update(Both, Present(Host), 0, Peers);
+        returning.ExpireAll();
+        var back = returning.Update(Both, Present(Host, Guest), 1, Peers);
+        Check.That(back.Returned.SequenceEqual([Guest]) && back.Expired.Count == 0, "a released member that is back before the update is returned");
+        Check.That(!returning.ExpiryDue(2, Peers), "and the release is gone with it");
+
+        var cleared = new MemberGrace();
+        cleared.Update(Both, Present(Host), 0, Peers);
+        cleared.ExpireAll();
+        cleared.Clear();
+        Check.That(!cleared.ExpiryDue(1, Peers), "Clear drops a release too");
     }
 
     private static void Hiccup()

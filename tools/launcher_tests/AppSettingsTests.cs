@@ -33,6 +33,7 @@ public static class AppSettingsTests
     public static void Run()
     {
         RoundTripWithLastGame();
+        LobbyVisibilityRoundTrip();
         WriteKeepsLastGoodCopy();
         UnreadableFileFallsBack();
         GameFolderIsRememberedUntilSettingsChange();
@@ -48,6 +49,21 @@ public static class AppSettingsTests
         Check.That(read.LastGame == "sr2" && read.GameFolder("sr2") == @"C:\Games\Juiced", "the last game and a game folder survive a write and a read");
         Check.That(AppSettings.Current.LastGame == "sr2", "the current settings carry the last game");
         Check.That(!File.Exists(File1(data) + ".tmp"), "no temp file is left after a write");
+    }
+
+    private static void LobbyVisibilityRoundTrip()
+    {
+        using var data = new TempData();
+        Check.That(new AppSettings().LobbyVisibility == LobbyVisibility.Friends, "lobbies are friends only by default");
+        Check.That(AppSettings.Read().LobbyVisibility == LobbyVisibility.Friends, "no file reads the default");
+        AppSettings.Update(s => s.WithLobbyVisibility(LobbyVisibility.Everyone));
+        Check.That(AppSettings.Read().LobbyVisibility == LobbyVisibility.Everyone && AppSettings.Current.LobbyVisibility == LobbyVisibility.Everyone,
+            "everyone survives a write and a read");
+        AppSettings.Update(s => s.WithLobbyVisibility(LobbyVisibility.Friends).WithLastGame("re0"));
+        var read = AppSettings.Read();
+        Check.That(read.LobbyVisibility == LobbyVisibility.Friends && read.LastGame == "re0", "back to friends, beside the other settings");
+        File.WriteAllText(File1(data), "{ \"CheckForUpdates\": false }");
+        Check.That(AppSettings.Read().LobbyVisibility == LobbyVisibility.Friends, "a file from before the setting reads the default");
     }
 
     private static void WriteKeepsLastGoodCopy()

@@ -15,6 +15,7 @@ public sealed class MemberGrace
     public const long HostGraceMs = 180_000;
 
     private readonly Dictionary<ulong, long> _missingSince = new();
+    private readonly HashSet<ulong> _released = new();
 
     /// <summary>The members currently held (missing, grace not over).</summary>
     public IReadOnlyCollection<ulong> HeldIds => _missingSince.Keys;
@@ -24,19 +25,19 @@ public sealed class MemberGrace
     public GraceVerdict Update(IEnumerable<ulong> slotMembers, ISet<ulong> present, long nowMs, Func<ulong, long> graceFor)
     {
         var members = slotMembers.ToList();
-        foreach (var id in _missingSince.Keys.Except(members).ToList()) _missingSince.Remove(id);
+        foreach (var id in _missingSince.Keys.Except(members).ToList()) Forget(id);
         List<ulong> held = [], returned = [], expired = [];
         foreach (var id in members)
         {
             if (present.Contains(id))
             {
-                if (_missingSince.Remove(id)) returned.Add(id);
+                if (Forget(id)) returned.Add(id);
                 continue;
             }
             var since = _missingSince.TryAdd(id, nowMs) ? nowMs : _missingSince[id];
-            if (nowMs - since >= graceFor(id))
+            if (_released.Contains(id) || nowMs - since >= graceFor(id))
             {
-                _missingSince.Remove(id);
+                Forget(id);
                 expired.Add(id);
             }
             else held.Add(id);
@@ -45,8 +46,27 @@ public sealed class MemberGrace
     }
 
     /// <summary>True when a held member's grace is over, so the membership needs another check even if the lobby did not change.</summary>
-    public bool ExpiryDue(long nowMs, Func<ulong, long> graceFor) => _missingSince.Any(held => nowMs - held.Value >= graceFor(held.Key));
+    public bool ExpiryDue(long nowMs, Func<ulong, long> graceFor) =>
+        _released.Count > 0 || _missingSince.Any(held => nowMs - held.Value >= graceFor(held.Key));
+
+    /// <summary>Ends the grace of every member held now: the next <see cref="Update"/> expires them (play on without them).</summary>
+    public void ExpireAll() => _released.UnionWith(_missingSince.Keys);
+
+    /// <summary>Milliseconds before a held member's grace is over; 0 for one that is not held or was released.</summary>
+    public long MsLeft(ulong id, long nowMs, Func<ulong, long> graceFor) =>
+        _missingSince.TryGetValue(id, out var since) && !_released.Contains(id) ? Math.Max(0, graceFor(id) - (nowMs - since)) : 0;
 
     /// <summary>Forgets every hold (the lobby was replaced).</summary>
-    public void Clear() => _missingSince.Clear();
+    public void Clear()
+    {
+        _missingSince.Clear();
+        _released.Clear();
+    }
+
+    /// <summary>Drops a member's hold; true when it was held.</summary>
+    private bool Forget(ulong id)
+    {
+        _released.Remove(id);
+        return _missingSince.Remove(id);
+    }
 }
