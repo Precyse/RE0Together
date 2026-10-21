@@ -55,7 +55,13 @@ public sealed class GameWatch
         if (running && !_wasRunning) _runningSinceMs = nowMs;
         _wasRunning = running;
         _seenRunning |= running;
-        var linked = (game.RendezvousSession && !status.Bridged) || status.State is AppState.GameRunning or AppState.PeerConnected;
-        return Next(running, _seenRunning, linked, status.LaunchedAtMs, _runningSinceMs, nowMs);
+        return Next(running, _seenRunning, Linked(status, game), status.LaunchedAtMs, _runningSinceMs, nowMs);
     }
+
+    /// <summary>Whether the adapter link is there or not expected: a rendezvous game on its own transport has none, and while
+    /// the lobby is being rebuilt (rejoining, waiting for the host) the held session keeps the link it had, so the game is
+    /// never called unlinked for it.</summary>
+    public static bool Linked(AppStatus status, GameProfile game) =>
+        (game.RendezvousSession && !status.Bridged)
+        || status.State is AppState.GameRunning or AppState.PeerConnected or AppState.Rejoining or AppState.WaitingForHost;
 }
