@@ -75,6 +75,22 @@ public static class SteamLibrary
     public static string LibraryCacheDir(int appId) =>
         Path.Combine(SteamRoot(), "appcache", "librarycache", appId.ToString());
 
+    /// <summary>Custom library artwork the player set in Steam (right-click the game's art, "Set custom ..."): every
+    /// account's userdata\id\config\grid file named appId plus the suffix, newest first.</summary>
+    public static IEnumerable<string> CustomArtFiles(int appId, string suffix)
+    {
+        var userdata = Path.Combine(SteamRoot(), "userdata");
+        if (!Directory.Exists(userdata)) return [];
+        return Directory.EnumerateDirectories(userdata)
+            .Select(account => Path.Combine(account, "config", "grid"))
+            .Where(Directory.Exists)
+            .SelectMany(grid => GridImageExtensions.Select(extension => Path.Combine(grid, $"{appId}{suffix}{extension}")))
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc);
+    }
+
+    private static readonly string[] GridImageExtensions = { ".png", ".jpg", ".jpeg", ".webp" };
+
     private static string SteamRoot() =>
         (Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam")?.GetValue("SteamPath") as string ?? DefaultSteamPath)
         .Replace('/', '\\');
