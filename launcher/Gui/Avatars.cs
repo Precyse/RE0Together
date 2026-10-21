@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace CoopLauncher.Gui;
 
-/// <summary>Pixel format conversion for Steam avatars.</summary>
+/// <summary>Pixel format conversion for Steam avatars and the pictures taken from a game.</summary>
 public static class AvatarPixels
 {
     private const int BytesPerPixel = 4;
@@ -26,6 +26,23 @@ public static class AvatarPixels
             bgra[i + 3] = rgba[i + 3];
         }
         return bgra;
+    }
+
+    /// <summary>A bitmap holding BGRA bytes (<paramref name="width"/> x <paramref name="height"/> pixels, rows without padding).</summary>
+    public static Bitmap ToBitmap(byte[] bgra, int width, int height)
+    {
+        var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        var data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var row = width * BytesPerPixel;
+            for (var y = 0; y < height; y++) Marshal.Copy(bgra, y * row, data.Scan0 + y * data.Stride, row);
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
+        return bitmap;
     }
 }
 
@@ -102,7 +119,7 @@ internal sealed class AvatarStore : IDisposable
         Bitmap bitmap;
         try
         {
-            bitmap = ToBitmap(AvatarPixels.RgbaToBgra(rgba, width, height), width, height);
+            bitmap = AvatarPixels.ToBitmap(AvatarPixels.RgbaToBgra(rgba, width, height), width, height);
         }
         catch (ArgumentException e)
         {
@@ -139,22 +156,6 @@ internal sealed class AvatarStore : IDisposable
     }
 
     public void Dispose() => _cache.Clear();
-
-    private static Bitmap ToBitmap(byte[] bgra, int width, int height)
-    {
-        var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-        var data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-        try
-        {
-            var row = width * 4;
-            for (var y = 0; y < height; y++) Marshal.Copy(bgra, y * row, data.Scan0 + y * data.Stride, row);
-        }
-        finally
-        {
-            bitmap.UnlockBits(data);
-        }
-        return bitmap;
-    }
 }
 
 /// <summary>Shows one player's avatar in a box on a control: when the avatar arrives after the box was first drawn, it

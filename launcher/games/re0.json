@@ -5,19 +5,20 @@
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session" },
   "adapterLog": "coop/adapter.log",
   "freshTypes": ["0x0140", "0x0160", "0x0173"],
+  "outfitArt": { "arc": "nativePC/arc/ui/cos_{value}.arc", "texture": "cos_{value}_ID_HQ" },
   "options": [
     { "key": "partner_mode", "label": "Partner mode", "host": true, "values": [
       { "value": "input", "label": "Input" }, { "value": "state", "label": "State" } ] },
     { "key": "character", "label": "Character", "host": true, "values": [
       { "value": "rebecca", "label": "Rebecca" }, { "value": "billy", "label": "Billy" } ] },
-    { "key": "outfit_rebecca", "label": "Rebecca outfit", "values": [
+    { "key": "outfit_rebecca", "label": "Rebecca outfit", "character": "rebecca", "values": [
       { "value": "", "label": "Saved" }, { "value": "02", "label": "S.T.A.R.S. 2002" }, { "value": "7d", "label": "Western" },
       { "value": "81", "label": "Leather" }, { "value": "91", "label": "Team Wesker" },
       { "value": "71", "label": "S.T.A.R.S. 1996", "dlcAppId": "381713" }, { "value": "75", "label": "Sportswear", "dlcAppId": "381712" },
       { "value": "79", "label": "Cheerleader", "dlcAppId": "381710" }, { "value": "85", "label": "Nurse", "dlcAppId": "381711" },
       { "value": "89", "label": "S.T.A.R.S. Prototype", "dlcAppId": "381713" }, { "value": "8d", "label": "S.T.A.R.S. 1997", "dlcAppId": "381712" } ] },
-    { "key": "outfit_billy", "label": "Billy outfit", "values": [
+    { "key": "outfit_billy", "label": "Billy outfit", "character": "billy", "values": [
       { "value": "", "label": "Saved" }, { "value": "05", "label": "Prisoner" }, { "value": "95", "label": "Jacket" },
-      { "value": "a5", "label": "Wesker" },
+      { "value": "a5", "label": "Wesker", "art": { "arc": "nativePC/arc/ui/result_eng.arc", "texture": "get_wesker_ID_HQ", "crop": [640, 56, 340, 548], "feather": 40 } },
       { "value": "99", "label": "Wolf Force", "dlcAppId": "381710" }, { "value": "9d", "label": "Cody", "dlcAppId": "381711" } ] }
   ] }
