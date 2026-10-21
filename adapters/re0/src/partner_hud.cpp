@@ -18,14 +18,6 @@ std::string g_shown;                              // the line the overlay has no
 state_sync::PlayerState g_partnerState{};          // net thread only: the partner's latest PLAYER_STATE
 int g_partnerStateSlot = -1;                      // the slot it came from, -1 before the first
 
-// The other player in the session, on the host and on the guest alike.
-const PeerInfo* partner(const SessionSnapshot& session) {
-    for (const PeerInfo& peer : session.peers) {
-        if (peer.slot != session.localSlot) return &peer;
-    }
-    return nullptr;
-}
-
 partner_status::Input gather(const PeerInfo& peer) {
     partner_status::Input input;
     input.name = peer.name;
@@ -47,7 +39,7 @@ partner_status::Input gather(const PeerInfo& peer) {
 namespace partner_hud {
 
 void onNetTick(const SessionSnapshot& session) {
-    const PeerInfo* peer = partner(session);
+    const PeerInfo* peer = otherPeer(session.peers, session.localSlot);
     std::string line;
     if (peer) line = partner_status::text(gather(*peer));
     else if (g_hostLeft) line = partner_status::text(gather(PeerInfo{}));

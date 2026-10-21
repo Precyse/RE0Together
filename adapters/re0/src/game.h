@@ -599,6 +599,36 @@ constexpr uintptr_t kReactionEntrySize = 0x10;
 constexpr uintptr_t kGrabCommandFunction = 0x517340;
 constexpr uintptr_t kStruggleFunction = 0x4c8ed0;
 
+// Menu text and the Options screen (docs/RE0_NOTES.md "Menus: text hook and the Co-op entry in Options")
+constexpr uintptr_t kGameGuiGlobal = 0xe2daa4;        // sGameGUI*
+constexpr uintptr_t kGuiTablesOffset = 0x158;         // rGUIMessage*[kGuiTableSlots], one per message table slot
+constexpr int kGuiTableSlots = 19;
+constexpr int kGuiOptionTableSlot = 5;                // "option": the Options help lines
+constexpr uintptr_t kGetStringFunction = 0x887090;    // thiscall(rGUIMessage table, id) ret 4 -> UTF-8 char*, "" past the count
+constexpr uintptr_t kOptionHelpTable = 0xcdf8b8;      // u32 per Options item id: the help line's id in the option table, -1 none
+constexpr uintptr_t kOptionTopBuildFunction = 0x5c8970;   // uGUIOptionTop::v5, fastcall(top): fills the item list
+constexpr uintptr_t kOptionManagerMoveFunction = 0x5cb5a0;  // uOptionManager::v8, fastcall(manager): the screen router
+constexpr uintptr_t kOptionKeyGuideFunction = 0x5cc1b0;   // thiscall(manager, bool) ret 4: the button guide of the screen
+constexpr uintptr_t kOptionRouterJumpCheck = 0x5cba3d;    // dec eax; cmp eax, 0x15; ja default: the router's state dispatch
+constexpr uintptr_t kOptionRouterDefault = 0x5cc07e;      // default case: unlock and return
+// uOptionManager
+constexpr uintptr_t kOptionCreatingOffset = 0x48;         // u8: 1 until the pages are built
+constexpr uintptr_t kOptionDialogOffset = 0x4d;           // u8: 1 while a confirm dialog is up
+constexpr uintptr_t kOptionStateOffset = 0x54;            // u32 router state, 0 closed
+constexpr uintptr_t kOptionTopOffset = 0x15c;             // uGUIOptionTop*
+// uGUIOptionTop (the field block from +0x264 is read in one copy)
+constexpr uintptr_t kOptionTopFieldsOffset = 0x264;       // u8 cancel pressed
+constexpr uintptr_t kOptionTopStateOffset = 0x268;        // u32 screen state, 0 closed
+constexpr uintptr_t kOptionTopItemsOffset = 0x26c;        // u32[10] item ids in list order
+constexpr uintptr_t kOptionTopCountOffset = 0x294;        // u32 item count
+constexpr uintptr_t kOptionTopScrollOffset = 0x298;       // u32 first visible item
+constexpr uintptr_t kOptionTopCursorOffset = 0x29c;       // u32 cursor row within the visible rows
+constexpr size_t kOptionTopFieldsSize = 0x3c;
+// Menu input as every screen reads it: the trigger bits of pad, keyboard and mouse merged (cdecl() -> bits)
+constexpr uintptr_t kMenuTriggerFunction = 0x5ef420;
+constexpr uintptr_t kPadDecideMaskOffset = 0xb6c;         // sGamePad: the trigger bit mask of confirm
+constexpr uintptr_t kPadCancelMaskOffset = 0xb70;         // sGamePad: the trigger bit mask of cancel
+
 // MSVC cannot declare a free thiscall pointer; __fastcall with edx unused has the same register and stack layout.
 template <class R, class... Args>
 R callThiscall(uintptr_t function, void* self, Args... args) {
@@ -665,10 +695,14 @@ inline bool isRealPad(const void* object) {
     return object && readPointer(reinterpret_cast<uintptr_t>(object)) == kPadVtable;
 }
 
-inline bool codeDecrypted() {
-    std::array<uint8_t, kDecryptProbeBytes.size()> actual{};
-    return readMemory(kDecryptProbeAddress, actual) && actual == kDecryptProbeBytes;
+// True when the game memory at `address` holds exactly `expected`: the check before hooking or patching a site.
+template <size_t N>
+bool bytesMatch(uintptr_t address, const std::array<uint8_t, N>& expected) {
+    std::array<uint8_t, N> actual{};
+    return readMemory(address, actual) && actual == expected;
 }
+
+inline bool codeDecrypted() { return bytesMatch(kDecryptProbeAddress, kDecryptProbeBytes); }
 
 // Pointer stored at sPlayer + offset, or 0 when sPlayer or the field is missing.
 inline uintptr_t playerField(uintptr_t offset) {

@@ -62,6 +62,24 @@ Get grabbed from the front, bitten from behind, mash free, and get freed by a pa
 | expect | +0x1034 is 0 in normal play; group 2 states 6 / 9 in holds; +0x69cc runs 1 / 2 / 3 |
 | report | every non-zero +0x1034 with its moment |
 
+### T15 Co-op entry in Options (one PC; either partner_mode, no partner needed)
+
+Setup: `coop=1`, any `partner_mode`, delete `adapter.log`, start the game with no partner connected. Run the steps on the title screen (Options) and again in game (status screen, Options). Send `adapter.log` and a screenshot of the page and of the list with the Co-op row for every fail.
+
+| step | do | pass | fail |
+|---|---|---|---|
+| a. hooks | start the game, open the log | `hooks: rGUIMessage::getString hooked`, `hooks: uOptionManager::v8 hooked`, `hooks: uGUIOptionTop::v5 hooked`; no `gui_text:` or `options_coop:` line about unexpected code, no `adapter: Co-op menu entry unavailable` | any of those lines |
+| b. entry | Options top menu | one more row than vanilla, directly above Back: in game 8 rows, 9 with the Bonus unlock (Quit Game, then Co-op with the old "Auto Upload" label strip, then Back), on the title 8; the scroll arrows and the cursor wrap behave as before with the longer list; keyboard, pad and mouse hover move over the new row | row missing, row below Back, Back or Quit Game gone or doubled, cursor skips or sticks, arrows wrong |
+| c. help line | put the cursor on the new row | the line under the list reads `Co-op`; on every other row it is the game's own text | blank, `Auto Upload` text, another row's text changed |
+| d. open | confirm on the new row (pad confirm, Enter, mouse click) | the screen fades out as for any option page, then the Co-op page is centred: title, the rows Partner / Connection / Ping / Mode / Character / Outfit / Host, a separator, and Back highlighted; note what the background behind it looks like (black, or the options frame) | stays on the list, hangs in a black screen with no page, game crash |
+| e. values | read the rows with no partner, then with one (T2 or a two-PC session) | no partner: Partner `none`, Connection `waiting for partner` (or `link down` without the launcher), Ping `none`, Mode = `partner_mode` of adapter.ini, Character / Outfit the one you play (`none` on the title), Host `you` or `none`; with a partner: its name, `connected`, a ping that moves, the host's name or `you` | wrong mode, character, outfit or host, ping stuck |
+| f. back | on the page press confirm; reopen it and press cancel (pad B, Esc, right mouse button) | each press returns to the options list with the open animation, the screen fades back in, the cursor is on the Co-op row, the list and all other rows work; the log has one `coop_page: opened` and one `coop_page: closed` per visit | stuck on a black screen, cursor on another row, the whole Options screen closes on the same press, a second press needed |
+| g. no input bleed | on the page press up, down, left, right, confirm and cancel in turn, with a different row of the list under the cursor each visit; after returning press nothing for 2 s | the page ignores directions; no other row was activated (no Display, Audio, Controls, Quit Game dialog, Back out of Options) and the list cursor did not move while the page was open; in game, leaving Options afterwards does not make Rebecca / Billy move, fire or open the pause menu | any other page or dialog opens, the cursor moved, the options closed with the page |
+| h. repeat and leave | open and close the page 5 times, then leave Options with Back, reopen Options | the entry and the page work every time; Back still leaves; Quit Game still shows its dialog and works; the new row is present again after reopening | row gone after the first reopen, doubled rows, crash |
+| i. language (title) | change the language in Options, reopen Options, open the page | the entry and the help line still work | row or help text lost |
+| j. coop=0 unchanged | set `coop=0`, start the game, open Options on the title and in game | vanilla: no Co-op row (7 rows on the title, 7 or 8 in game), nothing changed; the log has none of `gui_text:`, `options_coop:`, `coop_page:` and no `rGUIMessage::getString` hook line | any difference from vanilla |
+| k. two PCs | with a partner connected, one player opens the page and keeps it open for 10 s, then closes it | the other player's status line shows `in menu` while it is open and the world holds as for any menu (20 s cap) and resumes on close | no hold, or no resume |
+
 ## TWO-PC
 
 Setup: both PCs install (Setup above), same build. Host: `character=rebecca` (default). Host opens `launcher\test\coop-launcher.exe`, Host, sends the code; guest Join. Both launcher logs: `Fresh channel: 3 types`. Wi-Fi guest is fine. Start with a fresh save the host owns; guest gets it automatically.

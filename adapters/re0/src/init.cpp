@@ -28,6 +28,7 @@
 #include "floor_items_sync.h"
 #include "game.h"
 #include "game_tick.h"
+#include "gui_text.h"
 #include "inventory_sync.h"
 #include "input_record.h"
 #include "input_redirect.h"
@@ -37,6 +38,7 @@
 #include "net_client.h"
 #include "net_pad.h"
 #include "net_trace.h"
+#include "options_coop.h"
 #include "pad_commands.h"
 #include "partner_think.h"
 #include "party_mode.h"
@@ -106,6 +108,8 @@ void enableCoop(const Config& config) {
     enemy_spawn::install();
     player_damage::install(g_net);
     menu_mirror::enable();
+    if (!gui_text::enable()) logger::write("adapter: menu text hook unavailable");
+    if (!options_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
     if (state_mode::on()) state_mode::enableAll(g_net);
 }
 
@@ -158,6 +162,8 @@ void shutdownAdapter() {
     pad_commands::uninstall();
     player_damage::uninstall();
     menu_mirror::uninstall();
+    options_coop::uninstall();
+    gui_text::uninstall();
     appearance::uninstall();
     floor_items_sync::uninstall();
     door_sync::uninstall();

@@ -25,6 +25,14 @@ struct SessionSnapshot {
     std::vector<PeerInfo> peers;
 };
 
+// The first peer that is not the local player, the other player of a two-player session; null when there is none.
+inline const PeerInfo* otherPeer(const std::vector<PeerInfo>& peers, uint8_t localSlot) {
+    for (const PeerInfo& peer : peers) {
+        if (peer.slot != localSlot) return &peer;
+    }
+    return nullptr;
+}
+
 struct GameFrame {
     uint16_t type = 0;
     uint8_t flags = 0;
