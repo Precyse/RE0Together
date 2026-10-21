@@ -1,0 +1,90 @@
+/* Joining, hosting, lobby and character select. Sizes are the concepts SPEC 8.5, 8.6 and 8.8 values, scoped to the screen. */
+
+.joining, .session, .select-screen { display: flex; }
+.joining, .session { align-items: center; justify-content: center; }
+.art-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.18; pointer-events: none; }
+.session-lobby .art-backdrop { opacity: 0.2; }
+.select-screen .art-backdrop { opacity: 0.22; }
+.art-logo { width: 200px; height: 80px; object-fit: contain; object-position: left center; }
+
+/* ---- joining ---- */
+.joining-column { position: relative; width: 420px; display: flex; flex-direction: column; gap: 24px; }
+.joining-header { display: flex; align-items: center; gap: 12px; }
+.joining-avatar { width: 40px; height: 40px; font-size: 14px; }
+.joining-names { display: flex; flex-direction: column; min-width: 0; }
+.joining-title { font-size: 18px; font-weight: 600; }
+.joining-sub { font-size: 12px; color: var(--muted); }
+.joining-buttons { display: flex; gap: 12px; }
+.joining-buttons .btn { height: 40px; }
+.joining-buttons.has-fix .btn { height: 44px; }
+.joining-fix { width: 160px; }
+.joining-again { width: 140px; }
+.joining-cancel { width: 120px; }
+
+/* ---- hosting and lobby ---- */
+.session-grid { position: relative; width: 760px; display: grid; grid-template-columns: var(--col-left) minmax(0, 1fr); gap: var(--col-gap); align-items: center; }
+.session-hosting { --col-left: 330px; --col-gap: 48px; }
+.session-lobby { --col-left: 300px; --col-gap: 40px; }
+.session-left { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.session-code-block { display: flex; flex-direction: column; gap: 6px; }
+.session-code-row { display: flex; align-items: center; gap: 8px; }
+.session-code-row { --copy-hold: 1200ms; }
+/* icon-swap there, hold, icon-swap back: one animation of 2 x --icon-swap-dur + --copy-hold, so the keyframe stops sit at 250 and 1450 of 1700 ms. */
+.t-icon-swap.is-copied .t-icon { animation-duration: calc(var(--icon-swap-dur) * 2 + var(--copy-hold)); animation-timing-function: var(--icon-swap-ease); animation-fill-mode: both; }
+.t-icon-swap.is-copied .t-icon[data-icon="a"] { animation-name: t-copy-from; }
+.t-icon-swap.is-copied .t-icon[data-icon="b"] { animation-name: t-copy-to; }
+@keyframes t-copy-from {
+  0%, 100% { opacity: 1; filter: blur(0); transform: scale(1); }
+  14.7%, 85.3% { opacity: 0; filter: blur(var(--icon-swap-blur)); transform: scale(var(--icon-swap-start-scale)); }
+}
+@keyframes t-copy-to {
+  0%, 100% { opacity: 0; filter: blur(var(--icon-swap-blur)); transform: scale(var(--icon-swap-start-scale)); }
+  14.7%, 85.3% { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+.session-code { font-weight: 700; letter-spacing: 0.02em; }
+.session-code.large { font-size: 24px; }
+.session-code.medium { font-size: 22px; }
+.session-body { display: flex; flex-direction: column; gap: 20px; }
+.session-state { display: flex; align-items: center; gap: 12px; }
+.session-state-words { font-size: 18px; font-weight: 600; }
+.session-state-timer { font-size: 14px; color: var(--muted); }
+.session-options { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 12px; }
+.session-option { display: contents; }
+.session-option-label { color: var(--muted); }
+.session-events { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted); }
+.session-buttons { display: flex; gap: 12px; }
+.session-primary { width: 150px; height: 44px; }
+.session-leave { width: 104px; height: 44px; }
+.session-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.session-hosting .session-right:has(.cards[data-layout="tall"]) { gap: 10px; }
+.session-players { display: flex; align-items: center; gap: 6px; }
+
+/* ---- character select ---- */
+.select-fade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(12, 13, 14, 0) 45%, rgba(12, 13, 14, 0.85) 78%, var(--bg) 100%); pointer-events: none; }
+.select-stage { position: relative; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr); align-items: end; padding: 0 40px; }
+.select-half { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.select-figure { position: relative; width: 240px; height: 300px; opacity: var(--o, 1); transition: opacity var(--resize-dur) var(--resize-ease); }
+.select-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+.select-names { display: flex; align-items: baseline; gap: 10px; }
+.select-name { font-size: 22px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.select-role { font-size: 12px; color: var(--muted); }
+.select-arrows { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.select-half[data-focus] .select-arrows { outline: var(--focus-ring); outline-offset: 4px; }
+.select-arrow { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: var(--card); color: var(--text); transition: background-color var(--hover-dur) var(--hover-ease); }
+.select-arrow:hover:not(:disabled) { background: var(--card-hover); }
+.select-arrow:disabled { color: var(--disabled); }
+.select-label { width: 150px; text-align: center; font-size: 15px; font-weight: 600; }
+.select-dots { position: relative; display: flex; gap: 5px; height: 6px; margin: 6px 0 22px; }
+.select-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+.select-dots .select-dot-active { position: absolute; left: 0; top: 0; background: var(--text); transform: translateX(calc(var(--at, 0) * 1px)); transition: transform var(--tabs-dur) var(--tabs-ease); }
+.select-half[data-kind="partner"] .select-name, .select-half[data-kind="partner"] .select-label { color: var(--muted); }
+.select-half[data-kind="partner"] .select-arrow { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.select-half[data-kind="partner"] .select-dots i { background: var(--raised); }
+.select-half[data-kind="partner"] .select-dots .select-dot-active { background: var(--muted); }
+.select-half[data-kind="readonly"] .select-arrow { display: none; }
+.select-half[data-kind="readonly"] .select-label { width: auto; color: var(--muted); }
+.select-centre { align-self: center; display: flex; justify-content: center; }
+.select-swap, .select-lock { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); }
+.select-swap { background: var(--card); color: var(--text); transition: background-color var(--hover-dur) var(--hover-ease); }
+.select-swap:hover { background: var(--card-hover); }
+.select-lock { color: var(--muted); }

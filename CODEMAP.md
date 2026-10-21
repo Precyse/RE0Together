@@ -203,6 +203,21 @@ The WebView2 page (page spec: SPEC 2, 3, 6 of the launcher web UI). No build ste
 
 ## launcher/web (session)
 
+Joining, hosting, lobby, mini window, character select and their components (briefs: concepts SPEC 6-9). Text only through `textContent`; every label, flag and state comes in the DTO.
+
+| file | owns | key members |
+|---|---|---|
+| web/js/spinner.js | the matrix loader (orbit variant), small and large | `createSpinner(size)` |
+| web/js/steps.js | the step list: glyphs (circle, spinner, check drawn in, cross + row shake), rolling trailing digits, bar tween, indeterminate bar, lines, Host/You pairs; keyed by row index | `createSteps(size)`, `setGlyph`, `fillList` |
+| web/js/cards.js | player cards in wide / tall / mini / miniPortrait: portrait (figure, avatar, initial, open dots), state layers (tint, edge, glow, comet) cross-faded by `data-state`, shake and bloom on entering, occupant cross-fade, staggered `enter()`, clickable local card | `createCards(ctx, layout)`, `createPortrait`, `createAvatar`, `createImage`, `setImage` |
+| web/js/joining.js | joining screen: backdrop, host header (text swap), large steps, Cancel / fix / Start again | `create` |
+| web/js/session.js | hosting and lobby (two instances by `ctx.screen`): code + copy icon swap, hosting steps, lobby state line, options, events, buttons, notice row, PLAYERS reel, cards | `create`, `createCode` |
+| web/js/select.js | character select S1 / S3: halves, outfit slide, character swap crossing, sliding dots, Left/Right/Tab keys | `create`, `createHalf` |
+| web/js/mini.js, web/js/mini-main.js, web/mini.html | the mini window page: header, seats or the alert, event footer; `shown` / `miniClose` play the modal recipes | `createMini` |
+| web/css/cards.css | spinner, step list, check / cross recipes, card layouts, state layers and loops (bloom, breathe, pulse, comet) | |
+| web/css/session.css, web/css/mini.css | joining, hosting / lobby, select; the 360x220 mini page | |
+| web/dev/fixtures/(joining, hosting, lobby, select, mini, cards_states, seq_*).js, web/dev/sequences/*.js, web/dev/smoke/select_keys.js, mini_expand.js | session fixtures, the eight sequences (hosting_to_lobby, step_done, step_failed, card_states, copy_swap, outfit_next, character_swap, mini_open), smoke scripts | |
+
 ## adapters/re0/ (C++20, x86, dinput8.dll proxy)
 
 Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build`. Output `build/dinput8.dll`, copied to `adapters/re0/dinput8.dll`. Vendored MinHook in `third_party/minhook` (wrapped by src/hooks.cpp) and Dear ImGui (imgui core + `backends/imgui_impl_dx9`, MIT) in `third_party/imgui`.
@@ -546,3 +561,4 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 - Tuning input delay without a partner: `adapters/re0/build/trace_replay.exe --synthetic 120 --jitter 60`, or record with `net_trace=1` and replay the file
 - A crash on a player's machine: `coop\crash-*.dmp` next to adapter.log, read with `tools/re0/dump_stack.py`
 - Launcher web page (WebView2): shell and browse screens `launcher/web/js/main.js`, motion recipes `css/motion.css` + `js/motion.js`, tokens `css/tokens.css`; screenshots without the launcher: `python tools/launcher_web/render.py <fixture|sequence> --out <dir>`
+- Launcher web page, session screens (joining, hosting, lobby, mini, select), cards, steps, spinner: `launcher/web/js/cards.js`, `steps.js`, `session.js`; card state edge CSS `css/cards.css`; fixtures `dev/fixtures`, sequences `dev/sequences`

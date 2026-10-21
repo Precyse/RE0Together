@@ -26,6 +26,7 @@ const ICONS = {
     fill: true,
     shapes: [['path', { d: 'M0 3h16V0l10 5.5L16 11V8H0z M26 14H10v-3L0 16.5 10 22v-3h16z' }]],
   },
+  swapStage: { box: [26, 22], fill: true, shapes: [['path', { d: 'M8 0 L0 6 L8 12 Z M18 10 L26 16 L18 22 Z M6 5h16v2H6z M4 15h16v2H4z' }]] },
   person: {
     box: [20, 20],
     shapes: [['circle', { cx: 10, cy: 6, r: 3.5 }], ['path', { d: 'M3 18c0-4 3-6 7-6s7 2 7 6' }]],

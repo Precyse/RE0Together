@@ -6,7 +6,7 @@ const REDUCED_PARAM = 'reduced';
 const MINI_PAGE = 'mini.html';
 const SETTLE_LIMIT_MS = 1500;
 const SETTLE_POLL_MS = 50;
-const FRAME_FALLBACK_MS = 100;
+const FRAME_MS = 17;
 const READY_ATTRIBUTE = 'data-ready';
 const ERROR_ATTRIBUTE = 'data-error';
 const HOUSEKEEPING = ['ready', 'page.rendered'];
@@ -15,20 +15,36 @@ const params = new URLSearchParams(location.search);
 const isMini = location.pathname.endsWith(MINI_PAGE);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const nextFrame = () => Promise.race([new Promise((resolve) => requestAnimationFrame(resolve)), wait(FRAME_FALLBACK_MS)]);
-async function frames(count) {
-  for (let i = 0; i < count; i += 1) await nextFrame();
-}
+/**
+ * Frames are waited on a timer: in headless virtual time requestAnimationFrame callbacks arrive only when the time budget is used up. A rAF loop
+ * that does nothing still runs so the compositor keeps producing frames and animations start.
+ */
+const frames = (count) => wait(count * FRAME_MS);
+(function keepFrames() { requestAnimationFrame(keepFrames); }());
 
 function finiteAnimations() {
   return document.getAnimations().filter((a) => a.effect.getComputedTiming().iterations !== Infinity && a.playState === 'running');
 }
 
-/** Waits until no finite animation is running (or the limit passes). */
+/** Waits until no finite animation is running (or the limit passes), then finishes any that never got going (headless virtual time may not start them). */
 async function settle() {
   await frames(2);
   for (let waited = 0; waited < SETTLE_LIMIT_MS && finiteAnimations().length; waited += SETTLE_POLL_MS) await wait(SETTLE_POLL_MS);
+  for (const animation of finiteAnimations()) animation.finish();
   await frames(2);
+}
+
+const IMAGE_PATTERN = /\/dev\/art\/[^"]+/g;
+
+/** Loads every image a fixture names into the browser cache first, so a frozen frame never shows a picture that is still on its way. */
+function preloadImages(fixtures) {
+  const sources = new Set(JSON.stringify(fixtures).match(IMAGE_PATTERN));
+  return Promise.all([...sources].map((src) => new Promise((resolve) => {
+    const image = new Image();
+    image.onload = resolve;
+    image.onerror = resolve;
+    image.src = src;
+  })));
 }
 
 async function loadFixture(key) {
@@ -75,19 +91,19 @@ async function runSmoke(name) {
 
 async function play(deliver) {
   const { keys, transitions = [], events = {} } = params.has(SEQUENCE_PARAM) ? await sequenceOf(params.get(SEQUENCE_PARAM)) : { keys: [params.get(FIXTURE_PARAM)] };
-  const first = await loadFixture(keys[0]);
+  const fixtures = await Promise.all(keys.map(loadFixture));
+  await preloadImages(fixtures);
+  const first = fixtures[0];
   deliver({ type: 'hello', page: isMini ? 'mini' : 'main', debug: false, ...first.hello, reducedMotion: params.get(REDUCED_PARAM) === '1' });
   if (first.log) deliver({ type: 'log', lines: first.log });
   let seq = 0;
-  for (const [index, key] of keys.entries()) {
-    const fixture = index === 0 ? first : await loadFixture(key);
+  for (const [index, fixture] of fixtures.entries()) {
     seq += 1;
     const body = isMini ? fixture.mini : fixture.state;
     deliver({ ...body, ...(transitions[index] && { transition: transitions[index] }), type: 'state', seq });
-    for (const name of events[index] ?? []) deliver({ type: 'event', name });
-    if (index < keys.length - 1) await settle();
+    for (const name of [...(events[index] ?? []), ...(fixture.events ?? [])]) deliver({ type: 'event', name });
+    if (index < fixtures.length - 1) await settle();
   }
-  for (const name of first.events ?? []) deliver({ type: 'event', name });
   if (params.has(FRAME_PARAM)) freeze(Number(params.get(FRAME_PARAM)));
   else await settle();
   const smoke = params.get(SMOKE_PARAM) ?? first.smoke;
