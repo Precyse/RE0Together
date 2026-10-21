@@ -7,12 +7,16 @@ public sealed record WindowBounds(int X, int Y, int Width, int Height, bool Maxi
 
 /// <summary>
 /// The launcher's settings, stored as JSON in %AppData%\CoopLauncher\settings.json. Read once at start; every change
-/// replaces <see cref="Current"/> and writes the file. A missing or unreadable file means the defaults.
+/// replaces <see cref="Current"/> and writes the file. A file is written whole beside itself and then moved over the old one, which
+/// stays as settings.json.bak: a file that turns out unreadable falls back to that copy, and a missing file means the defaults.
 /// </summary>
 public sealed record AppSettings(
     bool CheckForUpdates = true, Dictionary<string, string>? GameFolders = null, WindowBounds? Window = null,
-    Dictionary<string, Dictionary<string, string>>? GameOptions = null)
+    Dictionary<string, Dictionary<string, string>>? GameOptions = null, string? LastGame = null)
 {
+    private const string TempSuffix = ".tmp";
+    private const string BackupSuffix = ".bak";
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
     private static readonly object Gate = new();
     private static AppSettings _current = Read();
@@ -25,7 +29,8 @@ public sealed record AppSettings(
         }
     }
 
-    /// <summary>Replaces the settings with the changed copy and saves them.</summary>
+    /// <summary>Replaces the settings with the changed copy and saves them. A changed game folder must be found again, so the
+    /// remembered folders are dropped.</summary>
     public static void Update(Func<AppSettings, AppSettings> change)
     {
         lock (Gate)
@@ -33,6 +38,7 @@ public sealed record AppSettings(
             _current = change(_current);
             Write(_current);
         }
+        CoopLauncher.GameFolders.Invalidate();
     }
 
     /// <summary>The game folder the player chose for this game, or null to use the one Steam knows.</summary>
@@ -46,6 +52,9 @@ public sealed record AppSettings(
         else folders[gameId] = folder;
         return this with { GameFolders = folders };
     }
+
+    /// <summary>A copy with the game that was selected last.</summary>
+    public AppSettings WithLastGame(string gameId) => this with { LastGame = gameId };
 
     /// <summary>The value the player chose for a game's option, or null for the option's default.</summary>
     public string? Option(string gameId, string key) =>
@@ -61,27 +70,46 @@ public sealed record AppSettings(
         return this with { GameOptions = all };
     }
 
-    private static AppSettings Read()
+    /// <summary>The settings file; when it is unreadable the last good copy; the defaults when there is no file.</summary>
+    public static AppSettings Read()
+    {
+        if (!File.Exists(AppData.SettingsFile)) return new AppSettings();
+        if (TryRead(AppData.SettingsFile, out var settings)) return settings;
+        if (File.Exists(AppData.SettingsFile + BackupSuffix) && TryRead(AppData.SettingsFile + BackupSuffix, out settings))
+        {
+            Log.Info("Settings unreadable, using the last good copy");
+            return settings;
+        }
+        Log.Info("Settings unreadable, using the defaults");
+        return new AppSettings();
+    }
+
+    private static bool TryRead(string path, out AppSettings settings)
     {
         try
         {
-            return File.Exists(AppData.SettingsFile)
-                ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppData.SettingsFile), JsonOptions) ?? new AppSettings()
-                : new AppSettings();
+            settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOptions)!;
+            return settings != null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
-            Log.Info($"Settings unreadable, using the defaults: {e.Message}");
-            return new AppSettings();
+            Log.Info($"Could not read {path}: {e.Message}");
+            settings = new AppSettings();
+            return false;
         }
     }
 
+    /// <summary>Writes beside the file and moves over it, so a crash never leaves half a file; the file being replaced becomes the
+    /// .bak copy when it is a readable one.</summary>
     private static void Write(AppSettings settings)
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(AppData.SettingsFile)!);
-            File.WriteAllText(AppData.SettingsFile, JsonSerializer.Serialize(settings, JsonOptions));
+            var file = AppData.SettingsFile;
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file + TempSuffix, JsonSerializer.Serialize(settings, JsonOptions));
+            if (File.Exists(file) && TryRead(file, out _)) File.Copy(file, file + BackupSuffix, overwrite: true);
+            File.Move(file + TempSuffix, file, overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
