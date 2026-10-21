@@ -41,6 +41,7 @@ wire::JoinExtras sample() {
     wire::JoinExtras extras;
     extras.snapshotSerial = 5;
     extras.flagSerial = 41;
+    extras.worldEpoch = 6;
     extras.claims = {claim(0x2d, 2, 0), claim(0x08, 1, 0)};
     extras.props = {commitAt(0x2d, 1)};
     extras.items = {takeAt(0x2d, 0x2b), takeAt(0x08, 0x14), takeAt(0x08, 0x0f)};
@@ -58,6 +59,7 @@ void testRoundTrip() {
     check(got.has_value(), "a good message decodes");
     if (!got) return;
     check(got->snapshotSerial == 5 && got->flagSerial == 41, "the serials survive");
+    check(got->worldEpoch == 6, "the host's world epoch survives");
     check(got->claims.size() == 2 && got->claims[0].id == 0x2d && got->claims[0].epoch == 2 && got->claims[1].id == 0x08,
           "the claims survive in order");
     check(got->props.size() == 1 && got->props[0].scene == 0x2d && got->props[0].unitId == 1 && got->props[0].yaw == 1.5f &&
@@ -74,6 +76,7 @@ void testRoundTrip() {
 void testEmpty() {
     wire::JoinExtras extras;
     extras.snapshotSerial = 1;
+    extras.worldEpoch = 1;
     const auto got = wire::decode(raw(extras));
     check(got && got->claims.empty() && got->props.empty() && got->items.empty() && got->flagSerial == 0,
           "a message with no lists decodes");
@@ -88,6 +91,7 @@ void testSizeRefusals() {
     check(!wire::decode(std::vector<uint8_t>(sizeof(wire::ExtrasHeader) - 1)), "less than a header is refused");
     wire::ExtrasHeader header{};
     header.snapshotSerial = 1;
+    header.worldEpoch = 1;
     header.items = static_cast<uint16_t>(wire::kMaxItems + 1);
     std::vector<uint8_t> big(sizeof(header) + header.items * sizeof(wire::ItemTake));
     std::memcpy(big.data(), &header, sizeof(header));
@@ -102,10 +106,10 @@ void testHeaderRefusals() {
     noSerial.snapshotSerial = 0;
     std::memcpy(bytes.data(), &noSerial, sizeof(header));
     check(!wire::decode(bytes), "snapshot serial 0 is refused");
-    wire::ExtrasHeader reserved = header;
-    reserved.reserved = 1;
-    std::memcpy(bytes.data(), &reserved, sizeof(header));
-    check(!wire::decode(bytes), "a reserved header field must be zero");
+    wire::ExtrasHeader noEpoch = header;
+    noEpoch.worldEpoch = 0;
+    std::memcpy(bytes.data(), &noEpoch, sizeof(header));
+    check(!wire::decode(bytes), "world epoch 0 is refused: the host's epoch is never 0");
     wire::ExtrasHeader lying = header;
     lying.claims = 3;
     std::memcpy(bytes.data(), &lying, sizeof(header));
@@ -145,6 +149,7 @@ void testEntryRefusals() {
 void testEncodeCutsToLimits() {
     wire::JoinExtras extras;
     extras.snapshotSerial = 2;
+    extras.worldEpoch = 1;
     extras.props.assign(wire::kMaxProps + 5, commitAt(0x2d, 0));
     extras.items.assign(wire::kMaxItems + 5, takeAt(0x2d, 0x2b));
     const auto got = wire::decode(raw(extras));

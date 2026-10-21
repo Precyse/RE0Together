@@ -27,7 +27,9 @@ std::vector<uint8_t> bytesOf(const T& value) {
     return out;
 }
 
-wire::TakeRequest sampleRequest() { return {7, 0x0a05, 0x2b, 1, {100.0f, 0.0f, 200.0f}}; }
+constexpr uint16_t kEpoch = 5;
+
+wire::TakeRequest sampleRequest() { return {7, 0x0a05, 0x2b, 1, {100.0f, 0.0f, 200.0f}, kEpoch, 0}; }
 
 void testIds() {
     check(wire::kMsgTakeRequest == 0x0170, "TAKE_REQUEST is 0x0170");
@@ -41,6 +43,7 @@ void testRequestRoundTrip() {
     if (!got) return;
     check(got->seq == 7 && got->scene == 0x0a05 && got->itemId == 0x2b && got->count == 1, "request fields survive");
     check(got->pos == sent.pos, "request position survives");
+    check(got->worldEpoch == kEpoch, "the requester's world epoch survives");
     const item_ledger_rule::Key key = wire::keyOf(*got);
     check(key.scene == 0x0a05 && key.itemId == 0x2b && key.pos == sent.pos, "the ledger key is the request's item");
 }
@@ -80,6 +83,8 @@ void testResultRefusals() {
     check(wire::decodeResult(bytesOf(result)).has_value(), "Granted is a wire answer");
     result.answer = static_cast<uint8_t>(Answer::Taken);
     check(wire::decodeResult(bytesOf(result)).has_value(), "Taken is a wire answer");
+    result.answer = static_cast<uint8_t>(Answer::Stale);
+    check(wire::decodeResult(bytesOf(result)).has_value(), "Stale is a wire answer: the host refuses a request from before its load");
     result.answer = static_cast<uint8_t>(Answer::TimedOut);
     check(!wire::decodeResult(bytesOf(result)), "the local timeout never travels");
     check(!wire::decodeResult(std::vector<uint8_t>(3)), "a short result is refused");

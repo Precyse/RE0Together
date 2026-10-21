@@ -15,12 +15,18 @@ namespace flag_sequencer_wire {
 constexpr uint16_t kMsgFlagPropose = proto::kFirstGameType + 0x75;  // 0x0175, guest to host, reliable
 constexpr uint16_t kMsgFlagCommit = proto::kFirstGameType + 0x76;   // 0x0176, host to all, reliable
 
-// FLAG_PROPOSE: the flag_sync diff the guest made natively.
+// FLAG_PROPOSE: the flag_sync diff the guest made natively, stamped with the world epoch the guest last adopted
+// (world_epoch_rule.h) so the host can drop a proposal from before its last load.
 struct ProposeHeader {
     uint16_t count;
-    uint16_t reserved;
+    uint16_t worldEpoch;
 };
 static_assert(sizeof(ProposeHeader) == 4);
+
+struct Propose {
+    uint16_t worldEpoch = 0;
+    std::vector<flag_diff::Change> changes;
+};
 
 // FLAG_COMMIT: the host's order. `origin` is the slot whose change this is (the host's own, or the proposing guest,
 // which counts it as the answer to its oldest proposal). An empty commit answers a proposal that changed nothing.
@@ -62,19 +68,21 @@ inline void appendChanges(std::vector<uint8_t>& out, const std::vector<flag_diff
 
 }  // namespace detail
 
-inline std::vector<uint8_t> encodePropose(const std::vector<flag_diff::Change>& changes) {
-    const ProposeHeader header{static_cast<uint16_t>(changes.size()), 0};
+inline std::vector<uint8_t> encodePropose(const Propose& propose) {
+    const ProposeHeader header{static_cast<uint16_t>(propose.changes.size()), propose.worldEpoch};
     std::vector<uint8_t> out(sizeof(header));
     std::memcpy(out.data(), &header, sizeof(header));
-    detail::appendChanges(out, changes);
+    detail::appendChanges(out, propose.changes);
     return out;
 }
 
-inline std::optional<std::vector<flag_diff::Change>> decodePropose(std::span<const uint8_t> bytes) {
+inline std::optional<Propose> decodePropose(std::span<const uint8_t> bytes) {
     ProposeHeader header{};
     if (bytes.size() < sizeof(header)) return std::nullopt;
     std::memcpy(&header, bytes.data(), sizeof(header));
-    return detail::readChanges(bytes.subspan(sizeof(header)), header.count);
+    auto changes = detail::readChanges(bytes.subspan(sizeof(header)), header.count);
+    if (!changes) return std::nullopt;
+    return Propose{header.worldEpoch, std::move(*changes)};
 }
 
 inline std::vector<uint8_t> encodeCommit(const Commit& commit) {

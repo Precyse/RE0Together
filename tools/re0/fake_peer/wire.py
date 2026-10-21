@@ -204,8 +204,8 @@ RoomState = _layout("RoomState", "door_travel.h", "<HBBHBx", "scene partner_in_r
 Ownership = _layout("Ownership", "character_owner.h", "<BB", "billy_owner rebecca_owner")
 SaveSlot = _layout("SaveSlot", None, "<ii", "slot phase")
 MenuState = _layout("MenuState", "menu_mirror.h", "<BB", "open phase")
-FloorPut = _layout("FloorPut", "floor_items_sync.h", "<HHII3f3f", "room reserved item_id count pos*3 rot*3")
-FloorTake = _layout("FloorTake", "floor_items_sync.h", "<HHI3f", "room reserved item_id pos*3")
+FloorPut = _layout("FloorPut", "floor_items_sync.h", "<HHII3f3f", "room world_epoch item_id count pos*3 rot*3")
+FloorTake = _layout("FloorTake", "floor_items_sync.h", "<HHI3f", "room world_epoch item_id pos*3")
 FloorHeader = _layout("Header", "floor_snapshot.h", "<HH", "count reserved")
 FloorEntry = _layout("Entry", "floor_snapshot.h", "<HBBII3f3f", "room is_take reserved item_id count pos*3 rot*3")
 HitRequest = _layout("HitPayload", "enemy_protocol.h", "<4B3f4i2i4IIBB2x4i",
@@ -224,7 +224,7 @@ DoorFollow = _layout("DoorFollow", "room_move_wire.h", "<IHHIIIIBBH",
 DoorFollowResult = _layout("DoorFollowResult", "room_move_wire.h", "<IBBH", "serial result character reserved")
 
 SessionReady = _layout("SessionReady", "session_wire.h", "<BBHHHI", "phase reserved scene load_serial reserved2 snapshot_serial")
-ExtrasHeader = _layout("ExtrasHeader", "session_wire.h", "<IIHHHH", "snapshot_serial flag_serial claims props items reserved")
+ExtrasHeader = _layout("ExtrasHeader", "session_wire.h", "<IIHHHH", "snapshot_serial flag_serial claims props items world_epoch")
 ItemTake = _layout("ItemTake", "session_wire.h", "<HHI3f", "scene reserved item_id pos*3")
 DemoSkip = _layout("DemoSkip", "demo_skip_wire.h", "<HHBB", "demo_id serial flags reserved")
 
@@ -244,13 +244,13 @@ PlayerHit = _layout("PlayerHit", "enemy_lease_wire.h", "<IIIHBBHBBB3x3f",
 BossHeader = _layout("Header", "boss_wire.h", "<IIHBBBBH", "token room_epoch scene phase count alive reason pad")
 BossMember = _layout("Member", "boss_wire.h", "<BBHhH3fI4i", "slot class_index spawn_id hp pad pos*3 quat record*4")
 
-TakeRequest = _layout("TakeRequest", "item_wire.h", "<HHII3f", "seq scene item_id count pos*3")
+TakeRequest = _layout("TakeRequest", "item_wire.h", "<HHII3fHH", "seq scene item_id count pos*3 world_epoch reserved")
 TakeResult = _layout("TakeResult", "item_wire.h", "<IHHBBH", "serial seq scene requester answer reserved")
 PropLease = _layout("Lease", "prop_wire.h", "<IHBBB3x", "serial scene unit op holder")
 PropMove = _layout("Move", "prop_wire.h", "<IHBB3ff", "sender_ms scene kind unit pos*3 yaw")
 PropCommit = _layout("Commit", "prop_wire.h", "<IHBB3ffB3x", "serial scene kind unit pos*3 yaw committer")
 FlagChange = _layout("Change", "flag_diff.h", "<HHII", "word reserved set clear")
-FlagProposeHeader = _layout("ProposeHeader", "flag_sequencer_wire.h", "<HH", "count reserved")
+FlagProposeHeader = _layout("ProposeHeader", "flag_sequencer_wire.h", "<HH", "count world_epoch")
 FlagCommitHeader = _layout("CommitHeader", "flag_sequencer_wire.h", "<IBBH", "serial origin reserved count")
 
 # Sizes the adapter fixes for payloads that carry no layout here.
@@ -263,7 +263,11 @@ RESULT_COMMIT, RESULT_BUSY, RESULT_OTHER_ROOM = range(3)
 RESULT_TIMEOUT = len(DOOR_RESULTS) - 1
 REASON_TEAM = 0
 READY, ECHO = 0, 1
-ANSWER_GRANTED, ANSWER_TAKEN, ANSWER_CLAIMED = 0, 1, 2
+ANSWER_GRANTED, ANSWER_TAKEN, ANSWER_CLAIMED, ANSWER_STALE = 0, 1, 2, 3
+ANSWER_TIMED_OUT = 4  # the asking machine's own timeout: never on the wire
+
+# The host's world epoch (world_epoch_rule.h): 1 until a load, never 0; a guest stamps what it sends with the one it adopted.
+WORLD_EPOCH_FIRST = 1
 LEASE_REQUEST, LEASE_GRANT, LEASE_DENY, LEASE_RELEASE = range(4)
 PROP_OBSTACLE_KIND = 0x70
 BOSS_PREPARE, BOSS_READY, BOSS_COMMIT, BOSS_OUTCOME, BOSS_CANCEL = range(5)
@@ -394,8 +398,8 @@ def unpack_enemy_batch(entry_layout, payload):
     return unpack_list(EnemyHeader, entry_layout, payload)
 
 
-def pack_flag_propose(changes):
-    return FlagProposeHeader.pack(count=len(changes)) + b"".join(FlagChange.pack(**change) for change in changes)
+def pack_flag_propose(changes, world_epoch):
+    return FlagProposeHeader.pack(count=len(changes), world_epoch=world_epoch) + b"".join(FlagChange.pack(**change) for change in changes)
 
 
 def unpack_flag_propose(payload):
@@ -419,9 +423,9 @@ def _unpack_changes(payload, offset, count):
     return [FlagChange.unpack(payload, offset + i * FlagChange.size) for i in range(count)]
 
 
-def pack_extras(snapshot_serial, flag_serial, claims, props, items):
+def pack_extras(snapshot_serial, flag_serial, claims, props, items, world_epoch=WORLD_EPOCH_FIRST):
     header = ExtrasHeader.pack(snapshot_serial=snapshot_serial, flag_serial=flag_serial, claims=len(claims),
-                               props=len(props), items=len(items))
+                               props=len(props), items=len(items), world_epoch=world_epoch)
     return (header + b"".join(AuthMessage.pack(**c) for c in claims) + b"".join(PropCommit.pack(**p) for p in props) +
             b"".join(ItemTake.pack(**i) for i in items))
 

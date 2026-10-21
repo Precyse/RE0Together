@@ -9,6 +9,7 @@
 #include "log.h"
 #include "resync.h"
 #include "state_net.h"
+#include "world_epoch.h"
 
 namespace {
 
@@ -30,13 +31,14 @@ rule::HostOrder g_hostOrder;    // game thread
 rule::GuestOrder g_guestOrder;  // game thread
 
 void onPropose(const GameFrame& frame) {
-    auto changes = wire::decodePropose(frame.payload);
-    if (!changes) {
+    auto propose = wire::decodePropose(frame.payload);
+    if (!propose) {
         logger::writeUnlessRepeated("flag_seq: refused a malformed proposal from slot %d", frame.slot);
         return;
     }
+    if (!world_epoch::acceptsFromGuest(propose->worldEpoch, "flag proposal")) return;
     std::lock_guard lock(g_mutex);
-    g_proposals.push_back({frame.slot, std::move(*changes)});
+    g_proposals.push_back({frame.slot, std::move(propose->changes)});
 }
 
 void onCommit(const GameFrame& frame) {
@@ -131,7 +133,7 @@ void submitLocal(const std::vector<Change>& changes) {
         commit(character_owner::localSlot(), changes);
         return;
     }
-    if (state_net::send(wire::kMsgFlagPropose, true, wire::encodePropose(changes))) {
+    if (state_net::send(wire::kMsgFlagPropose, true, wire::encodePropose({world_epoch::stamp(), changes}))) {
         g_guestOrder.proposed(changes);
         debug_stats::count(debug_stats::Counter::FlagWordsSent, static_cast<uint32_t>(changes.size()));
     }
@@ -146,5 +148,12 @@ uint32_t issuedSerial() { return g_hostOrder.serial(); }
 void adoptSerial(uint32_t serial) { g_guestOrder.adopt(serial); }
 
 void reset() { g_guestOrder.reset(); }
+
+void onLocalLoad() {
+    reset();
+    std::lock_guard lock(g_mutex);
+    g_proposals.clear();
+    g_commits.clear();
+}
 
 }  // namespace flag_sequencer

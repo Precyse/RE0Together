@@ -4,6 +4,7 @@
 
 #include "../src/flag_sequencer_rule.h"
 #include "../src/flag_sequencer_wire.h"
+#include "../src/world_epoch_rule.h"
 
 namespace {
 
@@ -12,6 +13,7 @@ namespace wire = flag_sequencer_wire;
 using flag_diff::Change;
 using flag_diff::Words;
 
+constexpr uint16_t kEpoch = 3;
 constexpr uint8_t kHost = 0;
 constexpr uint8_t kGuest = 1;
 constexpr uint16_t kWord = 3;
@@ -43,8 +45,11 @@ void testEffective() {
 
 void testWire() {
     const std::vector<Change> changes = {setBits(2, 0x11), clearBits(70, 0x80000000u)};
-    const auto proposal = wire::decodePropose(wire::encodePropose(changes));
-    check(proposal && proposal->size() == 2 && (*proposal)[1].word == 70, "a proposal round trips");
+    const auto proposal = wire::decodePropose(wire::encodePropose({kEpoch, changes}));
+    check(proposal && proposal->changes.size() == 2 && proposal->changes[1].word == 70, "a proposal round trips");
+    check(proposal && proposal->worldEpoch == kEpoch, "a proposal carries the world epoch of its sender");
+    check(wire::decodePropose(wire::encodePropose({world_epoch_rule::kNone, changes}))->worldEpoch == world_epoch_rule::kNone,
+          "an unadopted epoch travels as it is, for the host to refuse");
 
     const wire::Commit commit{42, kGuest, changes};
     const auto decoded = wire::decodeCommit(wire::encodeCommit(commit));
@@ -60,12 +65,12 @@ void testWire() {
     check(!wire::decodeCommit(std::vector<uint8_t>(3)), "a commit without a header is refused");
     check(!wire::decodePropose(std::vector<uint8_t>(2)), "a proposal without a header is refused");
 
-    check(!wire::decodePropose(wire::encodePropose({setBits(static_cast<uint16_t>(flag_diff::kWords), 1)})),
+    check(!wire::decodePropose(wire::encodePropose({kEpoch, {setBits(static_cast<uint16_t>(flag_diff::kWords), 1)}})),
           "a word outside the bitset is refused");
-    check(!wire::decodePropose(wire::encodePropose({{kWord, 0, kBit, kBit}})), "a bit both set and cleared is refused");
+    check(!wire::decodePropose(wire::encodePropose({kEpoch, {{kWord, 0, kBit, kBit}}})), "a bit both set and cleared is refused");
 
     std::vector<Change> tooMany(flag_diff::kWords + 1, setBits(0, 1));
-    check(!wire::decodePropose(wire::encodePropose(tooMany)), "more changes than words is refused");
+    check(!wire::decodePropose(wire::encodePropose({kEpoch, tooMany})), "more changes than words is refused");
     check(sizeof(wire::CommitHeader) == 8 && sizeof(wire::ProposeHeader) == 4, "header sizes");
 }
 

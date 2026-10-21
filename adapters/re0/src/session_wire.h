@@ -70,13 +70,14 @@ struct ExtrasHeader {
     uint16_t claims;
     uint16_t props;
     uint16_t items;
-    uint16_t reserved;
+    uint16_t worldEpoch;      // the host's world epoch (world_epoch.h) the snapshot belongs to; never 0
 };
 static_assert(sizeof(ExtrasHeader) == 16);
 
 struct JoinExtras {
     uint32_t snapshotSerial = 0;
     uint32_t flagSerial = 0;
+    uint16_t worldEpoch = 0;
     std::vector<room_authority_wire::AuthMessage> claims;
     std::vector<prop_wire::Commit> props;
     std::vector<ItemTake> items;
@@ -116,7 +117,7 @@ inline std::vector<uint8_t> encode(const JoinExtras& extras) {
     kept.props.resize(std::min(kept.props.size(), kMaxProps));
     kept.items.resize(std::min(kept.items.size(), kMaxItems));
     const ExtrasHeader header{kept.snapshotSerial, kept.flagSerial, static_cast<uint16_t>(kept.claims.size()),
-                              static_cast<uint16_t>(kept.props.size()), static_cast<uint16_t>(kept.items.size()), 0};
+                              static_cast<uint16_t>(kept.props.size()), static_cast<uint16_t>(kept.items.size()), kept.worldEpoch};
     std::vector<uint8_t> out(sizeof(header));
     std::memcpy(out.data(), &header, sizeof(header));
     detail::append(out, kept.claims);
@@ -131,7 +132,7 @@ inline std::optional<JoinExtras> decode(std::span<const uint8_t> bytes) {
     ExtrasHeader header{};
     if (bytes.size() < sizeof(header)) return std::nullopt;
     std::memcpy(&header, bytes.data(), sizeof(header));
-    if (header.snapshotSerial == 0 || header.reserved != 0 || header.claims > kMaxClaims || header.props > kMaxProps ||
+    if (header.snapshotSerial == 0 || header.worldEpoch == 0 || header.claims > kMaxClaims || header.props > kMaxProps ||
         header.items > kMaxItems) {
         return std::nullopt;
     }
@@ -142,6 +143,7 @@ inline std::optional<JoinExtras> decode(std::span<const uint8_t> bytes) {
     JoinExtras extras;
     extras.snapshotSerial = header.snapshotSerial;
     extras.flagSerial = header.flagSerial;
+    extras.worldEpoch = header.worldEpoch;
     const uint8_t* cursor = bytes.data() + sizeof(header);
     cursor = detail::take(cursor, header.claims, extras.claims);
     cursor = detail::take(cursor, header.props, extras.props);

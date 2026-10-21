@@ -255,8 +255,8 @@ class FlagTests(unittest.TestCase):
 
     def test_the_host_commits_every_proposal_with_the_guests_origin_and_serial_plus_one(self):
         ctx = make_context("host")
-        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([self.CHANGE]))
-        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([self.CHANGE]))
+        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([self.CHANGE], wire.WORLD_EPOCH_FIRST))
+        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([self.CHANGE], wire.WORLD_EPOCH_FIRST))
         (first, changes), (second, again) = self.commits(ctx)
         self.assertEqual((first.serial, first.origin, len(changes), changes[0].set), (1, GUEST, 1, 0x10))
         self.assertEqual((second.serial, len(again)), (2, 0))  # the second is a no-op: an empty commit
@@ -265,11 +265,11 @@ class FlagTests(unittest.TestCase):
         ctx = make_context("host")
         ctx.flags.words[3] = 0x10
         ctx.flags.correct_next = True
-        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([dict(word=3, set=0, clear=0x10)]))
+        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([dict(word=3, set=0, clear=0x10)], wire.WORLD_EPOCH_FIRST))
         changes = self.commits(ctx)[0][1]
         self.assertEqual((changes[0].set, changes[0].clear), (0x10, 0))  # the opposite of clearing a set bit, sent although the mirror holds it
         ctx.flags.gap_next = True
-        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([self.CHANGE]))
+        deliver(ctx, Msg.FLAG_PROPOSE, wire.pack_flag_propose([self.CHANGE], wire.WORLD_EPOCH_FIRST))
         self.assertEqual(self.commits(ctx)[-1][0].serial, 3)
 
     def test_the_guest_default_proposal_is_a_no_op_and_commits_are_checked(self):

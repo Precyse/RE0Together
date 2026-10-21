@@ -7,10 +7,12 @@
 #include "character_owner.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
+#include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
 #include "game_state.h"
 #include "hooks.h"
+#include "item_ledger.h"
 #include "log.h"
 #include "net_pad.h"
 #include "pose_wire.h"
@@ -20,6 +22,7 @@
 #include "save_redirect.h"
 #include "session_rule.h"
 #include "state_mode.h"
+#include "world_epoch.h"
 
 namespace {
 
@@ -69,16 +72,27 @@ void remember(int32_t slot) {
     logger::write("session_slot: playing slot %d", slot);
 }
 
-// The game's own data is current after a load or a save: floor changes before it need no replay for a joining guest.
-void onSaveOrLoad(int32_t slot) {
+// The game's own data is current after a save: floor changes before it need no replay for a joining guest.
+void onSave(int32_t slot) {
     remember(slot);
-    floor_items_sync::clearJournal();
+    floor_items_sync::onSave();
+}
+
+// A load of a player save starts a new world: what was queued, proposed or requested for the old one must not reach it
+// (docs/RE0_NOTES.md "State mode: sync review fixes"). The system data the game reads at boot is no world.
+void onLoad(int32_t slot) {
+    remember(slot);
+    if (!isPlayerSlot(slot)) return;
+    floor_items_sync::onLoad();
+    item_ledger::resetTake();
+    flag_sync::onLocalLoad();
+    world_epoch::onLocalLoad();
 }
 
 bool __fastcall loadDetour(void* self, void* edx, int32_t slot) {
     const int32_t chosen = chooseSlot(slot);
     const bool accepted = g_originalLoad(self, edx, chosen);
-    if (accepted) onSaveOrLoad(chosen);
+    if (accepted) onLoad(chosen);
     return accepted;
 }
 
@@ -113,7 +127,7 @@ bool routeSave(SaveRequestFn original, void* self, void* edx, int32_t slot, int3
     const int32_t target = coop ? kCoopSlot : slot;
     if (coop && slot != target) logger::write("session_slot: save to slot %d kept in the co-op slot %d", slot, target);
     const bool accepted = original(self, edx, target, arg);
-    if (accepted) onSaveOrLoad(target);
+    if (accepted) onSave(target);
     return accepted;
 }
 

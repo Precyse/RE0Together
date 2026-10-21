@@ -150,7 +150,8 @@ class Items(Module):
             return None
         seq = self.ctx.peer.next_u16("take")
         self._pending[seq] = key
-        self.ctx.link.send(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=seq, scene=key[0], item_id=key[1], count=1, pos=key[2]))
+        self.ctx.link.send(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=seq, scene=key[0], item_id=key[1], count=1, pos=key[2],
+                                                                       world_epoch=self.ctx.flows.world_epoch))
         return key
 
     def race(self, key=None):
@@ -172,7 +173,8 @@ class Items(Module):
         key = self._pending.pop(result.seq)
         self.results.append((result.seq, result.answer))
         if result.answer == wire.ANSWER_GRANTED:
-            self.ctx.link.send(Msg.FLOOR_TAKE, wire.FloorTake.pack(room=key[0], item_id=key[1], pos=key[2]))
+            self.ctx.link.send(Msg.FLOOR_TAKE, wire.FloorTake.pack(room=key[0], item_id=key[1], pos=key[2],
+                                                                    world_epoch=self.ctx.flows.world_epoch))
 
     def tick(self, now):
         while self._due and self._due[0][0] <= now:
@@ -221,7 +223,7 @@ class Flags(Module):
         changes = changes or [self._noop()]
         self.proposed.append(changes)
         self.proposals_sent += 1
-        self.ctx.link.send(Msg.FLAG_PROPOSE, wire.pack_flag_propose(changes))
+        self.ctx.link.send(Msg.FLAG_PROPOSE, wire.pack_flag_propose(changes, self.ctx.flows.world_epoch))
 
     # host seat
 

@@ -22,6 +22,7 @@ ENEMY_CLASS = 0
 BOSS_CLASS = wire_check.vtables("kEnemyVtables").index(wire_check.vtables("kBossVtables")[0])
 ENEMY_SLOT = 4
 POS = (100.0, 5.0, -200.0)
+EPOCH = wire.WORLD_EPOCH_FIRST
 PLAY_SE_SOUND = 0x1E00
 # weapon_fx_sites.h indices: one site per op.
 FX_SITES = {"se": 0, "flash": 11, "effect": 13, "casing": 19, "projectile": 21, "stow": 28, "wick": 29, "ripple": 30}
@@ -110,9 +111,9 @@ def samples():
         refuse(Msg.PLAYER_STATE, bytes(wire.PlayerState.size - 1)),
         accept(Msg.ROOM_STATE, wire.RoomState.pack(scene=SCENE, door_target=wire.NO_SCENE)),
         refuse(Msg.ROOM_STATE, bytes(wire.RoomState.size + 1)),
-        accept(Msg.FLOOR_PUT, wire.FloorPut.pack(room=SCENE, item_id=0x10, count=1, pos=POS)),
+        accept(Msg.FLOOR_PUT, wire.FloorPut.pack(room=SCENE, world_epoch=EPOCH, item_id=0x10, count=1, pos=POS)),
         refuse(Msg.FLOOR_PUT, bytes(wire.FloorPut.size - 4)),
-        accept(Msg.FLOOR_TAKE, wire.FloorTake.pack(room=SCENE, item_id=0x10, pos=POS)),
+        accept(Msg.FLOOR_TAKE, wire.FloorTake.pack(room=SCENE, world_epoch=EPOCH, item_id=0x10, pos=POS)),
         refuse(Msg.FLOOR_TAKE, bytes(wire.FloorTake.size + 4)),
         accept(Msg.HIT_REQUEST, bytes(wire.HitRequest.size)),
         refuse(Msg.HIT_REQUEST, bytes(wire.HitRequest.size - 4)),
@@ -148,6 +149,7 @@ def samples():
         accept(Msg.JOIN_EXTRAS, extras([CLAIM], [PROP_COMMIT], [ITEM_TAKE])),
         refuse(Msg.JOIN_EXTRAS, truncated(extras([CLAIM], [PROP_COMMIT], [ITEM_TAKE]))),
         refuse(Msg.JOIN_EXTRAS, extras([dict(CLAIM, epoch=0)])),
+        refuse(Msg.JOIN_EXTRAS, wire.pack_extras(1, 0, [], [], [], world_epoch=0)),
         accept(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose())),
         refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(slot=37))),
         refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(flags=wire.ENEMY_LEASED))),
@@ -171,18 +173,19 @@ def samples():
         accept(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(phase=wire.BOSS_READY, alive=0), [])),
         refuse(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(phase=wire.BOSS_READY, alive=0), [boss_member()])),
         refuse(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(), [boss_member(class_index=ENEMY_CLASS)])),
-        accept(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=1, scene=SCENE, item_id=0x10, count=1, pos=POS)),
-        refuse(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=1, scene=SCENE, item_id=0x100, count=1, pos=POS)),
+        accept(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=1, scene=SCENE, item_id=0x10, count=1, pos=POS, world_epoch=EPOCH)),
+        refuse(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=1, scene=SCENE, item_id=0x100, count=1, pos=POS, world_epoch=EPOCH)),
         accept(Msg.TAKE_RESULT, wire.TakeResult.pack(serial=1, seq=1, scene=SCENE, requester=1, answer=wire.ANSWER_CLAIMED)),
-        refuse(Msg.TAKE_RESULT, wire.TakeResult.pack(serial=1, seq=1, scene=SCENE, requester=1, answer=3)),
+        accept(Msg.TAKE_RESULT, wire.TakeResult.pack(serial=0, seq=1, scene=SCENE, requester=1, answer=wire.ANSWER_STALE)),
+        refuse(Msg.TAKE_RESULT, wire.TakeResult.pack(serial=1, seq=1, scene=SCENE, requester=1, answer=wire.ANSWER_TIMED_OUT)),
         accept(Msg.PROP_LEASE, wire.PropLease.pack(scene=SCENE, unit=2, op=wire.LEASE_REQUEST, holder=1)),
         refuse(Msg.PROP_LEASE, wire.PropLease.pack(scene=SCENE, unit=5, op=wire.LEASE_REQUEST)),
         accept(Msg.PROP_MOVE, wire.PropMove.pack(sender_ms=1000, scene=SCENE, kind=wire.PROP_OBSTACLE_KIND, unit=2, pos=POS)),
         refuse(Msg.PROP_MOVE, wire.PropMove.pack(sender_ms=1000, scene=SCENE, kind=0, unit=2, pos=POS)),
         accept(Msg.PROP_COMMIT, wire.PropCommit.pack(**PROP_COMMIT)),
         refuse(Msg.PROP_COMMIT, wire.PropCommit.pack(**dict(PROP_COMMIT, yaw=NAN))),
-        accept(Msg.FLAG_PROPOSE, wire.pack_flag_propose([FLAG_CHANGE])),
-        refuse(Msg.FLAG_PROPOSE, wire.pack_flag_propose([BAD_FLAG_CHANGE])),
+        accept(Msg.FLAG_PROPOSE, wire.pack_flag_propose([FLAG_CHANGE], EPOCH)),
+        refuse(Msg.FLAG_PROPOSE, wire.pack_flag_propose([BAD_FLAG_CHANGE], EPOCH)),
         accept(Msg.FLAG_COMMIT, wire.pack_flag_commit(1, 0, [FLAG_CHANGE])),
         accept(Msg.FLAG_COMMIT, wire.pack_flag_commit(2, 1, [])),
         refuse(Msg.FLAG_COMMIT, wire.pack_flag_commit(1, 0, [dict(FLAG_CHANGE, word=wire.FLAG_WORDS)])),

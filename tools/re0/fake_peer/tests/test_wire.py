@@ -77,7 +77,7 @@ class VariablePayloadTests(unittest.TestCase):
 
     def test_flag_messages(self):
         change = dict(word=3, set=0x10, clear=0x01)
-        self.assertEqual(wire.unpack_flag_propose(wire.pack_flag_propose([change]))[0].set, 0x10)
+        self.assertEqual(wire.unpack_flag_propose(wire.pack_flag_propose([change], wire.WORLD_EPOCH_FIRST))[0].set, 0x10)
         header, changes = wire.unpack_flag_commit(wire.pack_flag_commit(4, 1, [change]))
         self.assertEqual((header.serial, header.origin, changes[0].clear), (4, 1, 1))
 

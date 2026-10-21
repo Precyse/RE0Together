@@ -8,8 +8,10 @@
 #include "frame_router.h"
 #include "item_wire.h"
 #include "log.h"
+#include "resync.h"
 #include "settled_copy.h"
 #include "state_net.h"
+#include "world_epoch.h"
 
 namespace {
 
@@ -59,7 +61,9 @@ void onRequest(const GameFrame& frame) {
         logger::writeUnlessRepeated("item_ledger: refused a malformed take request from slot %d", frame.slot);
         return;
     }
-    const rule::Decision decision = decide(wire::keyOf(*request), frame.slot);
+    const rule::Decision decision = world_epoch::acceptsFromGuest(request->worldEpoch, "take request")
+                                        ? decide(wire::keyOf(*request), frame.slot)
+                                        : rule::Decision{rule::Answer::Stale, 0};
     const wire::TakeResult result{decision.serial, request->seq, request->scene, frame.slot,
                                   static_cast<uint8_t>(decision.answer), 0};
     state_net::send(wire::kMsgTakeResult, true, proto::bytesOf(result));
@@ -72,6 +76,7 @@ void onResult(const GameFrame& frame) {
         return;
     }
     if (result->requester != character_owner::localSlot()) return;
+    if (result->answer == static_cast<uint8_t>(rule::Answer::Stale)) resync::request("take refused as stale");
     std::lock_guard lock(g_mutex);
     g_received = Received{result->seq, static_cast<rule::Answer>(result->answer)};
 }
@@ -102,7 +107,7 @@ bool submit(const Take& take) {
         return false;
     }
     ++g_requestSeq;
-    const wire::TakeRequest request{g_requestSeq, take.scene, take.itemId, take.count, take.pos};
+    const wire::TakeRequest request{g_requestSeq, take.scene, take.itemId, take.count, take.pos, world_epoch::stamp(), 0};
     if (!state_net::send(wire::kMsgTakeRequest, true, proto::bytesOf(request))) {
         g_hold.settle(rule::Answer::Granted);  // not linked: nobody to arbitrate
         return false;

@@ -30,9 +30,10 @@ struct Key {
     Vec3 pos;
 };
 
-// The answer to a take request. The wire carries Granted..Claimed; TimedOut exists only on the asking machine.
-enum class Answer : uint8_t { Granted = 0, Taken = 1, Claimed = 2, TimedOut = 3 };
-constexpr uint8_t kLastWireAnswer = static_cast<uint8_t>(Answer::Claimed);
+// The answer to a take request. The wire carries Granted..Stale (Stale: the request was made in a world from before
+// the host's last load, world_epoch_rule.h); TimedOut exists only on the asking machine.
+enum class Answer : uint8_t { Granted = 0, Taken = 1, Claimed = 2, Stale = 3, TimedOut = 4 };
+constexpr uint8_t kLastWireAnswer = static_cast<uint8_t>(Answer::Stale);
 
 // The reason in a refusal line.
 constexpr const char* name(Answer answer) {
@@ -40,6 +41,7 @@ constexpr const char* name(Answer answer) {
         case Answer::Granted: return "granted";
         case Answer::Taken: return "taken";
         case Answer::Claimed: return "claimed";
+        case Answer::Stale: return "stale";
         case Answer::TimedOut: return "timeout";
     }
     return "unknown";

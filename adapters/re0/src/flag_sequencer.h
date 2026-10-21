@@ -31,4 +31,8 @@ void adoptSerial(uint32_t serial);
 // Game thread: forget the order and the unanswered proposals (the link dropped, or a snapshot replaced the flags).
 void reset();
 
+// Game thread: this machine loaded a player save. Like `reset`, and the proposals and commits that arrived for the world
+// before the load and were not collected yet are dropped.
+void onLocalLoad();
+
 }  // namespace flag_sequencer

@@ -1,5 +1,6 @@
 // Checks the host item ledger rules and the pickup hold (no game). Exit 0 when every check passes.
 #include <cstdio>
+#include <string>
 
 #include "../src/item_ledger_rule.h"
 
@@ -168,6 +169,17 @@ void testHoldRefused() {
     check(hold.step(kStart + 20, std::nullopt) == Step::End, "the refusal stands");
 }
 
+void testHoldStale() {
+    rule::TakeHold hold;
+    hold.step(kStart, std::nullopt);
+    hold.sent(kStart);
+    check(hold.step(kStart + 10, Answer::Stale) == Step::End, "a request from before the host's load ends the pickup");
+    check(hold.answer() == Answer::Stale, "the reason is kept");
+    check(std::string(rule::name(Answer::Stale)) == "stale", "and named in the refusal line");
+    check(rule::kLastWireAnswer == static_cast<uint8_t>(Answer::Stale) && Answer::TimedOut > Answer::Stale,
+          "stale travels, the local timeout does not");
+}
+
 void testHoldTimesOut() {
     rule::TakeHold hold;
     hold.step(kStart, std::nullopt);
@@ -229,6 +241,7 @@ int main() {
     testConsumedJournal();
     testHoldGrantedAfterAnswer();
     testHoldRefused();
+    testHoldStale();
     testHoldTimesOut();
     testHoldTimeoutAcrossClockWrap();
     testHostSettlesAtOnce();

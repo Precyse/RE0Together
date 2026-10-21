@@ -11,6 +11,7 @@
 #include "room_authority.h"
 #include "session_wire.h"
 #include "state_net.h"
+#include "world_epoch.h"
 
 namespace {
 
@@ -67,13 +68,15 @@ void send() {
     JoinExtras extras;
     extras.snapshotSerial = g_serial.load() + 1;
     extras.flagSerial = flag_sequencer::issuedSerial();
+    extras.worldEpoch = world_epoch::hostEpoch();
     extras.claims = room_authority::claims();
     for (const prop_rule::Record& record : prop_sync::commits()) extras.props.push_back(wireOf(record));
     for (const item_ledger::Key& key : item_ledger::consumed()) extras.items.push_back(session_wire::takeOf(key));
     if (!state_net::send(session_wire::kMsgJoinExtras, true, session_wire::encode(extras))) return;
     g_serial = extras.snapshotSerial;
-    logger::write("join_extras: sent serial %u (claims %zu, prop commits %zu, items taken %zu, flag commit %u)",
-                  extras.snapshotSerial, extras.claims.size(), extras.props.size(), extras.items.size(), extras.flagSerial);
+    logger::write("join_extras: sent serial %u (claims %zu, prop commits %zu, items taken %zu, flag commit %u, world %u)",
+                  extras.snapshotSerial, extras.claims.size(), extras.props.size(), extras.items.size(), extras.flagSerial,
+                  extras.worldEpoch);
 }
 
 uint32_t lastSerial() { return g_serial.load(); }
@@ -103,8 +106,10 @@ std::optional<uint32_t> applyArrived() {
     for (const session_wire::ItemTake& take : extras.items) taken.push_back(session_wire::keyOf(take));
     item_ledger::adoptConsumed(taken);
     flag_sequencer::adoptSerial(extras.flagSerial);
-    logger::write("join_extras: applied serial %u (claims %zu, prop commits %zu, items taken %zu, flag commit %u)",
-                  extras.snapshotSerial, extras.claims.size(), extras.props.size(), extras.items.size(), extras.flagSerial);
+    world_epoch::adopt(extras.worldEpoch);
+    logger::write("join_extras: applied serial %u (claims %zu, prop commits %zu, items taken %zu, flag commit %u, world %u)",
+                  extras.snapshotSerial, extras.claims.size(), extras.props.size(), extras.items.size(), extras.flagSerial,
+                  extras.worldEpoch);
     return extras.snapshotSerial;
 }
 

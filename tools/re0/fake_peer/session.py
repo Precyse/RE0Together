@@ -44,6 +44,7 @@ class SessionFlows(Module):
         self.snapshots = 0
         self.floor = []  # FloorEntry records received (guest) or to send (host: dicts)
         self.extras = None  # the last JOIN_EXTRAS received (guest)
+        self.world_epoch = 0  # guest: the epoch of the last JOIN_EXTRAS, 0 before one; what its puts, takes, requests and proposals carry
         self.latest_serial = 0  # host: the serial of the newest JOIN_EXTRAS sent
         self.refusals = []  # (reason, scene, serial) the host judged
         self.echoes = []  # SessionReady records echoed (host) or received (guest)
@@ -87,6 +88,7 @@ class SessionFlows(Module):
     def on_extras(self, frame):
         header, claims, props, items = wire.unpack_extras(frame.payload)
         self.extras = header
+        self.world_epoch = header.world_epoch
         self.ctx.authority.apply_extras(claims, self.ctx.link.session.game_slot)
         self.ctx.flags.adopt_serial(header.flag_serial)
         self.ctx.props.adopt(props)

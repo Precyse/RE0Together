@@ -21,6 +21,7 @@
 #include "settled_copy.h"
 #include "state_mode.h"
 #include "stream_clock.h"
+#include "world_epoch.h"
 
 namespace {
 
@@ -107,14 +108,14 @@ bool itemIdOf(uint32_t item, uint32_t& itemId) {
 item_ledger::Key ledgerKey(uint16_t room, uint32_t itemId, const Vec3& pos) { return {room, itemId, pos}; }
 
 void sendPut(const game::ItemDesc& desc, const Vec3& pos, const Vec3& rot) {
-    const FloorPut message{game_state::currentRoom(), 0, desc.itemId, desc.count, pos, rot};
+    const FloorPut message{game_state::currentRoom(), world_epoch::stamp(), desc.itemId, desc.count, pos, rot};
     if (g_net->send(proto::kMsgFloorPut, true, proto::kSlotAll, proto::bytesOf(message))) {
         debug_stats::count(Counter::FloorPutSent);
     }
 }
 
 void sendTake(uint32_t itemId, const Vec3& pos) {
-    const FloorTake message{game_state::currentRoom(), 0, itemId, pos};
+    const FloorTake message{game_state::currentRoom(), world_epoch::stamp(), itemId, pos};
     if (g_net->send(proto::kMsgFloorTake, true, proto::kSlotAll, proto::bytesOf(message))) {
         debug_stats::count(Counter::FloorTakeSent);
     }
@@ -269,10 +270,12 @@ void onFrame(const GameFrame& frame) {
     if (frame.type == proto::kMsgFloorPut && frame.payload.size() == sizeof(FloorPut)) {
         FloorPut message;
         std::memcpy(&message, frame.payload.data(), sizeof(message));
+        if (!world_epoch::acceptsFromGuest(message.worldEpoch, "floor put")) return;
         enqueue(message.room, {false, message.itemId, message.count, message.pos, message.rot});
     } else if (frame.type == proto::kMsgFloorTake && frame.payload.size() == sizeof(FloorTake)) {
         FloorTake message;
         std::memcpy(&message, frame.payload.data(), sizeof(message));
+        if (!world_epoch::acceptsFromGuest(message.worldEpoch, "floor take")) return;
         enqueue(message.room, {true, message.itemId, 0, message.pos, {}}, takeDelayMs(frame.slot));
         if (state_mode::on()) item_ledger::noteTaken(ledgerKey(message.room, message.itemId, message.pos));
     } else if (frame.type == proto::kMsgFloorSnapshot) {
@@ -282,9 +285,17 @@ void onFrame(const GameFrame& frame) {
     }
 }
 
-void clearJournal() {
+void onSave() {
     g_journal.clear();
     if (state_mode::on()) item_ledger::clear();
+}
+
+void onLoad() {
+    onSave();
+    g_pending.clear();
+    g_delayed.clear();
+    std::lock_guard lock(g_mutex);
+    g_incoming.clear();
 }
 
 bool locateItem(uint32_t itemId, const Vec3& around, float reach, Vec3& out) {
