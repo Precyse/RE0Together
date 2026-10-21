@@ -66,7 +66,7 @@ public sealed partial class MainForm
         switch (kind)
         {
             case ScreenKind.Home when Rail.Selected is { } selected:
-                _home.Show(SessionCards.Home(status, selected, Rail.SelectedStatus, Updater.Staged, _update.NewerBuild, _games), selected, Rail.SelectedArt!, OptionsRows.Has(selected));
+                _home.Show(SessionCards.Home(status, selected, Rail.SelectedStatus, Updater.Staged, _update.NewerBuild, _games), selected, Rail.SelectedArt!, OptionsModel.Has(selected));
                 break;
             case ScreenKind.Lobbies:
                 ShowLobbies(status);

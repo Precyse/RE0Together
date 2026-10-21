@@ -48,16 +48,10 @@ internal sealed class LobbyRows : Panel
     /// <summary>Applies a lobby's action to a button: the primary JOIN, a disabled Full, Update, or a disabled Join.</summary>
     public static void Configure(FlatButton button, LobbyAction action)
     {
-        var join = action == LobbyAction.Join;
-        button.Kind = join ? ButtonKind.Primary : ButtonKind.Ghost;
-        button.Text = action switch
-        {
-            LobbyAction.Join => "JOIN",
-            LobbyAction.Full => "Full",
-            LobbyAction.UpdateLauncher or LobbyAction.UpdateMod => "Update",
-            _ => "Join",
-        };
-        button.Enabled = action is LobbyAction.Join or LobbyAction.UpdateLauncher or LobbyAction.UpdateMod;
+        var shown = LobbyRowModels.ButtonOf(action);
+        button.Kind = shown.Primary ? ButtonKind.Primary : ButtonKind.Ghost;
+        button.Text = shown.Label;
+        button.Enabled = shown.Enabled;
     }
 
     /// <summary>The columns of a row (and of the header over the rows) for a width: the left edge and width of each of game,

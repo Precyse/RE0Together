@@ -37,8 +37,8 @@ internal sealed class OptionsRows : Panel
     /// the game offers it.</summary>
     public void Show(GameProfile game, string? gameDir, IReadOnlyDictionary<string, string>? hostValues = null)
     {
-        var options = OptionsOf(game, _settingsOptions);
-        var shown = options.Select(option => ShownValue(game, option, gameDir, hostValues)).ToList();
+        var options = OptionsModel.OptionsOf(game, _settingsOptions);
+        var shown = options.Select(option => OptionsModel.ShownValue(game, option, gameDir, hostValues)).ToList();
         var key = $"{game.Id}|{gameDir}|{string.Join(',', shown)}";
         if (_shownFor == key) return;
         _shownFor = key;
@@ -66,17 +66,11 @@ internal sealed class OptionsRows : Panel
         Height = rows.Sum(row => row.Height);
     }
 
-    /// <summary>Whether the game has options this grid shows (the options of its character select are not among them).</summary>
-    public static bool Has(GameProfile game, bool settingsOptions = false) => OptionsOf(game, settingsOptions).Count > 0;
-
     /// <summary>Lists are locked while a session is open.</summary>
     public void SetLocked(bool locked)
     {
         foreach (var select in _selects) select.Enabled = !locked;
     }
-
-    private static List<GameOption> OptionsOf(GameProfile game, bool settingsOptions) =>
-        (game.Options ?? []).Where(option => option.Settings == settingsOptions && !GameOptions.InCharacterSelect(game, option)).ToList();
 
     /// <summary>Label, list, then for each further column a gap, label, list; a row with fewer options leaves the last columns empty.</summary>
     private TableLayoutPanel GridRow(List<Control> cells)
@@ -107,21 +101,15 @@ internal sealed class OptionsRows : Panel
         BackColor = _background, AutoEllipsis = true,
     };
 
-    /// <summary>The value the option reads: the host's when a host value is given and offered, else the player's own.</summary>
-    private static string ShownValue(GameProfile game, GameOption option, string? gameDir, IReadOnlyDictionary<string, string>? hostValues) =>
-        option.Host && hostValues != null && hostValues.TryGetValue(option.Key, out var host) && option.Values.Any(v => v.Value == host)
-            ? host
-            : GameOptions.Current(game, gameDir)[option.Key];
-
     private FlatSelect Build(GameProfile game, GameOption option, string? gameDir, string current)
     {
         var select = new FlatSelect();
-        var values = option.AvailableIn(gameDir).ToList();
+        var values = OptionsModel.Values(option, gameDir);
         foreach (var value in values) select.Items.Add(value.Label);
         select.SelectedIndex = Math.Max(0, values.FindIndex(v => v.Value == current));
         select.SelectedIndexChanged += (_, _) =>
         {
-            AppSettings.Update(settings => settings.WithOption(game.Id, option.Key, values[select.SelectedIndex].Value));
+            OptionsModel.Save(game.Id, option.Key, values[select.SelectedIndex].Value);
             Changed?.Invoke();
         };
         return select;

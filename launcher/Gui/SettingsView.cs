@@ -1,7 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-
 namespace CoopLauncher.Gui;
 
 /// <summary>The settings pane: the launcher's own options, then one section per game (its folder with Browse / Reset to
@@ -57,36 +53,6 @@ internal sealed class SettingsView : Panel
         foreach (var game in _games) game.Show(statusOf(game.Id), free, modsLocked);
     }
 
-    /// <summary>Asks for a game's folder; true when the player chose one that holds the game and it was saved.</summary>
-    public static bool BrowseFor(GameProfile game)
-    {
-        using var dialog = new FolderBrowserDialog { InitialDirectory = GameFolders.Find(game) ?? string.Empty };
-        if (dialog.ShowDialog() != DialogResult.OK) return false;
-        if (!File.Exists(Path.Combine(dialog.SelectedPath, game.Exe)))
-        {
-            Log.Info($"{game.Exe} is not in {dialog.SelectedPath}");
-            return false;
-        }
-        AppSettings.Update(settings => settings.WithGameFolder(game.Id, dialog.SelectedPath));
-        Log.Info($"{game.Name} folder set to {dialog.SelectedPath}");
-        return true;
-    }
-
-    /// <summary>Zips the logs for sending, puts the zip's path on the clipboard and shows the zip in Explorer.</summary>
-    public static void CreateReport(IEnumerable<GameProfile> games)
-    {
-        if (ReportBundle.Create(games) is not { } path) return;
-        try
-        {
-            Clipboard.SetText(path);
-        }
-        catch (ExternalException e)
-        {
-            Log.Info($"Could not copy the report path: {e.Message}");
-        }
-        StartExplorer($"/select,\"{path}\"");
-    }
-
     private void Refit()
     {
         foreach (var section in _sections) section.FitToContent();
@@ -97,12 +63,12 @@ internal sealed class SettingsView : Panel
     {
         var section = new SectionPanel("Launcher");
         var updates = new FlatToggle("Check for updates at start") { Checked = AppSettings.Current.CheckForUpdates };
-        updates.Flipped += SetCheckForUpdates;
+        updates.Flipped += LauncherActions.SetCheckForUpdates;
         var visibilityRow = VisibilityRow();
         var logs = new FlatButton("Logs folder", ButtonKind.Normal);
-        logs.Click += (_, _) => OpenLogsFolder();
+        logs.Click += (_, _) => LauncherActions.OpenLogsFolder();
         var report = new FlatButton("Create report", ButtonKind.Normal);
-        report.Click += (_, _) => CreateReport(games);
+        report.Click += (_, _) => LauncherActions.CreateReport(games);
         var toolsRow = ControlRow.Create(new Control[] { logs, report, new Panel() }, Theme.ToolWidth, Theme.ToolWidth, -1);
         ControlRow.Stack(section, updates, ControlRow.Spacer(Theme.Gap), visibilityRow, ControlRow.Spacer(Theme.Gap), toolsRow);
         return section;
@@ -121,38 +87,6 @@ internal sealed class SettingsView : Panel
         _visibility.SelectedIndexChanged += (_, _) =>
             AppSettings.Update(settings => settings.WithLobbyVisibility((LobbyVisibility)_visibility.SelectedIndex));
         return ControlRow.Create(new Control[] { caption, _visibility, new Panel() }, VisibilityLabelWidth, VisibilityWidth, -1);
-    }
-
-    private static void SetCheckForUpdates(bool on)
-    {
-        AppSettings.Update(settings => settings with { CheckForUpdates = on });
-        Log.Info(on ? "Checking for updates at start" : "Not checking for updates at start");
-    }
-
-    private static void OpenLogsFolder()
-    {
-        try
-        {
-            Directory.CreateDirectory(AppData.LogsDir);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            Log.Info($"Could not create the logs folder: {e.Message}");
-            return;
-        }
-        StartExplorer($"\"{AppData.LogsDir}\"");
-    }
-
-    private static void StartExplorer(string arguments)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo("explorer.exe", arguments));
-        }
-        catch (Win32Exception e)
-        {
-            Log.Info($"Could not open Explorer: {e.Message}");
-        }
     }
 
     /// <summary>One game's section: its folder (Browse, Reset, Uninstall), the mod and game line, the game's settings
@@ -182,7 +116,7 @@ internal sealed class SettingsView : Panel
             _browse.Click += (_, _) => Browse();
             _reset.Click += (_, _) => Reset();
             _uninstall.Click += (_, _) => UninstallClicked?.Invoke();
-            _archive.Click += (_, _) => OpenArchive();
+            _archive.Click += (_, _) => LauncherActions.OpenArchive(game);
             _archiveRow.Controls.Add(_archive);
             var row = ControlRow.Create(new Control[] { _path, _browse, _reset, _uninstall }, -1, Theme.ToolWidth, Theme.ToolWidth, Theme.ToolWidth);
             _hasSettingsOptions = (game.Options ?? []).Any(option => option.Settings);
@@ -207,9 +141,9 @@ internal sealed class SettingsView : Panel
         public void Show(GameStatus status, bool free, bool modsLocked)
         {
             _free = free;
-            _line.Text = status.SettingsLine;
-            _uninstall.Enabled = free && !modsLocked && status.GameFound && status.ModInstalled;
-            _browse.Enabled = free;
+            _line.Text = SettingsModel.Line(status);
+            _uninstall.Enabled = SettingsModel.UninstallEnabled(status, free, modsLocked);
+            _browse.Enabled = SettingsModel.BrowseEnabled(free);
             if (_hasSettingsOptions)
             {
                 _options.Show(_game, GameFolders.Find(_game));
@@ -220,34 +154,18 @@ internal sealed class SettingsView : Panel
             if (Panel.FittedHeight != Panel.Height) LayoutChanged?.Invoke();
         }
 
-        private string? ArchiveFolder()
-        {
-            if (_game.SaveSync is not { } sync || GameFolders.Find(_game) is not { } gameDir) return null;
-            return AdapterSettings.ArchiveRoot(Path.Combine(gameDir, sync.SessionDir));
-        }
-
-        private void ShowArchive()
-        {
-            var shown = ArchiveFolder() is { } folder && Directory.Exists(folder);
-            _archiveRow.Height = shown ? Theme.Gap + Theme.ControlHeight : 0;
-        }
-
-        private void OpenArchive()
-        {
-            if (ArchiveFolder() is { } folder) StartExplorer($"\"{folder}\"");
-        }
+        private void ShowArchive() => _archiveRow.Height = SettingsModel.ArchiveShown(_game) ? Theme.Gap + Theme.ControlHeight : 0;
 
         private void Browse()
         {
-            if (!BrowseFor(_game)) return;
+            if (!LauncherActions.BrowseFor(_game)) return;
             ShowFolder();
             Changed?.Invoke();
         }
 
         private void Reset()
         {
-            AppSettings.Update(settings => settings.WithGameFolder(_game.Id, null));
-            Log.Info($"{_game.Name} folder reset to the one Steam knows");
+            LauncherActions.ResetFolder(_game);
             ShowFolder();
             Changed?.Invoke();
         }
@@ -256,7 +174,7 @@ internal sealed class SettingsView : Panel
         {
             _path.Text = GameFolders.Find(_game) ?? string.Empty;
             _path.Invalidate();
-            _reset.Enabled = _free && AppSettings.Current.GameFolder(_game.Id) != null;
+            _reset.Enabled = SettingsModel.ResetEnabled(_game, _free);
         }
     }
 

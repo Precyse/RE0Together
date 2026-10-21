@@ -4,6 +4,9 @@ namespace CoopLauncher.Gui;
 /// library, or another Steam layout): every lookup returns null and the window paints without it.</summary>
 internal sealed class SteamArt
 {
+    /// <summary>The pictures a game has in the library cache.</summary>
+    public enum Kind { Capsule, Hero, Logo }
+
     private static readonly string[] CapsuleNames = { "library_600x900.jpg", "library_capsule.jpg" };
     private static readonly string[] HeroNames = { "library_hero.jpg" };
     private static readonly string[] LogoNames = { "logo.png" };
@@ -14,19 +17,28 @@ internal sealed class SteamArt
 
     public SteamArt(int appId)
     {
-        var dir = SteamLibrary.LibraryCacheDir(appId);
-        if (!Directory.Exists(dir)) return;
-        Capsule = Load(dir, CapsuleNames);
-        Hero = Load(dir, HeroNames);
-        Logo = Load(dir, LogoNames);
+        Capsule = Load(FindFiles(appId, Kind.Capsule));
+        Hero = Load(FindFiles(appId, Kind.Hero));
+        Logo = Load(FindFiles(appId, Kind.Logo));
     }
 
-    private static Image? Load(string dir, IEnumerable<string> names)
+    /// <summary>The file of a picture in the library cache (the first name of its kind that exists), or null.</summary>
+    public static string? FindFile(int appId, Kind kind) => FindFiles(appId, kind).FirstOrDefault();
+
+    /// <summary>The files of a picture's kind that exist, in the order their names are preferred.</summary>
+    private static IEnumerable<string> FindFiles(int appId, Kind kind)
     {
+        var dir = SteamLibrary.LibraryCacheDir(appId);
+        if (!Directory.Exists(dir)) yield break;
+        var names = kind switch { Kind.Capsule => CapsuleNames, Kind.Hero => HeroNames, _ => LogoNames };
         foreach (var name in names)
+            if (Directory.EnumerateFiles(dir, name, SearchOption.AllDirectories).FirstOrDefault() is { } path) yield return path;
+    }
+
+    private static Image? Load(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
         {
-            var path = Directory.EnumerateFiles(dir, name, SearchOption.AllDirectories).FirstOrDefault();
-            if (path == null) continue;
             try
             {
                 using var stream = File.OpenRead(path);

@@ -260,7 +260,7 @@ internal sealed class GameRail : Control
         if (row.Bottom <= HeaderHeight || row.Y >= Height) return;
         var profile = _games[index].Profile;
         var art = _games[index].Art;
-        var locked = !Enabled && index != _selected;
+        var locked = RailModel.Locked(Enabled, index == _selected);
 
         var artBox = new Rectangle(row.X + PadX, row.Y + (row.Height - ArtHeight) / 2, ArtWidth, ArtHeight);
         if (art.Capsule is not { } capsule) Draw.Fill(g, Theme.Card, artBox);
@@ -269,7 +269,7 @@ internal sealed class GameRail : Control
 
         var textX = artBox.Right + ArtTextGap;
         var textWidth = row.Right - textX - PadX;
-        var sub = profile.Id == _runningId ? "Running" : $"{profile.MaxPlayers} players";
+        var sub = RailModel.Sub(profile, _runningId);
         var status = _games[index].Status;
         var statusHeight = Draw.WrappedHeight(status.Line, Theme.Small, textWidth, NameMaxLines);
         var nameHeight = Draw.WrappedHeight(profile.Name, Theme.Strong, textWidth, NameMaxLines);
@@ -280,7 +280,8 @@ internal sealed class GameRail : Control
         var quiet = Interpolate.Lerp(Theme.Dim, Theme.Muted, Math.Clamp(1 - Math.Abs(_slide - index), 0, 1));
         Draw.Wrapped(g, sub, Theme.Small, quiet, new Rectangle(textX, y, textWidth, Theme.Small.Height));
         y += Theme.Small.Height + NameSubGap;
-        var statusColor = locked || !status.NeedsAttention ? quiet : status.HasProblem ? Theme.Problem : Theme.Armed;
+        var tone = RailModel.Tone(status);
+        var statusColor = locked || tone == RailTone.Quiet ? quiet : tone == RailTone.Red ? Theme.Problem : Theme.Armed;
         Draw.Wrapped(g, status.Line, Theme.Small, statusColor, new Rectangle(textX, y, textWidth, statusHeight));
     }
 

@@ -179,7 +179,7 @@ public sealed partial class MainForm : ChromelessForm
         _home.OptionsClicked += ToggleOptions;
         _home.CharactersClicked += () => ShowView(ScreenKind.Select);
         _home.NoticeActionClicked += RunNoticeFix;
-        _home.NoticeReportClicked += () => SettingsView.CreateReport(_games);
+        _home.NoticeReportClicked += () => LauncherActions.CreateReport(_games);
     }
 
     private void WireLobbies()
@@ -200,7 +200,7 @@ public sealed partial class MainForm : ChromelessForm
         _session.MiniClicked += StartMini;
         _session.RelaunchClicked += RelaunchGame;
         _session.NoticeActionClicked += RunNoticeFix;
-        _session.NoticeReportClicked += () => SettingsView.CreateReport(_games);
+        _session.NoticeReportClicked += () => LauncherActions.CreateReport(_games);
         _session.SeatClicked += label =>
         {
             _select.FocusCharacter(label);
@@ -411,18 +411,7 @@ public sealed partial class MainForm : ChromelessForm
         RefreshMods();
     }
 
-    private void CopyLobbyCode()
-    {
-        try
-        {
-            Clipboard.SetText(_app.Status.LobbyId.ToString());
-            Log.Info("Lobby code copied");
-        }
-        catch (System.Runtime.InteropServices.ExternalException e)
-        {
-            Log.Info($"Could not copy the lobby code: {e.Message}");
-        }
-    }
+    private void CopyLobbyCode() => LauncherActions.CopyLobbyCode(_app.Status.LobbyId);
 
     /// <summary>The fix button of a notice or of the joining screen, for the refusal or the invite on show.</summary>
     private void RunNoticeFix()
@@ -438,7 +427,7 @@ public sealed partial class MainForm : ChromelessForm
                 _update.Click();
                 break;
             case NoticeFix.Browse when game != null:
-                if (SettingsView.BrowseFor(game)) RefreshMods();
+                if (LauncherActions.BrowseFor(game)) RefreshMods();
                 break;
             case NoticeFix.JoinAgain when status.Refusal is { } refusal:
                 Join(_target is { } target && target.LobbyId == refusal.LobbyId ? target : new JoinTarget(refusal.LobbyId, string.Empty, 0));
