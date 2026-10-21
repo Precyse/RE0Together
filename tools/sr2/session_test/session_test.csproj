@@ -22,6 +22,7 @@
     <Compile Include="../../../launcher/Framing.cs" />
     <Compile Include="../../../launcher/ITransport.cs" />
     <Compile Include="../../../launcher/ILobby.cs" />
+    <Compile Include="../../../launcher/Refusal.cs" />
     <Compile Include="../../../launcher/GameProfile.cs" />
     <Compile Include="../../../launcher/RepoPaths.cs" />
     <Compile Include="../../../launcher/Log.cs" />

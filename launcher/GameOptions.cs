@@ -1,9 +1,13 @@
+using System.Globalization;
+
 namespace CoopLauncher;
 
 /// <summary>The values of a game's options as the player set them: for the adapter ini, for the lobby (host options) and
 /// for the seat labels.</summary>
 public static class GameOptions
 {
+    public const string SeatsKey = "max_players";
+
     private const string CharacterKey = "character";
     private const char PairSeparator = ';';
     private const char KeyValueSeparator = '=';
@@ -37,11 +41,24 @@ public static class GameOptions
     public static string Encode(IReadOnlyDictionary<string, string> values) =>
         string.Join(PairSeparator, values.Select(pair => $"{pair.Key}{KeyValueSeparator}{pair.Value}"));
 
-    public static Dictionary<string, string> Decode(string? text) =>
-        (text ?? string.Empty).Split(PairSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(pair => pair.Split(KeyValueSeparator, 2))
-            .Where(parts => parts.Length == 2)
-            .ToDictionary(parts => parts[0], parts => parts[1]);
+    /// <summary>A key that appears twice keeps its last value.</summary>
+    public static Dictionary<string, string> Decode(string? text)
+    {
+        var values = new Dictionary<string, string>();
+        foreach (var parts in (text ?? string.Empty).Split(PairSeparator, StringSplitOptions.RemoveEmptyEntries).Select(pair => pair.Split(KeyValueSeparator, 2)))
+            if (parts.Length == 2) values[parts[0]] = parts[1];
+        return values;
+    }
+
+    /// <summary>How many players the lobby takes: the host's <see cref="SeatsKey"/> choice when the profile offers that
+    /// option and the value is a number from 1 to the profile's maximum, else the maximum.</summary>
+    public static int Seats(GameProfile profile, IReadOnlyDictionary<string, string> hostValues) =>
+        profile.Options?.Any(option => option.Key == SeatsKey) == true
+        && hostValues.TryGetValue(SeatsKey, out var text)
+        && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var seats)
+        && seats >= 1 && seats <= profile.MaxPlayers
+            ? seats
+            : profile.MaxPlayers;
 
     /// <summary>The game's characters in seat order: the host's chosen character first.</summary>
     public static List<string> SeatCharacters(GameProfile profile, IReadOnlyDictionary<string, string> hostValues)

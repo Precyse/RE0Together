@@ -2,12 +2,15 @@ namespace CoopLauncher;
 
 /// <summary>
 /// Turns lobby membership into slots and epochs, and routes frames between adapter and peers. A member that vanishes from
-/// the lobby is held for <see cref="MemberGrace.PeerGraceMs"/> with its slot and frames before PEER_DOWN; one that comes
-/// back in time gets PEER_UP again for the same slot (the adapter resyncs).
+/// the lobby is held with its slot and frames before PEER_DOWN (<see cref="MemberGrace.PeerGraceMs"/>; the host
+/// <see cref="MemberGrace.HostGraceMs"/>, so a guest keeps its session while the host's lobby is gone); one that comes
+/// back in time gets PEER_UP again for the same slot (the adapter resyncs). The session itself never ends because the host
+/// is missing from the lobby: the app sees <see cref="HostMissing"/> and decides.
 /// </summary>
 public sealed class Session : IDisposable
 {
     private const long BudgetReportIntervalMs = 5000;
+    private const string DefaultName = "A player";
 
     private readonly GameProfile _profile;
     private readonly ITransport _transport;
@@ -59,6 +62,11 @@ public sealed class Session : IDisposable
 
     public bool PeerConnected => _active && !Ended && _slots.Count > 1;
 
+    /// <summary>A guest's host is no longer in the lobby, or no longer owns it (outside <see cref="Held"/>, when the lobby
+    /// object itself is gone).</summary>
+    public bool HostMissing =>
+        _active && !Ended && !Held && !IsHost && (_lobby.OwnerId != _hostId || _lobby.Members.All(member => member.Id != _hostId));
+
     public int? RttMs => _stats.RttMs;
 
     /// <summary>Raised on the main loop for each non-local peer that appears in the slot map, and for a held one that comes back.</summary>
@@ -82,11 +90,20 @@ public sealed class Session : IDisposable
     /// <summary>True for another member of the slot map, also while it is held.</summary>
     public bool HasPeer(ulong id) => id != _transport.LocalId && _slots.ContainsKey(id);
 
+    /// <summary>A member's round-trip time, null before its first pong (and for the local member).</summary>
+    public int? RttOf(ulong memberId) => PeerSlot(memberId) is { } slot ? _stats.RttOf(slot) : null;
+
+    /// <summary>True when a member that is not held has not answered a ping for <see cref="PeerStats.SilentAfterMs"/>.</summary>
+    public bool IsSilent(ulong memberId, long nowMs) => PeerSlot(memberId) is { } slot && _stats.SilentFor(slot, nowMs);
+
+    /// <summary>True while a member is missing from the lobby and still inside its grace.</summary>
+    public bool IsHeld(ulong memberId) => _grace.HeldIds.Contains(memberId);
+
     public void Pump()
     {
         if (Ended) return;
         var now = Environment.TickCount64;
-        if (_recheck || (!Held && _lobby.Revision != _seenRevision) || _grace.ExpiryDue(now))
+        if (_recheck || (!Held && _lobby.Revision != _seenRevision) || _grace.ExpiryDue(now, GraceFor))
         {
             _recheck = false;
             if (!Held) _seenRevision = _lobby.Revision;
@@ -125,6 +142,14 @@ public sealed class Session : IDisposable
 
     public void Dispose() => _transport.FrameReceived -= OnPeerFrame;
 
+    private long GraceFor(ulong memberId) => memberId == _hostId ? MemberGrace.HostGraceMs : MemberGrace.PeerGraceMs;
+
+    private byte? PeerSlot(ulong memberId) =>
+        memberId != _transport.LocalId && _slots.TryGetValue(memberId, out var slot) ? slot : null;
+
+    private string NameOf(ulong memberId) =>
+        _names.TryGetValue(memberId, out var name) && name.Length > 0 ? name : DefaultName;
+
     private List<byte> PeerSlots() =>
         _slots.Where(p => p.Key != _transport.LocalId).Select(p => p.Value).ToList();
 
@@ -138,13 +163,9 @@ public sealed class Session : IDisposable
             Activate(present);
             return;
         }
-        if (!Held && _lobby.OwnerId != _hostId)
-        {
-            End("host left");
-            return;
-        }
-
-        var verdict = _grace.Update(PeerIds, present, nowMs);
+        var heldBefore = _grace.HeldIds.ToHashSet();
+        var verdict = _grace.Update(PeerIds, present, nowMs, GraceFor);
+        if (!Held) LogHolds(verdict, heldBefore);
         if (verdict.Expired.Contains(_hostId))
         {
             End("host left");
@@ -158,6 +179,14 @@ public sealed class Session : IDisposable
         }
         if (mySlot != _localSlot) Reset(next, mySlot, _epoch + 1);
         else UpdatePeers(next, verdict.Returned);
+    }
+
+    /// <summary>The partners' side of the story: who just went missing and who came back. While the whole session is held it is
+    /// this launcher that lost the lobby, not the partners, so nothing is said about them.</summary>
+    private void LogHolds(GraceVerdict verdict, IReadOnlySet<ulong> heldBefore)
+    {
+        foreach (var id in verdict.Held.Where(id => !heldBefore.Contains(id))) Log.Event($"{NameOf(id)} reconnecting");
+        foreach (var id in verdict.Returned) Log.Event($"{NameOf(id)} back");
     }
 
     private void Activate(HashSet<ulong> present)
@@ -193,15 +222,20 @@ public sealed class Session : IDisposable
             _stats.Remove(slot);
             _budget.Remove(slot);
             _bridge.Send(ControlMessages.PeerDown(slot));
+            if (!next.ContainsKey(id)) Log.Event($"{NameOf(id)} left");
         }
         var previous = _slots;
         _slots = next;
         foreach (var (id, slot) in next)
-            if (id != _transport.LocalId && (returned.Contains(id) || !(previous.TryGetValue(id, out var s) && s == slot)))
-            {
-                SendPeerUp(id, slot);
-                PeerJoined?.Invoke(id);
-            }
+        {
+            if (id == _transport.LocalId) continue;
+            var isNew = !previous.ContainsKey(id);
+            if (returned.Contains(id)) _stats.Remove(slot);
+            if (!returned.Contains(id) && !isNew && previous[id] == slot) continue;
+            if (isNew) Log.Event($"{NameOf(id)} joined");
+            SendPeerUp(id, slot);
+            PeerJoined?.Invoke(id);
+        }
     }
 
     private void OnAdapterReady()

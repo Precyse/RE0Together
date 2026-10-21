@@ -1,20 +1,27 @@
 using System.Collections.Concurrent;
+using System.Net.Sockets;
+using CoopLauncher.Gui;
 
 namespace CoopLauncher;
 
 /// <summary>
 /// Wires transport, lobby, bridge and session together and runs the ~100 Hz main loop. The CLI runs one session and exits;
-/// an interactive app (GUI) stays up, takes Host/Join/Leave commands and returns to idle when a session ends.
+/// an interactive app (GUI) stays up, takes Host/Join/Leave commands and returns to idle when a session ends. The status
+/// it publishes is built in App.Status.cs, the reconnecting paths (lobby lost, host left) are in App.Reconnect.cs.
 /// </summary>
-public sealed class App
+public sealed partial class App
 {
     private const int PumpIntervalMs = 10;
+    private const long FriendPollMs = 5000;
+    private const long PendingResetCheckMs = 5000;
 
     private readonly CliOptions _options;
     private readonly bool _interactive;
     private readonly ConcurrentQueue<Action> _commands = new();
+    private readonly HashSet<string> _pendingResets = new();
     private volatile bool _stopRequested;
     private SteamBootstrap? _steam;
+    private SteamAvatars? _avatars;
     private ITransport? _transport;
     private ILobby? _lobby;
     private LoopbackBridge? _bridge;
@@ -25,11 +32,18 @@ public sealed class App
     private bool _sessionStarted;
     private GameProfile? _profile;
     private string? _gameDir;
+    private ulong _hostId;
     private bool _launchPending;
+    private long? _launchedAtMs;
+    private bool _bridgeWasReady;
+    private SaveProgressMeter _saveMeter = new();
     private BuildCheck? _buildCheck;
-    private Rejoin? _rejoin;
     private HostFollow? _follow;
-    private BuildMismatch _problem;
+    private ulong _joining;
+    private string? _opening;
+    private Refusal? _refusal;
+    private PendingInvite? _invite;
+    private long _nextResetCheckMs;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -42,13 +56,19 @@ public sealed class App
     /// <summary>Raised on the main loop thread when Status changes.</summary>
     public event Action<AppStatus>? StatusChanged;
 
+    /// <summary>Raised on the main loop thread when Steam hands over an avatar (Steam transport only).</summary>
+    public event Action<AvatarImage>? AvatarLoaded;
+
+    /// <summary>Raised on the main loop thread when the player accepted an invite (the window comes forward).</summary>
+    public event Action? InviteAccepted;
+
     public void Stop() => _stopRequested = true;
 
-    /// <summary>The window's loop host could not start the loop (Steam not running): shown until the loop runs again.</summary>
-    public void MarkOffline()
+    /// <summary>The window's loop host could not run the loop (Steam not running or gone): shown until the loop runs again.</summary>
+    public void MarkOffline(OfflineReason reason = OfflineReason.None)
     {
-        if (Status.State == AppState.Offline) return;
-        Status = new AppStatus(AppState.Offline);
+        if (Status.State == AppState.Offline && Status.Offline == reason) return;
+        Status = new AppStatus(AppState.Offline) { Offline = reason };
         StatusChanged?.Invoke(Status);
     }
 
@@ -58,7 +78,7 @@ public sealed class App
 
     public void Leave() => _commands.Enqueue(() =>
     {
-        _rejoin = null;
+        CancelReconnect();
         EndSession();
     });
 
@@ -73,6 +93,20 @@ public sealed class App
         Log.Info("Invite dialog opened");
     });
 
+    /// <summary>Leaves the current lobby and joins the one the pending invite names.</summary>
+    public void SwitchToInvite() => _commands.Enqueue(() =>
+    {
+        if (_invite is not { } invite) return;
+        CancelReconnect();
+        EndSession();
+        Open(Command.Join, invite.LobbyId.ToString());
+    });
+
+    public void ClearRefusal() => _commands.Enqueue(() => _refusal = null);
+
+    /// <summary>Raises <see cref="AvatarLoaded"/> again for every avatar already read (a window that subscribed late).</summary>
+    public void ResendAvatars() => _commands.Enqueue(() => _avatars?.ResendAll());
+
     public int Run()
     {
         _steam = _options.Transport == TransportKind.Steam ? new SteamBootstrap() : null;
@@ -84,47 +118,89 @@ public sealed class App
         ResetAdapterSettings();
         try
         {
+            StartAvatars();
             _lobby = OpenLobby(_options.Command, _options.Argument);
+            if (_lobby == null && _refusal != null && !_interactive) return 1;
             return Loop();
         }
         finally
         {
+            CancelReconnect();
             EndSession();
+            _avatars?.Dispose();
+            _avatars = null;
         }
+    }
+
+    private void StartAvatars()
+    {
+        if (_steam == null) return;
+        _avatars = new SteamAvatars();
+        _avatars.Loaded += image => AvatarLoaded?.Invoke(image);
     }
 
     private ILobby? OpenLobby(Command command, string? argument)
     {
-        switch (command, _options.Transport)
+        switch (command)
         {
-            case (Command.Host, TransportKind.Steam):
-                return SteamLobby.Create(GameProfile.Load(argument!), HostOptionsOf(argument!));
-            case (Command.Host, _):
-                return new LocalLobby((LocalTransport)_transport!, argument!, isHost: true, HostOptionsOf(argument!));
-            case (Command.Join, TransportKind.Steam):
-                return SteamLobby.Join(ulong.Parse(argument!));
-            case (Command.Join, _):
-                return new LocalLobby((LocalTransport)_transport!, _options.Game ?? SoleProfileId(), isHost: false, GameOptions.Decode(_options.HostOptions));
+            case Command.Host:
+                return OpenHostLobby(argument!);
+            case Command.Join:
+                return _options.Transport == TransportKind.Steam
+                    ? JoinLobby(ulong.Parse(argument!))
+                    : new LocalLobby((LocalTransport)_transport!, _options.Game ?? SoleProfileId(), isHost: false, GameOptions.Decode(_options.HostOptions));
             default:
                 Log.Info("Waiting for a Steam invite");
                 return null;
         }
     }
 
-    private Dictionary<string, string> HostOptionsOf(string gameId)
+    /// <summary>Opens the host's lobby once the game is known and ready to start; a refusal opens none.</summary>
+    private ILobby? OpenHostLobby(string gameId)
     {
+        _joining = 0;
+        _opening = gameId;
+        if (!GameProfile.ListIds().Contains(gameId))
+        {
+            Refuse(new Refusal(RefusalKind.UnknownGame, gameId, gameId));
+            return null;
+        }
         var profile = GameProfile.Load(gameId);
-        return GameOptions.HostValues(profile, ResolveGameDir(profile));
+        if (Preflight(profile, 0) is { } refusal)
+        {
+            Refuse(refusal);
+            return null;
+        }
+        var hostOptions = GameOptions.HostValues(profile, ResolveGameDir(profile));
+        return _options.Transport == TransportKind.Steam
+            ? SteamLobby.Create(profile, hostOptions)
+            : new LocalLobby((LocalTransport)_transport!, gameId, isHost: true, hostOptions);
     }
+
+    private SteamLobby JoinLobby(ulong lobbyId)
+    {
+        _joining = lobbyId;
+        _opening = null;
+        return SteamLobby.Join(lobbyId);
+    }
+
+    /// <summary>The start checks (<see cref="StartChecks"/>), which a run that never starts the game (--no-launch) skips.</summary>
+    private Refusal? Preflight(GameProfile profile, ulong lobbyId) =>
+        _options.NoLaunch ? null : StartChecks.Run(profile, ResolveGameDir(profile), lobbyId);
 
     private void Open(Command command, string argument)
     {
+        if (Reconnecting)
+        {
+            Log.Info("Already reconnecting");
+            return;
+        }
         if (_lobby != null)
         {
             Log.Info("Already in a lobby");
             return;
         }
-        _problem = BuildMismatch.None;
+        _refusal = null;
         _lobby = OpenLobby(command, argument);
     }
 
@@ -136,27 +212,26 @@ public sealed class App
 
     private int Loop()
     {
-        while (!_stopRequested && (_interactive || _session?.Ended != true || _rejoin != null))
+        while (!_stopRequested && (_interactive || _session?.Ended != true || Reconnecting))
         {
             RunCommands();
             if (!TryRejoin()) return 1;
             _steam?.Pump();
+            if (_steam?.Lost == true) throw new SteamLostException();
             _transport!.Pump();
+            _avatars?.Pump();
             AcceptInvite();
             _lobby?.Pump();
-            if (_lobby?.Failure is { } failure && !HoldGuestSession(failure))
-            {
-                Log.Info($"Lobby failure: {failure}");
-                var guestOf = _sessionStarted && _lobby.OwnerId != _transport!.LocalId ? _lobby.Id : (ulong?)null;
-                EndSession();
-                if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId);
-                else if (!_interactive) return 1;
-            }
+            if (_lobby?.Failure is { } failure && !OnLobbyFailure(failure)) return 1;
             DropEndedHeldSession();
+            WatchHost();
+            WaitForHost();
+            ReopenLobby();
             FollowHost();
             RejoinHeldSession();
-            if (!_sessionStarted && _lobby is { IsReady: true }) StartSession();
+            if (!_sessionStarted && _lobby is { IsReady: true } && !StartSession() && !_interactive) return 1;
             _bridge?.Pump();
+            _bridgeWasReady |= _bridge?.IsReady == true;
             _session?.Pump();
             _saveSync?.Pump();
             _logForwarder?.Pump();
@@ -167,74 +242,26 @@ public sealed class App
                 EndSession();
             }
             if (_interactive && _session?.Ended == true) EndSession();
+            PollWhileIdle();
             PublishStatus();
             Thread.Sleep(PumpIntervalMs);
         }
         return 0;
     }
 
-    /// <summary>A guest whose lobby object failed keeps its session, its game link and its services while the peers are held
-    /// (Session.Hold); only the lobby is dropped and rejoined. False when there is no such session to hold.</summary>
-    private bool HoldGuestSession(string failure)
+    /// <summary>A lobby that failed: kept as a held session where there is one (App.Reconnect.cs), else the session ends with
+    /// the reason, and a guest retries the lobby it was in. False when the CLI should exit.</summary>
+    private bool OnLobbyFailure(LobbyFailure failure)
     {
-        if (_session is not { Ended: false, IsHost: false } session || !session.Hold()) return false;
-        Log.Info($"Lobby failure: {failure}, keeping the session while rejoining");
-        var lobbyId = session.LobbyId;
-        _follow = null;
-        _lobby!.Dispose();
-        _lobby = null;
-        _rejoin ??= new Rejoin(lobbyId);
-        return true;
-    }
-
-    /// <summary>A held session whose grace ran out is gone: it is dropped while the rejoin runs, so the rejoined lobby starts fresh.</summary>
-    private void DropEndedHeldSession()
-    {
-        if (_session is { Ended: true } && _rejoin != null) DropSession();
-    }
-
-    /// <summary>The rejoined lobby replaces the failed one in a held session when it is the same lobby with the same host;
-    /// otherwise the session starts over on it.</summary>
-    private void RejoinHeldSession()
-    {
-        if (_session is not { Held: true } session || _lobby is not { IsReady: true } lobby) return;
-        if (lobby.Id == session.LobbyId && lobby.OwnerId == session.HostId)
-        {
-            session.Rebind(lobby);
-            _rejoin = null;
-            _follow = NewHostFollow();
-        }
-        else
-        {
-            DropSession();
-        }
-    }
-
-    private HostFollow? NewHostFollow() =>
-        _steam != null && _lobby is { } lobby && lobby.OwnerId != _transport!.LocalId ? new HostFollow(lobby.OwnerId, _profile!.Id) : null;
-
-    /// <summary>A guest whose host opened a new lobby (it crashed or relaunched) leaves the old one and joins the new one,
-    /// through the same retrying path as a lost connection.</summary>
-    private void FollowHost()
-    {
-        if (_lobby == null || _follow?.MovedTo(_lobby) is not { } lobbyId) return;
-        Log.Info($"The host opened lobby {lobbyId}, following");
+        if (HoldSession(failure)) return true;
+        Log.Info($"Lobby failure: {failure.Message}");
+        var guestOf = _sessionStarted && _lobby!.OwnerId != _transport!.LocalId ? _lobby.Id : (ulong?)null;
+        var gameId = _lobby!.GameId;
+        var retrying = guestOf != null || _rejoin != null;
+        if (!retrying) Refuse(failure.Kind, failure.Detail);
         EndSession();
-        _rejoin ??= new Rejoin(lobbyId);
-    }
-
-    /// <summary>Drives a pending rejoin. False when it gave up and the CLI should exit.</summary>
-    private bool TryRejoin()
-    {
-        if (_rejoin == null || _lobby != null) return true;
-        if (_rejoin.GaveUp)
-        {
-            Log.Info($"Could not rejoin lobby {_rejoin.LobbyId}, giving up");
-            _rejoin = null;
-            return _interactive;
-        }
-        if (_rejoin.AttemptDue()) _lobby = OpenLobby(Command.Join, _rejoin.LobbyId.ToString());
-        return true;
+        if (guestOf is { } lobbyId) _rejoin ??= new Rejoin(lobbyId) { GameId = gameId };
+        return guestOf != null || _interactive;
     }
 
     /// <summary>Commands come from another thread; a failing one is logged and the loop carries on.</summary>
@@ -256,54 +283,117 @@ public sealed class App
 
     private void AcceptInvite()
     {
-        if (_steam?.PendingInviteLobby is not { } lobbyId) return;
-        _steam.PendingInviteLobby = null;
-        if (_lobby != null)
+        if (_steam?.PendingInvite is not { } invite) return;
+        _steam.PendingInvite = null;
+        if (_lobby?.Id == invite.LobbyId) return;
+        if (IsIdle)
         {
-            Log.Info("Already in a lobby, ignoring invite");
-            return;
+            _refusal = null;
+            _lobby = JoinLobby(invite.LobbyId);
         }
-        _problem = BuildMismatch.None;
-        _lobby = SteamLobby.Join(lobbyId);
+        else
+        {
+            _invite = new PendingInvite(invite.LobbyId, invite.FromId, _steam.PersonaName(invite.FromId));
+            Log.Info($"Invite to lobby {invite.LobbyId} kept, already in a lobby");
+        }
+        InviteAccepted?.Invoke();
     }
 
-    private void StartSession()
+    /// <summary>Starts the session of a ready lobby. False when the game cannot start here (a joined lobby's game is not ready
+    /// or the bridge or save sync could not be built): the refusal is set and the lobby left.</summary>
+    private bool StartSession()
     {
-        if (_rejoin != null) Log.Info("Rejoined the session");
-        _rejoin = null;
-        _profile = GameProfile.Load(_lobby!.GameId!);
-        _gameDir = ResolveGameDir(_profile);
+        var profile = GameProfile.Load(_lobby!.GameId!);
+        var isHost = _lobby.OwnerId == _transport!.LocalId;
+        if (!isHost && Preflight(profile, _lobby.Id) is { } refusal)
+        {
+            Refuse(refusal);
+            EndSession();
+            return false;
+        }
+        if (Reconnecting) Log.Event("Rejoined the session");
+        CancelReconnect();
+        _profile = profile;
+        _gameDir = ResolveGameDir(profile);
+        _hostId = _lobby.OwnerId;
         _sessionStarted = true;
-        if (_profile.RendezvousSession && _gameDir != null) _nativeJoin = NativeJoin.Create(_profile, _gameDir, _lobby, _transport!.LocalId);
-        if (_profile.Bridged(_lobby.HostOptions)) StartBridgedSession();
+        if (!isHost) Log.Event($"Joined {profile.Name} lobby");
+        if (profile.RendezvousSession && _gameDir != null) _nativeJoin = NativeJoin.Create(profile, _gameDir, _lobby, _transport.LocalId);
+        if (profile.Bridged(_lobby.HostOptions) && !StartBridgedSession())
+        {
+            EndSession();
+            return false;
+        }
         _follow = NewHostFollow();
         _launchPending = true;
+        return true;
     }
 
     /// <summary>The bridge, frames between launchers, build check, save sync and log forwarding of a lobby game (or of a
-    /// rendezvous game whose host chose the bridged transport).</summary>
-    private void StartBridgedSession()
+    /// rendezvous game whose host chose the bridged transport). False, with the refusal set, when the loopback port is taken or
+    /// the save sync cannot start; log forwarding is optional.</summary>
+    private bool StartBridgedSession()
     {
-        _bridge = new LoopbackBridge(_profile!, _options.BridgePort != 0 ? _options.BridgePort : _profile!.Port);
+        var port = _options.BridgePort != 0 ? _options.BridgePort : _profile!.Port;
+        try
+        {
+            _bridge = new LoopbackBridge(_profile!, port);
+        }
+        catch (SocketException e)
+        {
+            Log.Info($"Could not open the loopback bridge on port {port}: {e.Message}");
+            Refuse(RefusalKind.PortInUse, port.ToString());
+            return false;
+        }
         _session = new Session(_profile!, _lobby!, _transport!, _bridge);
+        if (!_session.IsHost) _session.FileFrameReceived += OnFileFrame;
         _buildCheck = BuildCheck.Create(_profile!, _gameDir, _session, _transport!);
-        if (_gameDir == null) return;
-        _saveSync = SaveSyncCoordinator.Create(_profile!, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!);
-        _logForwarder = LogForwarder.Create(_profile!, _gameDir, _session, _transport!);
+        if (_gameDir == null) return true;
+        try
+        {
+            _saveSync = SaveSyncCoordinator.Create(_profile!, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!);
+        }
+        catch (Exception e) when (IsServiceFailure(e))
+        {
+            Log.Info($"Save sync could not start: {e.Message}");
+            Refuse(RefusalKind.SaveFolderMissing);
+            return false;
+        }
+        try
+        {
+            _logForwarder = LogForwarder.Create(_profile!, _gameDir, _session, _transport!);
+        }
+        catch (Exception e) when (IsServiceFailure(e))
+        {
+            Log.Info($"Log forwarding is off: {e.Message}");
+        }
+        return true;
     }
 
-    /// <summary>Starts the game once save sync is ready. False when the save sync timed out.</summary>
+    private static bool IsServiceFailure(Exception e) =>
+        e is InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException;
+
+    /// <summary>The save the host sends, as it arrives: the meter behind "Receiving save 40%".</summary>
+    private void OnFileFrame(ulong sender, Frame frame)
+    {
+        if (frame.Type == Msg.FileBegin && FileMessages.TryParseBegin(frame.Payload, out var begin)) _saveMeter.OnBegin(begin.Id, begin.Size);
+        else if (frame.Type == Msg.FileChunk && FileMessages.TryParseChunk(frame.Payload, out var chunk)) _saveMeter.OnChunk(chunk.Id, chunk.Data.Length);
+    }
+
+    /// <summary>Starts the game once build check and save sync are ready. False when the session cannot go on (the refusal is
+    /// set): the builds differ, the save sync timed out, or the game could not start.</summary>
     private bool TryLaunch()
     {
         if (_buildCheck is { Mismatch: not null } refused)
         {
-            _problem = refused.Reason;
+            Refuse(Refusals.FromBuildMismatch(refused.Reason));
             return false;
         }
         if (_buildCheck?.Ready == false) return true;
         if (_saveSync?.TimedOut == true)
         {
             Log.Info("Save sync timed out, not launching the game");
+            Refuse(RefusalKind.SaveTimedOut);
             return false;
         }
         if (_saveSync?.Ready == false) return true;
@@ -311,21 +401,61 @@ public sealed class App
         var options = AdapterOptions();
         _saveSync?.EnableAdapter(options);
         if (_options.NoLaunch) return true;
-        return _profile!.RendezvousSession
-            ? _gameDir != null && GameLauncher.LaunchWithOptions(_profile, _gameDir, options)
+        Log.Event($"Starting {_profile!.Name}");
+        var result = _profile.RendezvousSession
+            ? _gameDir != null ? GameLauncher.LaunchWithOptions(_profile, _gameDir, options) : LaunchResult.SteamStartFailed
             : GameLauncher.Launch(_profile, _gameDir);
+        if (result == LaunchResult.Started) _launchedAtMs = Environment.TickCount64;
+        return result is LaunchResult.Started or LaunchResult.AlreadyRunning || RefuseLaunch(result);
+    }
+
+    /// <summary>Sets the refusal for a game start that failed. Always false.</summary>
+    private bool RefuseLaunch(LaunchResult result)
+    {
+        switch (result)
+        {
+            case LaunchResult.GameUnsupported:
+                Refuse(RefusalKind.GameUnsupported, GameBuilds.Installed(_profile!, _gameDir).ToString());
+                break;
+            case LaunchResult.ModNotInstalled:
+                Refuse(RefusalKind.ModNotInstalled);
+                break;
+            default:
+                Refuse(RefusalKind.LaunchFailed);
+                break;
+        }
+        return false;
     }
 
     private Dictionary<string, string> AdapterOptions() =>
-        GameOptions.ForAdapter(_profile!, GameOptions.Current(_profile!, _gameDir), _lobby!.HostOptions, _lobby.OwnerId == _transport!.LocalId);
+        GameOptions.ForAdapter(_profile!, GameOptions.Current(_profile!, _gameDir), _lobby!.HostOptions, _hostId == _transport!.LocalId);
+
+    /// <summary>Records why a start did not go on and tells the player once. The refusal names the game and the lobby being
+    /// opened or left.</summary>
+    private void Refuse(RefusalKind kind, string detail = "") =>
+        Refuse(new Refusal(kind, detail, _lobby?.GameId ?? _profile?.Id ?? _opening, _lobby is { Id: not 0 } lobby ? lobby.Id : _joining));
+
+    private void Refuse(Refusal refusal)
+    {
+        _refusal = refusal;
+        Log.Event(StatusText.Refusal(refusal));
+        PublishStep(LocalProgress());
+    }
 
     /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
     private void EndSession()
     {
         DropSession();
+        DisposeLobby();
+        _view = null;
+        _invite = null;
+        ResetAdapterSettings();
+    }
+
+    private void DisposeLobby()
+    {
         _lobby?.Dispose();
         _lobby = null;
-        ResetAdapterSettings();
     }
 
     /// <summary>Drops the session and its services (bridge, save sync, log forwarder) but not the lobby.</summary>
@@ -344,65 +474,65 @@ public sealed class App
         _bridge = null;
         _profile = null;
         _gameDir = null;
+        _hostId = 0;
         _launchPending = false;
+        _launchedAtMs = null;
+        _bridgeWasReady = false;
+        _saveMeter = new SaveProgressMeter();
         _sessionStarted = false;
     }
-
-    private void PublishStatus()
-    {
-        var status = CurrentStatus();
-        if (status == Status) return;
-        Status = status;
-        StatusChanged?.Invoke(status);
-    }
-
-    private AppStatus CurrentStatus()
-    {
-        if (_lobby == null) return _session is { Held: true } ? Status : AppStatus.Idle with { Problem = _problem };
-        if (!_lobby.IsReady) return new AppStatus(AppState.Connecting);
-        var state = _session is { PeerConnected: true } ? AppState.PeerConnected
-            : _bridge?.IsReady == true ? AppState.GameRunning
-            : _lobby.OwnerId == _transport!.LocalId ? AppState.Hosting
-            : AppState.Joined;
-        return new AppStatus(state, _lobby.Id, _session?.RttMs)
-        {
-            Players = PlayerSlots(_lobby), GameId = _lobby.GameId, SeatCharacters = SeatCharacters(_lobby), Bridged = _bridge != null,
-        };
-    }
-
-    private IReadOnlyList<PlayerSlot> PlayerSlots(ILobby lobby) =>
-        lobby.Members
-            .OrderByDescending(member => member.Id == lobby.OwnerId)
-            .Select(member => new PlayerSlot(
-                member.Name, member.Id == lobby.OwnerId, member.Id == _transport!.LocalId, NativeJoin.Readable(lobby.MemberStatus(member))))
-            .ToList();
-
-    private List<string> SeatCharacters(ILobby lobby) =>
-        lobby.GameId is { } id ? GameOptions.SeatCharacters(GameProfile.Load(id), lobby.HostOptions) : [];
 
     private string? ResolveGameDir(GameProfile profile) => _options.GameDir ?? GameFolders.Find(profile);
 
     /// <summary>Crash recovery and cleanup: every profile with save sync goes back to coop=0 and loses its session folder.
-    /// A game that is running keeps both: its session folder holds the saves it is playing from.</summary>
+    /// A game that is running keeps both (its session folder holds the saves it is playing from) and is reset once it exits.</summary>
     private void ResetAdapterSettings()
     {
-        foreach (var id in GameProfile.ListIds())
+        foreach (var id in GameProfile.ListIds()) ResetAdapterSettings(GameProfile.Load(id));
+    }
+
+    private void ResetAdapterSettings(GameProfile profile)
+    {
+        if (profile.SaveSync is not { } config || ResolveGameDir(profile) is not { } gameDir) return;
+        if (GameLauncher.IsRunning(profile))
+        {
+            Log.Info($"{profile.Name} is running, its co-op settings are left as they are");
+            _pendingResets.Add(profile.Id);
+            return;
+        }
+        _pendingResets.Remove(profile.Id);
+        try
+        {
+            AdapterSettings.Reset(gameDir, profile, config);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not reset {profile.Name}'s co-op settings: {e.Message}");
+        }
+    }
+
+    /// <summary>Work that only matters at rest: the co-op settings of games that were running when a session ended, and the
+    /// friends hosting a lobby.</summary>
+    private void PollWhileIdle()
+    {
+        if (!IsIdle)
+        {
+            _friends = [];
+            _nextFriendPollMs = 0;
+            return;
+        }
+        var now = Environment.TickCount64;
+        if (_steam != null && now >= _nextFriendPollMs)
+        {
+            _nextFriendPollMs = now + FriendPollMs;
+            _friends = FriendLobbies.Select(FriendLobbies.Read(), GameProfile.ListIds(), FriendLobbies.MaxFriendRows);
+        }
+        if (_pendingResets.Count == 0 || now < _nextResetCheckMs) return;
+        _nextResetCheckMs = now + PendingResetCheckMs;
+        foreach (var id in _pendingResets.ToList())
         {
             var profile = GameProfile.Load(id);
-            if (profile.SaveSync is not { } config || ResolveGameDir(profile) is not { } gameDir) continue;
-            if (GameLauncher.IsRunning(profile))
-            {
-                Log.Info($"{profile.Name} is running, its co-op settings are left as they are");
-                continue;
-            }
-            try
-            {
-                AdapterSettings.Reset(gameDir, profile, config);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                Log.Info($"Could not reset {profile.Name}'s co-op settings: {e.Message}");
-            }
+            if (!GameLauncher.IsRunning(profile)) ResetAdapterSettings(profile);
         }
     }
 }

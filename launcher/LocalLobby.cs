@@ -5,7 +5,7 @@ public sealed class LocalLobby : ILobby
 {
     private readonly LocalTransport _transport;
     private readonly bool _isHost;
-    private readonly Dictionary<ulong, string> _status = new();
+    private readonly Dictionary<(ulong Member, MemberKey Key), string> _data = new();
     private bool _peerPresent;
 
     public LocalLobby(LocalTransport transport, string gameId, bool isHost, IReadOnlyDictionary<string, string>? hostOptions = null)
@@ -18,7 +18,7 @@ public sealed class LocalLobby : ILobby
 
     public bool IsReady => true;
 
-    public string? Failure => null;
+    public LobbyFailure? Failure => null;
 
     public string? GameId { get; }
 
@@ -49,9 +49,9 @@ public sealed class LocalLobby : ILobby
         Revision++;
     }
 
-    public void SetMemberStatus(string status) => _status[_transport.LocalId] = status;
+    public void SetMemberData(MemberKey key, string value) => _data[(_transport.LocalId, key)] = value;
 
-    public string MemberStatus(LobbyMember member) => _status.GetValueOrDefault(member.Id, string.Empty);
+    public string MemberData(LobbyMember member, MemberKey key) => _data.GetValueOrDefault((member.Id, key), string.Empty);
 
     public void Dispose()
     {

@@ -13,6 +13,7 @@
   <ItemGroup>
     <Compile Include="../../../launcher/PlayerName.cs" />
     <Compile Include="../../../launcher/ILobby.cs" />
+    <Compile Include="../../../launcher/Refusal.cs" />
   </ItemGroup>
 
 </Project>

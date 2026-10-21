@@ -8,6 +8,7 @@ const ulong GuestA = 20;
 const ulong GuestB = 30;
 const ushort GameDatagram = 0x0120;
 const int BridgePort = 27991;
+const int GuestBridgePort = 27992;
 const int WaitMs = 3000;
 const int GraceWaitMs = (int)MemberGrace.PeerGraceMs + WaitMs;
 
@@ -57,31 +58,66 @@ Pump(() => !session.PeerConnected, GraceWaitMs);
 Check(!session.PeerConnected && !session.Ended, "the last guest leaving keeps the session open");
 
 lobby.SetMembers([new(GuestB, "Bob")], owner: GuestB);
-Pump(() => session.Ended);
-Check(session.Ended, "the host leaving ends the session");
+Pump(() => session.Ended, WaitMs);
+Check(!session.Ended, "an owner change alone does not end the session");
+
+GuestSession();
 
 return failures == 0 ? 0 : 1;
 
+void GuestSession()
+{
+    var guestLobby = new ScriptedLobby(HostId, [new(HostId, "Host"), new(GuestA, "Alice"), new(GuestB, "Bob")]);
+    var guestTransport = new RecordingTransport(GuestA);
+    using var guestBridge = new LoopbackBridge(profile, GuestBridgePort);
+    using var guestSession = new Session(profile, guestLobby, guestTransport, guestBridge);
+    using var guestAdapter = new StandInAdapter(GuestBridgePort, profile.Id);
+    void PumpGuest(Func<bool> done, int timeoutMs = WaitMs) => PumpWith(guestBridge, guestSession, done, timeoutMs);
+
+    PumpGuest(() => guestBridge.IsReady && guestAdapter.Count(Msg.PeerUp) >= 2);
+    Check(guestAdapter.Slots(Msg.PeerUp).Order().SequenceEqual([(byte)0, (byte)2]), "a guest's adapter hears the host (slot 0) and the other guest (slot 2)");
+    Check(!guestSession.HostMissing, "the host is in the lobby: not missing");
+
+    var newLobby = new ScriptedLobby(HostId, [new(HostId, "Host"), new(GuestA, "Alice"), new(GuestB, "Bob")], id: 2);
+    guestSession.Hold();
+    guestSession.Rebind(newLobby);
+    PumpGuest(() => guestAdapter.Count(Msg.PeerUp) >= 4);
+    Check(guestSession.LobbyId == 2 && !guestSession.Held && !guestSession.Ended, "a new lobby id with the same owner is accepted");
+    Check(guestAdapter.Count(Msg.PeerUp) == 4 && guestAdapter.Slots(Msg.PeerUp).Order().SequenceEqual([(byte)0, (byte)0, (byte)2, (byte)2]),
+        "the rebind sends PEER_UP again for every slot, none changed");
+    guestAdapter.Send(Datagram(slot: 0));
+    PumpGuest(() => guestTransport.SentTo(HostId) == 1);
+    Check(guestTransport.SentTo(HostId) == 1 && guestAdapter.Count(Msg.PeerDown) == 0, "after the rebind the slots still route to the same members");
+
+    newLobby.SetMembers([new(GuestA, "Alice")], owner: GuestA);
+    PumpGuest(() => guestAdapter.Slots(Msg.PeerDown).Contains(2), GraceWaitMs);
+    Check(guestAdapter.Slots(Msg.PeerDown).Contains(2), "a member that is not the host expires after the peer grace");
+    Check(guestSession.HostMissing && guestSession.IsHeld(HostId) && !guestSession.Ended && !guestAdapter.Slots(Msg.PeerDown).Contains(0),
+        "the missing host is still held when a guest's grace is over: the session goes on");
+}
+
 Frame Datagram(byte slot) => new(GameDatagram, 0, slot, [0, 0, 0, 0, 7]);
 
-void Pump(Func<bool> done, int timeoutMs = WaitMs)
+void Pump(Func<bool> done, int timeoutMs = WaitMs) => PumpWith(bridge, session, done, timeoutMs);
+
+void PumpWith(LoopbackBridge pumpedBridge, Session pumpedSession, Func<bool> done, int timeoutMs)
 {
     var deadline = Environment.TickCount64 + timeoutMs;
     while (Environment.TickCount64 < deadline)
     {
-        bridge.Pump();
-        session.Pump();
+        pumpedBridge.Pump();
+        pumpedSession.Pump();
         if (done()) return;
         Thread.Sleep(5);
     }
 }
 
-sealed class ScriptedLobby(ulong ownerId, List<LobbyMember> members) : ILobby
+sealed class ScriptedLobby(ulong ownerId, List<LobbyMember> members, ulong id = 1) : ILobby
 {
     public bool IsReady => true;
-    public string? Failure => null;
+    public LobbyFailure? Failure => null;
     public string? GameId => "sr2";
-    public ulong Id => 1;
+    public ulong Id => id;
     public ulong OwnerId { get; private set; } = ownerId;
     public IReadOnlyDictionary<string, string> HostOptions { get; } = new Dictionary<string, string>();
     public string JoinSecret => string.Empty;
@@ -96,8 +132,8 @@ sealed class ScriptedLobby(ulong ownerId, List<LobbyMember> members) : ILobby
         Revision++;
     }
 
-    public void SetMemberStatus(string status) { }
-    public string MemberStatus(LobbyMember member) => string.Empty;
+    public void SetMemberData(MemberKey key, string value) { }
+    public string MemberData(LobbyMember member, MemberKey key) => string.Empty;
     public void Pump() { }
     public void Dispose() { }
 }

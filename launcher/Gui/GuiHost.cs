@@ -1,3 +1,5 @@
+using Steamworks;
+
 namespace CoopLauncher.Gui;
 
 /// <summary>Runs the App loop on a background thread and the window on the calling (STA) thread. A loop that cannot
@@ -39,11 +41,19 @@ public static class GuiHost
             catch (Exception e)
             {
                 var detail = e.ToString();
-                if (detail != lastFailure) Log.Info($"Fatal: {detail}");
+                if (detail != lastFailure)
+                {
+                    Log.FileOnly($"Fatal: {detail}");
+                    Log.Info($"Fatal: {e.Message}");
+                }
                 lastFailure = detail;
-                app.MarkOffline();
+                app.MarkOffline(SteamIsMissing(e) ? OfflineReason.SteamNotRunning : OfflineReason.None);
                 closing.Wait(RetryDelayMs);
             }
         }
     }
+
+    /// <summary>Steam is not running (it could not be reached at start, or it went away).</summary>
+    private static bool SteamIsMissing(Exception e) =>
+        e is SteamLostException || (e is SteamUnavailableException { Result: ESteamAPIInitResult.k_ESteamAPIInitResult_NoSteamClient });
 }

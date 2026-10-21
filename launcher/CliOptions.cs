@@ -25,6 +25,8 @@ public sealed record CliOptions(
           --no-launch               do not start the game
         """;
 
+    /// <summary>Null for a command line that cannot be used; the offending argument is named on stderr first (the caller then
+    /// prints <see cref="Usage"/>). A Steam join's lobby id is read with <see cref="LobbyCode"/> and kept as plain digits.</summary>
     public static CliOptions? Parse(string[] args)
     {
         var command = Command.WaitForInvite;
@@ -35,47 +37,61 @@ public sealed record CliOptions(
 
         for (var i = 0; i < args.Length; i++)
         {
-            switch (args[i])
+            var flag = args[i];
+            var value = i + 1 < args.Length ? args[i + 1] : null;
+            switch (flag)
             {
-                case "host" when i + 1 < args.Length:
-                    (command, argument) = (Command.Host, args[++i]);
+                case "host" when value != null:
+                    (command, argument) = (Command.Host, value);
                     break;
-                case "join" or "+connect_lobby" when i + 1 < args.Length:
-                    (command, argument) = (Command.Join, args[++i]);
+                case "join" or "+connect_lobby" when value != null:
+                    (command, argument) = (Command.Join, value);
                     break;
-                case "--transport" when i + 1 < args.Length:
-                    if (!Enum.TryParse(args[++i], ignoreCase: true, out transport)) return null;
+                case "--transport" when value != null:
+                    if (!Enum.TryParse(value, ignoreCase: true, out transport)) return Reject($"{flag} {value}");
                     break;
-                case "--local-port" when i + 1 < args.Length:
-                    if (!int.TryParse(args[++i], out localPort)) return null;
+                case "--local-port" when value != null:
+                    if (!int.TryParse(value, out localPort)) return Reject($"{flag} {value}");
                     break;
-                case "--peer-port" when i + 1 < args.Length:
-                    if (!int.TryParse(args[++i], out peerPort)) return null;
+                case "--peer-port" when value != null:
+                    if (!int.TryParse(value, out peerPort)) return Reject($"{flag} {value}");
                     break;
-                case "--bridge-port" when i + 1 < args.Length:
-                    if (!int.TryParse(args[++i], out bridgePort)) return null;
+                case "--bridge-port" when value != null:
+                    if (!int.TryParse(value, out bridgePort)) return Reject($"{flag} {value}");
                     break;
-                case "--game" when i + 1 < args.Length:
-                    game = args[++i];
+                case "--game" when value != null:
+                    game = value;
                     break;
-                case "--save-source" when i + 1 < args.Length:
-                    saveSource = args[++i];
+                case "--save-source" when value != null:
+                    saveSource = value;
                     break;
-                case "--game-dir" when i + 1 < args.Length:
-                    gameDir = args[++i];
+                case "--game-dir" when value != null:
+                    gameDir = value;
                     break;
-                case "--host-options" when i + 1 < args.Length:
-                    hostOptions = args[++i];
+                case "--host-options" when value != null:
+                    hostOptions = value;
                     break;
                 case "--no-launch":
                     noLaunch = true;
-                    break;
+                    continue;
                 default:
-                    return null;
+                    return Reject(flag);
             }
+            i++;
         }
 
+        if (command == Command.Join && transport == TransportKind.Steam)
+        {
+            if (!LobbyCode.TryParse(argument, out var lobbyId)) return Reject(argument!);
+            argument = lobbyId.ToString();
+        }
         var localIncomplete = transport == TransportKind.Local && (localPort == 0 || peerPort == 0 || command == Command.WaitForInvite);
         return localIncomplete ? null : new CliOptions(command, argument, transport, localPort, peerPort, bridgePort, noLaunch, game, saveSource, gameDir, hostOptions);
+    }
+
+    private static CliOptions? Reject(string argument)
+    {
+        Console.Error.WriteLine($"Unknown argument: {argument}");
+        return null;
     }
 }
