@@ -3,7 +3,7 @@ using System.Globalization;
 namespace CoopLauncher;
 
 /// <summary>Where one player is in getting a session going; published to the lobby so everyone can show it.</summary>
-public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused }
+public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused, Ready }
 
 /// <summary>What the step depends on, read from the loop's state.</summary>
 public sealed record StepInputs(

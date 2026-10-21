@@ -11,6 +11,21 @@ public static class TextChangeTests
     {
         Classify();
         Measure();
+        ReelPlans();
+    }
+
+    private static void ReelPlans()
+    {
+        var one = ReelText.Plan("PLAYERS 1/2", "PLAYERS 2/2");
+        Check.That(one.Count == 1 && one[0] == new ReelColumn(8, 1, 2, 11, 0), "one changed digit is one reel, a full spin and one more cell");
+        var wrap = ReelText.Plan("PLAYERS 2/4", "PLAYERS 1/4");
+        Check.That(wrap.Count == 1 && wrap[0].Cells == 19 && (wrap[0].From + wrap[0].Cells) % 10 == wrap[0].To, "a lower digit spins on round to it");
+        var two = ReelText.Plan("1:59", "2:00");
+        Check.That(two.Select(column => column.Index).SequenceEqual(new[] { 0, 2, 3 }) && two.Select(column => column.DelayMs).SequenceEqual(new[] { 0, 90, 180 }), "changed columns start 90 ms apart, left to right");
+        Check.That(ReelText.Plan("1/2", "1/2").Count == 0, "equal texts have no reels");
+        Check.That(ReelText.Plan("9/10", "10/10").Count == 0, "a text of another length swaps at once");
+        Check.That(ReelText.Plan("PLAYERS 1/2", "PLAYERS 2/2 ").Count == 0 && ReelText.Plan("Open 1", "Done 1").Count == 0, "words that differ swap at once");
+        Check.That(one.All(column => (column.From + column.Cells) % 10 == column.To), "every reel lands on its digit");
     }
 
     private static void Classify()

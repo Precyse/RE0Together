@@ -25,6 +25,10 @@ public static class MotionTests
         ReducedMotion();
         Retarget();
         DisposedOwner();
+        LoopPhases();
+        NewRecipes();
+        LoopEngine();
+        LoopReduced();
         Motion.Clock = clock;
         Motion.ReducedOverride = null;
     }
@@ -228,5 +232,91 @@ public static class MotionTests
         now = StartMs + 50;
         Motion.Step();
         Check.That(applied == 0 && done == 0 && Motion.Active == 0 && !Motion.TimerRunning, "a disposed owner's tween is dropped");
+    }
+
+    private static void LoopPhases()
+    {
+        Check.That(Motion.LoopPhase(1000, 1000, 1200) == 0, "a loop starts at phase 0");
+        Check.That(Math.Abs(Motion.LoopPhase(1000, 1300, 1200) - 0.25) < Tolerance, "a quarter of the period in is phase 0.25");
+        Check.That(Motion.LoopPhase(1000, 2200, 1200) == 0 && Math.Abs(Motion.LoopPhase(1000, 3700, 1200) - 0.25) < Tolerance, "the phase wraps each lap");
+        Check.That(Math.Abs(Motion.LoopPhase(1000, 700, 1200) - 0.75) < Tolerance, "a clock before the start wraps backwards");
+        Check.That(Motion.LoopPhase(1000, 5000, 0) == 0, "a zero period is phase 0");
+    }
+
+    private static void NewRecipes()
+    {
+        Check.That(Recipes.StaggerIn(0) == new Layer(0, 0, 12, 1, 3) && Recipes.StaggerIn(1) == Layer.Rest, "StaggerIn rises 12 px from blur 3 to rest");
+        Check.That(Recipes.PageIn(0, 1) == new Layer(0, 8, 0, 1, 3) && Recipes.PageIn(0, -1) == new Layer(0, -8, 0, 1, 3), "PageIn comes from the side the direction names");
+        Check.That(Recipes.PageOut(1, 1) == new Layer(0, -8, 0, 1, 3) && Recipes.PageOut(1, -1) == new Layer(0, 8, 0, 1, 3), "PageOut leaves to the other side");
+        Check.That(Recipes.PageIn(1, 1) == Layer.Rest && Recipes.PageOut(0, -1) == Layer.Rest, "the page recipes end and start at rest");
+        Check.That(Recipes.OutfitIn(0, 1) == new Layer(0, 24, 0, 1, 3) && Recipes.OutfitOut(1, 1) == new Layer(0, -24, 0, 1, 3), "the outfit slides 24 px");
+
+        var legs = new[] { (0.0, 0.0), (80.0 / 280, 6.0), (160.0 / 280, -6.0), (220.0 / 280, 4.0), (1.0, 0.0) };
+        foreach (var (at, pixels) in legs)
+            Check.That(Math.Abs(Recipes.ErrorShakeX(at) - pixels) < Tolerance, $"error shake at {at:0.####} is {pixels}");
+        Check.That(Math.Abs(Recipes.ErrorShakeX(40.0 / 280) - 6 * Easing.Out.Ease(0.5)) < Tolerance, "an error shake leg is eased Out");
+
+        Check.That(Math.Abs(Recipes.CheckBob(0) - 6) < Tolerance && Math.Abs(Recipes.CheckBob(1)) < Tolerance, "the check bob drops 6 px to rest");
+        Check.That(Enumerable.Range(0, Samples + 1).Any(i => Recipes.CheckBob((double)i / Samples) < -0.01), "the check bob overshoots past rest");
+        var (opacity, rotation, bob, drawn) = StepPainter.CheckFrame(0);
+        Check.That(opacity == 0 && rotation == 80 && Math.Abs(bob - 6) < Tolerance && drawn == 0, "a check starts hidden, turned 80 degrees and dropped");
+        var (_, _, _, early) = StepPainter.CheckFrame(Durations.CheckDrawDelay);
+        var (rested, turn, drop, whole) = StepPainter.CheckFrame(Durations.CheckDrawDelay + Durations.CheckDraw);
+        Check.That(early == 0 && rested == 1 && turn == 0 && Math.Abs(drop) < Tolerance && whole == 1, "the stroke starts 80 ms late and everything ends at rest");
+    }
+
+    private static void LoopEngine()
+    {
+        long now = StartMs;
+        Motion.Clock = () => now;
+        Motion.ReducedOverride = false;
+        var owner = Window();
+        var phases = new List<double>();
+        Motion.Loop(owner, "spin", 1200, phases.Add);
+        Check.That(phases.SequenceEqual(new[] { 0.0 }) && Motion.Loops == 1 && Motion.TimerRunning, "a loop applies phase 0 at once and runs the timer");
+        now = StartMs + 300;
+        Motion.Step();
+        now = StartMs + 1500;
+        Motion.Step();
+        Check.That(phases.Count == 3 && Math.Abs(phases[1] - 0.25) < Tolerance && Math.Abs(phases[2] - 0.25) < Tolerance, $"each frame applies the phase ({string.Join(",", phases)})");
+
+        owner.Visible = false;
+        now = StartMs + 1600;
+        Motion.Step();
+        Check.That(phases.Count == 3 && !Motion.TimerRunning && Motion.Loops == 1, "a loop whose owner is hidden neither applies nor keeps the timer running");
+        owner.Visible = true;
+        Check.That(Motion.TimerRunning, "showing the owner again wakes the timer");
+        now = StartMs + 1800;
+        Motion.Step();
+        Check.That(phases.Count == 4 && Math.Abs(phases[3] - 0.5) < Tolerance, "the loop carries on from the clock");
+
+        Motion.Loop(owner, "spin", 1200, phases.Add);
+        Check.That(Motion.Loops == 1, "a loop on the same owner and channel replaces the running one");
+        Motion.Animate(owner, "tween", 0, 1, 100, Easing.Linear, _ => { });
+        Motion.Cancel(owner, "spin");
+        Check.That(Motion.Loops == 0 && Motion.Active == 1, "Cancel drops a loop and leaves tweens alone");
+        now = StartMs + 2000;
+        Motion.Step();
+        Check.That(Motion.Active == 0 && !Motion.TimerRunning, "no tween and no loop left: the timer stops");
+
+        var disposed = Window();
+        var applied = 0;
+        Motion.Loop(disposed, "spin", 1200, _ => applied++);
+        disposed.Dispose();
+        Motion.Step();
+        Check.That(Motion.Loops == 0 && applied == 1 && !Motion.TimerRunning, "a disposed owner's loop is dropped");
+        owner.Dispose();
+    }
+
+    private static void LoopReduced()
+    {
+        Motion.Clock = () => StartMs;
+        Motion.ReducedOverride = true;
+        var owner = Window();
+        var phases = new List<double>();
+        Motion.Loop(owner, "spin", 1200, phases.Add);
+        Check.That(phases.SequenceEqual(new[] { 0.0 }) && Motion.Loops == 0 && !Motion.TimerRunning, "reduced motion applies phase 0 once and registers nothing");
+        owner.Dispose();
+        Motion.ReducedOverride = false;
     }
 }

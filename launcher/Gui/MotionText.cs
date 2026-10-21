@@ -169,3 +169,136 @@ internal sealed class StatusLine
         else Draw.Text(g, text, font, color, bounds);
     }
 }
+
+/// <summary>One digit of a <see cref="ReelText"/> that spins: its position in the text, the digit it leaves and the one it lands
+/// on, how many cells of its 0-9 strip pass by in between (a full spin and the distance), and the delay before it starts.</summary>
+internal readonly record struct ReelColumn(int Index, int From, int To, int Cells, int DelayMs);
+
+/// <summary>A small count that changes with the spinning-counter recipe: each changed digit is a clipped reel of 0-9 that makes
+/// one full spin and lands on the new digit, the columns starting <see cref="Durations.ReelStagger"/> apart, a soft blur while a
+/// reel moves. Texts that differ in anything but digits swap at once. Same Set, Snap and Paint shape as <see cref="StatusLine"/>.</summary>
+internal sealed class ReelText
+{
+    private const int Digits = 10;
+    private const int Spins = 1;
+    private const int ColumnSlack = 2;
+
+    private readonly Control _owner;
+    private readonly string _channel;
+    private string _text = string.Empty;
+    private bool _started;
+    private IReadOnlyList<ReelColumn> _columns = [];
+    private double _ms;
+
+    public ReelText(Control owner, string channel)
+    {
+        _owner = owner;
+        _channel = channel;
+    }
+
+    public string Text => _text;
+
+    /// <summary>The reels that turn when one text becomes another: the digits that differ at the same place of two texts that are
+    /// otherwise equal, each starting a stagger after the one before. No reels when the texts differ in anything else.</summary>
+    public static IReadOnlyList<ReelColumn> Plan(string before, string after)
+    {
+        if (before.Length != after.Length) return [];
+        var columns = new List<ReelColumn>();
+        for (var i = 0; i < after.Length; i++)
+        {
+            if (before[i] == after[i]) continue;
+            if (!char.IsAsciiDigit(before[i]) || !char.IsAsciiDigit(after[i])) return [];
+            var from = before[i] - '0';
+            var to = after[i] - '0';
+            columns.Add(new ReelColumn(i, from, to, Spins * Digits + (to - from + Digits) % Digits, columns.Count * Durations.ReelStagger));
+        }
+        return columns;
+    }
+
+    /// <summary>Changes the text; the first text a slot gets is shown at once.</summary>
+    public void Set(string text)
+    {
+        if (!_started)
+        {
+            Snap(text);
+            return;
+        }
+        if (text == _text) return;
+        var plan = Plan(_text, text);
+        if (plan.Count == 0)
+        {
+            Snap(text);
+            return;
+        }
+        _text = text;
+        _columns = plan;
+        _ms = 0;
+        var total = Durations.Reel + plan[^1].DelayMs;
+        Motion.Animate(_owner, _channel, 0, total, total, Easing.Linear, ms =>
+        {
+            _ms = ms;
+            _owner.Invalidate();
+        }, () =>
+        {
+            _columns = [];
+            _owner.Invalidate();
+        });
+    }
+
+    /// <summary>Changes the text without motion.</summary>
+    public void Snap(string text)
+    {
+        Motion.Cancel(_owner, _channel);
+        _started = true;
+        _text = text;
+        _columns = [];
+        _owner.Invalidate();
+    }
+
+    public void Paint(Graphics g, Rectangle bounds, Font font, Color color, Color background, bool alignRight = false)
+    {
+        var start = 0;
+        foreach (var column in _columns)
+        {
+            PaintPiece(g, bounds, font, color, start, column.Index, alignRight);
+            PaintColumn(g, bounds, font, color, background, column, alignRight);
+            start = column.Index + 1;
+        }
+        PaintPiece(g, bounds, font, color, start, _text.Length, alignRight);
+    }
+
+    private int XOf(Rectangle bounds, Font font, int index, bool alignRight) =>
+        alignRight ? bounds.Right - Draw.TightWidth(_text[index..], font) : bounds.X + Draw.TightWidth(_text[..index], font);
+
+    private void PaintPiece(Graphics g, Rectangle bounds, Font font, Color color, int start, int end, bool alignRight)
+    {
+        if (end <= start) return;
+        var piece = _text[start..end];
+        var x = XOf(bounds, font, start, alignRight);
+        Draw.Text(g, piece, font, color, new Rectangle(x, bounds.Y, Draw.Width(piece, font), bounds.Height));
+    }
+
+    private void PaintColumn(Graphics g, Rectangle bounds, Font font, Color color, Color background, ReelColumn column, bool alignRight)
+    {
+        var progress = Easing.Reel.Ease(Math.Clamp((_ms - column.DelayMs) / Durations.Reel, 0, 1));
+        var width = Draw.TightWidth("0", font) + ColumnSlack;
+        var rect = new Rectangle(XOf(bounds, font, column.Index, alignRight), bounds.Y, width, bounds.Height);
+        var moving = progress is > 0 and < 1;
+        var layer = moving ? new Layer(1, 0, 0, 1, Distances.ReelBlur * (float)(1 - progress)) : Layer.Rest;
+        MotionLayer.Paint(g, rect, layer, background, (target, area) => PaintStrip(target, area, font, color, column, progress * column.Cells));
+    }
+
+    /// <summary>The reel's strip of digits, <paramref name="travelled"/> cells up from where it started, clipped to its cell.</summary>
+    private static void PaintStrip(Graphics g, Rectangle area, Font font, Color color, ReelColumn column, double travelled)
+    {
+        var state = g.Save();
+        g.SetClip(area, System.Drawing.Drawing2D.CombineMode.Intersect);
+        var first = (int)Math.Floor(travelled);
+        for (var cell = first; cell <= first + 1; cell++)
+        {
+            var y = area.Y + (int)Math.Round((cell - travelled) * area.Height);
+            Draw.Text(g, ((column.From + cell) % Digits).ToString(), font, color, new Rectangle(area.X, y, area.Width, area.Height));
+        }
+        g.Restore(state);
+    }
+}
