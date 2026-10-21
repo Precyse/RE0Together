@@ -1,3 +1,5 @@
+using System.Drawing.Imaging;
+
 namespace CoopLauncher.Gui;
 
 internal enum ArrowDirection { Up, Down, Left }
@@ -26,6 +28,12 @@ internal static class Draw
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.PathEllipsis);
 
     public static int Width(string text, Font font) => TextRenderer.MeasureText(text, font).Width;
+
+    /// <summary>The advance width of the text without the padding TextRenderer adds around it: where the next character
+    /// of a longer string starts.</summary>
+    public static int TightWidth(string text, Font font) =>
+        TextRenderer.MeasureText(text, font, new Size(int.MaxValue, int.MaxValue),
+            TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine).Width;
 
     private const TextFormatFlags Wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak
         | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
@@ -76,6 +84,12 @@ internal static class Draw
         g.DrawLine(pen, x, y1, x, y2);
     }
 
+    public static void Fill(Graphics g, Color color, Rectangle bounds)
+    {
+        using var brush = new SolidBrush(color);
+        g.FillRectangle(brush, bounds);
+    }
+
     public static void Border(Graphics g, Rectangle bounds, Color color)
     {
         using var pen = new Pen(color);
@@ -83,13 +97,35 @@ internal static class Draw
     }
 
     /// <summary>Fills the rectangle with the image, cropping whatever overflows (CSS object-fit: cover).</summary>
-    public static void Cover(Graphics g, Image image, Rectangle dest)
+    public static void Cover(Graphics g, Image image, Rectangle dest) =>
+        g.DrawImage(image, dest, CoverSource(image, dest), GraphicsUnit.Pixel);
+
+    private static RectangleF CoverSource(Image image, Rectangle dest)
     {
         var scale = Math.Max((float)dest.Width / image.Width, (float)dest.Height / image.Height);
         var cropWidth = dest.Width / scale;
         var cropHeight = dest.Height / scale;
-        var source = new RectangleF((image.Width - cropWidth) / 2, (image.Height - cropHeight) / 2, cropWidth, cropHeight);
-        g.DrawImage(image, dest, source, GraphicsUnit.Pixel);
+        return new RectangleF((image.Width - cropWidth) / 2, (image.Height - cropHeight) / 2, cropWidth, cropHeight);
+    }
+
+    /// <summary><see cref="Cover"/> drawn at the given opacity (0..1).</summary>
+    public static void Faded(Graphics g, Image image, Rectangle dest, float alpha)
+    {
+        var matrix = new ColorMatrix { Matrix33 = alpha };
+        using var attributes = new ImageAttributes();
+        attributes.SetColorMatrix(matrix);
+        var source = CoverSource(image, dest);
+        g.DrawImage(image, dest, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
+    }
+
+    /// <summary>A thin scroll position mark at the right edge of the track: nothing when the content fits, else a bar as
+    /// tall as the visible share of the content, placed at the scroll offset.</summary>
+    public static void ScrollThumb(Graphics g, Rectangle track, int contentHeight, int offset, int thumbWidth)
+    {
+        if (contentHeight <= track.Height) return;
+        var height = Math.Max(thumbWidth, track.Height * track.Height / contentHeight);
+        var y = track.Y + (track.Height - height) * offset / (contentHeight - track.Height);
+        Fill(g, Theme.Line, new Rectangle(track.Right - thumbWidth, y, thumbWidth, height));
     }
 
     /// <summary>The image scaled to fit inside the box without cropping, anchored to the box's bottom-left corner.</summary>

@@ -47,6 +47,9 @@ internal static class Theme
     /// fixed for its lifetime; every metric is converted once.</summary>
     public static int Scale(int pixelsAt96Dpi) => (int)Math.Round(pixelsAt96Dpi * DpiScale);
 
+    /// <summary>A fractional size in 96 dpi units as pixels at the screen's scale (animated offsets and blur radii).</summary>
+    public static float ScaleF(float pixelsAt96Dpi) => pixelsAt96Dpi * DpiScale;
+
     /// <summary>The inverse of <see cref="Scale"/>.</summary>
     public static int Unscale(int pixels) => (int)Math.Round(pixels / DpiScale);
 

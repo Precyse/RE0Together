@@ -16,6 +16,7 @@ public static class Check
 
 public static class Program
 {
+    [STAThread]
     public static int Main()
     {
         ContentHashTests.Run();
@@ -24,6 +25,10 @@ public static class Program
         PeerBudgetTests.Run();
         FreshQueueTests.Run();
         GameOptionsTests.Run();
+        MotionTests.Run();
+        BoxBlurTests.Run();
+        AvatarTests.Run();
+        TextChangeTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
