@@ -324,7 +324,7 @@ internal sealed class GameRail : Control
 
         public override void Select(AccessibleSelection flags)
         {
-            if (flags.HasFlag(AccessibleSelection.TakeSelection)) _rail.Select(_index);
+            if (_rail.Enabled && flags.HasFlag(AccessibleSelection.TakeSelection)) _rail.Select(_index);
         }
     }
 }
