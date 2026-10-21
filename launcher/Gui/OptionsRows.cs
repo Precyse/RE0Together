@@ -1,8 +1,10 @@
 namespace CoopLauncher.Gui;
 
 /// <summary>The selected game's options as a two-column grid of label and dropdown, filled row by row; a change is saved
-/// at once and reaches the adapter ini when the session launches the game. The grid is rebuilt only when the game or its
-/// folder changes, so an open list is never disturbed by a status refresh.</summary>
+/// at once and reaches the adapter ini when the session launches the game. One grid shows the session options and another
+/// (in the settings view) the options marked for settings. A guest's grid shows the host's value of every host option. The
+/// grid is rebuilt only when the game, its folder or the shown host values change, so an open list is never disturbed by a
+/// status refresh.</summary>
 internal sealed class OptionsRows : Panel
 {
     private const int Columns = 2;
@@ -11,34 +13,39 @@ internal sealed class OptionsRows : Panel
     private static readonly int ColumnGap = Theme.Scale(24);
 
     private readonly List<FlatSelect> _selects = new();
+    private readonly bool _settingsOptions;
     private string? _shownFor;
     private int _labelWidth;
 
     public event Action? Changed;
 
-    public OptionsRows()
+    /// <summary>The grid of the session options, or (settingsOptions) of the options the settings view shows.</summary>
+    public OptionsRows(bool settingsOptions = false)
     {
+        _settingsOptions = settingsOptions;
         BackColor = Theme.Bg;
         Dock = DockStyle.Top;
         Height = 0;
     }
 
-    public bool HasOptions => _selects.Count > 0;
-
-    public void Show(GameProfile game, string? gameDir)
+    /// <summary>Shows the game's options. With host values (a session is open) each host option reads the host's value when
+    /// the game offers it.</summary>
+    public void Show(GameProfile game, string? gameDir, IReadOnlyDictionary<string, string>? hostValues = null)
     {
-        var key = game.Id + "|" + gameDir;
+        var options = (game.Options ?? []).Where(option => option.Settings == _settingsOptions).ToList();
+        var shown = options.Select(option => ShownValue(game, option, gameDir, hostValues)).ToList();
+        var key = $"{game.Id}|{gameDir}|{string.Join(',', shown)}";
         if (_shownFor == key) return;
         _shownFor = key;
         Controls.Clear();
         _selects.Clear();
-        var options = game.Options ?? [];
         _labelWidth = options.Select(option => TextRenderer.MeasureText(option.Label, Theme.Body).Width + LabelPad)
             .Append(MinLabelWidth).Max();
         var cells = new List<Control>();
-        foreach (var option in options)
+        for (var i = 0; i < options.Count; i++)
         {
-            var select = Build(game, option, gameDir);
+            var option = options[i];
+            var select = Build(game, option, gameDir, shown[i]);
             _selects.Add(select);
             cells.Add(Caption(option.Label));
             cells.Add(select);
@@ -74,12 +81,17 @@ internal sealed class OptionsRows : Panel
         BackColor = Theme.Bg, AutoEllipsis = true,
     };
 
-    private FlatSelect Build(GameProfile game, GameOption option, string? gameDir)
+    /// <summary>The value the option reads: the host's when a host value is given and offered, else the player's own.</summary>
+    private static string ShownValue(GameProfile game, GameOption option, string? gameDir, IReadOnlyDictionary<string, string>? hostValues) =>
+        option.Host && hostValues != null && hostValues.TryGetValue(option.Key, out var host) && option.Values.Any(v => v.Value == host)
+            ? host
+            : GameOptions.Current(game, gameDir)[option.Key];
+
+    private FlatSelect Build(GameProfile game, GameOption option, string? gameDir, string current)
     {
         var select = new FlatSelect();
         var values = option.AvailableIn(gameDir).ToList();
         foreach (var value in values) select.Items.Add(value.Label);
-        var current = GameOptions.Current(game, gameDir)[option.Key];
         select.SelectedIndex = Math.Max(0, values.FindIndex(v => v.Value == current));
         select.SelectedIndexChanged += (_, _) =>
         {

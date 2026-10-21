@@ -57,6 +57,9 @@ public static class AdapterSettings
             .ToList();
     }
 
+    /// <summary>The folder that holds the archives of a session folder: beside it.</summary>
+    public static string ArchiveRoot(string sessionDir) => Path.Combine(Path.GetDirectoryName(sessionDir)!, ArchiveFolder);
+
     /// <summary>True when the session's saves are safely in the archive (copied, or already there unchanged), or there were none.</summary>
     private static bool ArchiveSession(string sessionDir)
     {
@@ -68,7 +71,7 @@ public static class AdapterSettings
                 .Where(relative => !relative.StartsWith(SaveReceiver.StagingFolder + Path.DirectorySeparatorChar) && !relative.EndsWith(SaveReceiver.TempSuffix))
                 .ToList();
             if (files.Count == 0) return true;
-            var archiveRoot = Path.Combine(Path.GetDirectoryName(sessionDir)!, ArchiveFolder);
+            var archiveRoot = ArchiveRoot(sessionDir);
             var newest = Directory.Exists(archiveRoot) ? Directory.GetDirectories(archiveRoot).OrderDescending(StringComparer.Ordinal).FirstOrDefault() : null;
             if (newest != null && files.All(relative => SameContent(Path.Combine(sessionDir, relative), Path.Combine(newest, relative))))
             {

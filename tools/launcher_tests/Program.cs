@@ -54,6 +54,8 @@ public static class Program
         SteamLibraryTests.Run();
         ReportBundleTests.Run();
         LoopbackBridgeTests.Run();
+        GameStatusTests.Run();
+        SessionCardsTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }

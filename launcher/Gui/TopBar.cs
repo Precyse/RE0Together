@@ -1,30 +1,36 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>The window's top strip and title bar: the brand on the left; the build, the state lamp, the state, Settings,
-/// Update and the window buttons on the right. Its empty surface is left to the window, which drags by it.</summary>
+/// <summary>The window's top strip and title bar: the brand on the left; the build, the state lamp and words, the update
+/// button (only while a newer build is offered), Settings and the window buttons on the right. The state words swap and
+/// their numbers roll; the lamp changes at once. Its empty surface is left to the window, which drags by it.</summary>
 internal sealed class TopBar : Control
 {
     private const string BrandText = "CO-OP";
     private const string SettingsLabel = "Settings";
     private const string SettingsCloseLabel = "Back";
+    private const string StateChannel = "state";
+    private const string WidestStateWords = "SAVE TRANSFER TIMED OUT";
 
     private static readonly int BarHeight = Theme.Scale(44);
     private static readonly int PadX = Theme.Scale(16);
-    private static readonly int UpdateButtonWidth = Theme.Scale(76);
+    private static readonly int UpdateButtonWidth = Theme.Scale(112);
     private static readonly int SettingsButtonWidth = Theme.Scale(84);
     private static readonly int ButtonHeight = Theme.Scale(26);
+    private static readonly int StateSlotWidth = Draw.Width(WidestStateWords, Theme.Label);
 
-    private string _build = string.Empty;
-    private string _state = string.Empty;
-    private string? _available;
-    private Color _lamp = Theme.Dim;
+    private readonly StatusLine _state;
     private readonly WindowButtons _windowButtons = new();
+    private string _build = string.Empty;
+    private Color _lamp = Theme.Dim;
+    private bool _updateShown;
 
     public TopBar()
     {
         Dock = DockStyle.Top;
         Height = BarHeight;
         BackColor = Theme.Bg2;
+        _state = new StatusLine(this, StateChannel);
+        UpdateButton.Visible = false;
         Controls.Add(UpdateButton);
         Controls.Add(SettingsButton);
         Controls.Add(_windowButtons);
@@ -32,8 +38,8 @@ internal sealed class TopBar : Control
                  | ControlStyles.ResizeRedraw, true);
     }
 
-    /// <summary>Checks the release for a newer build; enabled only while no session is open.</summary>
-    public FlatButton UpdateButton { get; } = new("Update", ButtonKind.Ghost) { Width = UpdateButtonWidth, Height = ButtonHeight };
+    /// <summary>The one update button: Update to N, Downloading, Restart. Hidden while no newer build is offered.</summary>
+    public FlatButton UpdateButton { get; } = new(string.Empty, ButtonKind.Ghost) { Width = UpdateButtonWidth, Height = ButtonHeight };
 
     /// <summary>Opens and closes the settings view.</summary>
     public FlatButton SettingsButton { get; } = new(SettingsLabel, ButtonKind.Ghost) { Width = SettingsButtonWidth, Height = ButtonHeight };
@@ -46,33 +52,41 @@ internal sealed class TopBar : Control
         SettingsButton.Invalidate();
     }
 
+    /// <summary>Shows the update button with this label, or hides it (null).</summary>
+    public void ShowUpdate(string? label, bool enabled)
+    {
+        var shown = label != null;
+        if (_updateShown != shown)
+        {
+            _updateShown = shown;
+            UpdateButton.Visible = shown;
+            PerformLayout();
+            Invalidate();
+        }
+        UpdateButton.Text = label ?? string.Empty;
+        UpdateButton.Enabled = enabled;
+    }
+
+    public void Show(string build, string state, Color lamp)
+    {
+        _build = build;
+        _lamp = lamp;
+        _state.Set(state.ToUpperInvariant());
+        Invalidate();
+    }
+
     protected override void OnLayout(LayoutEventArgs e)
     {
         base.OnLayout(e);
         var top = (Height - ButtonHeight) / 2;
-        UpdateButton.Location = new Point(_windowButtons.Left - Theme.Gap - UpdateButtonWidth, top);
-        SettingsButton.Location = new Point(UpdateButton.Left - Theme.Gap - SettingsButtonWidth, top);
+        SettingsButton.Location = new Point(_windowButtons.Left - Theme.Gap - SettingsButtonWidth, top);
+        UpdateButton.Location = new Point(SettingsButton.Left - Theme.Gap - UpdateButtonWidth, top);
     }
 
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
         if (m.Msg == NcHitTest.WindowMessage) m.Result = NcHitTest.Transparent;
-    }
-
-    /// <summary>A newer launcher build on GitHub, shown beside the build; null clears it.</summary>
-    public void ShowAvailable(string? text)
-    {
-        _available = text;
-        Invalidate();
-    }
-
-    public void Show(string build, string state, Color lamp)
-    {
-        _build = build;
-        _state = state.ToUpperInvariant();
-        _lamp = lamp;
-        Invalidate();
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -82,19 +96,13 @@ internal sealed class TopBar : Control
         var middle = Height / 2;
         Draw.Text(g, BrandText, Theme.Brand, Theme.Text, new Rectangle(PadX, 0, Width / 2, Height));
 
-        var stateWidth = Draw.Width(_state, Theme.Label);
-        var stateX = SettingsButton.Left - Theme.Gap * 2 - stateWidth;
-        Draw.Text(g, _state, Theme.Label, _lamp == Theme.Dim ? Theme.Muted : Theme.Text, new Rectangle(stateX, 0, stateWidth, Height));
-        var lampX = stateX - Theme.Gap - Theme.LampSize;
+        var left = _updateShown ? UpdateButton.Left : SettingsButton.Left;
+        var slot = new Rectangle(left - Theme.Gap * 2 - StateSlotWidth, 0, StateSlotWidth, Height);
+        _state.Paint(g, slot, Theme.Label, _lamp == Theme.Dim ? Theme.Muted : Theme.Text, BackColor, alignRight: true);
+        var lampX = slot.Right - Draw.Width(_state.Text, Theme.Label) - Theme.Gap - Theme.LampSize;
         Draw.Lamp(g, _lamp, lampX, middle);
         var buildWidth = Draw.Width(_build, Theme.Mono);
-        var buildX = lampX - Theme.Gap * 2 - buildWidth;
-        Draw.Text(g, _build, Theme.Mono, Theme.Dim, new Rectangle(buildX, 0, buildWidth, Height));
-        if (_available is { } available)
-        {
-            var availableWidth = Draw.Width(available, Theme.Mono);
-            Draw.Text(g, available, Theme.Mono, Theme.Text, new Rectangle(buildX - Theme.Gap * 2 - availableWidth, 0, availableWidth, Height));
-        }
+        Draw.Text(g, _build, Theme.Mono, Theme.Dim, new Rectangle(lampX - Theme.Gap * 2 - buildWidth, 0, buildWidth, Height));
 
         Draw.HorizontalLine(g, 0, Width, Height - 1);
     }
