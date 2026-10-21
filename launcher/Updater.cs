@@ -42,9 +42,9 @@ public static class Updater
             Log.Info("Updates install only from the packaged launcher");
             return false;
         }
-        Recover(root);
         try
         {
+            Recover(root);
             if (ReleaseFeed.Read(force: true) is not { Build: { } build, ZipUrl: { } zipUrl })
             {
                 Log.Info("No release to update from");
