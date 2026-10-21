@@ -88,10 +88,12 @@ class Expect:
 
 @dataclass(frozen=True)
 class Check:
+    """`hub_zero` names hub counters that must be 0; `hub_probes` are functions of the context that return a Result."""
     name: str
     expects: tuple
     includes: tuple = ()
     hub_zero: tuple = ()
+    hub_probes: tuple = ()
     needs_target: bool = False
 
 
@@ -250,6 +252,7 @@ def run_check(ctx, check, checks, target=None, clock=time.monotonic, sleep=time.
     counters = ctx.counters()
     for name in check.hub_zero:
         out.append(Result(counters.get(name, 0) == 0, None, f"hub {name}", f"{counters.get(name, 0)} since the last mark"))
+    out.extend(probe(ctx) for probe in check.hub_probes)
     for included in check.includes:
         out.extend(run_check(ctx, checks[included], checks, target, clock, sleep))
     return out

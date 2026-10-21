@@ -9,11 +9,13 @@ from pathlib import Path
 import echo_checks as ck
 import wire
 from echo_check_table import CHECKS
+from echo_link import LinkReport
 from echo_session import steam_id
 
 SOURCE_DIR = Path(__file__).resolve().parents[2] / "adapters" / "sr2" / "src"
 TIMESTAMP = "2026-10-20 12:00:00.000 "
-NAMES = ("link", "joined", "probe-a", "tunnel-clean", "pause", "kick", "leave", "hud", "waypoint", "refusal", "admission")
+NAMES = ("link", "joined", "probe-a", "tunnel-clean", "pause", "kick", "leave", "hud", "waypoint", "refusal", "admission",
+         "link-active")
 PORT = 27962
 COUNT = 3
 
@@ -96,6 +98,17 @@ class LogTailTest(unittest.TestCase):
         self.assertEqual(tail.lines(), ["run 2"])
 
 
+def perfect_link_report():
+    return LinkReport("none", True, 0, 0.0, 0, 0, 0, 0, 0)
+
+
+def link_report(**fields):
+    """A report of the bad_wifi profile (expects 4.1% loss) with the given counters."""
+    values = dict(profile="bad_wifi", perfect=False, seed=7, expected_loss=0.041, offered=1000, lost=40, cut=0, duplicated=5,
+                  reordered=20) | fields
+    return LinkReport(**values)
+
+
 class FakeTail:
     def __init__(self, lines=()):
         self.log = list(lines)
@@ -113,6 +126,7 @@ class FakeContext:
         self.logs = {k: FakeTail() for k in self.instances}
         self.statuses = {k: FakeTail() for k in self.instances}
         self.drops = {}
+        self.link = perfect_link_report()
 
     def tail(self, instance, source):
         return (self.statuses if source == ck.SOURCE_STATUS else self.logs)[instance]
@@ -131,6 +145,9 @@ class FakeContext:
 
     def counters(self):
         return self.drops
+
+    def link_report(self):
+        return self.link
 
     def say(self, instance, text):
         self.logs[instance].log.append(TIMESTAMP + text)
@@ -315,6 +332,30 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([r.label for r in failures(run(ctx, "admission"))], ["second guest admitted"])
         ctx.say(1, "trace: admission: member 0x302 is admitted now")
         self.assertEqual(failures(run(ctx, "admission")), [])
+
+    def test_link_active_passes_only_when_the_profile_did_its_work(self):
+        ctx = self.ctx
+        ctx.link = link_report()
+        results = run(ctx, "link-active")
+        self.assertEqual([(r.passed, r.instance) for r in results], [(True, None)])
+        self.assertIn("40 lost (4.0%", results[0].detail)
+        self.assertIn("bad_wifi seed 7", results[0].detail)
+
+    def test_link_active_fails_for_a_perfect_link_no_traffic_too_few_datagrams_or_no_loss(self):
+        ctx = self.ctx
+        for report, words in ((perfect_link_report(), "no fault model"),
+                              (link_report(offered=0, lost=0, duplicated=0, reordered=0), "no datagram"),
+                              (link_report(offered=50, lost=2), "too few datagrams"),
+                              (link_report(lost=0), "no loss in 1000"),
+                              (link_report(offered=100, cut=100, lost=0), "no datagram")):
+            ctx.link = report
+            failed = failures(run(ctx, "link-active"))
+            self.assertEqual(len(failed), 1, words)
+            self.assertIn(words, failed[0].detail)
+
+    def test_link_active_for_a_delay_only_profile_needs_traffic_not_loss(self):
+        self.ctx.link = link_report(profile="lan", expected_loss=0.0, offered=30, lost=0, duplicated=0, reordered=0)
+        self.assertEqual(failures(run(self.ctx, "link-active")), [])
 
     def test_results_print_pass_or_fail_with_the_instance(self):
         ok = ck.Result(True, 1, "own address", "the line")

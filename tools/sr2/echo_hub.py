@@ -4,24 +4,35 @@ connecting process runs from, answers HELLO with the snapshot of that instance's
 launcher's Session) and relays GAME_DATAGRAM between them. Join and status files are the launcher's (echo_files.py), the
 assertions are echo_checks.py.
 
-Usage: python tools/sr2/echo_hub.py [--count 4] [--launch] [--delay-ms 0] [--max-players 4] [--game-dir DIR] [--clones-root DIR]
-Console: leave k | back k | drop k | restore k | rejoin k | status | mark | check <name> [k] | quit"""
+The link between the instances is a seeded fault model (echo_link.py, echo_impair.py, profiles in echo_profiles.json): delay,
+jitter, burst loss, reordering, duplicates, a bandwidth cap and one-way cuts, chosen with --link <profile> --seed N. The seed is
+printed at start and by `status`, and every check prints the loss the link actually did, so a run can prove its profile.
+
+Usage: python tools/sr2/echo_hub.py [--count 4] [--launch] [--link none] [--seed N] [--delay-ms MS] [--max-players 4]
+                                    [--game-dir DIR] [--clones-root DIR]
+Console: leave k | back k | drop k | restore k | rejoin k | cut a b | uncut a b | link [profile] | status | mark |
+         check <name> [k] | quit"""
 import argparse
+import heapq
+import itertools
 import os
+import random
 import socket
 import struct
 import sys
 import threading
 import time
-from collections import Counter, deque
+from collections import Counter
 from pathlib import Path
 
 import echo_checks
 import echo_clones
 import echo_files
 import echo_identity
+import echo_impair
 import echo_launch
 import wire
+from echo_link import LinkModel
 from echo_check_table import CHECKS
 from echo_session import DROP_REASONS, Views, steam_id
 
@@ -32,11 +43,14 @@ DEFAULT_MAX_PLAYERS = 4
 SEND_TIMEOUT_MS = 2000
 PUMP_S = 0.02
 HEARTBEAT_S = 1.0
+MS_PER_S = 1000.0
+MAX_SEED = 1 << 32
 IDENTIFY_PID = "pid"
 IDENTIFY_ORDER = "order"
 PROMPT = "echo> "
 FRAME_NAMES = {wire.MSG_HELLO: "HELLO", wire.MSG_HEARTBEAT: "HEARTBEAT", wire.MSG_GAME_DATAGRAM: "GAME_DATAGRAM"}
 INSTANCE_COMMANDS = ("leave", "back", "drop", "restore", "rejoin")
+PAIR_COMMANDS = ("cut", "uncut")
 
 
 class HubError(Exception):
@@ -65,16 +79,17 @@ class Hub:
     """The listener, the links and the lobby. `folders` maps each instance (1 = the host) to its game folder. One lock guards
     the lobby, the links and the counters; there is one reader thread per link, one pump thread and the console."""
 
-    def __init__(self, folders, max_players=DEFAULT_MAX_PLAYERS, delay_ms=0, port=ADAPTER_PORT, identify=IDENTIFY_PID, out=print):
+    def __init__(self, folders, max_players=DEFAULT_MAX_PLAYERS, link=None, port=ADAPTER_PORT, identify=IDENTIFY_PID, out=print):
         self.folders = folders
         self.instances = sorted(folders)
-        self.delay_s = delay_ms / 1000
+        self.link = link or LinkModel.named(echo_impair.PERFECT_PROFILE, 0)
         self.requested_port = port
         self.out = out
         self.views = Views(len(folders), max_players)
         self.lock = threading.RLock()
         self.links = {}
-        self.delayed = {k: deque() for k in self.instances}
+        self.pending = []
+        self.pending_order = itertools.count()
         self.frame_counts = Counter()
         self.join_files = echo_files.JoinFiles(folders)
         self.statuses = {k: echo_files.StatusHistory() for k in self.instances}
@@ -198,23 +213,26 @@ class Hub:
                 self.relay(link.instance, slot, payload)
 
     def relay(self, sender, dst_slot, payload):
+        """Every copy the session rules deliver goes through the link: it is sent now, later (a delay, a duplicate) or never."""
         route = self.views.route(sender, dst_slot)
+        now_ms = time.monotonic() * MS_PER_S
         for receiver, slot in route.deliveries:
             frame = wire.encode(wire.MSG_GAME_DATAGRAM, 0, slot, payload)
-            if self.delay_s:
-                self.delayed[receiver].append((time.monotonic() + self.delay_s, frame))
-            else:
-                self.send(receiver, frame)
+            for delay_ms in self.link.decide(sender, receiver, now_ms, len(payload)).delays_ms:
+                if delay_ms > 0:
+                    heapq.heappush(self.pending, (now_ms + delay_ms, next(self.pending_order), receiver, frame))
+                else:
+                    self.send(receiver, frame)
 
     def pump(self):
-        """Delayed frames, the heartbeat of every link and the status files."""
+        """Frames the link delayed, the heartbeat of every link and the status files."""
         next_heartbeat = next_status = 0.0
         while not self.stopped.wait(PUMP_S):
             now = time.monotonic()
             with self.lock:
-                for receiver, queue in self.delayed.items():
-                    while queue and queue[0][0] <= now:
-                        self.send(receiver, queue.popleft()[1])
+                while self.pending and self.pending[0][0] <= now * MS_PER_S:
+                    _due, _order, receiver, frame = heapq.heappop(self.pending)
+                    self.send(receiver, frame)
                 if now >= next_heartbeat:
                     next_heartbeat = now + HEARTBEAT_S
                     for instance in list(self.links):
@@ -238,6 +256,10 @@ class Hub:
         try:
             if name in INSTANCE_COMMANDS:
                 return self.instance_command(name, self.instance_arg(args))
+            if name in PAIR_COMMANDS:
+                return self.pair_command(name, args)
+            if name == "link":
+                return self.switch_link(args)
             if name == "status":
                 return self.status()
             if name == "mark":
@@ -247,9 +269,9 @@ class Hub:
             if name == "quit":
                 self.stop()
                 return "join files removed, games left running"
-        except (HubError, ValueError) as error:
+        except (HubError, KeyError, ValueError) as error:
             return f"error: {error}"
-        return f"unknown command {name!r}; commands: {', '.join(INSTANCE_COMMANDS)}, status, mark, check, quit"
+        return f"unknown command {name!r}; commands: {', '.join(INSTANCE_COMMANDS + PAIR_COMMANDS)}, link, status, mark, check, quit"
 
     def instance_arg(self, args):
         if len(args) != 1 or not args[0].isdigit() or int(args[0]) not in self.instances:
@@ -272,17 +294,36 @@ class Hub:
                 self.join_files.write(k, self.name_of(k))
         return f"{name} {k} done"
 
+    def pair_command(self, name, args):
+        """cut a b stops every datagram from instance a to instance b (one way); uncut a b lets them through again."""
+        if len(args) != 2:
+            raise HubError(f"{name} <from> <to>")
+        sender, receiver = self.instance_arg(args[:1]), self.instance_arg(args[1:])
+        with self.lock:
+            (self.link.cut if name == "cut" else self.link.uncut)(sender, receiver)
+        return f"{name} {sender} -> {receiver} done"
+
+    def switch_link(self, args):
+        """link <profile> changes the profile of every direction from now on; link alone names the current one."""
+        if len(args) > 1:
+            raise HubError("link [profile]")
+        with self.lock:
+            if args:
+                self.link.switch(args[0], echo_impair.profile_params(args[0]))
+            return f"link {self.link.profile} seed {self.link.seed}"
+
     def mark(self):
         with self.lock:
             for k in self.instances:
                 self.tails[k].mark()
                 self.statuses[k].mark()
             self.views.clear_counters()
+            self.link.clear_counters()
         return "marked"
 
     def status(self):
         with self.lock:
-            rows = [f"hub on {LISTEN_HOST}:{self.port}, delay {self.delay_s * 1000:.0f} ms"]
+            rows = [f"hub on {LISTEN_HOST}:{self.port}, link {self.link.profile} seed {self.link.seed}"]
             for k in self.instances:
                 view, link, traffic = self.views.views[k], self.links.get(k), self.views.traffic[k]
                 slot = self.views.slot_of(k)
@@ -293,6 +334,8 @@ class Hub:
             rows.append("drops " + " ".join(f"{reason}={self.views.drops[reason]}" for reason in DROP_REASONS))
             others = sorted((k, name, n) for (k, name), n in self.frame_counts.items() if name not in FRAME_NAMES.values())
             rows += [f"frames {echo_checks.label_of(k)} {name} x{n}" for k, name, n in others]
+            rows.append(self.link.report().describe())
+            rows += [f"cut {a} -> {b}" for a, b in sorted(self.link.cuts)]
         return "\n".join(rows)
 
     def check(self, args):
@@ -301,7 +344,8 @@ class Hub:
         target = self.instance_arg(args[1:2]) if len(args) > 1 else None
         results = echo_checks.run_check(self, CHECKS[args[0]], CHECKS, target)
         failed = sum(not r.passed for r in results)
-        return "\n".join([echo_checks.format_result(r) for r in results] + [f"{len(results) - failed} passed, {failed} failed"])
+        return "\n".join([echo_checks.format_result(r) for r in results] + [self.link_report().describe(),
+                                                                          f"{len(results) - failed} passed, {failed} failed"])
 
     # The context the checks read (echo_checks.run_check).
     def tail(self, instance, source):
@@ -325,6 +369,10 @@ class Hub:
     def counters(self):
         with self.lock:
             return dict(self.views.drops)
+
+    def link_report(self):
+        with self.lock:
+            return self.link.report()
 
 
 def console(hub):
@@ -350,7 +398,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--count", type=int, default=DEFAULT_COUNT, help="instances, the host included (1 to 4)")
     parser.add_argument("--max-players", type=int, default=DEFAULT_MAX_PLAYERS)
-    parser.add_argument("--delay-ms", type=int, default=0)
+    parser.add_argument("--link", default=echo_impair.PERFECT_PROFILE, help="a profile of echo_profiles.json")
+    parser.add_argument("--seed", type=int, help="the random seed of the link faults (default: a new one, printed)")
+    parser.add_argument("--delay-ms", type=float, metavar="MS", help="replaces the latency of the profile")
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--game-dir", default=echo_clones.DEFAULT_GAME_DIR)
     parser.add_argument("--clones-root", default=echo_clones.DEFAULT_ROOT)
@@ -362,13 +412,15 @@ def main():
         _clones, errors = echo_clones.sync(args.game_dir, args.clones_root, args.count, args.ini_override)
         for error in errors:
             print(f"warning: {error}")
-        hub = Hub(instance_folders(args.game_dir, args.clones_root, args.count), args.max_players, args.delay_ms, args.port,
-                  args.identify)
+        seed = random.SystemRandom().randrange(1, MAX_SEED) if args.seed is None else args.seed
+        overrides = {} if args.delay_ms is None else {"latency_ms": args.delay_ms}
+        link = LinkModel.named(args.link, seed, **overrides)
+        hub = Hub(instance_folders(args.game_dir, args.clones_root, args.count), args.max_players, link, args.port, args.identify)
         hub.start()
-    except (echo_clones.CloneError, HubError, ValueError) as error:
+    except (echo_clones.CloneError, HubError, KeyError, ValueError) as error:
         print(f"FAIL: {error}")
         return 1
-    print(f"hub on {LISTEN_HOST}:{hub.port} for {args.count} instances")
+    print(f"hub on {LISTEN_HOST}:{hub.port} for {args.count} instances, link {link.profile}, seed {link.seed}")
     if args.launch:
         echo_launch.launch_in_background(hub.folders, hub.hello_events, print)
     console(hub)

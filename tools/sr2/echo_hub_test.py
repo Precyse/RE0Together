@@ -14,9 +14,11 @@ from pathlib import Path
 
 import echo_files
 import echo_hub
+import echo_impair
 import echo_launch
 import echo_session as es
 import wire
+from echo_link import LinkModel
 from echo_identity import normal_path
 from tunnel_launcher_test import Adapter, wait_for
 
@@ -75,6 +77,7 @@ class HubTest(unittest.TestCase):
         for k, adapter in self.adapters.items():
             self.assertEqual(welcomes(adapter), [(k - 1, 0, 4, 1, es.steam_id(k))])
             others = [(other - 1, es.steam_id(other)) for other in range(1, COUNT + 1) if other != k]
+            self.assertTrue(wait_for(lambda: len(peer_ups(adapter)) == len(others), WAIT_S))
             self.assertEqual(peer_ups(adapter), others)
 
     def test_a_host_broadcast_reaches_the_three_guests_with_slot_zero(self):
@@ -172,7 +175,7 @@ class HubTest(unittest.TestCase):
         self.assertEqual(self.hub.command(""), "")
 
     def test_a_delay_holds_frames_in_order(self):
-        self.hub.delay_s = 0.2
+        self.hub.link.switch("slow", echo_impair.Params(latency_ms=200))
         started = time.monotonic()
         self.adapters[1].send_datagram(2, 0x0A010203, b"first")
         self.adapters[1].send_datagram(2, 0x0A010203, b"second")
@@ -181,6 +184,65 @@ class HubTest(unittest.TestCase):
         with self.adapters[3].lock:
             order = [f[3][wire.DST.size:] for f in self.adapters[3].frames if f[0] == wire.MSG_GAME_DATAGRAM]
         self.assertEqual(order, [b"first", b"second"])
+
+
+    def test_a_blackout_profile_drops_every_datagram_and_the_report_counts_them(self):
+        self.hub.link.switch("blackout", echo_impair.Params(loss=1.0))
+        self.hub.command("mark")
+        for _ in range(3):
+            self.adapters[1].send_datagram(2, 0x0A010203, b"into the void")
+        self.settle()
+        self.assertIsNone(datagram_from(self.adapters[3], 0, b"into the void"))
+        report = self.hub.link_report()
+        self.assertEqual((report.offered, report.lost), (3, 3))
+        self.assertIn("3 offered, 3 lost (100.0%", self.hub.status().splitlines()[-1])
+
+    def test_a_duplicate_profile_delivers_every_datagram_twice(self):
+        self.hub.link.switch("twice", echo_impair.Params(duplicate=1.0, latency_ms=20))
+        self.adapters[1].send_datagram(2, 0x0A010203, b"echo")
+        self.assertTrue(wait_for(lambda: self.copies_at(3, b"echo") == 2, WAIT_S))
+        self.assertEqual(self.hub.link_report().duplicated, 1)
+
+    def copies_at(self, instance, data):
+        adapter = self.adapters[instance]
+        with adapter.lock:
+            return sum(1 for f in adapter.frames if f[0] == wire.MSG_GAME_DATAGRAM and f[3].endswith(data))
+
+    def test_a_one_way_cut_from_the_console(self):
+        self.assertIn("1 -> 3 done", self.hub.command("cut 1 3"))
+        self.adapters[1].send_datagram(2, 0x0A010203, b"cut off")
+        self.adapters[3].send_datagram(0, 0x0A010203, b"other way")
+        self.assertIsNotNone(self.adapters[1].wait(wire.MSG_GAME_DATAGRAM, lambda s, p: p.endswith(b"other way")))
+        self.settle()
+        self.assertIsNone(datagram_from(self.adapters[3], 0, b"cut off"))
+        self.assertEqual(self.hub.link_report().cut, 1)
+        self.assertIn("cut 1 -> 3", self.hub.status())
+        self.hub.command("uncut 1 3")
+        self.adapters[1].send_datagram(2, 0x0A010203, b"back again")
+        self.assertIsNotNone(self.adapters[3].wait(wire.MSG_GAME_DATAGRAM, lambda s, p: p.endswith(b"back again")))
+
+    def test_link_command_switches_and_names_the_profile_and_rejects_unknown_ones(self):
+        self.assertEqual(self.hub.command("link"), "link none seed 0")
+        self.assertEqual(self.hub.command("link bad_wifi"), "link bad_wifi seed 0")
+        self.assertIn("bad_wifi", self.hub.status().splitlines()[0])
+        self.assertIn("unknown profile", self.hub.command("link nowhere"))
+        self.assertIn("error", self.hub.command("cut 1"))
+        self.assertIn("error", self.hub.command("cut 1 9"))
+
+    def test_mark_starts_a_new_link_count(self):
+        self.adapters[1].send_datagram(wire.SLOT_ALL, wire.BROADCAST, b"counted")
+        self.assertTrue(wait_for(lambda: self.hub.link_report().offered == 3, WAIT_S))
+        self.hub.command("mark")
+        self.assertEqual(self.hub.link_report().offered, 0)
+
+
+class SeedTest(unittest.TestCase):
+    def test_one_seed_gives_one_sequence_of_verdicts_across_hubs(self):
+        def losses(seed):
+            link = LinkModel.named("hell", seed)
+            return [link.decide(1, 2, float(i), 100).dropped for i in range(500)]
+        self.assertEqual(losses(21), losses(21))
+        self.assertNotEqual(losses(21), losses(22))
 
 
 class RefusalTest(unittest.TestCase):

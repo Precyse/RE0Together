@@ -3,7 +3,7 @@ string verbatim next to the regex that finds its line. echo_checks_test.py fails
 adapters/sr2/src or a regex stops matching a line made from its format, so a drifted adapter fails a test, not a live run."""
 import re
 
-from echo_checks import (Check, EACH_MEMBER, EACH_REMOTE, Expect, LAST, NONE, ONCE, SOURCE_STATUS, WHO_ALL, WHO_GUESTS,
+from echo_checks import (Check, EACH_MEMBER, EACH_REMOTE, Expect, LAST, NONE, ONCE, Result, SOURCE_STATUS, WHO_ALL, WHO_GUESTS,
                          WHO_HOST, WHO_OTHERS, WHO_TARGET, remote_slots)
 
 LINK_WINDOW_S = 10.0
@@ -15,6 +15,8 @@ FIRST_GUEST_SLOT = 1
 HEX_BASE = 16
 CLEAN_TUNNEL_COUNTERS = ("no_peer", "not_virtual", "wrong_dst", "inbox_full", "oversize")
 HUB_ZERO = ("not_linked", "no_slot")
+MIN_EXPECTED_LOSSES = 5
+PERCENT = 100.0
 REMOTE_HUMAN_FORMAT = ("remote human 0x%X owner slot %u member %s flags 0x%02X downed %d hidden 0x%02X render 0x%X skin %u "
                        "type 0x%X record 0x%X%s")
 TUNNEL_COUNTERS_FORMAT = ("sent %llu received %llu dropped no_peer %llu not_virtual %llu wrong_dst %llu inbox_full %llu "
@@ -77,6 +79,23 @@ def hud_lists_remotes(ctx, instance, match, _lines, _slot):
 
 def players_differ(_ctx, _instance, match, _lines, _slot):
     return "refusal does not name different player counts" if match["theirs"] == match["ours"] else None
+
+
+def link_was_impaired(ctx):
+    """The hub's link ran a profile and did what it says since the last mark: a perfect link, no datagram, or too few datagrams to
+    expect a single loss are all FAIL (a profile that was never proven active is not a pass)."""
+    label = "link profile active"
+    report = ctx.link_report()
+    if report.perfect:
+        return Result(False, None, label, f"the link is {report.profile}, no fault model runs (--link <profile>)")
+    if report.impaired == 0:
+        return Result(False, None, label, f"no datagram was offered to the link since the last mark: {report.describe()}")
+    expected = report.expected_loss * report.impaired
+    if expected < MIN_EXPECTED_LOSSES and report.expected_loss > 0:
+        return Result(False, None, label, f"too few datagrams to prove a loss of {report.expected_loss * PERCENT:.1f}%: {report.describe()}")
+    if report.expected_loss > 0 and report.lost == 0:
+        return Result(False, None, label, f"no loss in {report.impaired} datagrams, about {expected:.0f} expected: {report.describe()}")
+    return Result(True, None, label, report.describe())
 
 
 def not_joined(_ctx, _instance, match, _lines, _slot):
@@ -199,5 +218,7 @@ ADMISSION = Check("admission", (
            format="trace: admission: member 0x%X is admitted now", after="second guest waits"),
 ))
 
+LINK_ACTIVE = Check("link-active", (), hub_probes=(link_was_impaired,))
+
 CHECKS = {check.name: check for check in
-          (LINK, JOINED, PROBE_A, TUNNEL_CLEAN, PAUSE, KICK, LEAVE, HUD, WAYPOINT, REFUSAL, ADMISSION)}
+          (LINK, JOINED, PROBE_A, TUNNEL_CLEAN, PAUSE, KICK, LEAVE, HUD, WAYPOINT, REFUSAL, ADMISSION, LINK_ACTIVE)}

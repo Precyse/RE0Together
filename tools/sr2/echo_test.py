@@ -1,9 +1,10 @@
-"""Runs every test of the echo rig without the game: the session rules, the hub end to end with stand-in adapters, the clone
-folders on a temporary tree and the assertion layer. Usage: python tools/sr2/echo_test.py"""
+"""Runs every test of the echo rig without the game: the session rules, the link fault model, the hub end to end with stand-in
+adapters, the clone folders on a temporary tree, the assertion layer and the scorer's known-bad-log self-tests.
+Usage: python tools/sr2/echo_test.py"""
 import sys
 import unittest
 
-MODULES = ("echo_session_test", "echo_hub_test", "echo_clones_test", "echo_checks_test")
+MODULES = ("echo_session_test", "echo_link_test", "echo_hub_test", "echo_clones_test", "echo_checks_test", "echo_scorer_test")
 
 
 def main():

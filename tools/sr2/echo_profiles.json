@@ -1,0 +1,23 @@
+{
+  "_notice": "Ported from coop-anything tools/chaos/profiles.json. Copyright (c) 2026 cranebeaker and contributors, MIT license.",
+  "_comment": "Named link profiles of the echo hub (echo_impair.py). Delays are one way, per direction. loss is the chance in the good state; burst_enter/burst_exit move between the good and the bad state per datagram, burst_loss is the chance in the bad state. bandwidth_bps 0 = unlimited; buffer_ms is the queue depth before a tail drop. Seeds are not part of a profile: the hub takes --seed N.",
+  "none": {},
+  "lan": { "latency_ms": 0.5, "jitter_ms": 0.2 },
+  "good_wifi": { "latency_ms": 12, "jitter_ms": 4, "loss": 0.005 },
+  "bad_wifi": {
+    "latency_ms": 35, "jitter_ms": 25, "loss": 0.02,
+    "burst_enter": 0.01, "burst_exit": 0.25, "burst_loss": 0.6,
+    "reorder": 0.02, "duplicate": 0.005
+  },
+  "mobile_tether": {
+    "latency_ms": 70, "jitter_ms": 40, "loss": 0.01,
+    "burst_enter": 0.01, "burst_exit": 0.2, "burst_loss": 0.5,
+    "reorder": 0.01, "bandwidth_bps": 2000000, "buffer_ms": 300
+  },
+  "transatlantic": { "latency_ms": 90, "jitter_ms": 8, "loss": 0.003 },
+  "hell": {
+    "latency_ms": 200, "jitter_ms": 150, "loss": 0.08,
+    "burst_enter": 0.03, "burst_exit": 0.1, "burst_loss": 0.9,
+    "reorder": 0.1, "duplicate": 0.05, "bandwidth_bps": 512000, "buffer_ms": 500
+  }
+}
