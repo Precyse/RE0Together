@@ -5,7 +5,7 @@ namespace CoopLauncher;
 public static class AdapterSettings
 {
     private const string CoopKey = "coop";
-    private const string ArchiveFolder = "archive";  // next to the session folder
+    public const string ArchiveFolder = "archive";  // next to the session folder
     private const string ArchiveStampFormat = "yyyyMMdd-HHmmss";
     private const string TempSuffix = ".part";
     private const int KeptArchives = 5;

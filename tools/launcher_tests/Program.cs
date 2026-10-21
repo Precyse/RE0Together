@@ -27,6 +27,7 @@ public static class Program
         FramingTests.Run();
         InstanceGuardTests.Run();
         UpdaterTests.Run();
+        ModInstallerTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
