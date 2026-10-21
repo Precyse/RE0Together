@@ -24,6 +24,17 @@ public static class Program
         PeerBudgetTests.Run();
         FreshQueueTests.Run();
         GameOptionsTests.Run();
+        LobbyCodeTests.Run();
+        SessionProgressTests.Run();
+        RefusalTests.Run();
+        FriendLobbiesTests.Run();
+        RetryScheduleTests.Run();
+        PeerStatsTests.Run();
+        StatusTextTests.Run();
+        GameWatchTests.Run();
+        CliOptionsTests.Run();
+        LogRotationTests.Run();
+        GameProfileTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }

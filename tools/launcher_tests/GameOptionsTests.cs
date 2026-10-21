@@ -28,6 +28,32 @@ public static class GameOptionsTests
         GuestTakesHostOptions();
         GuestKeepsItsOwnOtherOptions();
         UnofferedOrMissingValuesAreIgnored();
+        DecodeKeepsTheLastDuplicate();
+        SeatsFollowTheHostsChoice();
+    }
+
+    private static void DecodeKeepsTheLastDuplicate()
+    {
+        var values = GameOptions.Decode("a=1;b=2;a=3;broken;c=");
+        Check.That(values["a"] == "3" && values["b"] == "2" && values["c"] == "" && values.Count == 3, "a duplicate key keeps its last value, a pair without = is skipped");
+        Check.That(GameOptions.Decode(null).Count == 0, "no text: no values");
+    }
+
+    private static void SeatsFollowTheHostsChoice()
+    {
+        var withSeats = Profile with
+        {
+            MaxPlayers = 4,
+            Options = [.. Profile.Options!, new GameOption(GameOptions.SeatsKey, "Players", [new OptionValue("4", "4"), new OptionValue("3", "3"), new OptionValue("2", "2")], Host: true)],
+        };
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "3" }) == 3, "the host's choice sets the seats");
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "1" }) == 1, "down to one");
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string>()) == 4, "no choice: the profile's maximum");
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "5" }) == 4, "more than the maximum: the maximum");
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "0" }) == 4, "zero: the maximum");
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "-2" }) == 4, "negative: the maximum");
+        Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "many" }) == 4, "not a number: the maximum");
+        Check.That(GameOptions.Seats(Profile, new Dictionary<string, string> { [GameOptions.SeatsKey] = "1" }) == Profile.MaxPlayers, "a profile that does not offer the option ignores it");
     }
 
     private static void HostKeepsItsOwn()

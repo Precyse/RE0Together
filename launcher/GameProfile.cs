@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -29,8 +30,9 @@ public sealed record BridgeCondition(string Key, string Value);
 public sealed record OptionValue(string Value, string Label, string? DlcAppId = null);
 
 /// <summary>A per-game choice shown as a dropdown and written to the adapter ini under Key; the first value is the
-/// default. A Host option is the host's alone (the guest takes what follows from it).</summary>
-public sealed record GameOption(string Key, string Label, List<OptionValue> Values, bool Host = false)
+/// default. A Host option is the host's alone (the guest takes what follows from it). A Settings option is shown in the
+/// settings view, not in the session's options grid.</summary>
+public sealed record GameOption(string Key, string Label, List<OptionValue> Values, bool Host = false, bool Settings = false)
 {
     private const string DlcFolder = "DLC";
 
@@ -49,6 +51,8 @@ public sealed record GameProfile(
     List<string>? FreshTypes = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly ConcurrentDictionary<string, GameProfile> Loaded = new();
+    private static readonly Lazy<IReadOnlyList<string>> Ids = new(ReadIds);
 
     public bool NativeSession => SessionKind == SessionKind.Native;
 
@@ -65,14 +69,34 @@ public sealed record GameProfile(
     public string? MissingRequirement(string gameDir) =>
         Requires?.FirstOrDefault(required => !File.Exists(Path.Combine(gameDir, required.File)))?.Name;
 
-    public static GameProfile Load(string id)
+    /// <summary>The profile of a game, read once: the window and the loop thread share the instance. A profile that cannot be
+    /// read (missing, empty, a bad fresh frame type) throws and is read again on the next call.</summary>
+    public static GameProfile Load(string id) => Loaded.GetOrAdd(id, Read);
+
+    public static IReadOnlyList<string> ListIds() => Ids.Value;
+
+    private static GameProfile Read(string id)
     {
         var path = Path.Combine(RepoPaths.GamesDir, id + ".json");
         if (!File.Exists(path)) throw new FileNotFoundException($"No game profile for '{id}'", path);
-        return JsonSerializer.Deserialize<GameProfile>(File.ReadAllText(path), JsonOptions)
-               ?? throw new InvalidDataException($"Empty profile {path}");
+        return Parse(id, File.ReadAllText(path));
     }
 
-    public static IReadOnlyList<string> ListIds() =>
+    /// <summary>A profile from its JSON; the fresh frame types must be valid (the queue would refuse them mid-session).</summary>
+    internal static GameProfile Parse(string id, string json)
+    {
+        var profile = JsonSerializer.Deserialize<GameProfile>(json, JsonOptions) ?? throw new InvalidDataException($"Empty profile {id}");
+        try
+        {
+            FreshQueue.ParseTypes(profile.FreshTypes);
+        }
+        catch (InvalidDataException e)
+        {
+            throw new InvalidDataException($"Profile {id}: {e.Message}", e);
+        }
+        return profile;
+    }
+
+    private static IReadOnlyList<string> ReadIds() =>
         Directory.GetFiles(RepoPaths.GamesDir, "*.json").Select(Path.GetFileNameWithoutExtension).ToList()!;
 }

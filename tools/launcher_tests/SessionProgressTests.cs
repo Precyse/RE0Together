@@ -1,0 +1,78 @@
+using CoopLauncher;
+
+namespace LauncherTests;
+
+/// <summary>SessionProgress.Step (the first rule that applies), StepCodec (what a member publishes) and SaveProgressMeter.</summary>
+public static class SessionProgressTests
+{
+    private static readonly StepInputs Started = new(
+        LobbyReady: true, SessionStarted: true, Refused: false, BuildCheckPending: false, SaveSyncPending: false, LaunchPending: false,
+        Bridged: false, BridgeReady: false, BridgeWasReady: false);
+
+    public static void Run()
+    {
+        Steps();
+        Codec();
+        Meter();
+    }
+
+    private static void Steps()
+    {
+        Is(Started with { Refused = true, LobbyReady = false }, SessionStep.Refused, "a refusal wins over everything");
+        Is(Started with { LobbyReady = false }, SessionStep.None, "no lobby yet: no step");
+        Is(Started with { SessionStarted = false }, SessionStep.Lobby, "a ready lobby before the session starts: in lobby");
+        Is(Started with { BuildCheckPending = true, SaveSyncPending = true, LaunchPending = true }, SessionStep.CheckingBuild, "build check comes first");
+        Is(Started with { SaveSyncPending = true, LaunchPending = true }, SessionStep.ReceivingSave, "then the save");
+        Is(Started with { LaunchPending = true, Bridged = true, BridgeReady = true }, SessionStep.StartingGame, "then the launch");
+        Is(Started with { Bridged = true, BridgeReady = true }, SessionStep.InGame, "bridged with the adapter linked: in game");
+        Is(Started with { Bridged = true, BridgeWasReady = true }, SessionStep.GameClosed, "the adapter link was there and is gone: game closed");
+        Is(Started with { Bridged = true }, SessionStep.StartingGame, "bridged and the adapter never linked: starting game");
+        Is(Started, SessionStep.InGame, "no bridge (the game's own transport): in game once started");
+    }
+
+    private static void Codec()
+    {
+        Check.That(StepCodec.Encode(SessionStep.ReceivingSave, 40, null) == "step=ReceivingSave;pct=40", "receiving save carries its percent");
+        Check.That(StepCodec.Encode(SessionStep.Refused, 0, RefusalKind.ModFiles) == "step=Refused;why=ModFiles", "refused carries its kind");
+        Check.That(StepCodec.Encode(SessionStep.InGame, 77, RefusalKind.ModFiles) == "step=InGame", "other steps carry neither");
+        Check.That(StepCodec.Encode(SessionStep.ReceivingSave, 140, null) == "step=ReceivingSave;pct=100", "the percent is capped");
+
+        foreach (var step in Enum.GetValues<SessionStep>())
+        {
+            var ok = StepCodec.TryDecode(StepCodec.Encode(step, 0, null), out var back, out _, out _);
+            Check.That(ok && back == step, $"{step} survives a round trip");
+        }
+        Check.That(StepCodec.TryDecode("step=ReceivingSave;pct=40", out var save, out var percent, out var none)
+                   && save == SessionStep.ReceivingSave && percent == 40 && none == null, "save step and percent decode");
+        Check.That(StepCodec.TryDecode("step=Refused;why=ModFiles", out var refused, out _, out var why)
+                   && refused == SessionStep.Refused && why == RefusalKind.ModFiles, "refused step and kind decode");
+        Check.That(!StepCodec.TryDecode("", out _, out _, out _), "empty text does not decode");
+        Check.That(!StepCodec.TryDecode("searching 3", out _, out _, out _), "foreign text does not decode");
+        Check.That(!StepCodec.TryDecode("step=Dancing", out _, out _, out _), "an unknown step does not decode");
+        Check.That(!StepCodec.TryDecode("step=5", out _, out _, out _), "a numeric step does not decode");
+        Check.That(StepCodec.TryDecode("step=Refused;why=Nonsense", out _, out _, out var unknownWhy) && unknownWhy == null, "an unknown kind is dropped, the step stays");
+    }
+
+    private static void Meter()
+    {
+        var meter = new SaveProgressMeter();
+        Check.That(meter.Percent == 0, "0 before the first FILE_BEGIN");
+        meter.OnChunk(1, 50);
+        Check.That(meter.Percent == 0, "a chunk of a file never announced counts for nothing");
+        meter.OnBegin(1, 100);
+        meter.OnBegin(2, 300);
+        meter.OnChunk(1, 100);
+        Check.That(meter.Percent == 25, "bytes over the sum of the announced sizes");
+        meter.OnChunk(2, 150);
+        Check.That(meter.Percent == 62, "a second file adds to both");
+        meter.OnChunk(2, 5000);
+        Check.That(meter.Percent == 100, "capped at 100");
+        meter.OnBegin(1, 100);
+        Check.That(meter.Percent == 100, "a file announced again restarts only itself");
+        meter.OnChunk(1, 100);
+        Check.That(meter.Percent == 100, "and completes again");
+    }
+
+    private static void Is(StepInputs inputs, SessionStep expected, string what) =>
+        Check.That(SessionProgress.Step(inputs) == expected, what);
+}

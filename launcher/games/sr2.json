@@ -10,8 +10,8 @@
   "options": [
     { "key": "transport", "label": "Network", "host": true, "values": [
       { "value": "steam", "label": "Steam" }, { "value": "native", "label": "Direct" } ] },
-    { "key": "max_players", "label": "Players", "values": [
+    { "key": "max_players", "label": "Players", "host": true, "values": [
       { "value": "4", "label": "4" }, { "value": "3", "label": "3" }, { "value": "2", "label": "2" } ] },
-    { "key": "trace", "label": "Trace", "values": [
+    { "key": "trace", "label": "Trace", "settings": true, "values": [
       { "value": "1", "label": "On" }, { "value": "0", "label": "Off" } ] }
   ] }
