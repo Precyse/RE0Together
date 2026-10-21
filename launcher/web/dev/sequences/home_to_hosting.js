@@ -1,7 +1,7 @@
 export default {
  "keys": [
   "home_idle_re0",
-  "hosting_stub"
+  "hosting_waiting"
  ],
  "ms": 400
 };
