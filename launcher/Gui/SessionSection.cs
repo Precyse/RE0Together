@@ -1,8 +1,8 @@
 namespace CoopLauncher.Gui;
 
 /// <summary>The Session section of the main pane. Idle: Host, the mod button when the mod needs something, the Lobby code
-/// field and Join, and under them the friends hosting. In a lobby: Relaunch when the game is gone, the lobby code, Copy,
-/// Invite and Leave. Under either, the notice row. The caller hands it a <see cref="SessionView"/>; it reports what the
+/// field and Join, and under them the friends hosting. In a lobby: Relaunch when the game is gone, the lobby code with a
+/// clipboard icon after it, and Leave. Under either, the notice row. The caller hands it a <see cref="SessionView"/>; it reports what the
 /// player clicked and, when its content changes height, asks to be refitted.</summary>
 internal sealed class SessionSection
 {
@@ -12,6 +12,7 @@ internal sealed class SessionSection
     private const string CodeLabel = "Lobby code";
     private const int CodeDigits = 20;
     private const char CodeSample = '0';
+    private const string ClipboardGlyph = "";
 
     private static readonly int CodeLabelWidth = Theme.Scale(80);
     private static readonly int CodeWidth = Draw.Width(new string(CodeSample, CodeDigits), Theme.Code);
@@ -30,8 +31,7 @@ internal sealed class SessionSection
     {
         AutoSize = false, Font = Theme.Code, ForeColor = Theme.Text, TextAlign = ContentAlignment.MiddleLeft, BackColor = Theme.Bg,
     };
-    private readonly FlatButton _copy = new("Copy", ButtonKind.Normal) { Width = Theme.ToolWidth };
-    private readonly FlatButton _invite = new("Invite", ButtonKind.Normal) { Width = Theme.ToolWidth };
+    private readonly FlatButton _copy = new(ClipboardGlyph, ButtonKind.Icon) { AccessibleName = "Copy" };
     private readonly FlatButton _leave = new("Leave", ButtonKind.Ghost) { Width = Theme.ToolWidth };
     private readonly NoticeRow _notice = new();
     private SessionView? _view;
@@ -48,7 +48,7 @@ internal sealed class SessionSection
         };
         _joinRow = ControlRow.Create(new Control[] { codeCaption, _codeField, _join }, CodeLabelWidth, -1, Theme.ToolWidth);
         _idleRow = ControlRow.Create(new[] { (Control)_host, _mod, _joinRow }, Theme.PrimaryWidth, Theme.ToolWidth, -1);
-        _lobbyRow.Controls.AddRange([_relaunch, _code, _copy, _invite, _leave]);
+        _lobbyRow.Controls.AddRange([_relaunch, _code, _copy, _leave]);
         _stack.Controls.AddRange([_idleRow, _friends, _lobbyRow, _notice]);
         for (var i = 0; i < _stack.Controls.Count; i++) _stack.Controls[i].TabIndex = i;
         Panel.Controls.Add(_stack);
@@ -65,7 +65,6 @@ internal sealed class SessionSection
         _friends.JoinClicked += lobbyId => FriendJoinClicked?.Invoke(lobbyId);
         _relaunch.Click += (_, _) => RelaunchClicked?.Invoke();
         _copy.Click += (_, _) => CopyClicked?.Invoke();
-        _invite.Click += (_, _) => InviteClicked?.Invoke();
         _leave.Click += (_, _) => LeaveClicked?.Invoke();
         _notice.ActionClicked += () => NoticeActionClicked?.Invoke();
         _notice.ReportClicked += () => NoticeReportClicked?.Invoke();
@@ -94,7 +93,6 @@ internal sealed class SessionSection
     public event Action<ulong>? FriendJoinClicked;
     public event Action? RelaunchClicked;
     public event Action? CopyClicked;
-    public event Action? InviteClicked;
     public event Action? LeaveClicked;
     public event Action? NoticeActionClicked;
     public event Action? NoticeReportClicked;
@@ -125,7 +123,6 @@ internal sealed class SessionSection
         _relaunch.Visible = view.Relaunch;
         _code.Text = view.Code;
         _copy.Enabled = view.CopyEnabled;
-        _invite.Enabled = view.InviteEnabled;
         _leave.Enabled = view.LeaveEnabled;
         _noticeSpace |= view.Notice != null;
         Arrange();
@@ -136,7 +133,7 @@ internal sealed class SessionSection
     private bool RelaunchWraps => _view is { Relaunch: true } && _stack.Width < RelaunchRowWidth;
 
     /// <summary>The width one lobby row needs with Relaunch in front of the code: below it Relaunch takes a row of its own.</summary>
-    private static int RelaunchRowWidth => Theme.PrimaryWidth + Theme.Gap + CodeWidth + 3 * (Theme.Gap + Theme.ToolWidth);
+    private static int RelaunchRowWidth => Theme.PrimaryWidth + Theme.Gap + CodeWidth + Theme.Gap + Theme.ControlHeight + Theme.Gap + Theme.ToolWidth;
 
     /// <summary>Stacks the visible rows from the top and sizes the stack to them.</summary>
     private void Arrange()
@@ -171,8 +168,8 @@ internal sealed class SessionSection
         _stack.Height = y;
     }
 
-    /// <summary>Relaunch first (on a row of its own when the row is too narrow), then the code at a fixed width; Copy, Invite
-    /// and Leave at the right edge.</summary>
+    /// <summary>Relaunch first (on a row of its own when the row is too narrow), then the code with the clipboard icon right
+    /// after its digits; Leave at the right edge.</summary>
     private void ArrangeLobbyRow()
     {
         var height = Theme.ControlHeight;
@@ -185,12 +182,8 @@ internal sealed class SessionSection
             else codeX = Theme.PrimaryWidth + Theme.Gap;
         }
         _code.SetBounds(codeX, codeY, CodeWidth, height);
-        var right = _lobbyRow.Width;
-        foreach (var button in new[] { _leave, _invite, _copy })
-        {
-            right -= Theme.ToolWidth;
-            button.SetBounds(right, codeY, Theme.ToolWidth, height);
-            right -= Theme.Gap;
-        }
+        var codeEnd = codeX + Math.Min(CodeWidth, Draw.Width(_code.Text, Theme.Code));
+        _copy.SetBounds(codeEnd + Theme.Gap, codeY, height, height);
+        _leave.SetBounds(_lobbyRow.Width - Theme.ToolWidth, codeY, Theme.ToolWidth, height);
     }
 }

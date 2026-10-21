@@ -82,17 +82,6 @@ public sealed partial class App
         EndSession();
     });
 
-    public void Invite() => _commands.Enqueue(() =>
-    {
-        if (_lobby is not { IsReady: true } lobby)
-        {
-            Log.Info("No lobby to invite to");
-            return;
-        }
-        _steam?.ShowInviteDialog(lobby.Id);
-        Log.Info("Invite dialog opened");
-    });
-
     /// <summary>Leaves the current lobby and joins the one the pending invite names.</summary>
     public void SwitchToInvite() => _commands.Enqueue(() =>
     {

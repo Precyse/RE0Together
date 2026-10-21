@@ -7,7 +7,7 @@ Pick a game and use the button next to Host: Install, Update or Repair (the game
 Host and Join need the mod installed and a game version the mod supports (Game build N unsupported). Both players need the same game version.
 If the game closes or crashes during a session, Relaunch starts it again and it catches up. If the game was started outside the launcher the status reads Game not linked: close it and start it from the launcher.
 
-Host: pick the game, click Host, then send the lobby code (or click Invite).
+Host: pick the game, click Host, then send the lobby code (the clipboard icon copies it).
 Join: paste the lobby code into Lobby code and click Join. Friends who are hosting appear under the Host row with their own Join.
 Both players need the same build; the launcher refuses a mismatch.
 The Update to N button (top bar) installs a newer package; when it reads Restart, click it, then Update the game's mod.

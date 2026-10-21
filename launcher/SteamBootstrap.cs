@@ -53,7 +53,6 @@ public sealed class SteamBootstrap : IDisposable
 
     public string PersonaName(ulong userId) => SteamFriends.GetFriendPersonaName(new CSteamID(userId)) ?? string.Empty;
 
-    public void ShowInviteDialog(ulong lobbyId) => SteamFriends.ActivateGameOverlayInviteDialog(new CSteamID(lobbyId));
 
     public void Dispose()
     {

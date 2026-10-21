@@ -140,7 +140,6 @@ public sealed class MainForm : ChromelessForm
         _session.FriendJoinClicked += _app.Join;
         _session.RelaunchClicked += RelaunchGame;
         _session.CopyClicked += CopyLobbyCode;
-        _session.InviteClicked += _app.Invite;
         _session.LeaveClicked += _app.Leave;
         _session.NoticeActionClicked += RunNoticeFix;
         _session.NoticeReportClicked += () => SettingsView.CreateReport(_rail.Games);

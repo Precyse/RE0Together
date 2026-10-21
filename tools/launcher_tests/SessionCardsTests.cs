@@ -152,16 +152,16 @@ public static class SessionCardsTests
         Check.That(View(new AppStatus(AppState.Offline), Mod(ModState.NotInstalled)).ModEnabled, "view: offline is free for the mod button");
 
         var connecting = View(new AppStatus(AppState.Connecting));
-        Check.That(connecting is { Title: "Lobby", InLobby: true, Code: "", CopyEnabled: false, InviteEnabled: false, LeaveEnabled: true, HostEnabled: false, JoinEnabled: false },
+        Check.That(connecting is { Title: "Lobby", InLobby: true, Code: "", CopyEnabled: false, LeaveEnabled: true, HostEnabled: false, JoinEnabled: false },
             "view: connecting shows the lobby row, no code, Leave works");
 
         var hosting = View(new AppStatus(AppState.Hosting, LobbyId) { GameId = "re0" });
-        Check.That(hosting is { Code: "109775243712345678", CopyEnabled: true, InviteEnabled: true, LeaveEnabled: true, ModEnabled: false }, "view: a lobby with its code");
+        Check.That(hosting is { Code: "109775243712345678", CopyEnabled: true, LeaveEnabled: true, ModEnabled: false }, "view: a lobby with its code");
 
         var rejoining = View(new AppStatus(AppState.Rejoining, LobbyId) { GameId = "re0", RejoinAttempt = 2 });
-        Check.That(rejoining is { InLobby: true, CopyEnabled: true, InviteEnabled: false, LeaveEnabled: true }, "view: rejoining copies the code, cannot invite, can leave");
+        Check.That(rejoining is { InLobby: true, CopyEnabled: true, LeaveEnabled: true }, "view: rejoining copies the code, cannot invite, can leave");
         var waiting = View(new AppStatus(AppState.WaitingForHost, LobbyId) { GameId = "re0", SecondsLeft = 161 });
-        Check.That(waiting is { InLobby: true, CopyEnabled: true, InviteEnabled: false, LeaveEnabled: true }, "view: waiting for the host the same");
+        Check.That(waiting is { InLobby: true, CopyEnabled: true, LeaveEnabled: true }, "view: waiting for the host the same");
 
         Check.That(View(new AppStatus(AppState.GameRunning, LobbyId), relaunch: true).Relaunch, "view: relaunch shows in a lobby");
         Check.That(!View(AppStatus.Idle, relaunch: true).Relaunch, "view: relaunch needs a lobby");

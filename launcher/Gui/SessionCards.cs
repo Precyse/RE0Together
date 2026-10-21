@@ -7,7 +7,7 @@ internal enum NoticeFix { None, InstallMod, UpdateMod, UpdateLauncher, Browse, J
 /// hosting and the notice.</summary>
 internal sealed record SessionView(
     string Title, bool InLobby, bool Native, bool HostEnabled, bool JoinEnabled, ModAction? Mod, bool ModEnabled, bool CodeEnabled,
-    string Code, bool Relaunch, bool CopyEnabled, bool InviteEnabled, bool LeaveEnabled, IReadOnlyList<FriendCard> Friends, Notice? Notice);
+    string Code, bool Relaunch, bool CopyEnabled, bool LeaveEnabled, IReadOnlyList<FriendCard> Friends, Notice? Notice);
 
 /// <summary>The pure mapping from the app's status to what the window's cards, rows and notices say; unit tested
 /// (<c>SessionCardsTests</c>).</summary>
@@ -90,14 +90,13 @@ internal static class SessionCards
     {
         var idle = status.State == AppState.Idle;
         var free = idle || status.State == AppState.Offline;
-        var reconnecting = status.State is AppState.Rejoining or AppState.WaitingForHost;
         var code = !free && status.LobbyId != 0 ? status.LobbyId.ToString() : string.Empty;
         var action = mod.Action;
         return new SessionView(
             Title: free ? "Session" : "Lobby", InLobby: !free, Native: game.NativeSession,
             HostEnabled: (game.NativeSession ? free : idle) && mod.CanHost, JoinEnabled: idle && mod.CanHost,
             Mod: action, ModEnabled: free && !modLocked && action is { Enabled: true }, CodeEnabled: idle,
-            Code: code, Relaunch: !free && relaunch, CopyEnabled: code.Length > 0, InviteEnabled: code.Length > 0 && !reconnecting,
+            Code: code, Relaunch: !free && relaunch, CopyEnabled: code.Length > 0,
             LeaveEnabled: !free, Friends: idle ? Friends(status, games) : [],
             Notice: NoticeFor(status, newerBuild));
     }
