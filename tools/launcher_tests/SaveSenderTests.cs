@@ -54,6 +54,7 @@ public static class SaveSenderTests
             NonAsciiNameIsNotSent(Path.Combine(dir, "unicode"));
             OversizedFileIsNotSent(Path.Combine(dir, "big"));
             FixedListWithMissingFolderDoesNotThrow(Path.Combine(dir, "fixed"));
+            RejectedFileWaitsBeforeItIsResent(Path.Combine(dir, "rejected"));
         }
         finally
         {
@@ -132,5 +133,25 @@ public static class SaveSenderTests
         sender.SendTo(Peer);
         sender.Pump();
         Check.That(transport.Sent.Count == 0, "a fixed list whose file is missing sends nothing and does not throw");
+    }
+
+    private static void RejectedFileWaitsBeforeItIsResent(string folder)
+    {
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "a.dat"), "a");
+        var transport = new RecordingTransport();
+        var now = 0L;
+        var sender = new SaveSender(Pattern, folder, transport, () => now);
+        sender.SendTo(Peer);
+        sender.Pump();
+        Check.That(FileMessages.TryParseBegin(transport.Of(Msg.FileBegin).Single().Payload, out var begin), "the file starts a transfer");
+        now += SaveSender.RetryAfterMs / 2;
+        sender.OnAck(Peer, FileMessages.Ack(begin.Id, ok: false));
+        sender.Pump();
+        Check.That(transport.Of(Msg.FileBegin).Count() == 1, "a rejected file is not resent at once (a short lock would burn every attempt)");
+        now += SaveSender.RetryAfterMs;
+        sender.Pump();
+        sender.Pump();
+        Check.That(transport.Of(Msg.FileBegin).Count() == 2, "a rejected file is resent after the retry delay");
     }
 }

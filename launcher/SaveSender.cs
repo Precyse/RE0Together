@@ -8,7 +8,7 @@ namespace CoopLauncher;
 public sealed class SaveSender
 {
     private const double BytesPerSecond = 4 * 1024 * 1024;
-    private const long RetryAfterMs = 5000;
+    public const long RetryAfterMs = 5000;
     private const int MaxAttempts = 10;
     private const double MaxBurstChunks = 2;
 
@@ -29,17 +29,21 @@ public sealed class SaveSender
     private readonly SaveSyncProfile _config;
     private readonly string _sourceDir;
     private readonly ITransport _transport;
+    private readonly Func<long> _clock;
     private readonly List<Outgoing> _pending = [];
     private readonly HashSet<string> _logged = [];
     private uint _nextId = 1;
     private double _credit;
-    private long _lastPumpMs = Environment.TickCount64;
+    private long _lastPumpMs;
 
-    public SaveSender(SaveSyncProfile config, string sourceDir, ITransport transport)
+    /// <summary>The clock (milliseconds) defaults to the system tick count; tests drive their own.</summary>
+    public SaveSender(SaveSyncProfile config, string sourceDir, ITransport transport, Func<long>? clock = null)
     {
         _config = config;
         _sourceDir = sourceDir;
         _transport = transport;
+        _clock = clock ?? (() => Environment.TickCount64);
+        _lastPumpMs = _clock();
     }
 
     public void SendTo(ulong peer)
@@ -138,14 +142,14 @@ public sealed class SaveSender
         }
         else
         {
-            Log.Info($"Save sync: {peer} rejected {transfer.Name}, resending");
-            Restart(transfer);
+            Log.Info($"Save sync: {peer} rejected {transfer.Name}, resending in {RetryAfterMs / 1000} s");
+            transfer.EndSentAtMs = _clock();
         }
     }
 
     public void Pump()
     {
-        var now = Environment.TickCount64;
+        var now = _clock();
         var chunkBytes = _transport.MaxChunkBytes;
         _credit = Math.Min(_credit + BytesPerSecond * (now - _lastPumpMs) / 1000, chunkBytes * MaxBurstChunks);
         _lastPumpMs = now;
