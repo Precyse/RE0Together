@@ -9,14 +9,13 @@ internal sealed class TopBar : Control
     private const string SettingsLabel = "Settings";
     private const string SettingsCloseLabel = "Back";
     private const string StateChannel = "state";
-    private const string WidestStateWords = "SAVE TRANSFER TIMED OUT";
 
     private static readonly int BarHeight = Theme.Scale(44);
     private static readonly int PadX = Theme.Scale(16);
     private static readonly int UpdateButtonWidth = Theme.Scale(112);
     private static readonly int SettingsButtonWidth = Theme.Scale(84);
     private static readonly int ButtonHeight = Theme.Scale(26);
-    private static readonly int StateSlotWidth = Draw.Width(WidestStateWords, Theme.Label);
+    private static readonly int BrandRight = PadX + Draw.Width(BrandText, Theme.Brand);
 
     private readonly StatusLine _state;
     private readonly WindowButtons _windowButtons = new();
@@ -96,8 +95,11 @@ internal sealed class TopBar : Control
         var middle = Height / 2;
         Draw.Text(g, BrandText, Theme.Brand, Theme.Text, new Rectangle(PadX, 0, Width / 2, Height));
 
-        var left = _updateShown ? UpdateButton.Left : SettingsButton.Left;
-        var slot = new Rectangle(left - Theme.Gap * 2 - StateSlotWidth, 0, StateSlotWidth, Height);
+        // The words are right-aligned in all the room between the brand and the buttons, so no state (a refusal naming a
+        // file, a long one swapping out) is ever cut.
+        var slotLeft = BrandRight + Theme.Gap * 2;
+        var slotRight = (_updateShown ? UpdateButton.Left : SettingsButton.Left) - Theme.Gap * 2;
+        var slot = new Rectangle(slotLeft, 0, Math.Max(0, slotRight - slotLeft), Height);
         _state.Paint(g, slot, Theme.Label, _lamp == Theme.Dim ? Theme.Muted : Theme.Text, BackColor, alignRight: true);
         var lampX = slot.Right - Draw.Width(_state.Text, Theme.Label) - Theme.Gap - Theme.LampSize;
         Draw.Lamp(g, _lamp, lampX, middle);
