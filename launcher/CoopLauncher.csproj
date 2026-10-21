@@ -12,6 +12,7 @@
     <RootNamespace>CoopLauncher</RootNamespace>
     <RollForward>LatestMajor</RollForward>
     <UseWindowsForms>true</UseWindowsForms>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(LauncherUi)' == 'Classic'">
