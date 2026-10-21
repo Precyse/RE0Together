@@ -54,6 +54,7 @@ public static class ModInstallerTests
         ForeignReplacementIsModifiedAndRepairedWithNumberedBackup();
         UpdateAvailableThenInstalled();
         UninstallKeepsArchiveAndLeavesGameRoot();
+        UninstallArchivesTheSessionSaves();
         PartialInstallRollsBack();
         AnotherModsFileSurvivesUninstall();
     }
@@ -137,6 +138,32 @@ public static class ModInstallerTests
         flat.SetGame("Game.exe", "the game");
         ModInstaller.Uninstall(flatProfile, flat.Game);
         Check.That(flat.GameHas("adapter.ini") && flat.GameHas("Game.exe"), "an ini in the game folder itself does not make the game folder a coop folder");
+    }
+
+    /// <summary>The session folder holds the guest's progress: uninstall archives it like a session reset, and keeps it when it cannot.</summary>
+    private static void UninstallArchivesTheSessionSaves()
+    {
+        using var rig = new Rig(Dll);
+        var synced = rig.Profile with { SaveSync = new SaveSyncProfile(["data0.bin"], "coop/session") };
+        ModInstaller.Install(synced, rig.Game);
+        rig.SetGame("coop/session/data0.bin", "guest progress");
+        ModInstaller.Uninstall(synced, rig.Game);
+        var archiveRoot = rig.GamePath("coop/archive");
+        var archived = (Directory.Exists(archiveRoot) ? Directory.GetDirectories(archiveRoot) : []).Select(dir => Path.Combine(dir, "data0.bin")).Where(File.Exists).ToList();
+        Check.That(archived.Count == 1 && File.ReadAllText(archived[0]) == "guest progress", "uninstall archives the session saves first");
+        Check.That(!rig.GameHas("coop/session"), "an archived session folder is removed");
+
+        using var locked = new Rig(Dll);
+        var lockedProfile = locked.Profile with { SaveSync = new SaveSyncProfile(["data0.bin"], "coop/session") };
+        ModInstaller.Install(lockedProfile, locked.Game);
+        locked.SetGame("coop/session/data0.bin", "guest progress");
+        locked.SetGame("coop/session/data1.bin", "second slot");
+        locked.SetGame("coop/adapter.log", "log");
+        using (new FileStream(locked.GamePath("coop/session/data0.bin"), FileMode.Open, FileAccess.Read, FileShare.None))
+            ModInstaller.Uninstall(lockedProfile, locked.Game);
+        Check.That(locked.ReadGame("coop/session/data0.bin") == "guest progress" && locked.ReadGame("coop/session/data1.bin") == "second slot",
+            "a session that could not be archived is kept whole");
+        Check.That(!locked.GameHas("coop/adapter.log"), "the rest of the coop folder still goes");
     }
 
     private static void PartialInstallRollsBack()

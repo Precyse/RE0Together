@@ -127,7 +127,7 @@ public static class ModInstaller
     }
 
     /// <summary>Removes the adapter files the launcher installed, puts back any original it backed up, and deletes the game's
-    /// coop folder (adapter ini, logs, session) except its archive of saved sessions.</summary>
+    /// coop folder (adapter ini, logs, session) except its archive of saved sessions; the session's saves are archived first.</summary>
     public static bool Uninstall(GameProfile profile, string gameDir)
     {
         if (GameLauncher.IsRunning(profile))
@@ -193,21 +193,31 @@ public static class ModInstaller
         return installedHash == ReadMarker(file) || (File.Exists(file.Src) && installedHash == Hash(file.Src));
     }
 
+    /// <summary>Deletes the coop folder's content except the archive. The session's saves are archived first (the same reset as
+    /// after a session); a session folder that could not be archived is kept, so no save is ever lost.</summary>
     private static void RemoveCoopFolder(GameProfile profile, string gameDir)
     {
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameDir));
         var coopDir = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(root, profile.AdapterIni)));
-        if (coopDir == null || !coopDir.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return;
+        if (coopDir == null || !IsInside(coopDir, root)) return;
         if (!Directory.Exists(coopDir)) return;
+        if (profile.SaveSync is { } sync) AdapterSettings.Reset(gameDir, profile, sync);
+        var keptSession = profile.SaveSync is { } config && Path.GetFullPath(Path.Combine(root, config.SessionDir)) is var session
+                          && Directory.Exists(session) ? session : null;
         foreach (var entry in Directory.EnumerateFileSystemEntries(coopDir).ToList())
         {
             if (Directory.Exists(entry))
             {
-                if (!Path.GetFileName(entry).Equals(AdapterSettings.ArchiveFolder, StringComparison.OrdinalIgnoreCase)) Directory.Delete(entry, recursive: true);
+                var archive = Path.GetFileName(entry).Equals(AdapterSettings.ArchiveFolder, StringComparison.OrdinalIgnoreCase);
+                var holdsSession = keptSession != null && (keptSession.Equals(entry, StringComparison.OrdinalIgnoreCase) || IsInside(keptSession, entry));
+                if (!archive && !holdsSession) Directory.Delete(entry, recursive: true);
             }
             else File.Delete(entry);
         }
     }
+
+    private static bool IsInside(string path, string folder) =>
+        path.StartsWith(Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     private static void WriteBuild(ModFile first)
     {
