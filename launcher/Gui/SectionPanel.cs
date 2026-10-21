@@ -4,6 +4,8 @@ namespace CoopLauncher.Gui;
 /// under the section.</summary>
 internal sealed class SectionPanel : Panel
 {
+    private const string HeightChannel = "height";
+
     private static readonly int CaptionGap = Theme.Scale(26);
 
     private string _title;
@@ -39,7 +41,20 @@ internal sealed class SectionPanel : Panel
         }
     }
 
-    public void FitToContent() => Height = FittedHeight;
+    /// <summary>Sizes the section to its content: at once, or (animate) by tweening the height over card-resize. A section
+    /// that is not on screen yet snaps either way.</summary>
+    public void FitToContent(bool animate = false)
+    {
+        var target = FittedHeight;
+        if (!animate)
+        {
+            Motion.Cancel(this, HeightChannel);
+            Height = target;
+            return;
+        }
+        Motion.Animate(this, HeightChannel, Motion.ValueOf(this, HeightChannel) ?? Height, target, Durations.Resize, Easing.Out,
+            height => Height = (int)Math.Round(height));
+    }
 
     protected override void OnResize(EventArgs e)
     {

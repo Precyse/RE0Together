@@ -1,32 +1,72 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>A flat dropdown list in the tool's greys: dark well, line border (white while focused), a large arrow,
-/// the highlighted entry on the selection fill. The closed box is painted over the system's after each paint.</summary>
-internal sealed class FlatSelect : ComboBox
+/// <summary>A flat dropdown in the tool's greys: a dark well with the value, a line border (white while focused or open)
+/// and a large arrow. The list is a <see cref="SelectMenu"/>. Up and Down change the value without opening it; Space,
+/// Enter, F4 and Alt+Down open the list. The mouse wheel never changes the value.</summary>
+internal sealed class FlatSelect : Control
 {
-    private const int WmPaint = 0x000F;
-    private static readonly int ItemInset = Theme.Scale(6);
     private static readonly int ArrowBoxWidth = Theme.Scale(32);
+
+    private readonly List<string> _items = new();
+    private int _selected = -1;
+    private SelectMenu? _menu;
 
     public FlatSelect()
     {
-        DropDownStyle = ComboBoxStyle.DropDownList;
-        FlatStyle = FlatStyle.Flat;
-        DrawMode = DrawMode.OwnerDrawFixed;
+        Height = Theme.ControlHeight;
         BackColor = Theme.Bg2;
         ForeColor = Theme.Text;
         Font = Theme.Body;
-        ItemHeight = Theme.ControlHeight - Theme.Scale(6);
+        Cursor = Cursors.Hand;
+        TabStop = true;
+        AccessibleRole = AccessibleRole.ComboBox;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+                 | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
     }
 
-    protected override void OnDrawItem(DrawItemEventArgs e)
+    public event EventHandler? SelectedIndexChanged;
+
+    public IList<string> Items => _items;
+
+    public int SelectedIndex
     {
-        if (e.Index < 0) return;
-        var highlighted = (e.State & DrawItemState.Selected) != 0 && (e.State & DrawItemState.ComboBoxEdit) == 0;
-        using var fill = new SolidBrush(highlighted ? Theme.Selection : Theme.Bg2);
-        e.Graphics.FillRectangle(fill, e.Bounds);
-        var text = new Rectangle(e.Bounds.X + ItemInset, e.Bounds.Y, e.Bounds.Width - ItemInset, e.Bounds.Height);
-        Draw.Text(e.Graphics, GetItemText(Items[e.Index]) ?? string.Empty, Theme.Body, Enabled ? Theme.Text : Theme.Dim, text);
+        get => _selected;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, -1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value, _items.Count);
+            if (value == _selected) return;
+            _selected = value;
+            AccessibleName = value >= 0 ? _items[value] : null;
+            Invalidate();
+            SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>The list is showing.</summary>
+    public bool DroppedDown => _menu != null;
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+        {
+            if (_menu != null) _menu.CloseMenu();
+            else Open();
+        }
+        base.OnMouseDown(e);
+    }
+
+    protected override bool IsInputKey(Keys keyData) => (keyData & Keys.KeyCode) switch
+    {
+        Keys.Up or Keys.Down or Keys.Enter => true,
+        Keys.Escape => _menu != null,
+        _ => base.IsInputKey(keyData),
+    };
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        e.Handled = _menu != null ? _menu.HandleKey(e.KeyCode) : HandleClosedKey(e);
+        base.OnKeyDown(e);
     }
 
     protected override void OnGotFocus(EventArgs e)
@@ -37,22 +77,61 @@ internal sealed class FlatSelect : ComboBox
 
     protected override void OnLostFocus(EventArgs e)
     {
+        _menu?.CloseMenu();
         Invalidate();
         base.OnLostFocus(e);
     }
 
-    protected override void WndProc(ref Message m)
+    protected override void OnEnabledChanged(EventArgs e)
     {
-        base.WndProc(ref m);
-        if (m.Msg == WmPaint) PaintFrame();
+        if (!Enabled) _menu?.CloseMenu();
+        Cursor = Enabled ? Cursors.Hand : Cursors.Default;
+        Invalidate();
+        base.OnEnabledChanged(e);
     }
 
-    private void PaintFrame()
+    protected override void Dispose(bool disposing)
     {
-        using var g = Graphics.FromHwnd(Handle);
-        var arrowBox = new Rectangle(Width - ArrowBoxWidth, 0, ArrowBoxWidth, Height);
-        using (var fill = new SolidBrush(BackColor)) g.FillRectangle(fill, Rectangle.Inflate(arrowBox, 0, -1));
-        Draw.Arrow(g, Enabled ? Theme.Text : Theme.Dim, new Point(arrowBox.X + arrowBox.Width / 2, Height / 2), ArrowDirection.Down);
-        Draw.Border(g, ClientRectangle, Focused || DroppedDown ? Theme.Text : Theme.Line);
+        if (disposing) _menu?.CloseMenu();
+        base.Dispose(disposing);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        var ink = Enabled ? Theme.Text : Theme.Dim;
+        g.Clear(BackColor);
+        if (_selected >= 0)
+            Draw.Text(g, _items[_selected], Theme.Body, ink, new Rectangle(SelectMenu.TextInset, 0, Width - ArrowBoxWidth - SelectMenu.TextInset, Height));
+        Draw.Arrow(g, ink, new Point(Width - ArrowBoxWidth / 2, Height / 2), ArrowDirection.Down);
+        Draw.Border(g, ClientRectangle, Focused || _menu != null ? Theme.Text : Theme.Line);
+    }
+
+    private bool HandleClosedKey(KeyEventArgs e)
+    {
+        if (e.Alt && e.KeyCode == Keys.Down || e.KeyCode is Keys.Space or Keys.Enter or Keys.F4)
+        {
+            Open();
+            return true;
+        }
+        if (e.KeyCode is not (Keys.Up or Keys.Down)) return false;
+        var next = Math.Clamp(_selected + (e.KeyCode == Keys.Down ? 1 : -1), 0, _items.Count - 1);
+        if (_items.Count > 0) SelectedIndex = next;
+        return true;
+    }
+
+    private void Open()
+    {
+        if (!Enabled || _items.Count == 0 || _menu != null) return;
+        var menu = new SelectMenu(this, _items, _selected);
+        menu.Committed += index => SelectedIndex = index;
+        menu.Dismissed += () =>
+        {
+            _menu = null;
+            Invalidate();
+        };
+        _menu = menu;
+        menu.Open();
+        Invalidate();
     }
 }
