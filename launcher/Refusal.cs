@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CoopLauncher;
 
 /// <summary>What differs between the host's and this machine's setup, in the order it is checked.</summary>
@@ -18,6 +20,25 @@ public sealed record Refusal(RefusalKind Kind, string Detail = "", string? GameI
 /// <summary>A lobby that cannot be used: the refusal kind it maps to, the diagnostic line for the log and the refusal's
 /// detail where its words carry one (the host's build for LauncherBuild).</summary>
 public sealed record LobbyFailure(RefusalKind Kind, string Message, string Detail = "");
+
+/// <summary>The detail of a build refusal (LauncherBuild, GameBuild, ModFiles): the host's number and the local one,
+/// <c>"&lt;host&gt;/&lt;you&gt;"</c>.</summary>
+public static class RefusalVersions
+{
+    private const char Separator = '/';
+
+    public static string Format(int host, int you) => string.Create(CultureInfo.InvariantCulture, $"{host}{Separator}{you}");
+
+    /// <summary>False for text that is not two whole numbers around the separator (a refusal of another kind, an empty detail).</summary>
+    public static bool TryParse(string detail, out int host, out int you)
+    {
+        host = you = 0;
+        var parts = detail.Split(Separator);
+        return parts.Length == 2
+            && int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out host)
+            && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out you);
+    }
+}
 
 /// <summary>Pure maps from what Steam and the build check report to a <see cref="RefusalKind"/>. Codes are the Steamworks
 /// enum values as numbers so this file needs no Steamworks types.</summary>

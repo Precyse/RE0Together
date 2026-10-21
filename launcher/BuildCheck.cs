@@ -47,6 +47,17 @@ public sealed record BuildInfo(int LauncherBuild, int GameBuild, byte[]? ModHash
         if (local.ModHash is null) return BuildMismatch.ModNotInstalled;
         return host.ModHash.AsSpan().SequenceEqual(local.ModHash) ? BuildMismatch.None : BuildMismatch.ModFiles;
     }
+
+    /// <summary>The refusal detail of a mismatch, <see cref="RefusalVersions"/> of what differs: launcher builds, game builds, or
+    /// the installed mod builds (<paramref name="hostModBuild"/> is the host's <c>cf_mod</c>; the mod hash carries no number).
+    /// Empty for a mismatch with no numbers.</summary>
+    public static string Detail(BuildMismatch mismatch, BuildInfo host, BuildInfo local, int hostModBuild, int localModBuild) => mismatch switch
+    {
+        BuildMismatch.LauncherBuild => RefusalVersions.Format(host.LauncherBuild, local.LauncherBuild),
+        BuildMismatch.GameBuild => RefusalVersions.Format(host.GameBuild, local.GameBuild),
+        BuildMismatch.ModFiles => RefusalVersions.Format(hostModBuild, localModBuild),
+        _ => string.Empty,
+    };
 }
 
 /// <summary>
@@ -100,6 +111,9 @@ public sealed class BuildCheck
     /// <summary>What differs; <see cref="BuildMismatch.None"/> while <see cref="Mismatch"/> is null.</summary>
     public BuildMismatch Reason { get; private set; }
 
+    /// <summary>The host's and this machine's build as compared (null before the host's BUILD_INFO arrived).</summary>
+    public (BuildInfo Host, BuildInfo Local)? Compared { get; private set; }
+
     private BuildInfo LocalInfo() => new(LocalBuild(), GameBuilds.Installed(_profile, _gameDir),
         _gameDir is null ? null : ModInstaller.ContentHash(_profile, _gameDir));
 
@@ -116,6 +130,7 @@ public sealed class BuildCheck
         var local = LocalInfo();
         if (host.LauncherBuild != local.LauncherBuild && (host.LauncherBuild == BuildInfo.DevBuild || local.LauncherBuild == BuildInfo.DevBuild))
             Log.Info($"Build check: host build {host.LauncherBuild}, this build {local.LauncherBuild} (dev build, continuing)");
+        Compared = (host, local);
         Reason = BuildInfo.Compare(host, local);
         if (Reason == BuildMismatch.None) return;
         Mismatch = Describe(Reason, host, local);

@@ -5,6 +5,10 @@ namespace CoopLauncher;
 /// <summary>The restored window rectangle: size in 96 dpi units, position in screen pixels.</summary>
 public sealed record WindowBounds(int X, int Y, int Width, int Height, bool Maximized);
 
+/// <summary>Who can find a lobby this launcher hosts: Friends = friends only (Steam's friends-only lobby), Everyone = public, listed
+/// in every launcher's Lobbies tab.</summary>
+public enum LobbyVisibility { Friends, Everyone }
+
 /// <summary>
 /// The launcher's settings, stored as JSON in %AppData%\CoopLauncher\settings.json. Read once at start; every change
 /// replaces <see cref="Current"/> and writes the file. A file is written whole beside itself and then moved over the old one, which
@@ -12,7 +16,8 @@ public sealed record WindowBounds(int X, int Y, int Width, int Height, bool Maxi
 /// </summary>
 public sealed record AppSettings(
     bool CheckForUpdates = true, Dictionary<string, string>? GameFolders = null, WindowBounds? Window = null,
-    Dictionary<string, Dictionary<string, string>>? GameOptions = null, string? LastGame = null)
+    Dictionary<string, Dictionary<string, string>>? GameOptions = null, string? LastGame = null,
+    LobbyVisibility LobbyVisibility = LobbyVisibility.Friends)
 {
     private const string TempSuffix = ".tmp";
     private const string BackupSuffix = ".bak";
@@ -55,6 +60,9 @@ public sealed record AppSettings(
 
     /// <summary>A copy with the game that was selected last.</summary>
     public AppSettings WithLastGame(string gameId) => this with { LastGame = gameId };
+
+    /// <summary>A copy with who can find the lobbies this launcher hosts.</summary>
+    public AppSettings WithLobbyVisibility(LobbyVisibility visibility) => this with { LobbyVisibility = visibility };
 
     /// <summary>The value the player chose for a game's option, or null for the option's default.</summary>
     public string? Option(string gameId, string key) =>

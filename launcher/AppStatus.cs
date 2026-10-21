@@ -9,14 +9,15 @@ public enum OfflineReason { None, SteamNotRunning }
 
 /// <summary>One lobby member as the window shows it. Status is what its game reports (rendezvous games), else empty; Step
 /// and Percent are what its launcher published (<see cref="SessionStep"/>); RttMs, Held and Silent come from the session;
-/// Options is the encoded option values its launcher published (<see cref="GameOptions.Decode"/>).</summary>
+/// Options is the encoded option values its launcher published (<see cref="GameOptions.Decode"/>); HoldSecondsLeft is the
+/// whole seconds before a held member is given up (0 when it is not held).</summary>
 public sealed record PlayerSlot(
     ulong Id, string Name, bool IsHost, bool IsLocal, string Status = "",
     SessionStep Step = SessionStep.None, int Percent = 0, int? RttMs = null, bool Held = false, bool Silent = false,
-    string Options = "");
+    string Options = "", int HoldSecondsLeft = 0);
 
-/// <summary>A friend hosting a lobby of a game this launcher knows.</summary>
-public sealed record FriendLobby(ulong FriendId, string Name, ulong LobbyId, string GameId);
+/// <summary>A friend hosting a lobby of a game this launcher knows, with the lobby's data once Steam delivered it.</summary>
+public sealed record FriendLobby(ulong FriendId, string Name, ulong LobbyId, string GameId, LobbyListing? Listing = null);
 
 /// <summary>An invite to another lobby, received while already in one.</summary>
 public sealed record PendingInvite(ulong LobbyId, ulong FromId, string FromName);
@@ -70,11 +71,39 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
     /// <summary>An invite received while in a lobby, waiting for the player to switch to it.</summary>
     public PendingInvite? Invite { get; init; }
 
+    /// <summary>A receiving guest: the file now arriving, the bytes in and the bytes announced so far.</summary>
+    public string SaveFile { get; init; } = string.Empty;
+
+    public long SaveBytes { get; init; }
+
+    public long SaveTotal { get; init; }
+
+    /// <summary><c>Environment.TickCount64</c> when the open lobby became ready; null when there is none.</summary>
+    public long? LobbyOpenedAtMs { get; init; }
+
+    /// <summary><c>Environment.TickCount64</c> when this launcher's <see cref="Step"/> last changed; null when there is no lobby.</summary>
+    public long? StepSinceMs { get; init; }
+
+    /// <summary>When play began, Unix seconds as the host published it; 0 before.</summary>
+    public long SessionStartedUnix { get; init; }
+
+    /// <summary>The open lobby as its own data describes it (the host's builds and options, its roster).</summary>
+    public LobbyListing? Listing { get; init; }
+
+    /// <summary>The lobbies of everyone, from the last search while the Lobbies tab is watched (see <see cref="App.WatchLobbies"/>).</summary>
+    public IReadOnlyList<LobbyListing> Lobbies { get; init; } = Array.Empty<LobbyListing>();
+
+    /// <summary>A lobby search was asked for and has not been answered yet.</summary>
+    public bool LobbiesSearching { get; init; }
+
     public bool Equals(AppStatus? other) =>
         other is not null && State == other.State && LobbyId == other.LobbyId && RttMs == other.RttMs && GameId == other.GameId
         && Refusal == other.Refusal && Bridged == other.Bridged && Step == other.Step && SavePercent == other.SavePercent
         && Seats == other.Seats && RejoinAttempt == other.RejoinAttempt && SecondsLeft == other.SecondsLeft
         && Offline == other.Offline && LaunchedAtMs == other.LaunchedAtMs && Invite == other.Invite
+        && SaveFile == other.SaveFile && SaveBytes == other.SaveBytes && SaveTotal == other.SaveTotal
+        && LobbyOpenedAtMs == other.LobbyOpenedAtMs && StepSinceMs == other.StepSinceMs && SessionStartedUnix == other.SessionStartedUnix
+        && Equals(Listing, other.Listing) && LobbiesSearching == other.LobbiesSearching && Lobbies.SequenceEqual(other.Lobbies)
         && Players.SequenceEqual(other.Players) && SeatCharacters.SequenceEqual(other.SeatCharacters)
         && FriendLobbies.SequenceEqual(other.FriendLobbies) && SameValues(HostOptions, other.HostOptions);
 

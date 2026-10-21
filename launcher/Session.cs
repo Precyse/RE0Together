@@ -99,6 +99,9 @@ public sealed class Session : IDisposable
     /// <summary>True while a member is missing from the lobby and still inside its grace.</summary>
     public bool IsHeld(ulong memberId) => _grace.HeldIds.Contains(memberId);
 
+    /// <summary>Milliseconds before a held member is given up, 0 when it is not held.</summary>
+    public long HoldMsLeft(ulong memberId, long nowMs) => _grace.MsLeft(memberId, nowMs, GraceFor);
+
     public void Pump()
     {
         if (Ended) return;
@@ -124,6 +127,13 @@ public sealed class Session : IDisposable
         Held = true;
         _recheck = true;
         return true;
+    }
+
+    /// <summary>Gives up every held partner now (the host plays on alone): the next pump sends them PEER_DOWN.</summary>
+    public void ReleaseHeld()
+    {
+        _grace.ExpireAll();
+        _recheck = true;
     }
 
     /// <summary>A lobby replaced the failed one: membership follows it again, and the adapter hears every peer come up again

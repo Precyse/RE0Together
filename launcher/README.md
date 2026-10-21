@@ -23,7 +23,7 @@ coop-launcher +connect_lobby <id> same as join
 coop-launcher                     open the window (game picker, Host, Lobby code + Join, friends hosting, Leave, log)
 ```
 
-With any argument the launcher runs as a command-line program (it attaches to the console it was started from, so from cmd the prompt returns at once; use `start /wait` to block); with none it opens the window and joins an accepted overlay invite automatically.
+With any argument the launcher runs as a command-line program (it attaches to the console it was started from, so from cmd the prompt returns at once; use `start /wait` to block); with none it opens the window and joins an accepted overlay invite automatically. In the window the host starts the game with START GAME (a guest's game starts once the host's has), while a command-line host starts at once.
 
 ## Window
 
@@ -33,7 +33,7 @@ Layout (840x540 client at the least): top bar (brand, build, state lamp and word
 
 ## Settings
 
-The Settings button (top bar) opens the settings view. Stored as JSON in `%AppData%\CoopLauncher\settings.json`, read once at start, written on every change: `CheckForUpdates` (download a newer build by itself at start), `LastGame` (the game selected last), `GameFolders` (per-game folder chosen with Browse, else Steam's), `Window` (restored bounds). The launcher's own log is `%AppData%\CoopLauncher\logs\launcher.log` (the previous run as `launcher.prev.log`); the settings view opens that folder and also creates `report-<time>.zip` there (launcher logs, version.txt, per game the coop folder's adapter.log/ini, peer logs and crash dumps). A game's adapter log is `coopdapter.log` in its game folder.
+The Settings button (top bar) opens the settings view. Stored as JSON in `%AppData%\CoopLauncher\settings.json`, read once at start, written on every change: `CheckForUpdates` (download a newer build by itself at start), `LastGame` (the game selected last), `GameFolders` (per-game folder chosen with Browse, else Steam's), `Window` (restored bounds), `LobbyVisibility` (who can find the lobbies you host: `Friends`, the default, or `Everyone`, which lists them in every launcher's Lobbies tab; friends always see your lobby through rich presence). The launcher's own log is `%AppData%\CoopLauncher\logs\launcher.log` (the previous run as `launcher.prev.log`); the settings view opens that folder and also creates `report-<time>.zip` there (launcher logs, version.txt, per game the coop folder's adapter.log/ini, peer logs and crash dumps). A game's adapter log is `coopdapter.log` in its game folder.
 
 The host log prints `Lobby created: <id>`; friends can also join from the overlay invite.
 

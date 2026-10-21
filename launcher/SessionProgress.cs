@@ -2,13 +2,14 @@ using System.Globalization;
 
 namespace CoopLauncher;
 
-/// <summary>Where one player is in getting a session going; published to the lobby so everyone can show it.</summary>
+/// <summary>Where one player is in getting a session going; published to the lobby so everyone can show it. Ready: everything
+/// is prepared and the launch waits for the start gate (<see cref="StartGate"/>).</summary>
 public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused, Ready }
 
 /// <summary>What the step depends on, read from the loop's state.</summary>
 public sealed record StepInputs(
     bool LobbyReady, bool SessionStarted, bool Refused, bool BuildCheckPending, bool SaveSyncPending, bool LaunchPending,
-    bool Bridged, bool BridgeReady, bool BridgeWasReady);
+    bool Bridged, bool BridgeReady, bool BridgeWasReady, bool StartHeld = false);
 
 public static class SessionProgress
 {
@@ -21,11 +22,27 @@ public static class SessionProgress
         if (!inputs.SessionStarted) return SessionStep.Lobby;
         if (inputs.BuildCheckPending) return SessionStep.CheckingBuild;
         if (inputs.SaveSyncPending) return SessionStep.ReceivingSave;
+        if (inputs.LaunchPending && inputs.StartHeld) return SessionStep.Ready;
         if (inputs.LaunchPending) return SessionStep.StartingGame;
         if (!inputs.Bridged) return SessionStep.InGame;
         if (inputs.BridgeReady) return SessionStep.InGame;
         return inputs.BridgeWasReady ? SessionStep.GameClosed : SessionStep.StartingGame;
     }
+}
+
+/// <summary>Whether a window launcher may start its game: the host once it asked to (START GAME), a guest once the host's game
+/// is starting or running. A launcher without a held start (a command-line run, a game that already runs) is always open.</summary>
+public static class StartGate
+{
+    /// <summary><paramref name="latched"/>: the host was seen starting earlier in this session, so a host that blinks does not
+    /// close the gate again.</summary>
+    public static bool Open(bool isHost, bool held, bool requested, SessionStep hostStep, bool latched)
+    {
+        if (!held) return true;
+        return isHost ? requested : latched || HostStarted(hostStep);
+    }
+
+    public static bool HostStarted(SessionStep hostStep) => hostStep is SessionStep.StartingGame or SessionStep.InGame;
 }
 
 /// <summary>The lobby member-data text of a step: <c>step=ReceivingSave;pct=40</c>, <c>step=Refused;why=ModFiles</c>.</summary>
@@ -69,7 +86,8 @@ public static class StepCodec
     }
 }
 
-/// <summary>How much of the host's save a guest has received: bytes arrived over the sizes announced so far. Fed from the
+/// <summary>How much of the host's save a guest has received: bytes arrived over the sizes announced so far, and the file that
+/// last received a chunk. Fed from the
 /// FILE_BEGIN and FILE_CHUNK frames the session passes on; 0 before the first FILE_BEGIN. A file the host sends again (a
 /// failed transfer, a rejoin) under a new transfer id replaces its earlier transfer instead of adding to the total.</summary>
 public sealed class SaveProgressMeter
@@ -79,15 +97,25 @@ public sealed class SaveProgressMeter
     private readonly Dictionary<uint, long> _sizes = new();
     private readonly Dictionary<uint, long> _received = new();
     private readonly Dictionary<string, uint> _transferOf = new();
+    private readonly Dictionary<uint, string> _nameOf = new();
+    private uint? _current;
 
     public int Percent
     {
         get
         {
-            var total = _sizes.Values.Sum();
-            return total == 0 ? 0 : (int)Math.Min(PercentScale, _received.Values.Sum() * PercentScale / total);
+            var total = TotalBytes;
+            return total == 0 ? 0 : (int)Math.Min(PercentScale, ReceivedBytes * PercentScale / total);
         }
     }
+
+    /// <summary>The file whose chunk arrived last; empty before the first chunk.</summary>
+    public string CurrentFile => _current is { } id && _nameOf.TryGetValue(id, out var name) ? name : string.Empty;
+
+    public long ReceivedBytes => _received.Values.Sum();
+
+    /// <summary>The sizes of every file announced so far.</summary>
+    public long TotalBytes => _sizes.Values.Sum();
 
     /// <summary>A file starts (or starts again): its size joins the total and its received bytes restart; an earlier transfer of
     /// the same file no longer counts.</summary>
@@ -97,14 +125,19 @@ public sealed class SaveProgressMeter
         {
             _sizes.Remove(earlier);
             _received.Remove(earlier);
+            _nameOf.Remove(earlier);
+            if (_current == earlier) _current = null;
         }
         _transferOf[name] = id;
+        _nameOf[id] = name;
         _sizes[id] = size;
         _received[id] = 0;
     }
 
     public void OnChunk(uint id, int bytes)
     {
-        if (_sizes.ContainsKey(id)) _received[id] += bytes;
+        if (!_sizes.ContainsKey(id)) return;
+        _received[id] += bytes;
+        _current = id;
     }
 }
