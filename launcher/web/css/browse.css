@@ -1,0 +1,10 @@
+.topbar { height: var(--bar-h); flex: none; display: flex; align-items: center; gap: 16px; padding-left: var(--bar-pad-x); background: var(--bg2); border-bottom: 1px solid var(--line); position: relative; z-index: 3; }
+.topbar[data-mode="view"] { padding-left: 12px; }
+.top-brand { font-weight: 700; font-size: var(--fs-brand); letter-spacing: var(--ls-brand); }
+.topbar .seg-tabs { --seg-h: var(--tab-h); --seg-pad: var(--tab-pad-x); margin-left: 16px; }
+.top-spacer { flex: 1; }
+.top-build { font-size: var(--fs-caption); color: var(--muted); }
+.top-button { height: var(--bar-btn-h); padding: 0 16px; }
+.top-back { height: var(--back-h); padding: 0 14px 0 10px; gap: 10px; }
+.top-window-group { display: flex; }
+.top-window { width: var(--window-btn); height: var(--window-btn); }

@@ -147,6 +147,33 @@ Spec: `docs/CONTRACT.md`. Tools: `tools/save_sync_test.py` (two local launchers,
 | RepoPaths.cs | repo root / games dir discovery | |
 | Log.cs | timestamped console log; `Written` event feeds the GUI log pane; `Event` = a player-facing line (also an Info line) for `SubscribeEvents` listeners with a 50 line history; `FileOnly` = a line for the file only (stack traces); the window also writes `AppData.LogFile`, and the logs of the previous ten runs are kept (`RotatePrevious`: `launcher.prev.log`, `launcher.prev2.log` ... `launcher.prev10.log`) | `Info`, `Event`, `FileOnly`, `Subscribe`, `SubscribeEvents`, `WriteToFile`, `RotatePrevious` |
 
+## launcher/web (browse)
+
+The WebView2 page (page spec: SPEC 2, 3, 6 of the launcher web UI). No build step; ES modules; text only through `textContent`.
+
+| file | owns | key members |
+|---|---|---|
+| web/index.html, web/mini.html | the page shells: CSP meta, stylesheets, one module script (`main.js` / `mini-main.js`) | |
+| web/css/tokens.css | the one `:root`: colours, fonts, every size and every motion variable | |
+| web/css/base.css | reset, type, buttons, field, select, toggle, segments, icons, focus ring, `app-region` | `.btn`, `.field`, `.seg`, `.select`, `.toggle` |
+| web/css/motion.css | every generic recipe as a class + keyframes (`m-*`), `html.paused`, `html.reduced` end states | `m-page-in`, `m-panel-in`, `m-modal-in`, `m-reveal`, `m-shake` |
+| web/css/browse.css | top bar, home, lobbies, popups, settings, drawer | |
+| web/js/main.js | boot, registry of every screen module, Esc rule, `page.rendered` after each applied state | `SCREEN_MODULES` |
+| web/js/bridge.js | `COMMANDS` (SPEC 3.3), `connect`, `send`; WebView2 or the dev mock | `COMMANDS`, `connect`, `send` |
+| web/js/dom.js | `h`, `svg`, `setText`, `setAttr`, `setVar`, `toggle`, keyed list with exit hook | `keyed`, `wasCreated` |
+| web/js/motion.js | recipes as functions: `play`, `stagger`, `swapText`, `rollDigits`, `reel`, `shake`, `iconSwap`; reduced motion | `play`, `tokenMs` |
+| web/js/icons.js | the fixed SVG glyphs | `icon(name, size)` |
+| web/js/screen-host.js | one element per screen, the transition of the state (page, panelIn, panelOut) | `createScreenHost` |
+| web/js/perf.js | debug overlay: frame p95, long tasks, state apply time | `createPerf` |
+| web/js/segments.js, web/js/topbar.js | sliding-pill segmented control; the top bar | `createSegments` |
+| web/js/notice.js | the notice row (also used by session screens) | `createNotice` |
+| web/js/home.js, lobbies.js, settings.js, drawer.js, modal.js | browse screens (stubs until their commit) | |
+| web/js/joining.js, session.js, select.js, mini-main.js | stubs for the session builder | |
+| web/dev/mock.js | dev transport: `?fixture=` / `?sequence=`, `&frame=`, `&reduced=1`, `&smoke=`, `window.__sent`, `html[data-ready]`; fixtures in `dev/fixtures`, sequences in `dev/sequences`, smoke scripts in `dev/smoke`, art copy in `dev/art` (git-ignored) | `createTransport` |
+| tools/launcher_web/render.py | headless Edge screenshots of fixtures and sequences (throwaway profile and server), `--smoke`, `--dump-dom`, `--perf`, `--prepare-art` | |
+
+## launcher/web (session)
+
 ## adapters/re0/ (C++20, x86, dinput8.dll proxy)
 
 Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build`. Output `build/dinput8.dll`, copied to `adapters/re0/dinput8.dll`. Vendored MinHook in `third_party/minhook` (wrapped by src/hooks.cpp) and Dear ImGui (imgui core + `backends/imgui_impl_dx9`, MIT) in `third_party/imgui`.
@@ -488,3 +515,4 @@ Build (from a VsDevCmd `-arch=amd64` shell): `cmake -S . -B build -G Ninja -DCMA
 - Players in different rooms / independent play: `adapters/re0/src/split_rooms.cpp` (moving a character between rooms: `scene.cpp`), camera rule in `camera_parity.cpp`, control rule in `control_rule.h`; test on one PC with `tools/re0/fake_session.py`
 - Tuning input delay without a partner: `adapters/re0/build/trace_replay.exe --synthetic 120 --jitter 60`, or record with `net_trace=1` and replay the file
 - A crash on a player's machine: `coop\crash-*.dmp` next to adapter.log, read with `tools/re0/dump_stack.py`
+- Launcher web page (WebView2): shell and browse screens `launcher/web/js/main.js`, motion recipes `css/motion.css` + `js/motion.js`, tokens `css/tokens.css`; screenshots without the launcher: `python tools/launcher_web/render.py <fixture|sequence> --out <dir>`

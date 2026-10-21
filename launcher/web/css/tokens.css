@@ -1,0 +1,220 @@
+:root {
+  --bg: #0c0d0e;
+  --bg2: #141618;
+  --card: #1c1f22;
+  --card-hover: #2e2e2e;
+  --selection: #2c3035;
+  --line: #2a2e33;
+  --text: #ececec;
+  --muted: #8b9197;
+  --dim: #5b6168;
+  --raised: #3a3f45;
+  --disabled: #4a4f55;
+  --connected: #2ea043;
+  --problem: #e5202e;
+  --armed: #f2a900;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --tint-green: rgba(46, 160, 67, 0.2);
+  --tint-amber: rgba(242, 169, 0, 0.18);
+  --tint-red: rgba(229, 32, 46, 0.22);
+  --field-fill: rgba(28, 31, 34, 0.9);
+  --shade-solid: rgba(12, 13, 14, 0.9);
+  --shade-mid: rgba(12, 13, 14, 0.5);
+  --shade-clear: rgba(12, 13, 14, 0);
+  --fade-mid: rgba(12, 13, 14, 0.75);
+  --popup-header-top: rgba(20, 22, 24, 0.1);
+  --close-fill: rgba(12, 13, 14, 0.7);
+  --locked-art-opacity: 0.35;
+  --press-darken: rgba(12, 13, 14, 0.35);
+
+  --font-ui: 'Segoe UI', system-ui, sans-serif;
+  --font-mono: Consolas, monospace;
+  --fs-caption: 11px;
+  --fs-small: 12px;
+  --fs-body: 13px;
+  --fs-title: 18px;
+  --fs-brand: 14px;
+  --fs-code: 15px;
+  --fs-primary: 14px;
+  --ls-caption: 0.06em;
+  --ls-brand: 0.04em;
+  --focus-ring: 1px solid var(--text);
+
+  --bar-h: 44px;
+  --bar-pad-x: 20px;
+  --tab-h: 30px;
+  --tab-pad-x: 14px;
+  --bar-btn-h: 28px;
+  --back-h: 32px;
+  --window-btn: 44px;
+  --rail-w: 220px;
+  --rail-head-h: 36px;
+  --rail-row-h: 100px;
+  --rail-art-w: 40px;
+  --rail-art-h: 60px;
+  --rail-pad-x: 14px;
+  --hero-h: 296px;
+  --hero-pad: 24px;
+  --hero-row-bottom: 20px;
+  --hero-logo-left: 24px;
+  --hero-logo-top: 40px;
+  --hero-logo-w: 240px;
+  --hero-logo-h: 110px;
+  --action-h: 44px;
+  --host-w: 140px;
+  --join-w: 96px;
+  --icon-btn: 44px;
+  --gap: 8px;
+  --gap-row: 12px;
+  --card-pad: 12px;
+  --avatar-friend: 44px;
+  --friend-btn-w: 80px;
+  --friend-btn-h: 36px;
+  --control-h: 36px;
+  --tool-w: 104px;
+  --primary-w: 120px;
+  --select-w: 180px;
+  --page-pad-y: 20px;
+  --page-pad-x: 24px;
+  --lobby-cols: 2.2fr 1.2fr 0.7fr 0.7fr 0.7fr 92px;
+  --row-h: 56px;
+  --row-gap: 6px;
+  --row-btn-w: 92px;
+  --row-btn-h: 32px;
+  --row-capsule-w: 30px;
+  --row-capsule-h: 40px;
+  --row-avatar: 24px;
+  --popup-w: 520px;
+  --popup-options-w: 420px;
+  --popup-header-h: 140px;
+  --popup-close: 40px;
+  --popup-pad-x: 20px;
+  --popup-action-h: 44px;
+  --seat-h: 32px;
+  --confirm-w: 380px;
+  --confirm-pad: 24px;
+  --confirm-yes-w: 168px;
+  --footer-h: 30px;
+  --footer-pad-x: 14px;
+  --log-h: 180px;
+  --log-lines: 500;
+  --toggle-w: 46px;
+  --toggle-h: 24px;
+  --toggle-thumb: 18px;
+  --toggle-inset: 2px;
+  --section-pad-x: 20px;
+  --section-pad-y: 16px;
+  --section-caption-gap: 26px;
+  --content-max: 760px;
+  --option-label-w: 110px;
+  --option-col-gap: 24px;
+  --scroll-w: 3px;
+
+  --page-slide-dur: 250ms;
+  --page-fade-dur: 250ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --stagger-exit-dur: 150ms;
+
+  --pulse-dur: 1000ms;
+  --pulse-count: 1;
+  --pulse-min: 0.5;
+  --reveal-dur: 400ms;
+  --reveal-blur: 2px;
+  --reveal-ease: ease-in-out;
+
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+
+  --digit-dur: 260ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+
+  --reel-dur: 700ms;
+  --reel-cell: 14px;
+  --reel-spin-blur: 3px;
+  --reel-stagger: 90ms;
+  --reel-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
+
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --toast-open: 350ms;
+  --toast-close: 250ms;
+  --toast-distance: 16px;
+  --toast-blur: 2px;
+  --toast-scale: 0.97;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --toggle-dur: 350ms;
+  --toggle-travel: 22px;
+  --toggle-ov1: 1px;
+  --toggle-ov2: 0px;
+  --toggle-track: 150ms;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+
+  --check-dur: 500ms;
+  --check-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-bob-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-rotate: 80deg;
+  --check-bob: 6px;
+  --matrix-cycle: 1200ms;
+  --matrix-ease: ease-in-out;
+
+  --hover-dur: 150ms;
+  --hover-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --rail-hover-dur: 120ms;
+  --row-stagger: 40ms;
+  --skeleton-rows: 4;
+}
