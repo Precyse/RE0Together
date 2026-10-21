@@ -76,15 +76,15 @@ internal sealed class HeroBanner : Control
         var area = new Rectangle(0, 0, width, Height + Bleed);
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         Draw.Cover(g, hero, area);
-        Paint(g, area, LinearGradientMode.Horizontal,
+        PaintGradient(g, area, LinearGradientMode.Horizontal,
             [Color.FromArgb(ShadeLeftAlpha, Theme.Bg), Color.FromArgb(ShadeMidAlpha, Theme.Bg), Color.FromArgb(0, Theme.Bg), Color.FromArgb(0, Theme.Bg)],
             [0f, ShadeMid, ShadeEnd, 1f]);
-        Paint(g, area, LinearGradientMode.Vertical,
+        PaintGradient(g, area, LinearGradientMode.Vertical,
             [Color.FromArgb(0, Theme.Bg), Color.FromArgb(0, Theme.Bg), Color.FromArgb(FadeMidAlpha, Theme.Bg), Theme.Bg],
             [0f, FadeStart, FadeMid, 1f]);
     }
 
-    private static void Paint(Graphics g, Rectangle area, LinearGradientMode mode, Color[] colors, float[] positions)
+    private static void PaintGradient(Graphics g, Rectangle area, LinearGradientMode mode, Color[] colors, float[] positions)
     {
         using var brush = new LinearGradientBrush(area, Color.Black, Color.Black, mode);
         brush.InterpolationColors = new ColorBlend { Colors = colors, Positions = positions };
