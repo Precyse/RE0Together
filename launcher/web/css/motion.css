@@ -1,0 +1,139 @@
+/* Every generic recipe is a class that motion.js adds for the length of the animation. will-change lives only on these classes. */
+
+.m-page-in { animation: t-page-in var(--page-slide-dur) var(--page-slide-ease) both; will-change: transform, opacity, filter; }
+.m-page-out { animation: t-page-out var(--page-slide-dur) var(--page-slide-ease) both; will-change: transform, opacity, filter; }
+@keyframes t-page-in {
+  from { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * var(--dir, 1) * var(--page-exit-enabled))); filter: blur(calc(var(--page-blur) * var(--page-exit-enabled))); }
+  to { opacity: 1; transform: translateX(0); filter: blur(0); }
+}
+@keyframes t-page-out {
+  from { opacity: 1; transform: translateX(0); filter: blur(0); }
+  to { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * var(--dir, 1) * -1 * var(--page-exit-enabled))); filter: blur(calc(var(--page-blur) * var(--page-exit-enabled))); }
+}
+
+.m-panel-in { animation: t-panel-in var(--panel-open-dur) var(--panel-ease) both; will-change: transform, opacity, filter; }
+.m-panel-out { animation: t-panel-out var(--panel-close-dur) var(--panel-ease) both; will-change: transform, opacity, filter; }
+@keyframes t-panel-in {
+  from { opacity: 0; transform: translateY(var(--panel-translate-y)); filter: blur(var(--panel-blur)); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes t-panel-out {
+  from { opacity: 1; transform: translateY(0); filter: blur(0); }
+  to { opacity: 0; transform: translateY(var(--panel-translate-y)); filter: blur(var(--panel-blur)); }
+}
+
+.m-modal-in { animation: t-modal-in var(--modal-open-dur) var(--modal-ease) both; will-change: transform, opacity; }
+.m-modal-out { animation: t-modal-out var(--modal-close-dur) var(--modal-ease) both; will-change: transform, opacity; }
+.m-fade-in { animation: t-fade-in var(--modal-open-dur) var(--modal-ease) both; will-change: opacity; }
+.m-fade-out { animation: t-fade-out var(--modal-close-dur) var(--modal-ease) both; will-change: opacity; }
+@keyframes t-modal-in {
+  from { opacity: 0; transform: scale(var(--modal-scale)); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes t-modal-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(var(--modal-scale-close)); }
+}
+@keyframes t-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+.m-reveal { animation: t-reveal var(--stagger-dur) var(--stagger-ease) calc(var(--i, 0) * var(--stagger-stagger)) backwards; will-change: transform, opacity, filter; }
+.m-leave { animation: t-fade-out var(--stagger-exit-dur) ease both; }
+@keyframes t-reveal {
+  from { opacity: 0; transform: translateY(var(--stagger-distance)); filter: blur(var(--stagger-blur)); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.m-skeleton-pulse { animation: t-pulse var(--pulse-dur) ease-in-out infinite; }
+.m-skeleton-out { animation: t-blur-out var(--reveal-dur) var(--reveal-ease) both; will-change: opacity, filter; }
+.m-content-in { animation: t-blur-in var(--reveal-dur) var(--reveal-ease) calc(var(--i, 0) * var(--row-stagger)) backwards; will-change: opacity, filter; }
+@keyframes t-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: var(--pulse-min); }
+}
+@keyframes t-blur-in {
+  from { opacity: 0; filter: blur(var(--reveal-blur)); }
+  to { opacity: 1; filter: blur(0); }
+}
+@keyframes t-blur-out {
+  from { opacity: 1; filter: blur(0); }
+  to { opacity: 0; filter: blur(var(--reveal-blur)); }
+}
+
+.m-swap-out, .m-swap-in { display: inline-block; }
+.m-swap-out { animation: t-swap-out var(--text-swap-dur) var(--text-swap-ease) both; }
+.m-swap-in { animation: t-swap-in var(--text-swap-dur) var(--text-swap-ease) both; }
+@keyframes t-swap-out {
+  from { opacity: 1; transform: translateY(0); filter: blur(0); }
+  to { opacity: 0; transform: translateY(calc(var(--text-swap-translate-y) * -1)); filter: blur(var(--text-swap-blur)); }
+}
+@keyframes t-swap-in {
+  from { opacity: 0; transform: translateY(var(--text-swap-translate-y)); filter: blur(var(--text-swap-blur)); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.t-digit-group { display: inline-flex; align-items: baseline; }
+.t-digit { display: inline-block; }
+.m-digit { animation: t-digit-pop-in var(--digit-dur) var(--digit-ease) calc(var(--j, 0) * var(--digit-stagger)) backwards; will-change: transform, opacity, filter; }
+@keyframes t-digit-pop-in {
+  from { transform: translate(calc(var(--digit-distance) * var(--digit-dir-x)), calc(var(--digit-distance) * var(--digit-dir-y))); opacity: 0; filter: blur(var(--digit-blur)); }
+  to { transform: translate(0, 0); opacity: 1; filter: blur(0); }
+}
+
+.t-reel { display: inline-flex; align-items: center; height: var(--reel-cell); font-variant-numeric: tabular-nums; }
+.t-reel-col {
+  position: relative; height: var(--reel-cell); overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%);
+}
+.t-reel-strip { display: flex; flex-direction: column; }
+.t-reel-digit { height: var(--reel-cell); display: flex; align-items: center; justify-content: center; }
+.t-reel-fixed { display: inline-flex; align-items: center; height: var(--reel-cell); }
+
+.m-shake { animation: t-shake calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear; will-change: transform; }
+@keyframes t-shake {
+  0% { transform: translateX(0); animation-timing-function: var(--shake-ease); }
+  28.57% { transform: translateX(var(--shake-distance)); animation-timing-function: var(--shake-ease); }
+  57.14% { transform: translateX(calc(var(--shake-distance) * -1)); animation-timing-function: var(--shake-ease); }
+  78.57% { transform: translateX(var(--shake-overshoot)); animation-timing-function: var(--shake-ease); }
+  100% { transform: translateX(0); }
+}
+
+.m-toast-in { animation: t-toast-in var(--toast-open) var(--toast-ease) both; will-change: transform, opacity, filter; }
+.m-toast-out { animation: t-toast-out var(--toast-close) var(--toast-ease) both; will-change: transform, opacity, filter; }
+@keyframes t-toast-in {
+  from { opacity: 0; transform: translateY(var(--toast-distance)) scale(var(--toast-scale)); filter: blur(var(--toast-blur)); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes t-toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  to { opacity: 0; transform: translateY(var(--toast-distance)) scale(var(--toast-scale)); filter: blur(var(--toast-blur)); }
+}
+
+.m-dropdown-in { animation: t-dropdown-in var(--dropdown-open-dur) var(--dropdown-ease) both; transform-origin: top left; will-change: transform, opacity; }
+.m-dropdown-out { animation: t-dropdown-out var(--dropdown-close-dur) var(--dropdown-ease) both; transform-origin: top left; will-change: transform, opacity; }
+@keyframes t-dropdown-in {
+  from { opacity: 0; transform: scale(var(--dropdown-pre-scale)); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes t-dropdown-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(var(--dropdown-closing-scale)); }
+}
+
+.t-icon-swap { position: relative; display: inline-grid; }
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1; transition: opacity var(--icon-swap-dur) var(--icon-swap-ease), filter var(--icon-swap-dur) var(--icon-swap-ease), transform var(--icon-swap-dur) var(--icon-swap-ease);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] { opacity: 1; filter: blur(0); transform: scale(1); }
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] { opacity: 0; filter: blur(var(--icon-swap-blur)); transform: scale(var(--icon-swap-start-scale)); }
+
+.t-resize { transition: width var(--resize-dur) var(--resize-ease), height var(--resize-dur) var(--resize-ease); }
+
+html.paused *, html.paused *::before, html.paused *::after { animation-play-state: paused !important; }
+
+html.reduced *, html.reduced *::before, html.reduced *::after { animation: none !important; transition: none !important; }
+html.reduced .m-page-out, html.reduced .m-panel-out, html.reduced .m-modal-out, html.reduced .m-fade-out,
+html.reduced .m-leave, html.reduced .m-skeleton-out, html.reduced .m-toast-out, html.reduced .m-dropdown-out { opacity: 0; }
