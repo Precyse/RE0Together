@@ -32,6 +32,7 @@ public static class Program
         SaveReceiverTests.Run();
         SaveSyncTimeoutTests.Run();
         SavePathsTests.Run();
+        AdapterSettingsTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
