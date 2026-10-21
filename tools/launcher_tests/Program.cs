@@ -37,6 +37,7 @@ public static class Program
         AppSettingsTests.Run();
         SteamLibraryTests.Run();
         ReportBundleTests.Run();
+        LoopbackBridgeTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
