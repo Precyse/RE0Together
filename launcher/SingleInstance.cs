@@ -4,8 +4,10 @@ using System.Runtime.InteropServices;
 namespace CoopLauncher;
 
 /// <summary>
-/// One launcher window per user session. A second start asks the running window to come to the front and exits. A running
-/// copy that does not answer (hung, or a build from before this guard) is closed by InstanceGuard and this start takes over.
+/// One launcher window per user session. A second start asks the running window to come to the front and exits. The window
+/// answers from the moment it owns the mutex (the listener is registered in <see cref="Acquire"/>, before anything slow runs),
+/// so a start that is still busy is never mistaken for a hung one. Only a copy that stays silent for <see cref="HungAfterMs"/>
+/// and is hung (InstanceGuard) is closed and replaced; otherwise the second start just exits.
 /// An update relaunch names its predecessor in the environment and waits for it to exit first.
 /// </summary>
 public sealed class SingleInstance : IDisposable
@@ -15,6 +17,7 @@ public sealed class SingleInstance : IDisposable
     private const string FocusRequestName = @"Local\CoopLauncher.FocusRequest";
     private const string FocusAnswerName = @"Local\CoopLauncher.FocusAnswer";
     private const int AnswerWaitMs = 3000;
+    public const int HungAfterMs = 10_000;
     private const int TakeOverWaitMs = 5000;
     private const int PredecessorWaitMs = 10000;
     private const uint AnyProcess = uint.MaxValue;
@@ -23,40 +26,58 @@ public sealed class SingleInstance : IDisposable
     private readonly bool _owned;
     private readonly EventWaitHandle _focusRequest = new(false, EventResetMode.AutoReset, FocusRequestName);
     private readonly EventWaitHandle _focusAnswer = new(false, EventResetMode.AutoReset, FocusAnswerName);
-    private RegisteredWaitHandle? _listener;
+    private readonly object _showGate = new();
+    private readonly RegisteredWaitHandle _listener;
+    private Action? _show;
+    private bool _showQueued;
 
     private SingleInstance(Mutex mutex, bool owned)
     {
         _mutex = mutex;
         _owned = owned;
+        _listener = ThreadPool.RegisterWaitForSingleObject(_focusRequest, (_, _) => OnFocusRequest(), null, Timeout.Infinite, executeOnlyOnce: false);
     }
 
-    /// <summary>This process as the running launcher window, or null when another window took the request to come forward and this start must exit.</summary>
+    /// <summary>This process as the running launcher window, or null when this start must exit: another window took the request
+    /// to come forward, or the mutex holder is silent but not provably hung.</summary>
     public static SingleInstance? Acquire()
     {
         WaitForPredecessor();
         var mutex = new Mutex(initiallyOwned: true, MutexName, out var owned);
-        if (!owned && AskRunningWindowToShow())
+        if (owned)
+        {
+            var window = new SingleInstance(mutex, owned: true);
+            InstanceGuard.CloseOtherLaunchers(holdsWindow: false, answered: false);
+            return window;
+        }
+        if (AskRunningWindowToShow(AnswerWaitMs) || AskRunningWindowToShow(HungAfterMs))
         {
             mutex.Dispose();
             return null;
         }
-        InstanceGuard.CloseOtherLaunchers();
-        if (!owned) owned = TakeOver(mutex);
-        return new SingleInstance(mutex, owned);
+        Log.Info($"The running launcher has not answered for {AnswerWaitMs + HungAfterMs} ms");
+        if (InstanceGuard.CloseOtherLaunchers(holdsWindow: true, answered: false) > 0 && TakeOver(mutex)) return new SingleInstance(mutex, owned: true);
+        mutex.Dispose();
+        return null;
     }
 
-    /// <summary>Calls the action (on a pool thread) whenever a second start asks this window to come forward.</summary>
-    public void OnShowRequested(Action show) =>
-        _listener = ThreadPool.RegisterWaitForSingleObject(_focusRequest, (_, _) =>
+    /// <summary>Calls the action (on a pool thread) whenever a second start asks this window to come forward, once at once if one
+    /// already asked before the window existed.</summary>
+    public void OnShowRequested(Action show)
+    {
+        bool runNow;
+        lock (_showGate)
         {
-            show();
-            _focusAnswer.Set();
-        }, null, Timeout.Infinite, executeOnlyOnce: false);
+            _show = show;
+            runNow = _showQueued;
+            _showQueued = false;
+        }
+        if (runNow) show();
+    }
 
     public void Dispose()
     {
-        _listener?.Unregister(null);
+        _listener.Unregister(null);
         _focusRequest.Dispose();
         _focusAnswer.Dispose();
         if (_owned) _mutex.ReleaseMutex();
@@ -66,14 +87,27 @@ public sealed class SingleInstance : IDisposable
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(uint processId);
 
-    private static bool AskRunningWindowToShow()
+    /// <summary>Answers a second start at once, then brings the window forward (queued until the window exists).</summary>
+    private void OnFocusRequest()
+    {
+        Action? show;
+        lock (_showGate)
+        {
+            show = _show;
+            if (show == null) _showQueued = true;
+        }
+        _focusAnswer.Set();
+        show?.Invoke();
+    }
+
+    private static bool AskRunningWindowToShow(int waitMs)
     {
         using var request = new EventWaitHandle(false, EventResetMode.AutoReset, FocusRequestName);
         using var answer = new EventWaitHandle(false, EventResetMode.AutoReset, FocusAnswerName);
         AllowSetForegroundWindow(AnyProcess);
         answer.Reset();
         request.Set();
-        return answer.WaitOne(AnswerWaitMs);
+        return answer.WaitOne(waitMs);
     }
 
     /// <summary>Takes the mutex of a window that was just closed; a mutex abandoned by the killed process is ours too.</summary>

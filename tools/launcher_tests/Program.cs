@@ -25,6 +25,8 @@ public static class Program
         FreshQueueTests.Run();
         GameOptionsTests.Run();
         FramingTests.Run();
+        InstanceGuardTests.Run();
+        UpdaterTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
