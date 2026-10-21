@@ -85,6 +85,11 @@ public static class SessionCardsTests
         var invited = InLobby(Host()) with { Invite = new PendingInvite(55, 9, "Amy") };
         Check.That(SessionCards.NoticeFor(invited, 0) is { Words: "Invite from Amy", Action: "Switch", Report: false }, "notice: an invite offers Switch, no Report");
         Check.That(SessionCards.NoticeFor(invited with { Refusal = new Refusal(RefusalKind.HostLeft) }, 0) is { Words: "Host left" }, "notice: a refusal wins over an invite");
+
+        var steamOff = new AppStatus(AppState.Offline) { Offline = OfflineReason.SteamNotRunning };
+        Check.That(SessionCards.NoticeFor(steamOff, 0) is { Words: "Steam not running", Action: "Start Steam", Report: false }, "notice: Steam not running offers Start Steam");
+        Check.That(SessionCards.FixFor(steamOff, 0) == NoticeFix.StartSteam, "fix: Steam not running starts Steam");
+        Check.That(SessionCards.NoticeFor(new AppStatus(AppState.Offline), 0) == null, "notice: none while offline for another reason");
     }
 
     private static void Resolution()

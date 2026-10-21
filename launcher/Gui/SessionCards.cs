@@ -1,7 +1,7 @@
 namespace CoopLauncher.Gui;
 
 /// <summary>What the notice row's fix button does.</summary>
-internal enum NoticeFix { None, InstallMod, UpdateMod, UpdateLauncher, Browse, JoinAgain, Switch }
+internal enum NoticeFix { None, InstallMod, UpdateMod, UpdateLauncher, Browse, JoinAgain, Switch, StartSteam }
 
 /// <summary>What the home hero and friends show for one status: which buttons are usable, the mod button, the friends hosting
 /// and the notice.</summary>
@@ -15,6 +15,8 @@ internal static class SessionCards
 {
     private const string InviteWords = "Invite from {0}";
     private const string SwitchLabel = "Switch";
+    private const string SteamOfflineWords = "Steam not running";
+    private const string StartSteamLabel = "Start Steam";
 
     /// <summary>The friends hosting a lobby, in the order the app gave them, with their game's name, their lobby's player count
     /// when it is known, and whether the game is the selected one.</summary>
@@ -32,7 +34,8 @@ internal static class SessionCards
     /// A newer launcher build of 0 means none is known.</summary>
     public static NoticeFix FixFor(AppStatus status, int newerBuild)
     {
-        if (status.Refusal is not { } refusal) return status.Invite != null ? NoticeFix.Switch : NoticeFix.None;
+        if (status.Refusal is not { } refusal)
+            return status.Invite != null ? NoticeFix.Switch : SteamIsOff(status) ? NoticeFix.StartSteam : NoticeFix.None;
         return refusal.Kind switch
         {
             RefusalKind.ModNotInstalled => NoticeFix.InstallMod,
@@ -46,14 +49,17 @@ internal static class SessionCards
         };
     }
 
-    /// <summary>The one notice to show: a refusal (with Report) wins over an invite; none when there is neither.</summary>
+    private static bool SteamIsOff(AppStatus status) => status.State == AppState.Offline && status.Offline == OfflineReason.SteamNotRunning;
+
+    /// <summary>The one notice to show: a refusal (with Report) wins over an invite, which wins over Steam not running; none when there is none of them.</summary>
     public static Notice? NoticeFor(AppStatus status, int newerBuild)
     {
         var fix = FixFor(status, newerBuild);
         var label = FixLabel(fix, newerBuild);
         if (status.Refusal is { } refusal)
             return new Notice($"{refusal.Kind}/{refusal.GameId}/{refusal.LobbyId}", StatusText.Refusal(refusal), label, Report: true);
-        return status.Invite is { } invite ? new Notice($"invite/{invite.LobbyId}", string.Format(InviteWords, invite.FromName), label, Report: false) : null;
+        if (status.Invite is { } invite) return new Notice($"invite/{invite.LobbyId}", string.Format(InviteWords, invite.FromName), label, Report: false);
+        return fix == NoticeFix.StartSteam ? new Notice("steam/offline", SteamOfflineWords, label, Report: false) : null;
     }
 
     /// <summary>A refusal that the player's own fix has already resolved, so it can go: the game is found, its mod installed or
@@ -85,6 +91,7 @@ internal static class SessionCards
         NoticeFix.Browse => "Browse",
         NoticeFix.JoinAgain => "Join again",
         NoticeFix.Switch => SwitchLabel,
+        NoticeFix.StartSteam => StartSteamLabel,
         _ => null,
     };
 }

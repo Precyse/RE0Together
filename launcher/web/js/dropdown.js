@@ -9,8 +9,8 @@ const ARROW_WIDTH = 10;
  * Enter picks, Esc closes (and is swallowed so it does not close the popup or view behind). `set({ items: [{ value, label }], value, disabled })`.
  */
 export function createDropdown({ label, onSelect }) {
-  const text = h('span', { class: 'select-label' });
-  const trigger = h('button', { class: 'select-trigger', type: 'button', 'aria-haspopup': 'listbox', 'aria-label': label }, text, h('span', { class: 'select-arrow' }, icon('arrowDown', ARROW_WIDTH)));
+  const text = h('span', { class: 'select-value' });
+  const trigger = h('button', { class: 'select-trigger', type: 'button', 'aria-haspopup': 'listbox', 'aria-label': label }, text, h('span', { class: 'select-caret' }, icon('arrowDown', ARROW_WIDTH)));
   const menu = h('div', { class: 'select-menu', role: 'listbox', hidden: true });
   const el = h('div', { class: 'select' }, trigger, menu);
   let items = [];

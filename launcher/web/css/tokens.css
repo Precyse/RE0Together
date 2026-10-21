@@ -18,6 +18,7 @@
   --tint-amber: rgba(242, 169, 0, 0.18);
   --tint-red: rgba(229, 32, 46, 0.22);
   --field-fill: rgba(28, 31, 34, 0.9);
+  --over-art-fill: rgba(12, 13, 14, 0.55);
   --shade-solid: rgba(12, 13, 14, 0.9);
   --shade-mid: rgba(12, 13, 14, 0.5);
   --shade-clear: rgba(12, 13, 14, 0);
@@ -56,13 +57,16 @@
   --hero-h: 296px;
   --hero-pad: 24px;
   --hero-row-bottom: 20px;
+  --hero-fade-h: 192px;
+  --hero-fade-overlap: 2px;
+  --hero-notice-extra: calc(var(--control-h) + var(--gap-row));
   --hero-logo-left: 24px;
   --hero-logo-top: 40px;
   --hero-logo-w: 240px;
   --hero-logo-h: 110px;
   --action-h: 44px;
   --host-w: 140px;
-  --join-w: 96px;
+  --join-w: 88px;
   --icon-btn: 44px;
   --gap: 8px;
   --gap-row: 12px;
@@ -102,12 +106,11 @@
   --toggle-h: 24px;
   --toggle-thumb: 18px;
   --toggle-inset: 2px;
-  --section-pad-x: 20px;
-  --section-pad-y: 16px;
-  --section-caption-gap: 26px;
-  --content-max: 760px;
+  --section-pad-x: 24px;
+  --section-pad-y: 20px;
+  --settings-label-w: 200px;
+  --content-max: 920px;
   --option-label-w: 110px;
-  --option-col-gap: 24px;
   --scroll-w: 3px;
 
   --page-slide-dur: 250ms;

@@ -130,7 +130,6 @@
 .t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
 .t-icon-swap[data-state="b"] .t-icon[data-icon="a"] { opacity: 0; filter: blur(var(--icon-swap-blur)); transform: scale(var(--icon-swap-start-scale)); }
 
-.t-resize { transition: width var(--resize-dur) var(--resize-ease), height var(--resize-dur) var(--resize-ease); }
 
 html.paused *, html.paused *::before, html.paused *::after { animation-play-state: paused !important; }
 

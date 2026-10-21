@@ -1,13 +1,11 @@
-import { h, setText } from './dom.js';
+import { h } from './dom.js';
 
-/** A switch with a label: the thumb slides with the toggle recipe (the first state is drawn without motion). `set(on, disabled)`. */
+/** A switch (the label is its accessible name): light track with the knob right when on, dark track with the knob left when off; the knob moves with the toggle recipe (the first state is drawn without motion). `set(on, disabled)`. */
 export function createToggle({ label, onChange }) {
   const thumb = h('span', { class: 'toggle-thumb' });
-  const text = h('span', { class: 'toggle-text' });
-  const el = h('button', { class: 'toggle', type: 'button', role: 'switch', 'aria-checked': 'false' }, h('span', { class: 'toggle-track' }, thumb), text);
+  const el = h('button', { class: 'toggle', type: 'button', role: 'switch', 'aria-label': label, 'aria-checked': 'false' }, h('span', { class: 'toggle-track' }, thumb));
   let on = null;
 
-  setText(text, label);
   el.addEventListener('click', () => onChange(!on));
 
   return {

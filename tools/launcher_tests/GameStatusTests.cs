@@ -42,12 +42,13 @@ public static class GameStatusTests
 
     private static void SettingsLines()
     {
-        Check.That(Make(ModState.Installed).SettingsLine == "Mod 412 / Game 17178773", "settings line: installed");
+        Check.That(Make(ModState.Installed).SettingsLine == "Mod 412 installed / Game build 17178773", "settings line: installed");
         Check.That(Make(ModState.NotInstalled, found: false).SettingsLine == "Mod not installed / Game not found", "settings line: nothing");
-        Check.That(Make(ModState.Installed, gameBuild: UnsupportedBuild, supported: false).SettingsLine == "Mod 412 / Game 99999 unsupported", "settings line: unsupported");
-        Check.That(Make(ModState.Modified).SettingsLine == "Mod modified / Game 17178773", "settings line: modified");
-        Check.That(Make(ModState.UpdateAvailable, OldModBuild).SettingsLine == "Mod 401 / Game 17178773", "settings line: an update shows the installed build");
-        Check.That(Make(ModState.Installed, gameBuild: GameBuilds.Unknown).SettingsLine == "Mod 412 / Game found", "settings line: build unknown");
+        Check.That(Make(ModState.Installed, gameBuild: UnsupportedBuild, supported: false).SettingsLine == "Mod 412 installed / Game build 99999 unsupported", "settings line: unsupported");
+        Check.That(Make(ModState.Modified).SettingsLine == "Mod modified / Game build 17178773", "settings line: modified");
+        Check.That(Make(ModState.UpdateAvailable, OldModBuild).SettingsMod == "Mod update 412", "settings line: an update names the package build");
+        Check.That(Make(ModState.Installed, modBuild: 0).SettingsMod == "Mod installed", "settings line: mod build unknown");
+        Check.That(Make(ModState.Installed, gameBuild: GameBuilds.Unknown).SettingsGame == "Game found", "settings line: build unknown");
     }
 
     private static void Buttons()

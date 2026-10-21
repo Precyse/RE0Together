@@ -34,14 +34,21 @@ function section(title, ...content) {
   return root;
 }
 
+/** One row of the label column and the control column (two grid cells). */
+function labelled(label, ...controls) {
+  return [h('span', { class: 'settings-label', text: label }), h('div', { class: 'settings-control' }, ...controls)];
+}
+
+const tool = (label, onClick) => h('button', { class: 'btn btn-ghost settings-tool', type: 'button', text: label, on: { click: onClick } });
+
 /** Settings (a view over the page): the Launcher section, then one section per game. Every control sends its command; values come back in the state. */
 export function create(ctx) {
   const { send } = ctx;
   const updates = createToggle({ label: UPDATES_LABEL, onChange: (on) => send('settings.updates', { on }) });
   const visibility = createDropdown({ label: VISIBILITY_LABEL, onSelect: (value) => send('settings.visibility', { value }) });
-  const logs = h('button', { class: 'btn settings-tool', type: 'button', text: 'Logs folder', on: { click: () => send('settings.logs') } });
-  const report = h('button', { class: 'btn settings-tool', type: 'button', text: 'Create report', on: { click: () => send('report.create') } });
-  const launcher = section(LAUNCHER_TITLE, updates.el, h('div', { class: 'settings-row' }, h('span', { class: 'option-label', text: VISIBILITY_LABEL }), visibility.el), h('div', { class: 'settings-row' }, logs, report));
+  const logs = tool('Logs folder', () => send('settings.logs'));
+  const report = tool('Create report', () => send('report.create'));
+  const launcher = section(LAUNCHER_TITLE, h('div', { class: 'settings-grid' }, ...labelled(UPDATES_LABEL, updates.el), ...labelled(VISIBILITY_LABEL, visibility.el), ...labelled('', logs, report)));
   const games = h('div', { class: 'settings-games' });
   const el = h('section', { class: 'settings' }, h('div', { class: 'settings-scroll' }, launcher, games));
   const resize = new ResizeObserver(() => {
@@ -51,38 +58,41 @@ export function create(ctx) {
 
   function createGame(game) {
     const path = h('span', { class: 'settings-path mono' });
-    const browse = h('button', { class: 'btn settings-tool', type: 'button', text: 'Browse', on: { click: () => send('game.browse', { gameId: game.id }) } });
-    const reset = h('button', { class: 'btn btn-ghost settings-tool', type: 'button', text: 'Reset', on: { click: () => send('game.resetFolder', { gameId: game.id }) } });
-    const uninstall = h('button', { class: 'btn btn-ghost settings-tool', type: 'button', text: 'Uninstall', on: { click: () => send('game.uninstall', { gameId: game.id }) } });
-    const line = h('div', { class: 'settings-line' });
-    const options = h('div', { class: 'settings-options' });
-    const archive = h('button', { class: 'btn settings-tool', type: 'button', text: 'Archive', on: { click: () => send('game.archive', { gameId: game.id }) } });
-    const root = section('', h('div', { class: 'settings-row' }, path, browse, reset, uninstall), line, options, archive);
-    root.parts = { path, browse, reset, uninstall, line, options, archive };
+    const browse = tool('Browse', () => send('game.browse', { gameId: game.id }));
+    const reset = tool('Reset', () => send('game.resetFolder', { gameId: game.id }));
+    const uninstall = tool('Uninstall', () => send('game.uninstall', { gameId: game.id }));
+    const archive = tool('Archive', () => send('game.archive', { gameId: game.id }));
+    const modLine = h('span', { class: 'settings-mod' });
+    const gameLine = h('span', { class: 'settings-game' });
+    const options = h('div', { class: 'settings-grid' });
+    const buttons = h('div', { class: 'settings-buttons' }, browse, reset, uninstall, archive);
+    const root = section('', h('div', { class: 'settings-row' }, path, buttons), h('div', { class: 'settings-line' }, modLine, gameLine), options);
+    root.parts = { path, browse, reset, uninstall, modLine, gameLine, options, archive };
     return root;
   }
 
   function updateGame(root, game) {
-    const { path, browse, reset, uninstall, line, options, archive } = root.parts;
+    const { path, browse, reset, uninstall, modLine, gameLine, options, archive } = root.parts;
     setText(root.caption, game.name);
     path.dataset.full = game.folder;
     fitPath(path, game.folder);
     browse.disabled = !game.browseEnabled;
     reset.disabled = !game.resetEnabled;
     uninstall.disabled = !game.uninstallEnabled;
-    setText(line, game.line);
+    archive.hidden = !game.archive;
+    setText(modLine, game.modLine);
+    setText(gameLine, game.gameLine);
     options.hidden = game.options.length === 0;
     keyed(options, game.options, (option) => option.key, (option) => {
-      const label = h('span', { class: 'option-label', text: option.label });
+      const label = h('span', { class: 'settings-label' });
       const dropdown = createDropdown({ label: option.label, onSelect: (value) => send('option.set', { gameId: game.id, key: option.key, value }) });
-      const row = h('div', { class: 'settings-option' }, label, dropdown.el);
+      const row = h('div', { class: 'settings-option' }, label, h('div', { class: 'settings-control' }, dropdown.el));
       row.parts = { label, dropdown };
       return row;
     }, (row, option) => {
       setText(row.parts.label, option.label);
       row.parts.dropdown.set({ items: option.values, value: option.value, disabled: option.locked });
     });
-    archive.hidden = !game.archive;
   }
 
   return {

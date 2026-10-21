@@ -8,6 +8,8 @@ namespace CoopLauncher.Gui;
 /// them, shared by the WinForms views and the web window's controller. All run on the UI thread.</summary>
 internal static class LauncherActions
 {
+    private const string SteamOpenUri = "steam://open/main";
+
     /// <summary>Asks for a game's folder; true when the player chose one that holds the game and it was saved.</summary>
     public static bool BrowseFor(GameProfile game)
     {
@@ -85,6 +87,19 @@ internal static class LauncherActions
     public static void OpenArchive(GameProfile game)
     {
         if (SettingsModel.ArchiveFolder(game) is { } folder) StartExplorer($"\"{folder}\"");
+    }
+
+    /// <summary>Asks the shell to open Steam; the app's own retry notices when it is up.</summary>
+    public static void StartSteam()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(SteamOpenUri) { UseShellExecute = true });
+        }
+        catch (Win32Exception e)
+        {
+            Log.Info($"Could not start Steam: {e.Message}");
+        }
     }
 
     private static void StartExplorer(string arguments)

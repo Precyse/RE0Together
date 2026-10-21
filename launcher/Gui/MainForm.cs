@@ -437,6 +437,9 @@ public sealed partial class MainForm : ChromelessForm
                 _target = new JoinTarget(invite.LobbyId, invite.FromName, invite.FromId);
                 _app.SwitchToInvite();
                 break;
+            case NoticeFix.StartSteam:
+                LauncherActions.StartSteam();
+                break;
         }
     }
 

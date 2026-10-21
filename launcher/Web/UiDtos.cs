@@ -93,7 +93,7 @@ internal sealed record HalfDto(ImgDto Figure, string Name, string Role, string L
 internal sealed record SelectDto(HalfDto Left, HalfDto Right, StageCentre Centre, int FocusHalf);
 
 internal sealed record SettingsGameDto(
-    string Id, string Name, string Folder, bool BrowseEnabled, bool ResetEnabled, bool UninstallEnabled, string Line, OptionRowDto[] Options, bool Archive);
+    string Id, string Name, string Folder, bool BrowseEnabled, bool ResetEnabled, bool UninstallEnabled, string ModLine, string GameLine, OptionRowDto[] Options, bool Archive);
 
 internal sealed record SettingsDto(bool CheckForUpdates, LobbyVisibility Visibility, bool VisibilityLocked, SettingsGameDto[] Games);
 

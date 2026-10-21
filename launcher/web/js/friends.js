@@ -3,11 +3,16 @@ import { createAvatar } from './art.js';
 
 const CAPTION = 'Friends playing';
 
-/** FRIENDS PLAYING: 2-column cards keyed by lobby, staggered in on arrival, fading out when gone. */
-export function createFriends(ctx) {
+/** FRIENDS PLAYING: 2-column cards keyed by lobby, staggered in on arrival, fading out when gone. `change(apply)` wraps the section showing or hiding (the hero's height follows it). */
+export function createFriends(ctx, change) {
   const { send, motion } = ctx;
   const grid = h('div', { class: 'friends-grid' });
   const el = h('section', { class: 'friends', hidden: true }, h('div', { class: 'caption', text: CAPTION }), grid);
+
+  function showIfAny() {
+    const hidden = grid.children.length === 0;
+    if (hidden !== el.hidden) change(() => { el.hidden = hidden; });
+  }
 
   function createCard(friend) {
     const avatar = createAvatar('friend-avatar');
@@ -39,11 +44,11 @@ export function createFriends(ctx) {
       const { friends } = state.home;
       keyed(grid, friends, (friend) => friend.key, createCard, updateCard, (card, done) => motion.play(card, 'leave', { keep: true }).then(() => {
         done();
-        el.hidden = grid.children.length === 0;
+        showIfAny();
       }));
       const arrived = [...grid.children].filter((card) => !card.dataset.leaving && wasCreated(card));
       if (arrived.length) motion.stagger(arrived);
-      el.hidden = grid.children.length === 0;
+      showIfAny();
     },
   };
 }

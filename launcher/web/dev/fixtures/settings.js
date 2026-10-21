@@ -76,7 +76,8 @@ export default {
      "browseEnabled": true,
      "resetEnabled": true,
      "uninstallEnabled": true,
-     "line": "Mod 412 / Game 17178773",
+     "modLine": "Mod 412 installed",
+     "gameLine": "Game build 17178773",
      "options": [],
      "archive": false
     },
@@ -87,7 +88,8 @@ export default {
      "browseEnabled": true,
      "resetEnabled": false,
      "uninstallEnabled": true,
-     "line": "Mod 412 / Game 5217290",
+     "modLine": "Mod 412 installed",
+     "gameLine": "Game build 5217290",
      "options": [],
      "archive": true
     },
@@ -98,7 +100,8 @@ export default {
      "browseEnabled": true,
      "resetEnabled": true,
      "uninstallEnabled": false,
-     "line": "Mod 412 / Game 1",
+     "modLine": "Mod 412 installed",
+     "gameLine": "Game build 1",
      "options": [
       {
        "key": "transport",

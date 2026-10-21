@@ -160,7 +160,7 @@ internal static partial class UiSnapshot
         var games = i.Games.Select(game => new SettingsGameDto(
             game.Profile.Id, game.Profile.Name, i.FolderOf(game.Profile) ?? string.Empty, SettingsModel.BrowseEnabled(i.Free),
             SettingsModel.ResetEnabled(game.Profile, i.Free), SettingsModel.UninstallEnabled(game.Status, i.Free, i.Update.Staged),
-            SettingsModel.Line(game.Status), OptionRows(i, game.Profile, settingsOptions: true, hostValues: null), SettingsModel.ArchiveShown(game.Profile))).ToArray();
+            game.Status.SettingsMod, game.Status.SettingsGame, OptionRows(i, game.Profile, settingsOptions: true, hostValues: null), SettingsModel.ArchiveShown(game.Profile))).ToArray();
         return new SettingsDto(AppSettings.Current.CheckForUpdates, AppSettings.Current.LobbyVisibility, !i.Free, games);
     }
 }

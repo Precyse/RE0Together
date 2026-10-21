@@ -38,7 +38,7 @@ internal sealed record GameStatus(
             _ => ModLabel,
         };
 
-    /// <summary>The settings view's line under a game's folder: the mod and the game's build.</summary>
+    /// <summary>The settings view's line under a game's folder: the mod and the game's build (two items, a gap apart on the web page).</summary>
     public string SettingsLine => $"{SettingsMod} / {SettingsGame}";
 
     /// <summary>The one mod button the Session row offers, or none when the mod needs nothing. Never usable while the game runs.</summary>
@@ -52,17 +52,20 @@ internal sealed record GameStatus(
 
     private string ModLabel => Mod.Build > 0 ? $"Mod {Mod.Build}" : "Installed";
 
-    private string SettingsMod => Mod.State switch
+    /// <summary>The mod half of the settings line.</summary>
+    public string SettingsMod => Mod.State switch
     {
         ModState.NotInstalled => "Mod not installed",
         ModState.Modified => "Mod modified",
-        _ => ModLabel,
+        ModState.UpdateAvailable => PackageBuild > 0 ? $"Mod update {PackageBuild}" : "Mod update",
+        _ => Mod.Build > 0 ? $"Mod {Mod.Build} installed" : "Mod installed",
     };
 
-    private string SettingsGame => !GameFound ? "Game not found"
+    /// <summary>The game half of the settings line.</summary>
+    public string SettingsGame => !GameFound ? "Game not found"
         : GameBuild == GameBuilds.Unknown ? "Game found"
-        : BuildSupported ? $"Game {GameBuild}"
-        : $"Game {GameBuild} unsupported";
+        : BuildSupported ? $"Game build {GameBuild}"
+        : $"Game build {GameBuild} unsupported";
 
     /// <summary>Reads a game's mod state: the folder, the installed game build and the mod's files (it hashes them, so not on
     /// the UI thread), and whether the game runs now.</summary>

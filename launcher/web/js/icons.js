@@ -1,6 +1,6 @@
 import { svg } from './dom.js';
 
-/** Fixed drawings: viewBox [width, height] and the shapes (path d, or line / rect / circle attributes). Arrows and the swap glyph are filled. */
+/** Fixed drawings: viewBox [width, height] and the shapes (path d, or line / rect / circle attributes). Arrows, the cog and the swap glyph are filled. */
 const ICONS = {
   check: { box: [18, 18], shapes: [['path', { d: 'M3 9.5 L7.5 14 L15 4.5', pathLength: 100 }]] },
   cross: { box: [18, 18], shapes: [['path', { d: 'M4 4 L14 14 M14 4 L4 14' }]] },
@@ -9,13 +9,7 @@ const ICONS = {
   arrowRight: { box: [12, 14], fill: true, shapes: [['path', { d: 'M0 0 L12 7 L0 14 Z' }]] },
   arrowUp: { box: [14, 8], fill: true, shapes: [['path', { d: 'M0 8 L7 0 L14 8 Z' }]] },
   arrowDown: { box: [14, 8], fill: true, shapes: [['path', { d: 'M0 0 L14 0 L7 8 Z' }]] },
-  cog: {
-    box: [24, 24],
-    shapes: [
-      ['circle', { cx: 12, cy: 12, r: 3 }],
-      ['path', { d: 'M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1' }],
-    ],
-  },
+  cog: { box: [24, 24], fill: true, shapes: [['path', { d: 'M10.25 4.19 L10.25 1.40 L13.75 1.40 L13.75 4.19 A8 8 0 0 1 16.28 5.24 L18.26 3.27 L20.73 5.74 L18.76 7.72 A8 8 0 0 1 19.81 10.25 L22.60 10.25 L22.60 13.75 L19.81 13.75 A8 8 0 0 1 18.76 16.28 L20.73 18.26 L18.26 20.73 L16.28 18.76 A8 8 0 0 1 13.75 19.81 L13.75 22.60 L10.25 22.60 L10.25 19.81 A8 8 0 0 1 7.72 18.76 L5.74 20.73 L3.27 18.26 L5.24 16.28 A8 8 0 0 1 4.19 13.75 L1.40 13.75 L1.40 10.25 L4.19 10.25 A8 8 0 0 1 5.24 7.72 L3.27 5.74 L5.74 3.27 L7.72 5.24 A8 8 0 0 1 10.25 4.19Z M8.4 12 a3.6 3.6 0 1 0 7.2 0 a3.6 3.6 0 1 0 -7.2 0Z', 'fill-rule': 'evenodd' }]] },
   close: { box: [12, 12], shapes: [['path', { d: 'M1 1 L11 11 M11 1 L1 11' }]] },
   minimize: { box: [12, 12], shapes: [['path', { d: 'M1 6 L11 6' }]] },
   copy: { box: [18, 18], shapes: [['path', { d: 'M6.5 2.5h5v2h-5z M5 4.5H4v11h10v-11h-1' }]] },

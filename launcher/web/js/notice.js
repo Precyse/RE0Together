@@ -1,8 +1,9 @@
 import { h, setText } from './dom.js';
 import { play, clear } from './motion.js';
 
-/** The notice row (refusal or invite): the words, an optional fix button and, for a refusal, Report. A new notice rises in like a toast, a cleared one sinks out. */
-export function createNotice(ctx) {
+/** The notice row (refusal, invite or Steam not running): the words, an optional fix button and, for a refusal, Report. A new notice rises in like a toast, a cleared one sinks out.
+ * `change(apply)` wraps the row being shown or hidden (the home hero's height follows it). */
+export function createNotice(ctx, change = (apply) => apply()) {
   const { send } = ctx;
   const words = h('span', { class: 'notice-words' });
   const action = h('button', { class: 'btn notice-button', type: 'button', on: { click: () => send('notice.fix') } });
@@ -18,7 +19,7 @@ export function createNotice(ctx) {
       if (!leaving) return;
       leaving = false;
       key = null;
-      el.hidden = true;
+      change(() => { el.hidden = true; });
       clear(el, 'toast-out');
     });
   }
@@ -36,7 +37,7 @@ export function createNotice(ctx) {
     action.hidden = !notice.action;
     if (notice.action) setText(action, notice.action);
     report.hidden = !notice.report;
-    el.hidden = false;
+    if (el.hidden) change(() => { el.hidden = false; });
     if (isNew) play(el, 'toast-in');
   }
 
