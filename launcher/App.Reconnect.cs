@@ -126,7 +126,8 @@ public sealed partial class App
         }
         if (_lobby != null || !plan.Schedule.AttemptDue(now)) return;
         Log.Info($"Opening a new lobby (attempt {plan.Schedule.Attempts})");
-        _lobby = SteamLobby.Create(GameProfile.Load(plan.GameId), plan.Options);
+        var profile = GameProfile.Load(plan.GameId);
+        _lobby = SteamLobby.Create(profile, plan.Options, ResolveGameDir(profile));
     }
 
     /// <summary>A guest without a session whose host opened a new lobby leaves the old one and joins the new one, through the
