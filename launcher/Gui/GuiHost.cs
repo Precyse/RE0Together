@@ -1,3 +1,4 @@
+using CoopLauncher.Web;
 using Steamworks;
 
 namespace CoopLauncher.Gui;
@@ -13,20 +14,39 @@ public static class GuiHost
     {
         Log.WriteToFile(AppData.LogFile, AppData.PreviousLogFile);
         ApplicationConfiguration.Initialize();
+        if (!UiAvailable()) return 1;
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) => Log.Info($"Error: {e.Exception.Message}");
         var app = new App(options, interactive: true);
         var closing = new ManualResetEventSlim();
         var loop = new Thread(() => RunLoop(app, closing)) { IsBackground = true, Name = "app-loop" };
         loop.Start();
-        var window = new MainForm(app);
-        instance.OnShowRequested(window.BringForward);
+        var (window, bringForward) = CreateWindow(app);
+        instance.OnShowRequested(bringForward);
         Application.Run(window);
         closing.Set();
         app.Stop();
         loop.Join(StopTimeoutMs);
         return 0;
     }
+
+#if CLASSIC_UI
+    private static bool UiAvailable() => true;
+
+    private static (Form Window, Action BringForward) CreateWindow(App app)
+    {
+        var window = new MainForm(app);
+        return (window, window.BringForward);
+    }
+#else
+    private static bool UiAvailable() => WebRuntime.EnsureOrExplain();
+
+    private static (Form Window, Action BringForward) CreateWindow(App app)
+    {
+        var window = new WebShell(app);
+        return (window, window.BringForward);
+    }
+#endif
 
     private static void RunLoop(App app, ManualResetEventSlim closing)
     {
