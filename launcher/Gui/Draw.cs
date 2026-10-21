@@ -59,10 +59,11 @@ internal static class Draw
     public static void TextSpaced(Graphics g, string text, Font font, Color color, Rectangle bounds, int extra)
     {
         var x = bounds.X;
+        var y = bounds.Y + (bounds.Height - font.Height) / 2;
         foreach (var glyph in text)
         {
             var piece = glyph.ToString();
-            Text(g, piece, font, color, new Rectangle(x, bounds.Y, bounds.Right - x, bounds.Height));
+            TextRenderer.DrawText(g, piece, font, new Point(x, y), color, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
             x += TightWidth(piece, font) + extra;
         }
     }

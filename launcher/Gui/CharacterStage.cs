@@ -1,138 +1,105 @@
+using System.Drawing.Drawing2D;
+
 namespace CoopLauncher.Gui;
 
-internal enum Side { You, Partner }
-
-/// <summary>What one half of the stage says: the character's figure, its name, the role line (You, Partner, Open or a
-/// player's name) and the outfit's label (empty when the outfit is not known).</summary>
-internal sealed record StageHalf(Figure Figure, string Name, string Role, string Outfit);
-
-/// <summary>The two halves of the character select: you on the left and your partner on the right, each with a portrait and
-/// three lines of text (name, role, outfit); the swap button of the view sits in the column between them. The focused half
-/// has the selection fill, which slides to the other half; a hovered half fades to the card hover fill. A portrait that
-/// changes (a commit, a preview, a partner that joined) cross-fades, the two characters swapping places slide across, text
-/// lines swap their words, and pictures that arrive late fade in. Left and Right move the focus.</summary>
+/// <summary>The two halves of the character select (S1, S3) over the game's art: each a cutout with the character's name, the
+/// outfit label between big previous and next arrows, and the dots; between them the swap button (before a session) or the
+/// lock. The arrows of the focused half also answer to Left and Right, Tab moves to the other half. What moves is
+/// <see cref="StageHalfView"/>'s. Pictures that arrive late fade in.</summary>
 internal sealed class CharacterStage : Control
 {
-    private const string FocusChannel = "focus";
-    private const string SlideChannel = "slide";
     private const string ArrivalChannel = "arrival";
-    private const int TextLines = 3;
-    private const int OutfitMaxLines = 2;
-
-    private static readonly int SwapColumn = Theme.Scale(52);
-    private static readonly int PortraitWidth = Theme.Scale(146);
-    private static readonly int NameGap = Theme.Scale(12);
-    private static readonly int LineHeight = Theme.Scale(20);
-
-    /// <summary>Single lines are centred in their line; a wrapped one starts at the top, so it is moved down to match.</summary>
-    private static readonly int WrappedInset = (LineHeight - Theme.Body.Height) / 2;
+    private const float BackdropOpacity = 0.22f;
+    private const float FadeStart = 0.45f;
+    private const float FadeMid = 0.78f;
+    private const int FadeMidAlpha = 217;
+    private const int LockGlyphWidth = 18;
+    private const int LockGlyphHeight = 22;
+    private const int FocusInset = 6;
+    private const int Forward = 1;
+    private const int Backward = -1;
+    private const string PreviousLabel = "Previous outfit";
+    private const string NextLabel = "Next outfit";
 
     private readonly OutfitArtStore _art;
-    private readonly Half?[] _halves = new Half?[2];
-    private StageHalf[]? _model;
-    private OutfitTile? _preview;
-    private Side _focused = Side.You;
-    private Side _focusFrom = Side.You;
-    private double _focusSlide = 1;
-    private double _slide = 1;
-    private bool _sliding;
+    private readonly StageHalfView?[] _views = new StageHalfView?[SelectModel.Halves];
+    private readonly StageArrow[] _previous = [new(StageGlyph.Previous, PreviousLabel), new(StageGlyph.Previous, PreviousLabel)];
+    private readonly StageArrow[] _next = [new(StageGlyph.Next, NextLabel), new(StageGlyph.Next, NextLabel)];
+    private readonly int[] _direction = [Forward, Forward];
+    private readonly StageArrow _swap = new(StageGlyph.Swap, "Swap characters");
+    private Image? _backdrop;
+    private SelectModel? _model;
+    private int _focus;
     private double? _arrival;
-
-    private sealed class Half
-    {
-        public Half(CharacterStage owner, Side side, StageHalf model)
-        {
-            Figure = model.Figure;
-            Name = new StatusLine(owner, $"{side}/name");
-            Role = new StatusLine(owner, $"{side}/role");
-            Outfit = new StatusLine(owner, $"{side}/outfit", wrapped: true);
-            RevealChannel = $"{side}/reveal";
-            HoverChannel = $"{side}/hover";
-            Name.Snap(model.Name);
-            Role.Snap(model.Role);
-            Outfit.Snap(model.Outfit);
-        }
-
-        /// <summary>The figure at rest, or the one entering while <see cref="Previous"/> fades out.</summary>
-        public Figure Figure { get; set; }
-
-        public Figure? Previous { get; set; }
-
-        /// <summary>Eased progress of the cross-fade from <see cref="Previous"/>.</summary>
-        public double Reveal { get; set; }
-
-        /// <summary>0 = at rest, 1 = hovered.</summary>
-        public double Hover { get; set; }
-
-        public StatusLine Name { get; }
-        public StatusLine Role { get; }
-        public StatusLine Outfit { get; }
-        public string RevealChannel { get; }
-        public string HoverChannel { get; }
-    }
 
     public CharacterStage(OutfitArtStore art)
     {
         _art = art;
         BackColor = Theme.Bg;
-        Height = StageHeight;
         TabStop = true;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        for (var half = 0; half < SelectModel.Halves; half++)
+        {
+            var side = half;
+            _previous[half].Click += (_, _) => Step(side, Backward);
+            _next[half].Click += (_, _) => Step(side, Forward);
+            Controls.Add(_previous[half]);
+            Controls.Add(_next[half]);
+        }
+        _swap.Click += (_, _) => SwapRequested?.Invoke();
+        Controls.Add(_swap);
     }
 
-    public static readonly int StageHeight = Theme.Scale(200);
+    /// <summary>Raised with the half and the direction (1 next, -1 previous) when the player asks for another outfit.</summary>
+    public event Action<int, int>? Stepped;
 
-    /// <summary>Raised when the player points at or moves to a half.</summary>
-    public event Action<Side>? SideChosen;
+    /// <summary>Raised when the player asks to swap the characters.</summary>
+    public event Action? SwapRequested;
 
-    /// <summary>The half with the focus: its fill slides over from the other half.</summary>
-    public Side FocusedSide
+    /// <summary>The game's art laid under the stage, or null.</summary>
+    public Image? Backdrop
     {
-        get => _focused;
+        get => _backdrop;
         set
         {
-            if (_focused == value) return;
-            _focusFrom = _focused;
-            _focused = value;
-            _focusSlide = 0;
-            if (_halves[(int)value] is { } half) SetHover(half, 0);
-            Motion.Animate(this, FocusChannel, 0, 1, Durations.Tabs, Easing.Out, progress =>
-            {
-                _focusSlide = progress;
-                Invalidate();
-            });
-        }
-    }
-
-    /// <summary>The column between the halves, which holds the view's swap button.</summary>
-    public Rectangle SwapSlot => new(HalfWidth, 0, Width - 2 * HalfWidth, Height);
-
-    private int HalfWidth => (Width - SwapColumn) / 2;
-
-    /// <summary>Shows the two halves. The first call shows them at once; later, a half whose figure changed cross-fades, text
-    /// lines swap their words, and two characters that traded places slide across.</summary>
-    public void Show(StageHalf you, StageHalf partner)
-    {
-        var next = new[] { you, partner };
-        if (_model == null)
-        {
-            _model = next;
-            for (var i = 0; i < next.Length; i++) _halves[i] = new Half(this, (Side)i, Effective((Side)i));
+            _backdrop = value;
             Invalidate();
-            return;
         }
-        var swapped = TradedPlaces(_model, next);
-        _model = next;
-        Refresh(Durations.Reveal, swapped);
     }
 
-    /// <summary>Shows an outfit on the focused half until it is called again with null (the preview of a hovered tile).</summary>
-    public void Preview(OutfitTile? tile)
+    /// <summary>The half the keys act on (0 left, 1 right).</summary>
+    public int FocusedHalf
     {
-        if (_preview == tile) return;
-        _preview = tile;
-        Refresh(Durations.Swap, swapped: false);
+        get => _focus;
+        set
+        {
+            if (_focus == value) return;
+            _focus = value;
+            Invalidate();
+        }
+    }
+
+    /// <summary>Shows the model. The first call shows it at once; later, a half moves what changed (see
+    /// <see cref="StageHalfView.Show"/>), and two characters that traded places cross over.</summary>
+    public void Show(SelectModel model)
+    {
+        var before = _model;
+        _model = model;
+        if (before == null)
+        {
+            for (var half = 0; half < SelectModel.Halves; half++) _views[half] = new StageHalfView(this, _art, $"half{half}", model[half]);
+            _focus = model.OwnHalf;
+        }
+        else
+        {
+            var traded = TradedPlaces(before, model);
+            for (var half = 0; half < SelectModel.Halves; half++) _views[half]!.Show(model[half], _direction[half], traded);
+        }
+        Array.Fill(_direction, Forward);
+        if (!model[_focus].CanCycle && model[model.OwnHalf].CanCycle) _focus = model.OwnHalf;
+        UpdateControls();
+        Invalidate();
     }
 
     /// <summary>Pictures arrived: they fade in over what showed in their place.</summary>
@@ -146,44 +113,41 @@ internal sealed class CharacterStage : Control
         Invalidate();
     });
 
-    protected override AccessibleObject CreateAccessibilityInstance() => new ItemListAccessibility(this,
-        () => _model == null ? 0 : _model.Length, index => $"{_model![index].Name} {_model[index].Role}", index => HalfRect((Side)index),
-        index => (Side)index == _focused, index => SideChosen?.Invoke((Side)index));
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (var view in _views) view?.Dispose();
+            Motion.Cancel(this, ArrivalChannel);
+        }
+        base.Dispose(disposing);
+    }
 
-    protected override bool IsInputKey(Keys keyData) => keyData is Keys.Left or Keys.Right || base.IsInputKey(keyData);
+    protected override bool IsInputKey(Keys keyData) =>
+        (keyData & Keys.KeyCode) is Keys.Left or Keys.Right || ((keyData & Keys.KeyCode) == Keys.Tab && NextCycling(keyData.HasFlag(Keys.Shift) ? Backward : Forward) >= 0)
+        || base.IsInputKey(keyData);
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode is Keys.Left or Keys.Right)
+        switch (e.KeyCode)
         {
-            SideChosen?.Invoke(e.KeyCode == Keys.Left ? Side.You : Side.Partner);
-            e.Handled = true;
+            case Keys.Left or Keys.Right:
+                Step(_focus, e.KeyCode == Keys.Left ? Backward : Forward);
+                e.Handled = true;
+                break;
+            case Keys.Tab when NextCycling(e.Shift ? Backward : Forward) is var half and >= 0:
+                FocusedHalf = half;
+                e.Handled = true;
+                break;
         }
         base.OnKeyDown(e);
     }
 
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        for (var i = 0; i < _halves.Length; i++)
-        {
-            if (_halves[i] is not { } half) continue;
-            var side = (Side)i;
-            SetHover(half, side != _focused && HalfRect(side).Contains(e.Location) ? 1 : 0);
-        }
-        base.OnMouseMove(e);
-    }
-
-    protected override void OnMouseLeave(EventArgs e)
-    {
-        for (var i = 0; i < _halves.Length; i++)
-            if (_halves[i] is { } half) SetHover(half, 0);
-        base.OnMouseLeave(e);
-    }
-
     protected override void OnMouseClick(MouseEventArgs e)
     {
-        foreach (var side in Enum.GetValues<Side>())
-            if (HalfRect(side).Contains(e.Location)) SideChosen?.Invoke(side);
+        if (_model != null)
+            for (var half = 0; half < SelectModel.Halves; half++)
+                if (_model[half].CanCycle && Columns()[half].Contains(e.Location)) FocusedHalf = half;
         base.OnMouseClick(e);
     }
 
@@ -199,136 +163,91 @@ internal sealed class CharacterStage : Control
         base.OnLostFocus(e);
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        UpdateControls();
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(BackColor);
-        if (_model == null) return;
-        foreach (var side in Enum.GetValues<Side>())
-            Draw.Fill(g, Interpolate.Lerp(Theme.Bg, Theme.CardHover, _halves[(int)side]!.Hover), HalfRect(side));
-        Draw.Fill(g, Theme.Selection, Interpolate.Lerp(HalfRect(_focusFrom), HalfRect(_focused), _focusSlide));
-        foreach (var side in Enum.GetValues<Side>())
+        g.Clear(Theme.Bg);
+        if (_backdrop == null) return;
+        Draw.Backdrop(g, _backdrop, ClientRectangle, BackdropOpacity);
+        using var brush = new LinearGradientBrush(ClientRectangle, Color.Black, Color.Black, LinearGradientMode.Vertical)
         {
-            PaintPortrait(g, _halves[(int)side]!, side);
-            PaintText(g, _halves[(int)side]!, side);
-        }
-        if (Focused && ShowFocusCues) Draw.Border(g, Rectangle.Inflate(HalfRect(_focused), -1, -1), Theme.Text);
-    }
-
-    private Rectangle HalfRect(Side side) => new(side == Side.You ? 0 : Width - HalfWidth, 0, HalfWidth, Height);
-
-    private Rectangle PortraitRect(Side side) =>
-        new(side == Side.You ? 0 : Width - PortraitWidth, 0, PortraitWidth, Height);
-
-    private static bool TradedPlaces(StageHalf[] before, StageHalf[] after) =>
-        before[0].Figure.Character != before[1].Figure.Character
-        && before[0].Figure.Character == after[1].Figure.Character && before[1].Figure.Character == after[0].Figure.Character;
-
-    /// <summary>The half as shown: the focused half shows the previewed outfit while there is one.</summary>
-    private StageHalf Effective(Side side)
-    {
-        var half = _model![(int)side];
-        return side == _focused && _preview != null ? half with { Figure = _preview.Figure, Outfit = _preview.Label } : half;
-    }
-
-    private void Refresh(int fadeMs, bool swapped)
-    {
-        foreach (var side in Enum.GetValues<Side>())
-        {
-            var half = _halves[(int)side]!;
-            var shown = Effective(side);
-            half.Name.Set(shown.Name);
-            half.Role.Set(shown.Role);
-            half.Outfit.Set(shown.Outfit);
-            if (swapped) SnapFigure(half, shown.Figure);
-            else ChangeFigure(half, shown.Figure, fadeMs);
-        }
-        if (swapped) Slide();
-        Invalidate();
-    }
-
-    private void SnapFigure(Half half, Figure figure)
-    {
-        Motion.Cancel(this, half.RevealChannel);
-        half.Previous = null;
-        half.Figure = figure;
-    }
-
-    private void ChangeFigure(Half half, Figure figure, int fadeMs)
-    {
-        if (half.Figure == figure) return;
-        half.Previous = half.Figure;
-        half.Figure = figure;
-        Motion.Animate(this, half.RevealChannel, 0, 1, fadeMs, Easing.Out, progress =>
-        {
-            half.Reveal = progress;
-            Invalidate();
-        }, () =>
-        {
-            half.Previous = null;
-            Invalidate();
-        });
-    }
-
-    private void Slide()
-    {
-        _sliding = true;
-        _slide = 0;
-        Motion.Animate(this, SlideChannel, 0, 1, Durations.Resize, Easing.InOut, progress =>
-        {
-            _slide = progress;
-            Invalidate();
-        }, () =>
-        {
-            _sliding = false;
-            Invalidate();
-        });
-    }
-
-    private void SetHover(Half half, double target)
-    {
-        if (Motion.ValueOf(this, half.HoverChannel) is null && half.Hover == target) return;
-        Motion.Animate(this, half.HoverChannel, Motion.ValueOf(this, half.HoverChannel) ?? half.Hover, target, Durations.Hover, Easing.Css,
-            amount =>
+            InterpolationColors = new ColorBlend
             {
-                half.Hover = amount;
-                Invalidate();
-            });
+                Colors = [Color.FromArgb(0, Theme.Bg), Color.FromArgb(0, Theme.Bg), Color.FromArgb(FadeMidAlpha, Theme.Bg), Theme.Bg],
+                Positions = [0f, FadeStart, FadeMid, 1f],
+            },
+        };
+        g.FillRectangle(brush, ClientRectangle);
     }
 
-    /// <summary>The portrait at the half's edge; while two characters trade places, where it is between the two halves.</summary>
-    private void PaintPortrait(Graphics g, Half half, Side side)
+    protected override void OnPaint(PaintEventArgs e)
     {
-        var rect = PortraitRect(side);
-        if (_sliding) rect = Interpolate.Lerp(PortraitRect(Other(side)), rect, _slide);
-        var background = side == _focused ? Theme.Selection : Theme.Bg;
-        if (half.Previous is not { } previous)
+        if (_model == null) return;
+        var g = e.Graphics;
+        var layouts = Layouts();
+        for (var half = 0; half < SelectModel.Halves; half++)
+            _views[half]!.Paint(g, layouts[half], layouts[SelectModel.Halves - 1 - half].Figure, _arrival);
+        if (_model.Centre == StageCentre.Lock) PaintLock(g);
+        if (Focused && ShowFocusCues && _model[_focus].CanCycle)
+            Draw.Border(g, Rectangle.Inflate(layouts[_focus].ArrowRow, Theme.Scale(FocusInset), Theme.Scale(FocusInset)), Theme.Text);
+    }
+
+    private Rectangle[] Columns() => StageLayout.Columns(ClientSize);
+
+    private HalfLayout[] Layouts() => Columns().Select(StageLayout.Of).ToArray();
+
+    private static bool TradedPlaces(SelectModel before, SelectModel after) =>
+        before.Left.Figure.Character != before.Right.Figure.Character
+        && before.Left.Figure.Character == after.Right.Figure.Character && before.Right.Figure.Character == after.Left.Figure.Character;
+
+    /// <summary>The half in the direction from the focused one that has usable arrows, or -1.</summary>
+    private int NextCycling(int direction)
+    {
+        if (_model == null) return -1;
+        var half = _focus + direction;
+        return half is >= 0 and < SelectModel.Halves && _model[half].CanCycle ? half : -1;
+    }
+
+    private void Step(int half, int direction)
+    {
+        if (_model == null || !_model[half].CanCycle) return;
+        FocusedHalf = half;
+        _direction[half] = direction;
+        Stepped?.Invoke(half, direction);
+    }
+
+    /// <summary>Puts the arrows and the swap button where the layout says, and shows what the model has.</summary>
+    private void UpdateControls()
+    {
+        if (_model == null) return;
+        var layouts = Layouts();
+        for (var half = 0; half < SelectModel.Halves; half++)
         {
-            _art.Paint(g, rect, half.Figure, FigureBox.Portrait, background, arrival: _sliding ? null : _arrival);
-            return;
+            var shown = _model[half];
+            _previous[half].Bounds = layouts[half].Previous;
+            _next[half].Bounds = layouts[half].Next;
+            foreach (var arrow in new[] { _previous[half], _next[half] })
+            {
+                arrow.Visible = shown.HasArrows;
+                arrow.Enabled = shown.CanCycle;
+                arrow.Outlined = shown.Kind == HalfKind.Partner;
+            }
         }
-        MotionLayer.Paint(g, rect, Recipes.RevealOut(half.Reveal), background,
-            (target, area) => _art.Paint(target, area, previous, FigureBox.Portrait, background));
-        MotionLayer.Paint(g, rect, Recipes.RevealIn(half.Reveal), background,
-            (target, area) => _art.Paint(target, area, half.Figure, FigureBox.Portrait, background));
+        _swap.Bounds = StageLayout.CentreBox(ClientSize);
+        _swap.Visible = _model.Centre == StageCentre.Swap;
     }
 
-    private static Side Other(Side side) => side == Side.You ? Side.Partner : Side.You;
-
-    /// <summary>Name, role and outfit centred vertically beside the portrait: left aligned for you, right aligned for the
-    /// partner, whose portrait is at the right edge.</summary>
-    private void PaintText(Graphics g, Half half, Side side)
+    private void PaintLock(Graphics g)
     {
-        var halfRect = HalfRect(side);
-        var portrait = PortraitRect(side);
-        var alignRight = side == Side.Partner;
-        var left = alignRight ? halfRect.X + NameGap : portrait.Right + NameGap;
-        var right = alignRight ? portrait.X - NameGap : halfRect.Right - NameGap;
-        var top = (Height - TextLines * LineHeight) / 2;
-        var background = side == _focused ? Theme.Selection : Theme.Bg;
-        var width = Math.Max(0, right - left);
-        half.Name.Paint(g, new Rectangle(left, top, width, LineHeight), Theme.Brand, Theme.Text, background, alignRight);
-        half.Role.Paint(g, new Rectangle(left, top + LineHeight, width, LineHeight), Theme.Body, Theme.Muted, background, alignRight);
-        half.Outfit.Paint(g, new Rectangle(left, top + 2 * LineHeight + WrappedInset, width, OutfitMaxLines * LineHeight), Theme.Body, Theme.Text, background, alignRight);
+        var box = StageLayout.CentreBox(ClientSize);
+        Draw.Border(g, box, Theme.Line);
+        var glyph = new Size(Theme.Scale(LockGlyphWidth), Theme.Scale(LockGlyphHeight));
+        Draw.Lock(g, Theme.Muted, new Rectangle(box.X + (box.Width - glyph.Width) / 2, box.Y + (box.Height - glyph.Height) / 2, glyph.Width, glyph.Height));
     }
 }
