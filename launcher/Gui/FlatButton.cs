@@ -222,7 +222,7 @@ internal sealed class FlatButton : Control, IButtonControl
     private (Color Fill, Color Ink, Color? Outline) Colors()
     {
         var parent = Parent?.BackColor ?? Theme.Bg;
-        if (!Enabled) return (parent, Theme.Dim, Theme.Line);
+        if (!Enabled) return _kind == ButtonKind.Primary ? (Theme.Selection, Theme.Muted, null) : (parent, Theme.Dim, Theme.Line);
         var (restFill, restInk, outline) = Palette(parent, hovered: false);
         var (hoverFill, hoverInk, _) = Palette(parent, hovered: true);
         var fill = Interpolate.Lerp(restFill, hoverFill, _hover);

@@ -59,6 +59,7 @@ public static class Program
         GameStatusTests.Run();
         SessionCardsTests.Run();
         CardStateTests.Run();
+        SessionScreensTests.Run();
         SpinnerTests.Run();
         SelectModelTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
