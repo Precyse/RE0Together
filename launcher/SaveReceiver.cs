@@ -5,12 +5,14 @@ namespace CoopLauncher;
 /// <summary>Guest side of save sync: writes incoming files to a temp file, verifies sha256, moves them into the session dir and ACKs.
 /// Once the first full set has arrived, later files (the host saving mid-session) go to a staging folder instead, and
 /// <see cref="PromoteStaged"/> moves them into the session dir when the game is not running, so the guest's own saves
-/// are never replaced under a running game.</summary>
+/// are never replaced under a running game. A guest whose game already runs (it rejoined) stages the first set as well. A file
+/// that cannot be written (the game, antivirus or a sync tool holds it) fails only that transfer: the host is told and resends.</summary>
 public sealed class SaveReceiver
 {
-    private const long MaxFileBytes = 64L * 1024 * 1024;
+    /// <summary>The largest file a guest takes; the host does not send a set that holds a bigger one.</summary>
+    public const long MaxFileBytes = 64L * 1024 * 1024;
     public const string StagingFolder = "staging";  // under the session dir: files the host sent after the first full set
-    private const string TempSuffix = ".part";
+    public const string TempSuffix = ".part";  // a file still arriving; never part of a set
 
     private sealed class Incoming
     {
@@ -25,18 +27,20 @@ public sealed class SaveReceiver
     private readonly string _stagingDir;
     private readonly ITransport _transport;
     private readonly Func<ulong> _hostId;
+    private readonly bool _gameRunning;
     private readonly Dictionary<uint, Incoming> _incoming = new();
     private readonly HashSet<string> _received = [];
     private List<string>? _expected;  // the host's manifest when the profile sends by pattern
     private bool _initialSetDone;
 
-    public SaveReceiver(SaveSyncProfile config, string sessionDir, string stagingDir, ITransport transport, Func<ulong> hostId)
+    public SaveReceiver(SaveSyncProfile config, string sessionDir, string stagingDir, ITransport transport, Func<ulong> hostId, bool gameRunning)
     {
         _config = config;
         _sessionDir = sessionDir;
         _stagingDir = stagingDir;
         _transport = transport;
         _hostId = hostId;
+        _gameRunning = gameRunning;
         if (config.FilePattern == null) _expected = config.SteamRemoteFiles;
         UpdateComplete();
     }
@@ -57,14 +61,30 @@ public sealed class SaveReceiver
                 UpdateComplete();
                 break;
             case Msg.FileBegin when FileMessages.TryParseBegin(frame.Payload, out var begin):
-                OnBegin(begin);
+                Guarded(sender, begin.Id, () => OnBegin(begin));
                 break;
             case Msg.FileChunk when FileMessages.TryParseChunk(frame.Payload, out var chunk):
-                OnChunk(chunk);
+                Guarded(sender, chunk.Id, () => OnChunk(chunk));
                 break;
             case Msg.FileEnd when FileMessages.TryParseId(frame.Payload, out var id):
-                OnEnd(sender, id);
+                Guarded(sender, id, () => OnEnd(sender, id));
                 break;
+        }
+    }
+
+    /// <summary>The boundary for disk errors: the transfer is dropped, the host is told it failed (it resends) and the loop goes on.</summary>
+    private void Guarded(ulong sender, uint id, Action handle)
+    {
+        try
+        {
+            handle();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            var name = _incoming.TryGetValue(id, out var incoming) ? incoming.Begin.Name : $"transfer {id}";
+            Discard(id);
+            Log.Info($"Save sync: {name} could not be written ({e.Message}), the host will resend it");
+            _transport.Send(sender, FileMessages.Ack(id, ok: false));
         }
     }
 
@@ -80,7 +100,7 @@ public sealed class SaveReceiver
                 File.Move(path, Path.Combine(_sessionDir, Path.GetFileName(path)), overwrite: true);
                 Log.Info($"Save sync: moved staged {Path.GetFileName(path)} into the session");
             }
-            catch (IOException e)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 Log.Info($"Save sync: staged {Path.GetFileName(path)} not moved yet ({e.Message})");
             }
@@ -100,7 +120,7 @@ public sealed class SaveReceiver
             return;
         }
         foreach (var stale in _incoming.Where(p => p.Value.Begin.Name == begin.Name).Select(p => p.Key).ToList()) Discard(stale);
-        var finalDir = _initialSetDone ? _stagingDir : _sessionDir;
+        var finalDir = _initialSetDone || _gameRunning ? _stagingDir : _sessionDir;
         Directory.CreateDirectory(finalDir);
         var tempPath = Path.Combine(finalDir, begin.Name + TempSuffix);
         _incoming[begin.Id] = new Incoming
@@ -147,10 +167,16 @@ public sealed class SaveReceiver
 
     private void Discard(uint id)
     {
-        var incoming = _incoming[id];
+        if (!_incoming.Remove(id, out var incoming)) return;
         incoming.Stream.Dispose();
-        File.Delete(incoming.TempPath);
-        _incoming.Remove(id);
+        try
+        {
+            File.Delete(incoming.TempPath);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Save sync: could not delete {incoming.TempPath} ({e.Message})");
+        }
     }
 
     private static bool HashMatches(string path, byte[] expected)

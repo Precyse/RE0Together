@@ -10,16 +10,27 @@ public static class SavePaths
     private const ulong SteamId64Base = 76561197960265728;
     private const string ActiveProcessKey = @"Software\Valve\Steam\ActiveProcess";
     private const string ActiveUserValue = "ActiveUser";
+    private const string DocumentsToken = "{documents}";
+    private const string SteamIdToken = "{steamid64}";
+    private const char TokenStart = '{';
 
-    public static string Expand(string template) =>
-        template.Replace("{documents}", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments))
-                .Replace("{steamid64}", SteamId64().ToString())
-                .Replace('/', Path.DirectorySeparatorChar);
+    /// <summary>The template with this machine's folders in it, or null when it cannot be expanded (no Steam user signed in, no
+    /// Documents folder, an unknown token).</summary>
+    public static string? Expand(string template) =>
+        Expand(template, Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), SteamId64());
 
-    private static ulong SteamId64()
+    /// <summary>The same rule on given values: a token without a value, or one the rule does not know, gives null.</summary>
+    public static string? Expand(string template, string documents, ulong? steamId64)
+    {
+        if (template.Replace(DocumentsToken, "").Replace(SteamIdToken, "").Contains(TokenStart)) return null;
+        if (template.Contains(DocumentsToken) && documents.Length == 0) return null;
+        if (template.Contains(SteamIdToken) && steamId64 == null) return null;
+        return template.Replace(DocumentsToken, documents).Replace(SteamIdToken, steamId64.ToString()).Replace('/', Path.DirectorySeparatorChar);
+    }
+
+    private static ulong? SteamId64()
     {
         var account = Registry.CurrentUser.OpenSubKey(ActiveProcessKey)?.GetValue(ActiveUserValue) as int? ?? 0;
-        if (account == 0) throw new InvalidOperationException("No Steam user signed in (needed for {steamid64})");
-        return SteamId64Base + (uint)account;
+        return account == 0 ? null : SteamId64Base + (uint)account;
     }
 }
