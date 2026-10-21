@@ -4,7 +4,8 @@ namespace CoopLauncher;
 /// The launcher's side of a rendezvous game (SessionKind.Rendezvous): the Steam lobby says who hosts, and the game's mod
 /// connects itself. This writes the game's join file (role, token = the lobby id, password = the lobby's secret, name = the
 /// player's Steam name as <see cref="PlayerName"/> shapes it) and passes the status line the mod writes on to the other
-/// lobby members. The file is removed when the session ends.
+/// lobby members. The role is fixed when the session starts: a host that leaves the lobby does not turn a guest into a host.
+/// The file is removed when the session ends.
 /// </summary>
 public sealed class NativeJoin : IDisposable
 {
@@ -14,8 +15,10 @@ public sealed class NativeJoin : IDisposable
 
     private readonly string _joinPath;
     private readonly string _statusPath;
-    private readonly ILobby _lobby;
     private readonly ulong _localId;
+    private readonly ulong _hostId;
+    private ILobby _lobby;
+    private bool _hostLeftLogged;
     private string _written = string.Empty;
     private string _status = string.Empty;
     private long _nextPollMs;
@@ -26,6 +29,7 @@ public sealed class NativeJoin : IDisposable
         _statusPath = statusPath;
         _lobby = lobby;
         _localId = localId;
+        _hostId = lobby.OwnerId;
     }
 
     /// <summary>Null when the profile names no join and status file. A status left by an earlier run is removed.</summary>
@@ -50,23 +54,40 @@ public sealed class NativeJoin : IDisposable
         return $"{state} {detail}".Trim();
     }
 
+    /// <summary>A new lobby replaced the failed one for the same session: its id goes into the join file and the status line
+    /// is published to it again.</summary>
+    public void Rebind(ILobby lobby)
+    {
+        _lobby = lobby;
+        _status = string.Empty;
+        _hostLeftLogged = false;
+    }
+
     public void Pump()
     {
         var now = Environment.TickCount64;
         if (now < _nextPollMs) return;
         _nextPollMs = now + PollIntervalMs;
+        LogHostLeft();
         WriteJoinFile();
         PublishStatus();
     }
 
     public void Dispose() => TryDelete(_joinPath);
 
+    private void LogHostLeft()
+    {
+        if (_hostLeftLogged || _lobby.OwnerId == _hostId) return;
+        _hostLeftLogged = true;
+        Log.Info("The host left the lobby");
+    }
+
     /// <summary>Written when the lobby has its id and secret, and again whenever its content changes; atomically, so the
     /// mod never reads half of it.</summary>
     private void WriteJoinFile()
     {
         if (_lobby.Id == 0 || _lobby.JoinSecret.Length == 0) return;
-        var role = _lobby.OwnerId == _localId ? "host" : "guest";
+        var role = _hostId == _localId ? "host" : "guest";
         var name = PlayerName.ForLocal(_localId, _lobby.Members);
         var nameLine = name.Length > 0 ? $"name={name}\n" : string.Empty;
         var content = $"role={role}\ntoken={_lobby.Id}\npassword={_lobby.JoinSecret}\n{nameLine}";
@@ -100,7 +121,7 @@ public sealed class NativeJoin : IDisposable
         }
         if (line == _status) return;
         _status = line;
-        _lobby.SetMemberStatus(line);
+        _lobby.SetMemberData(MemberKey.GameStatus, line);
     }
 
     private static void TryDelete(string path)

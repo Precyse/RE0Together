@@ -3,9 +3,6 @@ using System.Security.Cryptography;
 
 namespace CoopLauncher;
 
-/// <summary>What differs between the host's and this machine's setup, in the order it is checked.</summary>
-public enum BuildMismatch { None, LauncherBuild, GameBuild, ModFiles, ModNotInstalled }
-
 /// <summary>
 /// One machine's build, as BUILD_INFO carries it: launcher build (version.txt; 0 = dev build), installed game build (Steam
 /// buildid; 0 = unknown), and the hash of the installed mod files (<see cref="ModInstaller.ContentHash"/>; null = not
