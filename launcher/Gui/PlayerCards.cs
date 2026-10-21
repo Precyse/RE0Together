@@ -34,6 +34,7 @@ internal sealed class PlayerCards : Control
     private static readonly int BarHeight = Theme.Scale(2);
     private static readonly int PingWidth = Draw.Width(PingSample, Theme.Mono);
     private static readonly int ArrowInset = Theme.Scale(12);
+    private static readonly int ArrowColumn = Theme.ArrowSize / 2 + Theme.Gap;
 
     private readonly AvatarStore _avatars;
     private readonly List<Seat> _seats = new();
@@ -277,24 +278,26 @@ internal sealed class PlayerCards : Control
         var fill = Interpolate.Lerp(FillOf(card), Theme.CardHover, hover);
         Draw.Fill(g, fill, rect);
         Draw.Border(g, rect, Theme.Line);
-        if (live && _clickable && card.Detail.Length > 0)
+        var hasDetail = card.Detail.Length > 0;
+        var arrow = live && _clickable && hasDetail;
+        if (arrow)
             Draw.Arrow(g, Interpolate.Lerp(Theme.Muted, Theme.Text, hover), new Point(rect.Right - ArrowInset - Theme.ArrowSize / 4, rect.Y + rect.Height / 2), ArrowDirection.Right);
 
+        var openInk = Interpolate.Lerp(Theme.Dim, Theme.Muted, hover);
         var avatar = new Rectangle(rect.X + AvatarX, rect.Y + AvatarY, AvatarSize, AvatarSize);
-        if (card.Open) Draw.Border(g, avatar, Theme.Line);
+        if (card.Open) Draw.Border(g, avatar, Interpolate.Lerp(Theme.Line, Theme.Dim, hover));
         else if (live) seat.Avatar.Paint(g, avatar, card.Name, fill);
         else _avatars.Paint(g, avatar, card.AvatarId, card.Name);
 
-        var hasDetail = card.Detail.Length > 0;
         var top = rect.Y + (hasDetail ? LineTop : TwoLineTop);
         var bottom = rect.Y + (hasDetail ? LineBottom : TwoLineBottom);
         var left = rect.X + TextX;
-        var right = rect.Right - PadRight;
-        var quiet = card.Open ? Theme.Dim : Theme.Muted;
+        var right = rect.Right - PadRight - (arrow ? ArrowColumn : 0);
+        var quiet = card.Open ? openInk : Theme.Muted;
 
         var roleWidth = Draw.Width(card.Role, Theme.Small);
         Draw.TextRight(g, card.Role, Theme.Small, quiet, new Rectangle(right - roleWidth, top, roleWidth, LineHeight));
-        Draw.Text(g, card.Name, Theme.Strong, card.Open ? Theme.Dim : Theme.Text,
+        Draw.Text(g, card.Name, Theme.Strong, card.Open ? openInk : Theme.Text,
             new Rectangle(left, top, Math.Max(0, right - roleWidth - Theme.Gap - left), LineHeight));
         if (hasDetail) Draw.Text(g, card.Detail, Theme.Small, quiet, new Rectangle(left, rect.Y + LineMiddle, right - left, LineHeight));
 
