@@ -60,15 +60,16 @@ internal sealed class PlayerSlots : Control
         Draw.TextRight(g, role, Theme.Small, quiet, new Rectangle(roleX, cell.Y, roleWidth, cell.Height));
 
         var name = player?.Name ?? OpenSeat;
-        var character = seat < _characters.Count ? _characters[seat] : string.Empty;
+        var detail = string.Join("  ", new[] { seat < _characters.Count ? _characters[seat] : string.Empty, player?.Status ?? string.Empty }
+            .Where(part => part.Length > 0));
         var textWidth = roleX - cell.X - NameX - Theme.Gap;
         var nameColor = player != null ? Theme.Text : Theme.Dim;
-        if (character.Length == 0)
+        if (detail.Length == 0)
         {
             Draw.Text(g, name, Theme.Strong, nameColor, new Rectangle(cell.X + NameX, cell.Y, textWidth, cell.Height));
             return;
         }
         Draw.Text(g, name, Theme.Strong, nameColor, new Rectangle(cell.X + NameX, middle - LineHeight, textWidth, LineHeight));
-        Draw.Text(g, character, Theme.Small, quiet, new Rectangle(cell.X + NameX, middle, textWidth, LineHeight));
+        Draw.Text(g, detail, Theme.Small, quiet, new Rectangle(cell.X + NameX, middle, textWidth, LineHeight));
     }
 }

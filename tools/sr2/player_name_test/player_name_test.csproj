@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Unit test of the launcher's PlayerName rules (no Steam, no game): dotnet run -c Release. Exit code 1 on a failure. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CoopLauncher</RootNamespace>
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../../launcher/PlayerName.cs" />
+    <Compile Include="../../../launcher/ILobby.cs" />
+  </ItemGroup>
+
+</Project>

@@ -45,10 +45,10 @@ public sealed class LogForwarder
     }
 
     /// <summary>Null when the profile names no adapter log.</summary>
-    public static LogForwarder? Create(GameProfile profile, string gameDir, Session session, ITransport transport, ILobby lobby)
+    public static LogForwarder? Create(GameProfile profile, string gameDir, Session session, ITransport transport)
     {
         if (profile.AdapterLog is not { } log) return null;
-        var forwarder = new LogForwarder(Path.Combine(gameDir, log), transport, () => lobby.OwnerId, lobby.OwnerId == transport.LocalId);
+        var forwarder = new LogForwarder(Path.Combine(gameDir, log), transport, () => session.HostId, session.IsHost);
         session.DiagnosticsFrameReceived += forwarder.OnFrame;
         return forwarder;
     }

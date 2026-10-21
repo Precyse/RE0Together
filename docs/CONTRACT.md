@@ -30,7 +30,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 | type | name | dir | payload |
 |---|---|---|---|
 | 0x0001 | HELLO | adapter->launcher | u16 proto, u8 len + ascii game id |
-| 0x0002 | WELCOME | launcher->adapter | u8 local slot, u8 host slot, u8 max players, u32 epoch |
+| 0x0002 | WELCOME | launcher->adapter | u8 local slot, u8 host slot, u8 max players, u32 epoch, u64 local SteamID (15 bytes; an adapter that reads 7 bytes ignores it; the local test transport reports its UDP port) |
 | 0x0003 | PEER_UP | launcher->adapter | u8 slot, u64 steam id, u8 len + utf8 name |
 | 0x0004 | PEER_DOWN | launcher->adapter | u8 slot |
 | 0x0005 | REJECT | launcher->adapter | u8 len + ascii reason (e.g. game or proto mismatch), then close |
@@ -44,7 +44,7 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 | 0x0042 | FILE_END | launcher->launcher | u32 transfer id |
 | 0x0043 | FILE_ACK | launcher->launcher | u32 transfer id, u8 ok (sha256 matched) |
 | 0x0044 | FILE_MANIFEST | host launcher->guest launcher | u8 count, then per file u8 length + ascii name; sent before the files when the profile sends by `filePattern`; the guest then expects exactly these files |
-| 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 build number (version.txt; 0 = dev build), then i32 installed game build (Steam buildid; 0 = unknown; absent from older launchers); sent as a peer joins, before the save files; a guest on a different launcher build or game build refuses to start the game |
+| 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 build number (version.txt; 0 = dev build), then i32 installed game build (Steam buildid; 0 = unknown; absent from older launchers), then u8[32] mod hash (SHA-256 over the profile's adapterFiles as installed: per file the lowercase dst name, 0x00, u64 LE length, bytes; zero = not installed; absent from older launchers); sent as a peer joins, before the save files; a guest on a different launcher build or game build refuses to start the game, and so does one with another hash (Mod files differ) or none (Mod not installed) when the host's is not zero; the first difference found counts, in the order launcher build, game build, mod; a dev build (build 0) is guarded by the hash alone |
 | 0x0060 | SAVE_CHANGED | adapter->own launcher | ascii name of a save file the game just wrote to the Steam cloud; the host launcher re-sends the profile's save files to every peer (same FILE_* transfer as at join) |
 | 0x0051 | CRASH_DUMP | guest launcher->host launcher | u8 name length, ascii name (`crash-*.dmp`), u32 offset, bytes (≤ 32 KiB); a dump the adapter wrote during the session, sent in order; the host writes `peer_<steamid>_<name>` beside its adapter log |
 | 0x0050 | LOG_APPEND | guest launcher->host launcher | raw bytes newly appended to the guest's adapter log (≤ 32 KiB, every 2 s); the host appends them to `peer_<steamid>.log` beside its own adapter log |
@@ -55,24 +55,42 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 
 ## Session
 
-- Slots: lobby owner = 0 = host. The others are sorted ascending by SteamID into 1..max-1. Recompute on every membership change. If the host leaves, the session ends (epoch bump, PEER_DOWN for all).
+- Slots: lobby owner = 0 = host. The others are sorted ascending by SteamID into 1..max-1. Recompute on every membership change. A member missing from the lobby is held 10 s before PEER_DOWN; its slot and frames continue. Back within 10 s: PEER_UP again for the same slot (adapters resync: a guest asks for a snapshot, a host re-sends what it sends a joining peer). The host missing for 10 s, or any change of lobby owner, ends the session (epoch bump, PEER_DOWN for all). A guest whose lobby fails keeps its session and adapter link during the 10 s while it rejoins.
 - Lobby data: `cf_game=<id>`, `cf_proto=<n>`, `cf_ver=<launcher version>`. Members whose `cf_game`/`cf_proto` mismatch get no slot.
 - Protocol version `proto = 1`.
+
+### Peer frame budget
+
+Game frames (type 0x0100 and up) from a peer pass a token bucket per source slot before the launcher relays them to the adapter. A frame must fit both buckets of its kind, or it is dropped and counted per (slot, type, reliable); the peer is never disconnected. Launcher-owned frames (FILE_*, BUILD_INFO, LOG_APPEND, CRASH_DUMP, PING/PONG) are not budgeted. Every 5 s, while the totals change, the log gets `Peer budget: slot 1 dropped 0x0101 x12 (unreliable)`; a reliable drop adds "state may diverge; F9 resyncs".
+
+| bucket | rate | capacity |
+|---|---|---|
+| unreliable frames | 300 /s | 600 (2 s) |
+| unreliable bytes | 256 KiB/s | 512 KiB |
+| reliable frames | 300 /s | 3000 (10 s, a stall's backlog) |
+| reliable bytes | 512 KiB/s | 4 MiB (above the 1 MiB frame cap) |
+
+That is about 2x the RE0 peak (140 frames/s, up to about 80 KiB/s; DS2 about 125 frames/s, under 20 KiB/s).
 
 ## Game profile (`launcher/games/<id>.json`)
 
 ```json
 { "id": "re0", "name": "Resident Evil 0 HD", "steamAppId": 339340, "exe": "re0hd.exe",
   "maxPlayers": 2, "port": 27960,
-  "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ] }
+  "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
+  "adapterIni": "coop/adapter.ini" }
 ```
+
+A `rendezvous` game's join file (`joinFile` in the profile, SR2: `coop\sr2_join.txt` in the game folder) is written atomically by the launcher and read by the mod: UTF-8 lines `role=host|guest` (the lobby owner hosts), `token=<digits>` (the Steam lobby id), `password=<digits>` (the lobby's `JoinSecret`) and the optional `name=<UTF-8>`. `name` is the player's Steam name in the game: printable ASCII and U+00A1..U+00FF only (any other code point is sent as `?`, control characters are dropped), trimmed, at most 15 characters and at most 64 bytes; when another lobby member shapes to the same name (case-insensitive) the members in ascending Steam id order after the first get ` 2`, ` 3` ... with the base cut to keep 15 characters. No `name` line (an empty result) means the game keeps its own name. The mod ignores a name outside that set, and drops one over 64 bytes without dropping the request.
+
+`sessionKind` is `lobby` (default: the launcher's Steam lobby, transport and save sync) or `native` (the game matches players itself, as Saints Row 2 does through OpenSpy: the launcher installs the mod, writes the options into `adapterIni` and starts the game; no lobby, seats, save sync or adapter link). `rendezvous` is `native` plus a Steam lobby that says who hosts (`joinFile`, `statusFile`); with `"bridgeWhen": { "key", "value" }` the launcher also runs the bridge, build check and log forwarding when the host's value of option `key` equals `value`. A game option with `"host": true` is the host's alone: guests write the host's value to the adapter ini. `requires` lists `{ "file", "name" }` entries the game folder must hold; a missing one is shown in the rail line as `<name> not found`.
 
 ## Save sync (launcher-owned, game-agnostic)
 
-- Profile key `saveSync`: `{ "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", "adapterIni": "coop/adapter.ini" }`. Files come from `Steam\userdata\<accountId>\<steamAppId>\remote\` on the host.
+- Profile key `saveSync`: `{ "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session", }`. Files come from `Steam\userdata\<accountId>\<steamAppId>\remote\` on the host.
 - Host: on each new peer, send every file as FILE_BEGIN, FILE_CHUNKs and FILE_END, all reliable. The host never has a session dir (it plays its own save).
 - Guest: write chunks to a temp file, verify the sha256, move it into `<game>\<sessionDir>\`, and reply FILE_ACK. Launch the game only after every file has been ACKed ok (60 s timeout, then abort with a message).
-- Both sides set `coop=1` in `<game>\<adapterIni>` before launching. On launcher exit, and on launcher start to recover from a crash, delete the session dir and set `coop=0`, so a normal launch plays vanilla.
+- Both sides set `coop=1` in the profile's `adapterIni` (in the game folder) before launching. On launcher exit, and on launcher start to recover from a crash, delete the session dir and set `coop=0`, so a normal launch plays vanilla.
 - The adapter redirects the game's save I/O to the session dir whenever that dir holds the files and `coop=1`.
 - Games that keep their saves outside the Steam cloud folder add `hostSaveDir` (host source), `guestSaveDir` (guest destination, relative to the game folder) and `filePattern` (e.g. `*.dat`). The folders are templates: `{documents}` is the user's Documents folder, `{steamid64}` the signed-in Steam user (from Steam's registry key). The host sends every matching file after a FILE_MANIFEST. Example: `launcher/games/ds2.json`. Before the launcher deletes a session folder (exit, crash recovery) it copies the guest's files in it to `<sessionDir's parent>rchive\<yyyyMMdd-HHmmss>\` (staging and `.part` files excluded; the last 5 archives are kept), so the guest's own progress is never lost. With `filePattern` the host launcher also watches its save folder (the game writes saves after the join and sends no SAVE_CHANGED) and, 3 s after a matching file stops changing, sends it to every peer as FILE_MANIFEST (current list) plus FILE_BEGIN/CHUNK/END. The guest takes the first full set straight into the session folder; every later file goes to `<sessionDir>/staging` and is moved into the session folder only while the game exe is not running, so a running game's own saves are never replaced.
 
@@ -83,6 +101,15 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 3. Keep an engine-neutral gameplay core and implement the per-engine primitives:
    `enumerate_actors`, `local_player`, `bind_remote(slot) -> body`, `suppress_ai(body)`, `warp(body, pos, rot)`, `play_action(body, id)`, `set_locomotion(body, speed, dir)`, `read_anim(body)`, `force_anim(body, anim)`, `apply_hit(descriptor)`.
 4. Authority: the host (slot 0) owns enemies, world flags and pickups. Guests send their own player state plus hit descriptors.
+5. A PEER_UP for a slot that is already up means the peer was unreachable for a while: resync, do not reset.
+
+## Game messages of the SR2 adapter (0x0100 and up, adapter-owned)
+
+Used only when the host's `transport` option is `steam`: the game's UDP datagrams travel through the launchers (`bridgeWhen` in `games/sr2.json`, port 27962). The launcher relays them as opaque bytes and overwrites the source slot, as for every game message. Integers little-endian.
+
+| type | name | dir | reliable | payload |
+|---|---|---|---|---|
+| 0x0100 | GAME_DATAGRAM | adapter to adapter | no | u32 dst (IPv4 in host order; 0xFFFFFFFF = broadcast), then the game's UDP payload (1..1300 bytes). The sender's frame slot is the peer's current slot, or 0xFF for a broadcast; the receiver reads the source slot the launcher wrote. |
 
 ## Game messages of the DS2 adapter (0x0100 and up, adapter-owned)
 

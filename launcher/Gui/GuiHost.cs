@@ -38,8 +38,9 @@ public static class GuiHost
             }
             catch (Exception e)
             {
-                if (e.Message != lastFailure) Log.Info($"Fatal: {e.Message}");
-                lastFailure = e.Message;
+                var detail = e.ToString();
+                if (detail != lastFailure) Log.Info($"Fatal: {detail}");
+                lastFailure = detail;
                 app.MarkOffline();
                 closing.Wait(RetryDelayMs);
             }

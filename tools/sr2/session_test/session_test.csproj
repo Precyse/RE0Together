@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Unit test of the launcher's Session with a scripted lobby and transport and a stand-in adapter on a loopback port (no Steam, no game): dotnet run -c Release. Exit code 1 on a failure. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CoopLauncher</RootNamespace>
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../../launcher/Session.cs" />
+    <Compile Include="../../../launcher/SlotAssigner.cs" />
+    <Compile Include="../../../launcher/LoopbackBridge.cs" />
+    <Compile Include="../../../launcher/PeerStats.cs" />
+    <Compile Include="../../../launcher/MemberGrace.cs" />
+    <Compile Include="../../../launcher/PeerBudget.cs" />
+    <Compile Include="../../../launcher/FreshQueue.cs" />
+    <Compile Include="../../../launcher/ControlMessages.cs" />
+    <Compile Include="../../../launcher/Framing.cs" />
+    <Compile Include="../../../launcher/ITransport.cs" />
+    <Compile Include="../../../launcher/ILobby.cs" />
+    <Compile Include="../../../launcher/GameProfile.cs" />
+    <Compile Include="../../../launcher/RepoPaths.cs" />
+    <Compile Include="../../../launcher/Log.cs" />
+  </ItemGroup>
+
+</Project>

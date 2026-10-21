@@ -1,27 +1,45 @@
 namespace CoopLauncher;
 
-/// <summary>Turns lobby membership into slots and epochs, and routes frames between adapter and peers.</summary>
+/// <summary>
+/// Turns lobby membership into slots and epochs, and routes frames between adapter and peers. A member that vanishes from
+/// the lobby is held for <see cref="MemberGrace.PeerGraceMs"/> with its slot and frames before PEER_DOWN; one that comes
+/// back in time gets PEER_UP again for the same slot (the adapter resyncs).
+/// </summary>
 public sealed class Session : IDisposable
 {
+    private const long BudgetReportIntervalMs = 5000;
+
     private readonly GameProfile _profile;
-    private readonly ILobby _lobby;
     private readonly ITransport _transport;
     private readonly LoopbackBridge _bridge;
     private readonly PeerStats _stats = new();
+    private readonly MemberGrace _grace = new();
+    private readonly PeerBudget _budget = new();
+    private readonly FreshQueue? _fresh;
+    private readonly Dictionary<ulong, string> _names = new();
 
+    private ILobby _lobby;
+    private ulong _lobbyId;
     private Dictionary<ulong, byte> _slots = new();
     private ulong _hostId;
     private byte _localSlot;
     private uint _epoch;
     private bool _active;
+    private bool _recheck;
     private int _seenRevision = -1;
+    private long _lastBudgetReportMs;
+    private long _lastFreshReplaced;
 
     public Session(GameProfile profile, ILobby lobby, ITransport transport, LoopbackBridge bridge)
     {
         _profile = profile;
         _lobby = lobby;
+        _lobbyId = lobby.Id;
+        _hostId = lobby.OwnerId;
         _transport = transport;
         _bridge = bridge;
+        _fresh = FreshQueue.ForProfile(profile);
+        if (_fresh != null) Log.Info($"Fresh channel: {_fresh.TypeCount} types");
         _transport.FrameReceived += OnPeerFrame;
         _bridge.GameFrame += OnAdapterFrame;
         _bridge.AdapterReady += OnAdapterReady;
@@ -30,11 +48,20 @@ public sealed class Session : IDisposable
 
     public bool Ended { get; private set; }
 
+    /// <summary>The guest's lobby object failed: membership is frozen and every peer is held until a lobby is rebound.</summary>
+    public bool Held { get; private set; }
+
+    public ulong HostId => _hostId;
+
+    public bool IsHost => _hostId == _transport.LocalId;
+
+    public ulong LobbyId => _lobbyId;
+
     public bool PeerConnected => _active && !Ended && _slots.Count > 1;
 
     public int? RttMs => _stats.RttMs;
 
-    /// <summary>Raised on the main loop for each non-local peer that appears in the slot map.</summary>
+    /// <summary>Raised on the main loop for each non-local peer that appears in the slot map, and for a held one that comes back.</summary>
     public event Action<ulong>? PeerJoined;
 
     /// <summary>Launcher-owned file transfer frames (FILE_*), with the sender's transport id. Never relayed to the adapter.</summary>
@@ -52,16 +79,48 @@ public sealed class Session : IDisposable
     /// <summary>A guest's diagnostics (LOG_APPEND, CRASH_DUMP), with the sender's transport id. Never relayed to the adapter.</summary>
     public event Action<ulong, Frame>? DiagnosticsFrameReceived;
 
+    /// <summary>True for another member of the slot map, also while it is held.</summary>
+    public bool HasPeer(ulong id) => id != _transport.LocalId && _slots.ContainsKey(id);
+
     public void Pump()
     {
         if (Ended) return;
-        if (_lobby.Revision != _seenRevision)
+        var now = Environment.TickCount64;
+        if (_recheck || (!Held && _lobby.Revision != _seenRevision) || _grace.ExpiryDue(now))
         {
-            _seenRevision = _lobby.Revision;
-            ApplyMembership();
+            _recheck = false;
+            if (!Held) _seenRevision = _lobby.Revision;
+            ApplyMembership(now);
         }
         if (_active && !Ended)
             _stats.Tick(PeerSlots(), SendPing, (slot, rtt) => _bridge.Send(ControlMessages.PeerStats(slot, rtt)));
+        FlushFresh();
+        ReportBudget(now);
+    }
+
+    /// <summary>The guest's lobby object failed. The session, its slots and frames carry on while every peer is held for the
+    /// grace. False when there is nothing to hold (the session never became active, or it ended).</summary>
+    public bool Hold()
+    {
+        if (!_active || Ended) return false;
+        if (!Held) Log.Info("Lobby lost, holding the session");
+        Held = true;
+        _recheck = true;
+        return true;
+    }
+
+    /// <summary>A lobby replaced the failed one: membership follows it again, and the adapter hears every peer come up again
+    /// (it was unreachable for a while, so it resyncs).</summary>
+    public void Rebind(ILobby lobby)
+    {
+        _lobby = lobby;
+        _lobbyId = lobby.Id;
+        _seenRevision = -1;
+        Held = false;
+        _grace.Clear();
+        Log.Info("Session rebound to the new lobby");
+        foreach (var (id, slot) in _slots)
+            if (id != _transport.LocalId) SendPeerUp(id, slot);
     }
 
     public void Dispose() => _transport.FrameReceived -= OnPeerFrame;
@@ -69,33 +128,51 @@ public sealed class Session : IDisposable
     private List<byte> PeerSlots() =>
         _slots.Where(p => p.Key != _transport.LocalId).Select(p => p.Value).ToList();
 
-    private void ApplyMembership()
+    private void ApplyMembership(long nowMs)
     {
-        var members = _lobby.Members;
-        var ownerPresent = members.Any(m => m.Id == _lobby.OwnerId);
-        if (!_active && !ownerPresent) return;
-        if (_active && (!ownerPresent || _lobby.OwnerId != _hostId))
+        var present = Held ? new HashSet<ulong>() : _lobby.Members.Select(m => m.Id).ToHashSet();
+        if (!Held)
+            foreach (var member in _lobby.Members) _names[member.Id] = member.Name;
+        if (!_active)
+        {
+            Activate(present);
+            return;
+        }
+        if (!Held && _lobby.OwnerId != _hostId)
         {
             End("host left");
             return;
         }
 
-        var hostId = _active ? _hostId : _lobby.OwnerId;
-        var next = SlotAssigner.Assign(hostId, members.Select(m => m.Id), _profile.MaxPlayers);
+        var verdict = _grace.Update(PeerIds, present, nowMs);
+        if (verdict.Expired.Contains(_hostId))
+        {
+            End("host left");
+            return;
+        }
+        var next = SlotAssigner.Assign(_hostId, present.Concat(verdict.Held).Append(_transport.LocalId), _profile.MaxPlayers);
         if (!next.TryGetValue(_transport.LocalId, out var mySlot))
         {
             End("no slot available");
             return;
         }
+        if (mySlot != _localSlot) Reset(next, mySlot, _epoch + 1);
+        else UpdatePeers(next, verdict.Returned);
+    }
 
-        if (!_active)
+    private void Activate(HashSet<ulong> present)
+    {
+        if (!present.Contains(_lobby.OwnerId)) return;
+        var hostId = _lobby.OwnerId;
+        var next = SlotAssigner.Assign(hostId, present, _profile.MaxPlayers);
+        if (!next.TryGetValue(_transport.LocalId, out var mySlot))
         {
-            _active = true;
-            _hostId = hostId;
-            Reset(next, mySlot, 1);
+            End("no slot available");
+            return;
         }
-        else if (mySlot != _localSlot) Reset(next, mySlot, _epoch + 1);
-        else UpdatePeers(next);
+        _active = true;
+        _hostId = hostId;
+        Reset(next, mySlot, 1);
     }
 
     private void Reset(Dictionary<ulong, byte> slots, byte localSlot, uint epoch)
@@ -108,18 +185,19 @@ public sealed class Session : IDisposable
         foreach (var id in slots.Keys.Where(id => id != _transport.LocalId)) PeerJoined?.Invoke(id);
     }
 
-    private void UpdatePeers(Dictionary<ulong, byte> next)
+    private void UpdatePeers(Dictionary<ulong, byte> next, IReadOnlyList<ulong> returned)
     {
         foreach (var (id, slot) in _slots)
         {
             if (id == _transport.LocalId || (next.TryGetValue(id, out var s) && s == slot)) continue;
             _stats.Remove(slot);
+            _budget.Remove(slot);
             _bridge.Send(ControlMessages.PeerDown(slot));
         }
         var previous = _slots;
         _slots = next;
         foreach (var (id, slot) in next)
-            if (id != _transport.LocalId && !(previous.TryGetValue(id, out var s) && s == slot))
+            if (id != _transport.LocalId && (returned.Contains(id) || !(previous.TryGetValue(id, out var s) && s == slot)))
             {
                 SendPeerUp(id, slot);
                 PeerJoined?.Invoke(id);
@@ -133,15 +211,24 @@ public sealed class Session : IDisposable
 
     private void SendSnapshot()
     {
-        _bridge.Send(ControlMessages.Welcome(_localSlot, SlotAssigner.HostSlot, (byte)_profile.MaxPlayers, _epoch));
+        _bridge.Send(ControlMessages.Welcome(_localSlot, SlotAssigner.HostSlot, (byte)_profile.MaxPlayers, _epoch, _transport.LocalId));
         foreach (var (id, slot) in _slots)
             if (id != _transport.LocalId) SendPeerUp(id, slot);
     }
 
-    private void SendPeerUp(ulong id, byte slot)
+    private void SendPeerUp(ulong id, byte slot) =>
+        _bridge.Send(ControlMessages.PeerUp(slot, id, _names.GetValueOrDefault(id, id.ToString())));
+
+    private void ReportBudget(long nowMs)
     {
-        var name = _lobby.Members.FirstOrDefault(m => m.Id == id)?.Name ?? id.ToString();
-        _bridge.Send(ControlMessages.PeerUp(slot, id, name));
+        if (nowMs - _lastBudgetReportMs < BudgetReportIntervalMs) return;
+        _lastBudgetReportMs = nowMs;
+        foreach (var line in _budget.TakeReport()) Log.Info(line);
+        if (_fresh != null && _fresh.Replaced != _lastFreshReplaced)
+        {
+            _lastFreshReplaced = _fresh.Replaced;
+            Log.Info($"Fresh channel: {_lastFreshReplaced} older frames replaced");
+        }
     }
 
     private void End(string reason)
@@ -153,8 +240,23 @@ public sealed class Session : IDisposable
         Ended = true;
     }
 
-    private void SendToPeer(ulong id, Frame frame) =>
-        _transport.Send(id, frame with { Flags = (byte)(frame.Flags & Framing.FlagReliable), Slot = _localSlot });
+    private Frame Outgoing(Frame frame) =>
+        frame with { Flags = (byte)(frame.Flags & Framing.FlagReliable), Slot = _localSlot };
+
+    private void SendToPeer(ulong id, Frame frame) => _transport.Send(id, Outgoing(frame));
+
+    /// <summary>A fresh type waits for the next flush (newest wins); everything else goes out now.</summary>
+    private void RouteToPeer(ulong id, Frame frame)
+    {
+        if (_fresh?.Accepts(frame) == true) _fresh.Enqueue(id, Outgoing(frame));
+        else SendToPeer(id, frame);
+    }
+
+    private void FlushFresh()
+    {
+        if (_fresh == null) return;
+        foreach (var (id, frame) in _fresh.Drain()) _transport.Send(id, frame, TransportChannel.Fresh);
+    }
 
     private void SendPing(byte slot)
     {
@@ -178,9 +280,9 @@ public sealed class Session : IDisposable
         if (!_active) return;
         if (frame.Slot == Framing.SlotAll)
         {
-            foreach (var id in _slots.Keys.Where(id => id != _transport.LocalId).ToList()) SendToPeer(id, frame);
+            foreach (var id in _slots.Keys.Where(id => id != _transport.LocalId).ToList()) RouteToPeer(id, frame);
         }
-        else if (TryGetPeerId(frame.Slot, out var id)) SendToPeer(id, frame);
+        else if (TryGetPeerId(frame.Slot, out var id)) RouteToPeer(id, frame);
     }
 
     private void OnPeerFrame(ulong senderId, Frame frame)
@@ -202,7 +304,10 @@ public sealed class Session : IDisposable
         }
         if (!_active || !_slots.TryGetValue(senderId, out var slot)) return;
         frame = frame with { Slot = slot };
-        if (frame.Type >= Msg.FirstGameType) _bridge.Send(frame);
+        if (frame.Type >= Msg.FirstGameType)
+        {
+            if (_budget.Admit(slot, frame, Environment.TickCount64)) _bridge.Send(frame);
+        }
         else if (frame.Type == Msg.Ping && ControlMessages.TryParseTimestamp(frame.Payload, out var ping))
             SendToPeer(senderId, ControlMessages.Pong(ping));
         else if (frame.Type == Msg.Pong && ControlMessages.TryParseTimestamp(frame.Payload, out var echoed))

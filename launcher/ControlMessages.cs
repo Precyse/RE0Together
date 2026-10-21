@@ -8,13 +8,14 @@ public static class ControlMessages
 {
     private const byte NoSlot = 0;
 
-    public static Frame Welcome(byte localSlot, byte hostSlot, byte maxPlayers, uint epoch)
+    public static Frame Welcome(byte localSlot, byte hostSlot, byte maxPlayers, uint epoch, ulong localId)
     {
-        var p = new byte[7];
+        var p = new byte[15];
         p[0] = localSlot;
         p[1] = hostSlot;
         p[2] = maxPlayers;
         BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(3), epoch);
+        BinaryPrimitives.WriteUInt64LittleEndian(p.AsSpan(7), localId);
         return Make(Msg.Welcome, p);
     }
 

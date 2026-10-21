@@ -38,7 +38,7 @@ internal static class Program
         }
         catch (Exception e)
         {
-            Log.Info($"Fatal: {e.Message}");
+            Log.Info($"Fatal: {e}");
             return 1;
         }
     }

@@ -10,6 +10,8 @@ public sealed class MainForm : ChromelessForm
     private const string WindowTitle = "Co-op Launcher";
     private const string ConfirmCloseText = "Leave the session and close?";
     private const string JoinCodeLabel = "Join code";
+    private const string HostLabel = "Host";
+    private const string LaunchLabel = "Launch";
     private const int WatchIntervalMs = 1000;
     private const int ModColumn = 1;
     private const int RelaunchColumn = 1;
@@ -33,7 +35,7 @@ public sealed class MainForm : ChromelessForm
     private readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
     private readonly LogDrawer _drawer = new();
 
-    private readonly FlatButton _host = new("Host", ButtonKind.Primary);
+    private readonly FlatButton _host = new(HostLabel, ButtonKind.Primary);
     private readonly FlatButton _mod = new("Install", ButtonKind.Normal);
     private readonly Label _joinLabel = new()
     {
@@ -41,6 +43,7 @@ public sealed class MainForm : ChromelessForm
     };
     private readonly FieldBox _joinCode = new();
     private readonly FlatButton _join = new("Join", ButtonKind.Ghost);
+    private readonly TableLayoutPanel _joinRow;
     private readonly TableLayoutPanel _idleRow;
     private readonly Label _lobbyCode = new()
     {
@@ -68,8 +71,8 @@ public sealed class MainForm : ChromelessForm
         Size = SizeFromClientSize(new Size(WindowWidth, WindowHeight));
         WindowMemory.Restore(this);
         NativeTheme.DarkScrollbars(_pane);
-        _idleRow = ControlRow.Create(new[] { (Control)_host, _mod, _joinLabel, _joinCode, _join },
-            Theme.PrimaryWidth, Theme.ToolWidth, JoinLabelWidth, -1, Theme.ToolWidth);
+        _joinRow = ControlRow.Create(new Control[] { _joinLabel, _joinCode, _join }, JoinLabelWidth, -1, Theme.ToolWidth);
+        _idleRow = ControlRow.Create(new[] { (Control)_host, _mod, _joinRow }, Theme.PrimaryWidth, Theme.ToolWidth, -1);
         _lobbyRow = ControlRow.Create(new[] { (Control)_lobbyCode, _relaunch, _copy, _invite, _leave },
             -1, 0, Theme.ToolWidth, Theme.ToolWidth, Theme.ToolWidth);
         LoadGames();
@@ -87,7 +90,7 @@ public sealed class MainForm : ChromelessForm
             if (AppSettings.Current.CheckForUpdates) ReadReleaseInBackground();
         };
         _options.Changed += () => Apply(_app.Status);
-        _host.Click += (_, _) => { if (_rail.Selected is { } game) _app.Host(game.Id); };
+        _host.Click += (_, _) => HostOrLaunch();
         _mod.Click += (_, _) => InstallMod();
         _join.Click += (_, _) => JoinTypedCode();
         _joinCode.Input.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) JoinTypedCode(); };
@@ -234,7 +237,8 @@ public sealed class MainForm : ChromelessForm
             var gameDir = GameFolders.Find(game);
             var gameBuild = GameBuilds.Installed(game, gameDir);
             _rail.SetStatus(game.Id, new GameStatus(
-                ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild(), gameBuild, GameBuilds.IsSupported(game, gameBuild)));
+                ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild(), gameBuild, GameBuilds.IsSupported(game, gameBuild),
+                gameDir == null ? null : game.MissingRequirement(gameDir)));
         }
     }
 
@@ -254,6 +258,14 @@ public sealed class MainForm : ChromelessForm
     {
         var game = _rail.Games.FirstOrDefault(g => g.Id == _app.Status.GameId);
         if (game != null) GameLauncher.Launch(game, GameFolders.Find(game));
+    }
+
+    /// <summary>The session row's main button: opens a lobby, or for a game that matches its players itself starts the game.</summary>
+    private void HostOrLaunch()
+    {
+        if (_rail.Selected is not { } game) return;
+        if (!game.NativeSession) _app.Host(game.Id);
+        else if (GameFolders.Find(game) is { } gameDir) GameLauncher.LaunchWithOptions(game, gameDir, GameOptions.Current(game, gameDir));
     }
 
     /// <summary>The session row's mod button: Install, or Update (re-copy), for the selected game.</summary>
@@ -325,7 +337,7 @@ public sealed class MainForm : ChromelessForm
         var running = status.State is AppState.GameRunning or AppState.PeerConnected;
 
         var exited = _watch.Condition == GameCondition.Exited;
-        _top.Show(BuildLabel(), StatusText.Format(status, _watch.Condition), StatusText.Lamp(status.State, _watch.Condition));
+        _top.Show(BuildLabel(), StatusText.Format(status, _watch.Condition), StatusText.Lamp(status, _watch.Condition));
         _relaunch.Visible = exited;
         _lobbyRow.ColumnStyles[RelaunchColumn].Width = exited ? Theme.ToolWidth : 0;
         _rail.Enabled = free;
@@ -348,7 +360,12 @@ public sealed class MainForm : ChromelessForm
         _lobbyRow.Visible = inLobby;
         _lobbyCode.Text = inLobby ? status.LobbyId.ToString() : string.Empty;
         var mod = _rail.SelectedStatus;
-        _host.Enabled = idle && mod.CanHost;
+        var native = _rail.Selected is { NativeSession: true };
+        _host.Text = native ? LaunchLabel : HostLabel;
+        _host.Enabled = (native ? free : idle) && mod.CanHost;
+        _host.Invalidate();
+        _joinRow.Visible = !native;
+        _playersSection.Visible = !native;
         var offerMod = !mod.ModInstalled || mod.UpdateAvailable;
         _mod.Visible = offerMod;
         _idleRow.ColumnStyles[ModColumn].Width = offerMod ? Theme.ToolWidth : 0;
@@ -372,6 +389,7 @@ public sealed class MainForm : ChromelessForm
     /// <summary>The pane scrolls once its sections and the seats no longer fit the window.</summary>
     private void FitPane()
     {
-        _pane.AutoScrollMinSize = new Size(0, _hero.Height + _session.Height + _optionsSection.Height + _playersSection.FittedHeight);
+        var playersHeight = _playersSection.Visible ? _playersSection.FittedHeight : 0;
+        _pane.AutoScrollMinSize = new Size(0, _hero.Height + _session.Height + _optionsSection.Height + playersHeight);
     }
 }

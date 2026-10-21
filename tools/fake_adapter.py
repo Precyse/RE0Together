@@ -34,8 +34,9 @@ def read_exact(sock, n):
 
 def describe(msg_type, slot, payload):
     if msg_type == 0x0002:
-        local, host, max_players, epoch = struct.unpack("<BBBI", payload)
-        return f"local_slot={local} host_slot={host} max={max_players} epoch={epoch}"
+        local, host, max_players, epoch = struct.unpack("<BBBI", payload[:7])
+        steam_id = f" id={struct.unpack('<Q', payload[7:15])[0]}" if len(payload) >= 15 else ""
+        return f"local_slot={local} host_slot={host} max={max_players} epoch={epoch}{steam_id}"
     if msg_type == 0x0003:
         peer_slot, steam_id, name_len = struct.unpack("<BQB", payload[:10])
         return f"slot={peer_slot} id={steam_id} name={payload[10:10 + name_len].decode()}"

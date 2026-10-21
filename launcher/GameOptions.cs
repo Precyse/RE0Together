@@ -19,6 +19,21 @@ public static class GameOptions
         return Current(profile, gameDir).Where(pair => host.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
+    /// <summary>The values the adapter ini gets: the player's own, except that a guest takes the host's value of every host
+    /// option the lobby carries (a value the profile does not offer is ignored), so both machines run the same character
+    /// and partner mode.</summary>
+    public static Dictionary<string, string> ForAdapter(GameProfile profile, IReadOnlyDictionary<string, string> own,
+        IReadOnlyDictionary<string, string> hostValues, bool isHost)
+    {
+        var values = own.ToDictionary(pair => pair.Key, pair => pair.Value);
+        if (isHost) return values;
+        foreach (var option in (profile.Options ?? []).Where(option => option.Host))
+        {
+            if (hostValues.TryGetValue(option.Key, out var hostValue) && option.Values.Any(v => v.Value == hostValue)) values[option.Key] = hostValue;
+        }
+        return values;
+    }
+
     public static string Encode(IReadOnlyDictionary<string, string> values) =>
         string.Join(PairSeparator, values.Select(pair => $"{pair.Key}{KeyValueSeparator}{pair.Value}"));
 

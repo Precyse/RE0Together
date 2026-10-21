@@ -20,6 +20,15 @@ public interface ILobby : IDisposable
     /// <summary>The host's option values (GameOption.Host), set when the lobby was created and read by every member.</summary>
     IReadOnlyDictionary<string, string> HostOptions { get; }
 
+    /// <summary>The password the host made for a rendezvous game's session (empty until known, and for other games).</summary>
+    string JoinSecret { get; }
+
+    /// <summary>Publishes our own status line for the other members to show.</summary>
+    void SetMemberStatus(string status);
+
+    /// <summary>The status line a member published, empty when it has none.</summary>
+    string MemberStatus(LobbyMember member);
+
     /// <summary>Members compatible with our game and protocol.</summary>
     IReadOnlyList<LobbyMember> Members { get; }
 

@@ -6,7 +6,7 @@ public enum Command { WaitForInvite, Host, Join }
 
 public sealed record CliOptions(
     Command Command, string? Argument, TransportKind Transport, int LocalPort, int PeerPort, int BridgePort, bool NoLaunch, string? Game,
-    string? SaveSource, string? GameDir)
+    string? SaveSource, string? GameDir, string? HostOptions)
 {
     public const string Usage = """
         Usage:
@@ -21,13 +21,14 @@ public sealed record CliOptions(
           --game <id>               game profile for a local join (default: the only profile)
           --save-source <dir>       host: folder holding the save files (default: Steam userdata remote folder)
           --game-dir <dir>          game folder (default: resolved through Steam)
+          --host-options k=v;k=v    local join: the host's option values (a Steam lobby carries them)
           --no-launch               do not start the game
         """;
 
     public static CliOptions? Parse(string[] args)
     {
         var command = Command.WaitForInvite;
-        string? argument = null, game = null, saveSource = null, gameDir = null;
+        string? argument = null, game = null, saveSource = null, gameDir = null, hostOptions = null;
         var transport = TransportKind.Steam;
         int localPort = 0, peerPort = 0, bridgePort = 0;
         var noLaunch = false;
@@ -63,6 +64,9 @@ public sealed record CliOptions(
                 case "--game-dir" when i + 1 < args.Length:
                     gameDir = args[++i];
                     break;
+                case "--host-options" when i + 1 < args.Length:
+                    hostOptions = args[++i];
+                    break;
                 case "--no-launch":
                     noLaunch = true;
                     break;
@@ -72,6 +76,6 @@ public sealed record CliOptions(
         }
 
         var localIncomplete = transport == TransportKind.Local && (localPort == 0 || peerPort == 0 || command == Command.WaitForInvite);
-        return localIncomplete ? null : new CliOptions(command, argument, transport, localPort, peerPort, bridgePort, noLaunch, game, saveSource, gameDir);
+        return localIncomplete ? null : new CliOptions(command, argument, transport, localPort, peerPort, bridgePort, noLaunch, game, saveSource, gameDir, hostOptions);
     }
 }
