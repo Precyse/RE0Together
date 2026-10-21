@@ -13,6 +13,7 @@ public sealed partial class App
 {
     private const int PumpIntervalMs = 10;
     private const long FriendPollMs = 5000;
+    private const long LobbySearchMs = 10_000;
     private const long PendingResetCheckMs = 5000;
 
     private readonly CliOptions _options;
@@ -22,6 +23,7 @@ public sealed partial class App
     private volatile bool _stopRequested;
     private SteamBootstrap? _steam;
     private SteamAvatars? _avatars;
+    private LobbyDirectory? _directory;
     private ITransport? _transport;
     private ILobby? _lobby;
     private LoopbackBridge? _bridge;
@@ -34,6 +36,9 @@ public sealed partial class App
     private string? _gameDir;
     private ulong _hostId;
     private bool _launchPending;
+    private bool _startHeld;
+    private bool _startRequested;
+    private bool _hostStarted;
     private long? _launchedAtMs;
     private bool _bridgeWasReady;
     private SaveProgressMeter _saveMeter = new();
@@ -44,6 +49,9 @@ public sealed partial class App
     private Refusal? _refusal;
     private PendingInvite? _invite;
     private long _nextResetCheckMs;
+    private bool _watchLobbies;
+    private long _nextLobbySearchMs;
+    private int _directoryRevision = -1;
 
     public App(CliOptions options, bool interactive = false)
     {
@@ -91,6 +99,28 @@ public sealed partial class App
         Open(Command.Join, invite.LobbyId.ToString());
     });
 
+    /// <summary>The host's START GAME: opens the start gate, so the held launch goes ahead. Ignored for a guest and when nothing is held.</summary>
+    public void StartGame() => _commands.Enqueue(() =>
+    {
+        if (_startHeld && _hostId == _transport!.LocalId) _startRequested = true;
+    });
+
+    /// <summary>The host plays on without the partners it is holding for a reconnect.</summary>
+    public void PlaySolo() => _commands.Enqueue(() =>
+    {
+        if (_session is not { IsHost: true } session) return;
+        session.ReleaseHeld();
+        Log.Event("Playing solo");
+    });
+
+    /// <summary>The window shows the Lobbies tab (or stopped): while it does and the app is idle the lobby list is searched now
+    /// and every <see cref="LobbySearchMs"/>.</summary>
+    public void WatchLobbies(bool on) => _commands.Enqueue(() =>
+    {
+        _watchLobbies = on;
+        _nextLobbySearchMs = 0;
+    });
+
     public void ClearRefusal() => _commands.Enqueue(() => _refusal = null);
 
     /// <summary>Raises <see cref="AvatarLoaded"/> again for every avatar already read (a window that subscribed late).</summary>
@@ -100,6 +130,7 @@ public sealed partial class App
     {
         _steam = _options.Transport == TransportKind.Steam ? new SteamBootstrap() : null;
         using var steam = _steam;
+        using var directory = _directory = _steam != null ? new LobbyDirectory() : null;
         _transport = _steam != null
             ? new SteamTransport(id => _lobby?.Members.Any(m => m.Id == id) == true || _session?.HasPeer(id) == true)
             : new LocalTransport(_options.LocalPort, _options.PeerPort);
@@ -162,7 +193,7 @@ public sealed partial class App
         }
         var hostOptions = GameOptions.HostValues(profile, ResolveGameDir(profile));
         return _options.Transport == TransportKind.Steam
-            ? SteamLobby.Create(profile, hostOptions)
+            ? SteamLobby.Create(profile, hostOptions, ResolveGameDir(profile))
             : new LocalLobby((LocalTransport)_transport!, gameId, isHost: true, hostOptions);
     }
 
@@ -305,6 +336,7 @@ public sealed partial class App
         _profile = profile;
         _gameDir = ResolveGameDir(profile);
         _hostId = _lobby.OwnerId;
+        _startHeld = _interactive && !GameLauncher.IsRunning(profile);
         _sessionStarted = true;
         if (!isHost) Log.Event($"Joined {profile.Name} lobby");
         if (profile.RendezvousSession && _gameDir != null) _nativeJoin = NativeJoin.Create(profile, _gameDir, _lobby, _transport.LocalId);
@@ -375,7 +407,7 @@ public sealed partial class App
     {
         if (_buildCheck is { Mismatch: not null } refused)
         {
-            Refuse(Refusals.FromBuildMismatch(refused.Reason));
+            Refuse(Refusals.FromBuildMismatch(refused.Reason), MismatchDetail(refused));
             return false;
         }
         if (_buildCheck?.Ready == false) return true;
@@ -385,7 +417,7 @@ public sealed partial class App
             Refuse(RefusalKind.SaveTimedOut);
             return false;
         }
-        if (_saveSync?.Ready == false) return true;
+        if (_saveSync?.Ready == false || StartGateClosed()) return true;
         _launchPending = false;
         var options = AdapterOptions();
         _saveSync?.EnableAdapter(options);
@@ -397,6 +429,26 @@ public sealed partial class App
         if (result == LaunchResult.Started) _launchedAtMs = Environment.TickCount64;
         return result is LaunchResult.Started or LaunchResult.AlreadyRunning || RefuseLaunch(result);
     }
+
+    /// <summary>The window's launchers wait for the start gate (<see cref="StartGate"/>): the host for its START GAME, a guest for the
+    /// host's game to start. Once the host was seen starting, a guest stays open. A command-line run holds nothing.</summary>
+    private bool StartGateClosed()
+    {
+        if (!_startHeld) return false;
+        var isHost = _hostId == _transport!.LocalId;
+        var hostStep = isHost ? SessionStep.None : HostStep();
+        _hostStarted |= StartGate.HostStarted(hostStep);
+        return !StartGate.Open(isHost, _startHeld, _startRequested, hostStep, _hostStarted);
+    }
+
+    private SessionStep HostStep() =>
+        _lobby?.Members.FirstOrDefault(member => member.Id == _hostId) is { } host ? PublishedStep(_lobby, host).Step : SessionStep.None;
+
+    /// <summary>The numbers the refusal for a build mismatch shows: the host's and this machine's.</summary>
+    private string MismatchDetail(BuildCheck check) =>
+        check.Compared is { } compared
+            ? BuildInfo.Detail(check.Reason, compared.Host, compared.Local, _lobby?.Listing?.ModBuild ?? 0, ModInstaller.Status(_profile!, _gameDir).Build)
+            : string.Empty;
 
     /// <summary>Sets the refusal for a game start that failed. Always false.</summary>
     private bool RefuseLaunch(LaunchResult result)
@@ -438,6 +490,9 @@ public sealed partial class App
         DisposeLobby();
         _view = null;
         _invite = null;
+        _timedLobby = null;
+        _lobbyOpenedAtMs = null;
+        _lastListing = null;
         ResetAdapterSettings();
     }
 
@@ -465,6 +520,10 @@ public sealed partial class App
         _gameDir = null;
         _hostId = 0;
         _launchPending = false;
+        _startHeld = false;
+        _startRequested = false;
+        _hostStarted = false;
+        _hostStartedUnix = 0;
         _launchedAtMs = null;
         _bridgeWasReady = false;
         _saveMeter = new SaveProgressMeter();
@@ -500,22 +559,17 @@ public sealed partial class App
         }
     }
 
-    /// <summary>Work that only matters at rest: the co-op settings of games that were running when a session ended, and the
-    /// friends hosting a lobby.</summary>
+    /// <summary>Work that only matters at rest: the co-op settings of games that were running when a session ended, the friends
+    /// hosting a lobby and, while the window watches the Lobbies tab, the lobby list.</summary>
     private void PollWhileIdle()
     {
         if (!IsIdle)
         {
-            _friends = [];
-            _nextFriendPollMs = 0;
+            ClearDiscovery();
             return;
         }
         var now = Environment.TickCount64;
-        if (_steam != null && now >= _nextFriendPollMs)
-        {
-            _nextFriendPollMs = now + FriendPollMs;
-            _friends = FriendLobbies.Select(FriendLobbies.Read(), GameProfile.ListIds(), FriendLobbies.MaxFriendRows);
-        }
+        if (_directory != null) PollDiscovery(_directory, now);
         if (_pendingResets.Count == 0 || now < _nextResetCheckMs) return;
         _nextResetCheckMs = now + PendingResetCheckMs;
         foreach (var id in _pendingResets.ToList())
@@ -523,5 +577,39 @@ public sealed partial class App
             var profile = GameProfile.Load(id);
             if (!GameLauncher.IsRunning(profile)) ResetAdapterSettings(profile);
         }
+    }
+
+    /// <summary>Friends' lobbies every <see cref="FriendPollMs"/>, the lobby list every <see cref="LobbySearchMs"/> while watched;
+    /// the status rows are worked out again when either asked for or received something.</summary>
+    private void PollDiscovery(LobbyDirectory directory, long now)
+    {
+        var changed = directory.Revision != _directoryRevision;
+        if (now >= _nextFriendPollMs)
+        {
+            _nextFriendPollMs = now + FriendPollMs;
+            _friendRows = FriendLobbies.Select(FriendLobbies.Read(), GameProfile.ListIds(), FriendLobbies.MaxFriendRows);
+            directory.ReadFriends(_friendRows);
+            changed = true;
+        }
+        if (_watchLobbies && now >= _nextLobbySearchMs)
+        {
+            _nextLobbySearchMs = now + LobbySearchMs;
+            directory.Search();
+        }
+        if (!changed) return;
+        _directoryRevision = directory.Revision;
+        _friends = _friendRows.Select(friend => friend with { Listing = directory.FriendListing(friend.LobbyId) }).ToList();
+        _lobbies = LobbyDirectory.Select(directory.Results, GameProfile.ListIds(), _transport!.LocalId);
+    }
+
+    /// <summary>A lobby is open or being rebuilt: nothing is offered, and the next idle moment looks again at once.</summary>
+    private void ClearDiscovery()
+    {
+        _friendRows = [];
+        _friends = [];
+        _lobbies = [];
+        _nextFriendPollMs = 0;
+        _nextLobbySearchMs = 0;
+        _directoryRevision = -1;
     }
 }
