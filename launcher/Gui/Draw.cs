@@ -72,13 +72,6 @@ internal static class Draw
     public static void Caption(Graphics g, string text, Color color, Point at) =>
         TextRenderer.DrawText(g, text.ToUpperInvariant(), Theme.Label, at, color, TextFormatFlags.NoPrefix);
 
-    /// <summary>A state lamp: a solid square, never a dot.</summary>
-    public static void Lamp(Graphics g, Color color, int x, int centerY)
-    {
-        using var brush = new SolidBrush(color);
-        g.FillRectangle(brush, x, centerY - Theme.LampSize / 2, Theme.LampSize, Theme.LampSize);
-    }
-
     /// <summary>A solid triangle Theme.ArrowSize across its base, pointing the given way, centred on the point.</summary>
     public static void Arrow(Graphics g, Color color, Point center, ArrowDirection direction)
     {

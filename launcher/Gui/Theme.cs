@@ -91,7 +91,6 @@ internal static class Theme
     public static readonly Font InitialLarge = new("Segoe UI", 30f, FontStyle.Bold);
     public static readonly Font InitialSmall = new("Segoe UI", 8.25f, FontStyle.Bold);
 
-    public static readonly int LampSize = Scale(10);
     public static readonly int ControlHeight = Scale(36);
     public static readonly int SectionPadX = Scale(20);
     public static readonly int SectionPadY = Scale(16);

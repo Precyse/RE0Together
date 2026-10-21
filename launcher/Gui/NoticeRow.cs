@@ -1,17 +1,14 @@
 namespace CoopLauncher.Gui;
 
-/// <summary>One line the Session section has to say: the key tells updates of the same notice from a different one. The
+/// <summary>One line the home hero or a session screen has to say: the key tells updates of the same notice from a different one. The
 /// caller supplies every word.</summary>
 public sealed record Notice(string Key, string Words, string? Action, bool Report);
 
-/// <summary>The notice row of the Session section: an amber lamp, the words, an optional fix button and, for a refusal, a
-/// Report button. A new notice rises in like a toast and a cleared one sinks out; the same notice updated in place changes
+/// <summary>The notice row: the words, an optional fix button and, for a refusal, a Report button. A new notice rises in like a toast and a cleared one sinks out; the same notice updated in place changes
 /// without motion. The row hides itself once gone and says so (<see cref="Collapsed"/>) so the section can resize.</summary>
 internal sealed class NoticeRow : Panel
 {
     private const string ReportWord = "Report";
-
-    private static readonly int LampGap = Theme.Scale(12);
 
     private readonly FlatButton _action = new(string.Empty, ButtonKind.Normal) { Width = Theme.ToolWidth, Visible = false };
     private readonly FlatButton _report = new(ReportWord, ButtonKind.Ghost) { Width = Theme.ToolWidth, Visible = false };
@@ -72,10 +69,8 @@ internal sealed class NoticeRow : Panel
         base.OnPaint(e);
         if (_notice == null) return;
         var g = e.Graphics;
-        Draw.Lamp(g, Theme.Problem, 0, Height / 2);
-        var textX = Theme.LampSize + LampGap;
         var right = (_notice.Action != null ? _action.Left : _notice.Report ? _report.Left : Width) - Theme.Gap;
-        Draw.Text(g, _notice.Words, Theme.Strong, Theme.Text, new Rectangle(textX, 0, Math.Max(0, right - textX), Height));
+        Draw.Text(g, _notice.Words, Theme.Strong, Theme.Text, new Rectangle(0, 0, Math.Max(0, right), Height));
     }
 
     private void Clear()

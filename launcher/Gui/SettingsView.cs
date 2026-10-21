@@ -10,8 +10,15 @@ namespace CoopLauncher.Gui;
 /// is saved at once through AppSettings.</summary>
 internal sealed class SettingsView : Panel
 {
+    private const string VisibilityLabel = "Lobby visibility";
+    private const string VisibilityFriends = "Friends";
+    private const string VisibilityEveryone = "Everyone";
+    private static readonly int VisibilityLabelWidth = Draw.Width(VisibilityLabel, Theme.Body) + Theme.Gap * 2;
+    private static readonly int VisibilityWidth = Theme.Scale(160);
+
     private readonly List<GameSection> _games = new();
     private readonly List<SectionPanel> _sections = new();
+    private readonly FlatSelect _visibility = new();
 
     public SettingsView(IEnumerable<GameProfile> games)
     {
@@ -43,9 +50,10 @@ internal sealed class SettingsView : Panel
     public event Action<GameProfile>? UninstallRequested;
 
     /// <summary>Shows each game's mod and build line and locks what changes a game unless free (no session, no staged update
-    /// for Uninstall).</summary>
+    /// for Uninstall); who may see a new lobby cannot change while a session is open either.</summary>
     public void ShowMods(Func<string, GameStatus> statusOf, bool free, bool modsLocked)
     {
+        _visibility.Enabled = free;
         foreach (var game in _games) game.Show(statusOf(game.Id), free, modsLocked);
     }
 
@@ -85,18 +93,34 @@ internal sealed class SettingsView : Panel
         AutoScrollMinSize = new Size(0, _sections.Sum(section => section.Height));
     }
 
-    private static SectionPanel LauncherSection(List<GameProfile> games)
+    private SectionPanel LauncherSection(List<GameProfile> games)
     {
         var section = new SectionPanel("Launcher");
         var updates = new FlatToggle("Check for updates at start") { Checked = AppSettings.Current.CheckForUpdates };
         updates.Flipped += SetCheckForUpdates;
+        var visibilityRow = VisibilityRow();
         var logs = new FlatButton("Logs folder", ButtonKind.Normal);
         logs.Click += (_, _) => OpenLogsFolder();
         var report = new FlatButton("Create report", ButtonKind.Normal);
         report.Click += (_, _) => CreateReport(games);
         var toolsRow = ControlRow.Create(new Control[] { logs, report, new Panel() }, Theme.ToolWidth, Theme.ToolWidth, -1);
-        ControlRow.Stack(section, updates, ControlRow.Spacer(Theme.Gap), toolsRow);
+        ControlRow.Stack(section, updates, ControlRow.Spacer(Theme.Gap), visibilityRow, ControlRow.Spacer(Theme.Gap), toolsRow);
         return section;
+    }
+
+    /// <summary>Lobby visibility: who can see a lobby this launcher opens (friends only, or everyone), saved at once.</summary>
+    private TableLayoutPanel VisibilityRow()
+    {
+        var caption = new Label
+        {
+            Text = VisibilityLabel, AutoSize = false, Font = Theme.Body, ForeColor = Theme.Muted, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleLeft,
+        };
+        _visibility.Items.Add(VisibilityFriends);
+        _visibility.Items.Add(VisibilityEveryone);
+        _visibility.SelectedIndex = (int)AppSettings.Current.LobbyVisibility;
+        _visibility.SelectedIndexChanged += (_, _) =>
+            AppSettings.Update(settings => settings.WithLobbyVisibility((LobbyVisibility)_visibility.SelectedIndex));
+        return ControlRow.Create(new Control[] { caption, _visibility, new Panel() }, VisibilityLabelWidth, VisibilityWidth, -1);
     }
 
     private static void SetCheckForUpdates(bool on)
