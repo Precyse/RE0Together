@@ -10,6 +10,7 @@ internal sealed class SectionPanel : Panel
 
     private string _title;
     private bool _bottomLine = true;
+    private bool _showCaption = true;
 
     public SectionPanel(string title)
     {
@@ -36,6 +37,19 @@ internal sealed class SectionPanel : Panel
 
     /// <summary>The band above the content that holds the caption.</summary>
     public int CaptionBand => Padding.Top;
+
+    /// <summary>A section whose content labels itself (a button) goes without the caption and its band.</summary>
+    public bool ShowCaption
+    {
+        get => _showCaption;
+        set
+        {
+            if (_showCaption == value) return;
+            _showCaption = value;
+            Padding = Padding with { Top = Theme.SectionPadY + (value ? CaptionGap : 0) };
+            Invalidate();
+        }
+    }
 
     public string Title
     {
@@ -84,7 +98,7 @@ internal sealed class SectionPanel : Panel
     {
         base.OnPaint(e);
         Backdrop?.Invoke(e.Graphics, Width);
-        Draw.Caption(e.Graphics, _title, Theme.Muted, new Point(Theme.SectionPadX, Theme.SectionPadY));
+        if (_showCaption) Draw.Caption(e.Graphics, _title, Theme.Muted, new Point(Theme.SectionPadX, Theme.SectionPadY));
         if (BottomLine) Draw.HorizontalLine(e.Graphics, 0, Width, Height - 1);
     }
 }

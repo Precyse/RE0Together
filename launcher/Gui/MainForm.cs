@@ -1,7 +1,7 @@
 namespace CoopLauncher.Gui;
 
 /// <summary>The launcher window, in the broadcast tool's operator look and without Windows' title bar: the top bar (which
-/// is the title bar), game rail, the selected game's hero, the Session, Options and Players sections and a log drawer; the
+/// is the title bar), game rail, the selected game's hero, the Session and Players sections, the Options button and a log drawer; the
 /// settings view takes the place of the right pane. It only composes: what each part shows is worked out in
 /// <see cref="SessionCards"/> and <see cref="GameStatus"/>, session logic lives in App, the update path in
 /// <see cref="UpdateFlow"/>.</summary>
@@ -26,8 +26,8 @@ public sealed class MainForm : ChromelessForm
     private readonly GameRail _rail = new();
     private readonly HeroBanner _hero = new();
     private readonly SessionSection _session;
-    private readonly SectionPanel _optionsSection = new("Options") { Dock = DockStyle.Top };
-    private readonly OptionsRows _options = new();
+    private readonly SectionPanel _optionsSection = new("Options") { Dock = DockStyle.Top, ShowCaption = false };
+    private readonly OptionsFold _optionsFold = new();
     private readonly SectionPanel _playersSection = new("Players") { Dock = DockStyle.Top };
     private readonly PlayerCards _players;
     private readonly Panel _pane = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg, AutoScroll = true };
@@ -45,7 +45,6 @@ public sealed class MainForm : ChromelessForm
     private bool _refreshing;
     private bool _refreshAgain;
     private long _lastRefreshMs;
-    private bool? _orderedForFree;
 
     public MainForm(App app)
     {
@@ -112,7 +111,8 @@ public sealed class MainForm : ChromelessForm
     private void WireEvents()
     {
         _rail.SelectionChanged += OnRailSelected;
-        _options.Changed += () => Apply(_app.Status);
+        _optionsFold.Rows.Changed += () => Apply(_app.Status);
+        _optionsFold.Resized += () => Fit(_optionsSection);
         _top.SettingsButton.Click += (_, _) => ShowSettings(!_settingsOpen);
         _top.UpdateButton.Click += (_, _) => _update.Click();
         _update.Changed += () =>
@@ -177,9 +177,12 @@ public sealed class MainForm : ChromelessForm
 
     private void BuildLayout()
     {
-        _optionsSection.Controls.Add(_options);
+        _optionsSection.Controls.Add(_optionsFold);
         _playersSection.Controls.Add(_players);
-        _pane.Controls.AddRange([_playersSection, _optionsSection, _session.Panel, _hero]);
+        // Docking stacks the control with the highest child index at the top: hero, Session, Players, Options.
+        Control[] topToBottom = [_hero, _session.Panel, _playersSection, _optionsSection];
+        _pane.Controls.AddRange(topToBottom.Reverse().ToArray());
+        for (var i = 0; i < topToBottom.Length; i++) topToBottom[i].TabIndex = i;
         _hero.Bleed = _session.Panel.CaptionBand;
         _session.Panel.Backdrop = _hero.PaintBleed;
         _hero.ArtChanged += _session.Panel.Invalidate;
@@ -460,16 +463,15 @@ public sealed class MainForm : ChromelessForm
         var gameDir = GameFolders.Find(game);
         var hostValues = GameOptions.HostValues(game, gameDir);
         _hero.Show(game, _rail.SelectedArt!);
-        _options.Show(game, gameDir, free ? null : status.HostOptions);
-        _options.SetLocked(!free);
+        _optionsFold.Rows.Show(game, gameDir, free ? null : status.HostOptions);
+        _optionsFold.Rows.SetLocked(!free);
         _session.Show(SessionCards.View(status, game, _rail.SelectedStatus, Updater.Staged,
             condition is GameCondition.Exited or GameCondition.NotStarted, _update.NewerBuild, _rail.Games));
         if (game.NativeSession) _players.Show([]);
         else if (status.State is not (AppState.Rejoining or AppState.WaitingForHost))
             _players.Show(SessionCards.Seats(status, status.SeatCharacters.Count > 0 ? status.SeatCharacters : GameOptions.SeatCharacters(game, hostValues),
                 status.Seats > 0 ? status.Seats : GameOptions.Seats(game, hostValues)));
-        var sections = SectionsTopToBottom(free);
-        OrderSections(free, sections);
+        SectionPanel[] sections = [_session.Panel, _playersSection, _optionsSection];
         Fit(_optionsSection);
         Fit(_playersSection);
         var lowest = sections.LastOrDefault(section => section.FittedHeight > 0);
@@ -477,24 +479,6 @@ public sealed class MainForm : ChromelessForm
     }
 
     /// <summary>Idle: Session, Options, Players. In a session: Session, Players, Options.</summary>
-    private SectionPanel[] SectionsTopToBottom(bool free) => free
-        ? [_session.Panel, _optionsSection, _playersSection]
-        : [_session.Panel, _playersSection, _optionsSection];
-
-    /// <summary>Stacks the hero and the sections. Docking stacks the control with the highest child index at the top, and
-    /// Tab follows the same order.</summary>
-    private void OrderSections(bool free, SectionPanel[] sections)
-    {
-        if (_orderedForFree == free) return;
-        _orderedForFree = free;
-        Control[] topToBottom = [_hero, .. sections];
-        for (var i = 0; i < topToBottom.Length; i++)
-        {
-            _pane.Controls.SetChildIndex(topToBottom[i], topToBottom.Length - 1 - i);
-            topToBottom[i].TabIndex = i;
-        }
-    }
-
     /// <summary>Sizes a section to its content, tweening the height (card-resize) when it has to change.</summary>
     private static void Fit(SectionPanel section)
     {
