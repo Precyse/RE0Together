@@ -1,6 +1,6 @@
 Co-op
 
-First install: unzip https://github.com/Precyse/RE0Together/releases/download/next/Coop.zip anywhere (for example %LocalAppData%\CoopLauncher) and start launcher\app\coop-launcher.exe. From then on it updates itself and the installed mods.
+First install: unzip https://github.com/Precyse/RE0Together/releases/download/preview/Coop.zip anywhere (for example %LocalAppData%\CoopLauncher) and start launcher\app\coop-launcher.exe. From then on it updates itself and the installed mods.
 
 Start launcher\app\coop-launcher.exe. One package holds the launcher and the mod for every game.
 

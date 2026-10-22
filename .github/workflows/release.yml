@@ -1,6 +1,6 @@
 name: release
 
-# One rolling release per channel: a push to `main` publishes `latest`, a push to `next` publishes the `next` prerelease. Each holds
+# One rolling release per channel: a push to `main` publishes `latest`, a push to `next` publishes the `preview` prerelease (a tag may not share the branch's name). Each holds
 # Coop.zip (the whole package, for first installs), launcher.zip, mod-<id>.zip per game and manifest.json (SHA-256 and size of every
 # asset and file; tools/release_manifest.py). Installed launchers read the manifest and download only the components that changed.
 # Friends install once from https://github.com/<repo>/releases/download/<channel>/Coop.zip.
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CHANNEL: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+  CHANNEL: ${{ github.ref_name == 'main' && 'latest' || 'preview' }}
 
 jobs:
   package:

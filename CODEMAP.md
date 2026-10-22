@@ -16,7 +16,7 @@ Spec: `docs/CONTRACT.md`. This file is the index: which file holds the table of 
 |---|---|
 | .github/workflows/release.yml | on push to `main` (channel `latest`) or `next` (channel `next`, prerelease): `publish_check.py`, `release_manifest_test.py`, build the RE0 and SR2 adapters (x86) and the DS2 adapter (x64) with their unit tests, the launcher end-to-end tests, assemble the package (`launcher\app`, `launcher\games\*.json`, `adapters\re0\dinput8.dll`, `adapters\sr2\dinput8.dll` + `scripts.delta.json` (fails when missing), `adapters\ds2\version.dll`, `README.txt`), run `tools/release_manifest.py` (writes `update.json` {repo, channel} and `installed.json`, zips `Coop.zip`, `launcher.zip`, `mod-<id>.zip`, `manifest.json`; on `latest` also `RE0-Coop.zip` for launchers released before the manifest), replace the release tagged with the channel (title `Build <run number>`), manifest uploaded last |
 | launcher/package/README.txt | player README shipped in the package |
-| launcher/update.json | `{ "repo": "Precyse/RE0Together", "channel": "next" }` copied next to the exe; a missing file or the `OWNER/REPO` placeholder disables updating (the release build writes the real repo and channel into the package) |
+| launcher/update.json | `{ "repo": "Precyse/RE0Together", "channel": "preview" }` copied next to the exe; a missing file or the `OWNER/REPO` placeholder disables updating (the release build writes the real repo and channel into the package) |
 
 ## Where to look for
 
