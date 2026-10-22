@@ -15,7 +15,10 @@
 #include "character_owner.h"
 #include "debug_stats.h"
 #include "door_sync.h"
+#include "demo_skip.h"
 #include "door_travel.h"
+#include "event_body.h"
+#include "event_place.h"
 #include "event_rule.h"
 #include "game.h"
 #include "game_state.h"
@@ -23,8 +26,11 @@
 #include "log.h"
 #include "net_pad.h"
 #include "party_mode.h"
+#include "pose_wire.h"
+#include "prop_sync.h"
 #include "protocol.h"
 #include "scene.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -65,6 +71,7 @@ struct Slot {
     bool announced = false;               // Leads: the peer has the thread, so it gets the steps too
     Character subject = Character::Unknown;  // the character the script treats as the player
     bool partnerFollows = true;           // no TraceOff in this thread yet
+    event_rule::Activity activity;        // when the thread last was at an op that does something (leadsAny / followsAny)
     uint32_t ran = 0, skipped = 0, waitsSkipped = 0, branches = 0, forced = 0, jumps = 0;
     int64_t maxLagMs = 0;
 };
@@ -153,6 +160,16 @@ uint16_t opcodeAt(uintptr_t thread) {
     return static_cast<uint16_t>(bytes[0] << 8 | bytes[1]);
 }
 
+// The big-endian dword operand `index` of the op at the thread's pc, for ops whose operands before it are dwords.
+uint32_t operandWord(uintptr_t thread, int index) {
+    const uintptr_t code = game::readPointer(thread + game::kThreadCodeOffset);
+    std::array<uint8_t, 4> bytes{};
+    const uintptr_t at = code + pcOf(thread) + game::kOpcodeSize + index * sizeof(uint32_t);
+    if (!code || !game::readMemory(at, bytes)) return 0;
+    return static_cast<uint32_t>(bytes[0]) << 24 | static_cast<uint32_t>(bytes[1]) << 16 |
+           static_cast<uint32_t>(bytes[2]) << 8 | bytes[3];
+}
+
 // Bytes of the opcode and its operands, sized by the game's own signature reader.
 uint32_t opSize(uint16_t opcode) {
     const auto signature = reinterpret_cast<const char*>(
@@ -175,24 +192,58 @@ uint8_t serialFlags(const Slot& slot) { return slot.serialMine ? 0 : event_sync:
 
 // ---- both roles ----
 
-// Runs the op with the subject as sPlayer's controlled character (and the other one as the partner).
-int runAsSubject(void* self, void* edx, uintptr_t thread, Character subject) {
+// The Body op at the thread's pc as event_body reads it.
+event_body::Op bodyOp(uintptr_t thread, uint16_t opcode) {
+    const int subject = event_rule::subjectOperand(opcode);
+    return {opcode, subject == event_rule::kNoOperand ? 0u : operandWord(thread, subject),
+            event_rule::isClimb(opcode) ? static_cast<int32_t>(operandWord(thread, event_rule::kClimbTypeOperand)) : 0,
+            threadField<uint32_t>(thread, game::kThreadKeyOffset)};
+}
+
+// A skipped op finishes at once: the pc moves past it and the thread goes on, as the handler's own tail does.
+int stepOverBody(uintptr_t thread, uint16_t opcode) {
+    moveTo(thread, pcOf(thread) + opSize(opcode));
+    return event_rule::kResultNext;
+}
+
+// Runs the op with the subject as sPlayer's controlled character (and the other one as the partner). In state mode a
+// Body op runs only for a character this machine owns (event_body): the puppet's op is skipped, or its slot of sPlayer
+// reads 0 while an op that reaches both characters runs.
+int runAsSubject(void* self, void* edx, uintptr_t thread, Character subject, uint16_t opcode, bool ownerRunsThread) {
     const uintptr_t sPlayer = game::readPointer(game::kPlayerGlobal);
     const uintptr_t controlled = game::controlled();
     const uintptr_t partner = game::partner();
     const uintptr_t subjectObject = character_owner::find(subject);
     const bool swap = sPlayer && subjectObject && subjectObject != controlled;
-    if (swap) {
-        game::writeMemory(sPlayer + game::kPlayerControlledOffset, static_cast<uint32_t>(subjectObject));
-        game::writeMemory(sPlayer + game::kPlayerPartnerOffset,
-                          static_cast<uint32_t>(partner == subjectObject ? controlled : partner));
+    const event_body::Seen seen{swap ? subjectObject : controlled,
+                                swap ? (partner == subjectObject ? controlled : partner) : partner};
+    event_body::Plan body;
+    std::optional<event_place::Mark> placed;
+    if (state_mode::on() && event_rule::roleOf(opcode) == OpRole::Body) {
+        const event_body::Op op = bodyOp(thread, opcode);
+        body = event_body::plan(op, seen, ownerRunsThread);
+        if (body.run == event_rule::BodyRun::Skip) return stepOverBody(thread, opcode);
+        placed = event_body::markPlacement(op, seen, body);
+    }
+    const bool write = sPlayer && (swap || body.hideControlled || body.hidePartner);
+    if (write) {
+        game::writeMemory(sPlayer + game::kPlayerControlledOffset,
+                          static_cast<uint32_t>(body.hideControlled ? 0 : seen.controlled));
+        game::writeMemory(sPlayer + game::kPlayerPartnerOffset, static_cast<uint32_t>(body.hidePartner ? 0 : seen.partner));
     }
     const int result = g_originalDispatch(self, edx, thread);
-    if (swap) {
+    if (write) {
         game::writeMemory(sPlayer + game::kPlayerControlledOffset, static_cast<uint32_t>(controlled));
         game::writeMemory(sPlayer + game::kPlayerPartnerOffset, static_cast<uint32_t>(partner));
     }
+    if (placed) event_place::reportMoved(*placed);
     return result;
+}
+
+// A cutscene starts on this thread: the shared skip (demo_skip) needs to know which one plays and who leads it.
+void noteDemoStart(uintptr_t thread, const Slot& slot, bool leads) {
+    const auto demoId = static_cast<uint16_t>(operandWord(thread, 0) >> 16);  // the op's one operand is an S2
+    demo_skip::onDemoStart(demoId, slot.serial, slot.serialMine, leads);
 }
 
 // TraceOff / TraceOn: the thread's doors leave the partner behind or not, and the host's party mode follows the script.
@@ -266,25 +317,28 @@ uint32_t triggerParam2(void* script, uint32_t key, uint32_t index) {
     return p2;
 }
 
-void logRefusedOnce(uint32_t key, uint32_t index, uint32_t type) {
+void logRefusedOnce(uint32_t key, uint32_t index, uint32_t type, TriggerKind kind) {
     if (scene::current() != g_refusedScene) {
         g_refusedLogged.clear();
         g_refusedScene = scene::current();
     }
     if (!g_refusedLogged.insert(key << 16 | index).second) return;
     debug_stats::count(debug_stats::Counter::EventsRefused);
-    logger::write("event_sync: scene 0x%02x trigger %u (type 0x%02x) is the room authority's to fire, not fired here",
-                  key, index, type);
+    logger::write("event_sync: scene 0x%02x trigger %u (type 0x%02x) is the %s to fire, not fired here", key, index, type,
+                  kind == TriggerKind::Obstacle ? "box pusher's" : "room authority's");
 }
 
 uintptr_t __fastcall startDetour(void* self, void* edx, uint32_t key, uint32_t index, uint32_t type) {
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     if (!net_pad::active() || caller == game::kItemProbeStartReturn) return g_originalStart(self, edx, key, index, type);
-    const TriggerKind kind = caller == game::kTriggerScanStartReturn
-                                 ? event_rule::classify(type, triggerParam2(self, key, index))
-                                 : TriggerKind::Local;
-    if (!event_rule::mayFire(kind, peerInRoom(), door_travel::enemyAuthority())) {
-        logRefusedOnce(key, index, type);
+    const bool scanned = caller == game::kTriggerScanStartReturn;
+    const uint32_t param2 = scanned ? triggerParam2(self, key, index) : 0;
+    const TriggerKind kind = scanned ? event_rule::classify(type, param2, state_mode::on()) : TriggerKind::Local;
+    const event_rule::PropOwner boxOwner = kind == TriggerKind::Obstacle
+                                               ? prop_sync::triggerOwner(static_cast<uint16_t>(key), static_cast<uint8_t>(param2))
+                                               : event_rule::PropOwner::Unknown;
+    if (!event_rule::mayFire(kind, peerInRoom(), door_travel::enemyAuthority(), boxOwner)) {
+        logRefusedOnce(key, index, type, kind);
         return 0;
     }
     const uintptr_t thread = g_originalStart(self, edx, key, index, type);
@@ -317,6 +371,7 @@ int stepOver(uintptr_t thread, const Slot& slot, uint32_t pc, uint16_t opcode) {
 int runLeading(void* self, void* edx, uintptr_t thread, Slot& slot) {
     const uint32_t pc = pcOf(thread);
     const uint16_t opcode = opcodeAt(thread);
+    if (state_mode::on()) slot.activity.note(event_rule::roleOf(opcode), pose_wire::clockMs());
     switch (event_rule::roleOf(opcode)) {
         case OpRole::Switch: {
             slot.subject = character_owner::other(slot.subject);
@@ -327,14 +382,15 @@ int runLeading(void* self, void* edx, uintptr_t thread, Slot& slot) {
         case OpRole::Follow:
             setPartnerFollows(slot, event_rule::followsAfter(opcode));
             return stepOver(thread, slot, pc, opcode);
-        case OpRole::Run: case OpRole::LeaderOnly: case OpRole::Wait:
+        case OpRole::Run: case OpRole::LeaderOnly: case OpRole::Wait: case OpRole::Body:
             break;
     }
+    if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, true);
     const uintptr_t script = eventScript();
     const uint32_t before = activeMask(script);
     const bool doorAlone = event_rule::isDoor(opcode) && !slot.partnerFollows;
     if (doorAlone) door_sync::setScriptDoorAlone(true);
-    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject));
+    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, slot.announced));
     if (doorAlone) door_sync::setScriptDoorAlone(false);
     if (event_rule::finished(pc, pcOf(thread), result)) record(slot, pc, pcOf(thread), result);
     const Slot parent = slot;
@@ -390,6 +446,8 @@ int takeLeadersStep(uintptr_t thread, Slot& slot, const QueuedStep& queued) {
 
 int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
     QueuedStep queued;
+    // The pc stays on the op the leader is still running, so a long message of the leader's keeps this thread busy.
+    if (state_mode::on()) slot.activity.note(event_rule::roleOf(opcodeAt(thread)), pose_wire::clockMs());
     if (!frontStep(queueId(slot), queued)) return event_rule::kResultYield;  // the leader has not finished this op yet
     if (queued.step.result == event_rule::kResultKilled) {
         popStep(queueId(slot));
@@ -419,7 +477,8 @@ int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
         ++(role == OpRole::Wait ? slot.waitsSkipped : slot.skipped);
         return takeLeadersStep(thread, slot, queued);
     }
-    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject));
+    if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, false);
+    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, true));
     const uint32_t after = pcOf(thread);
     switch (event_rule::afterRun(event_rule::finished(queued.step.from, after, result), msSince(queued.received))) {
         case event_rule::AfterRun::KeepRunning:
@@ -672,6 +731,22 @@ void onFrame(const GameFrame& frame) {
         it->second.push_back({step, now});
     }
 }
+
+namespace {
+
+bool anyBusy(Role role) {
+    const uint32_t now = pose_wire::clockMs();
+    for (const Slot& slot : g_slots) {
+        if (slot.role == role && slot.activity.busy(now)) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+bool leadsAny() { return anyBusy(Role::Leads); }
+
+bool followsAny() { return anyBusy(Role::Follows); }
 
 bool enable(NetClient& net) {
     g_net = &net;

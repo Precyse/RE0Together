@@ -19,22 +19,34 @@ constexpr uint8_t kNoOutfit = 0;  // no model byte is 0: "keep the save's outfit
 constexpr uint32_t kNoDlc = 0;
 constexpr int kHexBase = 16;
 
-// An offered outfit: its model byte and the Steam app id of the DLC pack that carries it (kNoDlc: base game). Only
-// the character's own family is offered; Rebecca has no Wesker (the engine only supports Wesker on Billy).
+// An offered outfit: its model byte, the Steam app id of the DLC pack that carries it (kNoDlc: base game) and its name
+// (docs/RE0_NOTES.md "Outfits"). Only the character's own family is offered; Rebecca has no Wesker (the engine only
+// supports Wesker on Billy).
 struct Outfit {
     uint8_t model;
     uint32_t dlcAppId;
+    const char* name;
 };
 
 constexpr uint8_t kRebeccaDefault = 0x02;
 constexpr uint8_t kBillyDefault = 0x05;
 constexpr uint8_t kBillyWesker = 0xa5;
 
-constexpr std::array<Outfit, 10> kRebeccaOutfits = {{{0x02, kNoDlc}, {0x7d, kNoDlc}, {0x81, kNoDlc}, {0x91, kNoDlc},
-                                                     {0x71, 381713}, {0x75, 381712}, {0x79, 381710}, {0x85, 381711},
-                                                     {0x89, 381713}, {0x8d, 381712}}};
-constexpr std::array<Outfit, 5> kBillyOutfits = {{{0x05, kNoDlc}, {0x95, kNoDlc}, {kBillyWesker, kNoDlc},
-                                                  {0x99, 381710}, {0x9d, 381711}}};
+constexpr std::array<Outfit, 10> kRebeccaOutfits = {{{0x02, kNoDlc, "S.T.A.R.S. 2002"},
+                                                     {0x7d, kNoDlc, "Western"},
+                                                     {0x81, kNoDlc, "Leather"},
+                                                     {0x91, kNoDlc, "Team Wesker"},
+                                                     {0x71, 381713, "S.T.A.R.S. 1996"},
+                                                     {0x75, 381712, "Sportswear"},
+                                                     {0x79, 381710, "Cheerleader"},
+                                                     {0x85, 381711, "Nurse"},
+                                                     {0x89, 381713, "Prototype"},
+                                                     {0x8d, 381712, "S.T.A.R.S. 1997"}}};
+constexpr std::array<Outfit, 5> kBillyOutfits = {{{0x05, kNoDlc, "Prisoner"},
+                                                  {0x95, kNoDlc, "Jacket"},
+                                                  {kBillyWesker, kNoDlc, "Wesker"},
+                                                  {0x99, 381710, "Wolf Force"},
+                                                  {0x9d, 381711, "Cody"}}};
 
 // The offered outfit with this model for the character, or null (an opposite-sex model, Wesker on Rebecca, an unknown id).
 inline const Outfit* find(Character character, uint8_t model) {

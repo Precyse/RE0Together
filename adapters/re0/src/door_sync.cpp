@@ -9,6 +9,7 @@
 
 #include "character_owner.h"
 #include "debug_stats.h"
+#include "door_follow.h"
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
@@ -17,6 +18,7 @@
 #include "net_pad.h"
 #include "protocol.h"
 #include "split_rooms.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -101,8 +103,12 @@ void __fastcall doorStartDetour(void* self, void* edx, uint32_t room, uint32_t e
         return;
     }
     split_rooms::beforeLocalDoor(static_cast<uint16_t>(room));
-    g_shared = split_rooms::travelsTogether() && flags == 0;  // the peer plays it too (split_rooms::takeOver)
+    g_shared = !state_mode::on() && split_rooms::travelsTogether() && flags == 0;  // the peer plays it too (split_rooms::takeOver)
     g_originalDoorStart(self, edx, room, entry, arg3, arg4, flag);
+    if (state_mode::on()) {  // each machine runs its own door: the partner is only asked to follow
+        door_follow::onLocalDoorStart({room, entry, arg3, arg4, flag, focused, flags, {}});
+        return;
+    }
     send({room, entry, arg3, arg4, flag, focused, flags, {}});
     logger::write("door_sync: door to room 0x%x entry 0x%x sent%s", room, entry, flags ? ", partner left behind" : "");
 }
@@ -128,6 +134,7 @@ void onTick() {
 namespace door_sync {
 
 void onFrame(const GameFrame& frame) {
+    if (state_mode::on()) return;  // state mode has no DOOR_CHANGE: a door is the runner's own, the partner follows (door_follow)
     if (frame.type != proto::kMsgDoorChange || frame.payload.size() != sizeof(DoorChange) ||
         frame.slot != net_pad::peerSlot()) {
         return;
@@ -165,6 +172,11 @@ void run(const DoorChange& change) {
     g_applying = false;
     debug_stats::count(debug_stats::Counter::DoorsApplied);
     logger::write("door_sync: ran the peer's door to room 0x%x entry 0x%x", change.room, change.entry);
+}
+
+void runFollow(const DoorChange& change) {
+    split_rooms::beforeLocalDoor(static_cast<uint16_t>(change.room));
+    run(change);
 }
 
 bool sharedDoor() { return g_shared; }

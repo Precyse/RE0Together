@@ -12,6 +12,7 @@
 #include "log.h"
 #include "net_pad.h"
 #include "room_gate_rule.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -93,6 +94,10 @@ bool __fastcall finishCheckDetour(void* door, void* edx) {
 namespace room_gate {
 
 bool install() {
+    if (state_mode::on()) {
+        logger::write("room_gate: off in state mode");
+        return true;
+    }
     return hooks::install("door finish check", game::kDoorFinishCheckFunction,
                           reinterpret_cast<void*>(finishCheckDetour), reinterpret_cast<void**>(&g_originalFinishCheck));
 }

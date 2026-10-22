@@ -12,10 +12,14 @@
 #include "game.h"
 #include "game_state.h"
 #include "game_tick.h"
+#include "join_extras.h"
 #include "log.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "room_authority.h"
 #include "scene.h"
+#include "session_ready.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -35,13 +39,21 @@ std::optional<JoinSnapshot> g_received;    // guarded by g_mutex: guest's unappl
 // Game thread, guest only.
 uintptr_t g_loadedPair = 0;          // controlled ^ partner of the load the snapshot belongs to
 bool g_applied = false;              // the snapshot for g_loadedPair has been applied
-std::atomic<bool> g_caughtUp{false};  // guest: applied and placed (read on the net thread)
+std::atomic<bool> g_placed{false};  // guest: applied and placed (read on the net thread)
 std::atomic<bool> g_resyncRequested{false};  // guest: take a new snapshot even though one was applied
 Clock::time_point g_lastRequest;
 std::optional<JoinSnapshot> g_snapshot;    // received, not yet applied
 std::optional<JoinSnapshot> g_travelling;  // applied; waiting for the own character's door to arrive
 
 bool inGame() { return game::controlled() && game::partner() && game_state::playing(); }
+
+// The guest's game was loaded again or the link dropped: the placement and, in state mode, the handshake start over.
+void forgetPlacement() {
+    g_placed = false;
+    if (!state_mode::on()) return;
+    session_ready::reset();
+    join_extras::reset();
+}
 
 const CharacterPlace& placeOf(const JoinSnapshot& snapshot, Character character) {
     return snapshot.places[static_cast<size_t>(character)];
@@ -65,23 +77,30 @@ void answer() {
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;
     floor_items_sync::sendJournal();
     game_tick::rearmAfterResync();
+    if (state_mode::on()) join_extras::send();
     logger::write("join_sync: snapshot sent (Billy scene 0x%02x, Rebecca scene 0x%02x)",
                   placeOf(snapshot, Character::Billy).scene, placeOf(snapshot, Character::Rebecca).scene);
 }
 
-// The own character stands in its room: the host's character joins its room, the own one takes the host's position.
-void finish(const JoinSnapshot& snapshot) {
-    const Character own = character_owner::localCharacter();
-    const Character other = character_owner::other(own);
+// The host's character joins its room (input mode; in state mode ROOM_MOVE and the pose room self-heal put the puppet there).
+void placeHostCharacter(const JoinSnapshot& snapshot) {
+    const Character other = character_owner::other(character_owner::localCharacter());
     const CharacterPlace& otherPlace = placeOf(snapshot, other);
     const uintptr_t otherPlayer = character_owner::find(other);
     if (otherPlace.hasDoor && scene::of(otherPlayer) != otherPlace.scene) {
         scene::move(otherPlayer, static_cast<uint16_t>(otherPlace.door.room), otherPlace.door.entry);
     }
+}
+
+// The own character stands in its room: the host's character joins its room, the own one takes the host's position.
+void finish(const JoinSnapshot& snapshot) {
+    if (!state_mode::on()) placeHostCharacter(snapshot);
+    const Character own = character_owner::localCharacter();
     const CharacterPlace& ownPlace = placeOf(snapshot, own);
     game::writeTransform(character_owner::find(own), ownPlace.pos, ownPlace.quat);
-    g_caughtUp = true;
+    g_placed = true;
     game_tick::rearmAfterResync();
+    if (state_mode::on()) room_authority::resendClaims();
     logger::write("join_sync: caught up in scene 0x%02x", scene::current());
 }
 
@@ -91,6 +110,7 @@ void apply(const JoinSnapshot& snapshot) {
         inventory_sync::applySnapshot(static_cast<uint8_t>(character), snapshot.inventories[static_cast<size_t>(character)]);
     }
     g_applied = true;
+    if (state_mode::on()) join_extras::onSnapshotApplied();
     const CharacterPlace& own = placeOf(snapshot, character_owner::localCharacter());
     if (own.scene == scene::of(character_owner::find(character_owner::localCharacter())) || !own.hasDoor) {
         if (own.scene != scene::current()) logger::write("join_sync: own room 0x%02x unknown door, staying", own.scene);
@@ -119,7 +139,7 @@ void guestTick() {
     if (pair != g_loadedPair) {
         g_loadedPair = pair;
         g_applied = false;
-        g_caughtUp = false;
+        forgetPlacement();
         g_snapshot.reset();
         g_travelling.reset();
         g_lastRequest = {};
@@ -159,7 +179,7 @@ void hostTick() {
 
 void onTick() {
     if (!net_pad::active()) {
-        g_caughtUp = false;
+        forgetPlacement();
         g_loadedPair = 0;
         return;
     }
@@ -173,7 +193,12 @@ namespace join_sync {
 
 void requestResync() { g_resyncRequested = true; }
 
-bool caughtUp() { return character_owner::isHost() || g_caughtUp.load(); }
+bool placed() { return character_owner::isHost() || g_placed.load(); }
+
+bool caughtUp() {
+    if (character_owner::isHost()) return true;
+    return state_mode::on() ? session_ready::echoed() : g_placed.load();
+}
 
 void onFrame(const GameFrame& frame) {
     std::lock_guard lock(g_mutex);
@@ -185,6 +210,7 @@ void onFrame(const GameFrame& frame) {
     JoinSnapshot snapshot;
     std::memcpy(&snapshot, frame.payload.data(), sizeof(snapshot));
     g_received = snapshot;
+    if (state_mode::on()) join_extras::reset();
 }
 
 void enable(NetClient& net) {

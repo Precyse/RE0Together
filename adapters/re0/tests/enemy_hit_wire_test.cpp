@@ -40,6 +40,7 @@ int main() {
     HitPayload sent = enemy_hit_wire::encode(5, 1, 0x25, kZombieVtable, point, senderEnemy, info);
     check(sent.hpBefore == 0 && sent.hpAfter == 0 && sent.random[0] == 0 && sent.reacted == 0 && sent.reaction[0] == 0,
           "a request carries no outcome");
+    check(sent.forwarded == 0, "a new request has not been forwarded");
     const game::RandomState random{0x12345678u, 0x9abcdef0u, 0x0badf00du, 0xdeadbeefu};
     enemy_hit_wire::stamp(sent, 94, random);
 

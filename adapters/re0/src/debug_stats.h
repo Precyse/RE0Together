@@ -44,6 +44,8 @@ enum class Counter : size_t {
     EnemyDecisionsApplied,
     FlagWordsSent,
     FlagWordsApplied,
+    FlagCommits,
+    FlagCorrections,
     EventsFired,
     EventsFollowed,
     EventsRefused,
@@ -55,9 +57,61 @@ enum class Counter : size_t {
     FloorPendingApplied,
     FloorPendingDropped,
     FloorTakeMisses,
+    TakesGranted,
+    TakesRefused,
+    PickupsHeld,
     CommandsSent,
     PickupsAborted,
     Blends,
+    PosesReceived,
+    MotionEventsSent,
+    MotionEventsReceived,
+    PuppetSeeks,
+    PuppetMotionMisses,
+    WeaponFxOut,
+    WeaponFxIn,
+    WeaponFxUnlisted,
+    StateSendRefused,
+    RouterDropped,
+    PuppetSubEvents,
+    EnemyObserverPoses,
+    EnemyObserverMotions,
+    EnemyObserverMisses,
+    EnemyObserverSeeks,
+    EnemyObserverStale,
+    EnemyObserverRefused,
+    EnemyObserverSent,
+    EnemyHandOvers,
+    EnemyCreatedOnDemand,
+    EnemyHitsForwarded,
+    EnemyHitsUnrouted,
+    RoomMovesSent,
+    RoomMovesApplied,
+    RoomMoveHeals,
+    DoorFollowsSent,
+    DoorFollowsAccepted,
+    DoorFollowsRejected,
+    ContactHitsSent,
+    ContactHitsApplied,
+    ContactHitsDropped,
+    LeasesGranted,
+    LeasesStarted,
+    LeasesEnded,
+    LeasePosesRefused,
+    BossHandOvers,
+    BossCancels,
+    BossFrozen,
+    EventBodyOpsSkipped,
+    DemoSkipsSent,
+    DemoSkipsApplied,
+    PropMovesSent,
+    PropMovesApplied,
+    PropMovesRefused,
+    PropCommits,
+    SessionReadySent,
+    SessionReadyEchoes,
+    SessionReadyRefused,
+    SaveWaits,
     Count
 };
 
@@ -76,6 +130,7 @@ struct Note {
 
 struct Snapshot {
     bool linked = false;
+    bool stateMode = false;  // partner_mode=state: the panel shows the state modules' rows
     uint8_t localSlot = 0;
     uint8_t hostSlot = 0;
     uint32_t epoch = 0;
@@ -92,6 +147,7 @@ struct Snapshot {
 
 void count(Counter counter, uint32_t amount = 1);
 void set(Gauge gauge, int value);
+void setStateMode(bool on);
 void setSession(const SessionSnapshot& session);
 void noteCallbackDisabled(const char* name);
 void noteCallbackRearmed(const char* name);
@@ -102,6 +158,10 @@ void setError(const char* format, ...);
 // The partner status line the overlay always shows (empty: nothing to show).
 void setPartnerLine(const std::string& line);
 std::string partnerLine();
+
+// The loaded room's enemy authority as the overlay shows it, "here e3" / "peer e3" / "none e3" (empty: not tracked).
+void setRoomAuthorityLine(const std::string& line);
+std::string roomAuthorityLine();
 
 void setLastCommand(const char* text);
 void setLastDecision(const char* text);

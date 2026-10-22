@@ -107,11 +107,18 @@ uintptr_t find(Character character) {
 
 bool isHost() { return g_linked && g_localSlot == g_hostSlot; }
 
+uint8_t localSlot() { return g_localSlot; }
+
 Character localCharacter() {
     for (const Character character : kCharacters) {
         if (isLocalOwned(character)) return character;
     }
     return Character::Unknown;
+}
+
+uintptr_t localPlayer() {
+    const Character owned = localCharacter();
+    return owned == Character::Unknown ? 0 : find(owned);
 }
 
 Character plannedLocalCharacter() {

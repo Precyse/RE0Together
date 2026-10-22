@@ -37,11 +37,17 @@ uintptr_t find(Character character);
 // The character this machine's player owns (Unknown until ownership is known or without a peer).
 Character localCharacter();
 
+// The object of the character this machine's player owns, or 0 while localCharacter is Unknown.
+uintptr_t localPlayer();
+
 // Like localCharacter, but a linked host without a peer yet already plays its chosen character.
 Character plannedLocalCharacter();
 
 // True on the linked session's host.
 bool isHost();
+
+// This machine's slot in the linked session.
+uint8_t localSlot();
 
 // True when the received ownership says `slot` drives `character`.
 bool isOwnedBy(Character character, uint8_t slot);

@@ -9,7 +9,7 @@ bool install();
 
 void uninstall();
 
-// True while a remote-owned character's move runs on this thread (its replayed input).
+// True while a remote-owned character's move runs on this thread (its replayed input, or its puppet).
 bool replayingRemoteInput();
 
 // The game's own pad object for the local player, or null while input is blocked.

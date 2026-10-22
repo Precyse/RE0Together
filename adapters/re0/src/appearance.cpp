@@ -353,6 +353,8 @@ bool enable(NetClient& net, const Config& config) {
                           reinterpret_cast<void**>(&g_originalSetCostume));
 }
 
+uint8_t outfitOf(Character character) { return currentModel(character); }
+
 void onFrame(const GameFrame& frame) {
     const std::optional<appearance_rule::Appearance> received = appearance_rule::decode(frame.payload);
     if (!received) return;

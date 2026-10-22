@@ -121,6 +121,7 @@ constexpr uintptr_t kPickupPhaseOffset = 0x10;  // u32 phase of the action state
 constexpr uintptr_t kPickupPlayerOffset = 0x18;  // the player doing the pickup
 // Player field: the interaction target (the item being picked up); the game clears it when that item is removed.
 constexpr uintptr_t kPlayerInteractTargetOffset = 0x67a0;
+constexpr uint32_t kPickupStartPhase = 0;
 constexpr uint32_t kPickupTakePhase = 1;
 constexpr uint32_t kPickupDonePhase = 2;
 
@@ -141,6 +142,21 @@ struct ItemPutRecord {
     uint32_t reserved1[3];
 };
 static_assert(sizeof(ItemPutRecord) == 0x24);
+
+// state mode: phase 12 (item ledger; docs/RE0_NOTES.md "State mode: item ledger")
+// The item data record the player's interaction target points at during a pickup: the take step reads the item id at +4
+// and the stack count at +8 (u16) from it (0x4ded40 returns the record + 4).
+constexpr uintptr_t kItemRecordIdOffset = 0x4;
+constexpr uintptr_t kItemRecordCountOffset = 0x8;
+
+// state mode: phase 8 (enemy hand-over and creation on demand; docs/RE0_NOTES.md "State mode: enemy hits and hand-over")
+// The create 0x410bb0 is thiscall on the spawn table (ECX, kept from the caller) with (room record, spawn record index,
+// flags) and ret 0xc: the room load (0x61b240 -> 0x4109d0) and the flag setter's spawns (0x4109f0) pass the room's
+// record and read the flags from the global below. The caller then moves the new enemy by the record's origin and
+// assigns it to the record (kSceneAssignFunction).
+constexpr uintptr_t kEnemyCreateFlagsGlobal = 0xdcf2e4;  // u32, the create's third argument
+constexpr uintptr_t kSceneRecordOriginOffset = 0x20;     // vec3 added to a created enemy's position
+constexpr uintptr_t kUnitPositionWOffset = 0x4c;         // u32, cleared after the origin is added
 
 // Rooms, doors and menus (single-byte reads are enough for every value below except the door phase, an i32)
 constexpr uintptr_t kGameInfoStageOffset = 0x2a80;
@@ -166,11 +182,12 @@ constexpr uintptr_t kDoorStartFunction = 0x552b50;
 constexpr uintptr_t kActOnTriggerFunction = 0x564070;
 constexpr uintptr_t kSubMenuStateOffset = 0x2c;
 // Save manager (singleton 0xdcc018, +0x20 = request object, dispatch 0x6133d0 on op +4): requests are thiscall
-// on the request object and return false while another request runs. Load (slot, 0) ret 8 is op 3 (0x6134c0) or op 4
-// (0x613500); save (slot) ret 4 is op 5 (0x613390). The load menu passes its cursor index as the slot.
-constexpr uintptr_t kSaveLoadRequestFunction = 0x6134c0;
-constexpr uintptr_t kSaveLoadAltRequestFunction = 0x613500;
-constexpr uintptr_t kSaveRequestFunction = 0x613390;
+// on the request object and return false while another request runs. Save (slot, 0) ret 8 is op 3 (0x6134c0) or
+// op 4, save by copy (0x613500); load (slot) ret 4 is op 5 (0x613390). The save screen and the options menu also
+// save the system data (slot 0x15) through the save requests; the load menu passes its cursor index as the slot.
+constexpr uintptr_t kSaveRequestFunction = 0x6134c0;
+constexpr uintptr_t kSaveCopyRequestFunction = 0x613500;
+constexpr uintptr_t kLoadRequestFunction = 0x613390;
 constexpr uintptr_t kSubMenuOpenFunction = 0x5d9030;  // thiscall, no args: opens the inventory for the focused character
 constexpr uint8_t kSubMenuClosed = 0x0d;
 // cPlayerThink vtable slot 28, reached from the lethal hit: kills the player (setHP 0) and enters the dead state.
@@ -245,6 +262,52 @@ constexpr uintptr_t kUnitRoomRegistryGlobal = 0xdcc010;
 constexpr uintptr_t kUnitRoomRegistryFunction = 0x411570;
 constexpr int32_t kNoScene = -1;
 
+// state mode: phase 11 (script body ops and the shared demo skip; docs/RE0_NOTES.md "State mode: scripts and cutscenes")
+constexpr uintptr_t kOpcodeNameOffset = 8;            // char* in an opcode row
+constexpr uintptr_t kUnitOrdinalFunction = 0x40ff00;  // thiscall on [kUnitRoomRegistryGlobal] (script key, ordinal) ret 8 -> unit index
+constexpr uint32_t kNoUnit = 0xffffffff;
+constexpr uintptr_t kUnitObjectFunction = 0x51fed0;   // thiscall on sGameChara (unit index) ret 4 -> object or 0
+// uEventDemoScheduler update (fastcall, this in ECX): state at +0x58, 5 plays the demo and tests for a skip, 6 fades out.
+constexpr uintptr_t kDemoSchedulerUpdateFunction = 0x54ac30;
+constexpr uintptr_t kDemoStateOffset = 0x58;
+constexpr uint32_t kDemoStatePlaying = 5;
+constexpr uint32_t kDemoStateFadingOut = 6;
+// The skip branch of state 5 starts the fade-out with the duration at +0x64 of the object in [0xdcbe98], on the object
+// at +0x20 of [0xdcbea4] (thiscall (float duration) ret 4), then sets state 6.
+constexpr uintptr_t kDemoFadeDurationGlobal = 0xdcbe98;
+constexpr uintptr_t kDemoFadeDurationOffset = 0x64;
+constexpr uintptr_t kDemoFadeHolderGlobal = 0xdcbea4;
+constexpr uintptr_t kDemoFadeObjectOffset = 0x20;
+constexpr uintptr_t kFadeStartFunction = 0x5aa410;
+// The inputs that test true for a skip in state 5 (0x54b496 .. 0x54b4f9): the active pad's trigger word bit 8, the
+// keyboard word & 0x8050000, the mouse byte & 2. The pad word is [pad + [pad + 0xc38] * 0x2cc + 0x1a0].
+constexpr uintptr_t kPadActiveIndexOffset = 0xc38;
+constexpr uintptr_t kPadDeviceStride = 0x2cc;
+constexpr uintptr_t kPadTriggerWordOffset = 0x1a0;
+constexpr uint32_t kPadSkipBit = 8;
+constexpr uintptr_t kKeyboardGlobal = 0xe2e148;
+constexpr uintptr_t kKeyboardWordOffset = 0x160;
+constexpr uint32_t kKeyboardSkipMask = 0x8050000;
+constexpr uintptr_t kMouseGlobal = 0xe2e16c;
+constexpr uintptr_t kMouseButtonsOffset = 0x40;
+constexpr uint8_t kMouseSkipBit = 2;
+
+// state mode: phase 13 (push blocks; docs/RE0_NOTES.md "State mode: props")
+// uObstacle's per-frame update (vtable slot 41 of 0xcc8140, fastcall, this in ECX, no arguments); its position is at +0x40.
+constexpr uintptr_t kObstacleMoveFunction = 0x4e7830;
+// The obstacle a pushing character moves (uPlayerBase +0x6a00, getter 0x50e290); the push is think group 0 state 9 (handler
+// 0x501180, entered by changeState(0, 9, 0)), which writes the obstacle's +0x40 / +0x44 / +0x48 and its fourth word 0.
+constexpr uintptr_t kPlayerPushedObstacleOffset = 0x6a00;
+constexpr int32_t kPushThinkGroup = 0;
+constexpr int32_t kPushThinkState = 9;
+constexpr uintptr_t kObstacleFourthWordOffset = 0x4c;
+// The table a room script's obstacle unit word (p2 0..4) indexes: rows of {u8 class, u8 kind, u16 n-th of that kind}. The unit
+// registry finds the unit (0x410070, thiscall on [kUnitRoomRegistryGlobal] (scene, class, kind, n-th) ret 0x10 -> unit
+// index or kNoUnit); kUnitObjectFunction turns the index into the object.
+constexpr uintptr_t kObstacleUnitTable = 0xcd5398;
+constexpr uintptr_t kObstacleUnitRowSize = 4;
+constexpr uintptr_t kUnitFindFunction = 0x410070;
+
 // Enemies: sEnemy holds a 37-entry pool; the pool slot index is the enemy's network id.
 constexpr uintptr_t kEnemyGlobal = 0xdcdc78;  // sEnemy*
 constexpr uintptr_t kEnemyPoolOffset = 0x4b0;
@@ -283,18 +346,68 @@ constexpr std::array<uintptr_t, 14> kEnemyExecutorFunctions = {
     0x4a8940,  // uEnemy43
     0x4bad30,  // uEnemy46
 };
-// The target an enemy chases: the 15 classes sharing update 0x420f70 choose it in 0x421b20 (thiscall, no arguments;
-// the nearer of sPlayer's controlled and partner characters, the controlled one on a tie or when flags 6 / 2 are set).
-constexpr uintptr_t kEnemyBaseTargetSelectFunction = 0x421b20;
-// The class of vtable 0xcbf0d0 has its own selector (called from its update 0x4392a0, thiscall, no arguments): same
-// target field; +0x6b84 is the flat (x, z) distance to the target there, +0x6b88 a range it does not write.
-constexpr uintptr_t kEnemyOwnClassTargetSelectFunction = 0x439e90;
-constexpr uintptr_t kEnemyTargetOffset = 0x6b80;          // uPlayerBase* the enemy chases
-constexpr uintptr_t kEnemyTargetHeightOffset = 0x6b84;    // f32 target y minus own y
-constexpr uintptr_t kEnemyTargetFlatDistanceOffset = kEnemyTargetHeightOffset;  // same field in the own-class selector: flat (x, z) distance
-constexpr uintptr_t kEnemyTargetDistanceOffset = 0x6b88;  // f32 distance to the target
+// Which player an enemy chases. Each class picks the nearer of sPlayer's controlled and partner characters in its own
+// selector (thiscall, no arguments, plain ret, called once per frame from the class update); it writes the target and
+// the distance (and for some classes the height), and it fills +0x67cc / +0x67d0 (the distance to the controlled and
+// to the partner character, FLT_MAX when that character is not eligible) just before choosing.
 constexpr uintptr_t kEnemyDistanceControlledOffset = 0x67cc;  // f32 distance to sPlayer's controlled character
 constexpr uintptr_t kEnemyDistancePartnerOffset = 0x67d0;     // f32 distance to sPlayer's partner
+constexpr size_t kEnemyUpdateSlot = 41;  // vtable slot (+0xa4): the class's per-frame update
+constexpr uintptr_t kEnemyBaseUpdateFunction = 0x420f70;  // the update the 15 base family vtables share
+constexpr uintptr_t kEnemyTargetOffset = 0x6b80;          // base family and uEnemy2b: uPlayerBase* the enemy chases
+constexpr uintptr_t kEnemyTargetHeightOffset = 0x6b84;    // base family: f32 target y minus own y
+constexpr uintptr_t kEnemyTargetFlatDistanceOffset = kEnemyTargetHeightOffset;  // uEnemy2b: flat (x, z) distance to the target
+constexpr uintptr_t kEnemyTargetDistanceOffset = 0x6b88;  // base family: f32 distance to the target
+// uEnemy2b (kEnemyOwnClassVtable) has its own selector (called from its update 0x4392a0): same target field; +0x6b84 is the
+// flat (x, z) distance to the target there, +0x6b88 a range it does not write.
+constexpr uintptr_t kEnemyOwnClassVtable = 0xcbf0d0;
+constexpr uintptr_t kEnemyOwnClassTargetSelectFunction = 0x439e90;
+
+// How the owner treats a class's target: SyncOnly = sent to the follower, nothing else; the others add hysteresis
+// (target_hysteresis_rule) with that tier's tuning.
+enum class TargetPolicy : uint8_t { SyncOnly, LargeBoss, Stalker };
+
+// A class's own nearest-player selector and the fields it fills. preferenceMask: while [enemy + preferenceOffset] &
+// preferenceMask is set, the class targets a fixed character and is left alone. An unused offset is 0.
+struct TargetSelector {
+    std::array<uintptr_t, 2> vtables;  // 0 = unused
+    uintptr_t matchUpdate;             // 0 = unused; else every vtable whose update (slot 41) is this one
+    uintptr_t function;
+    uintptr_t targetOffset;            // uPlayerBase*
+    uintptr_t distanceOffset;          // filled from +0x67cc / +0x67d0
+    uintptr_t heightOffset;            // target y minus own y
+    uintptr_t preferenceOffset;
+    uint32_t preferenceMask;
+    uintptr_t rebeccaFlagOffset;       // a flag word whose rebeccaFlagMask is set while the target is Rebecca-type
+    uint32_t rebeccaFlagMask;
+    TargetPolicy policy;
+};
+constexpr uintptr_t kEnemyPreferenceOffset = 0x6848;  // 0x37, 0x38, 0x43: & 3 = a fixed character is targeted
+constexpr uint32_t kEnemyPreferenceMask = 3;
+constexpr uintptr_t kEnemy46FlagsOffset = 0x6ce8;  // uEnemy46
+constexpr uint32_t kEnemy46LockedMask = 2;         // the target is locked on +0x6d78 / +0x6d88
+constexpr uint32_t kEnemy46RebeccaMask = 4;        // set while the target is Rebecca-type
+constexpr std::array<TargetSelector, 5> kTargetSelectors = {{
+    // The base family (zombies and the like): synced, no hysteresis.
+    {.vtables = {}, .matchUpdate = kEnemyBaseUpdateFunction, .function = 0x421b20, .targetOffset = kEnemyTargetOffset,
+     .distanceOffset = kEnemyTargetDistanceOffset, .heightOffset = kEnemyTargetHeightOffset,
+     .policy = TargetPolicy::SyncOnly},
+    // uEnemy31.
+    {.vtables = {0xcbfe58}, .function = 0x45b9b0, .targetOffset = 0x6a30, .distanceOffset = 0x6a34,
+     .policy = TargetPolicy::LargeBoss},
+    // uEnemy37, uEnemy38.
+    {.vtables = {0xcc08c0, 0xcc5ae8}, .function = 0x475e20, .targetOffset = 0x6a9c, .distanceOffset = 0x6aa0,
+     .preferenceOffset = kEnemyPreferenceOffset, .preferenceMask = kEnemyPreferenceMask,
+     .policy = TargetPolicy::LargeBoss},
+    // uEnemy43.
+    {.vtables = {0xcc25d8}, .function = 0x4b15f0, .targetOffset = 0x73fc, .distanceOffset = 0x7400,
+     .preferenceOffset = kEnemyPreferenceOffset, .preferenceMask = kEnemyPreferenceMask,
+     .policy = TargetPolicy::Stalker},
+    // uEnemy46. It writes no distance of its own (the flat ones at +0x67cc / +0x67d0 are what it compares).
+    {.vtables = {0xcc3248}, .function = 0x4ba270, .targetOffset = 0x6d98, .preferenceOffset = kEnemy46FlagsOffset,
+     .preferenceMask = kEnemy46LockedMask, .rebeccaFlagOffset = kEnemy46FlagsOffset,
+     .rebeccaFlagMask = kEnemy46RebeccaMask, .policy = TargetPolicy::LargeBoss},
+}};
 constexpr uintptr_t kSetHpFunction = 0x529310;  // thiscall, 1 stack arg; enemies and players
 // The game's one random generator (xorshift128 0x684d90 on four words at 0xe2ccb0). An enemy's damage function rolls
 // it for the critical hit before applying (slot 76 0x4cbdb0 -> randRange 0x6600c0; class 0x438b00 via 0x660080), so
@@ -310,6 +423,28 @@ constexpr uintptr_t kSpawnRecordSize = 0x5c;
 constexpr uint32_t kSpawnRecordCount = 0x4e8;
 constexpr uintptr_t kSpawnRecordKindOffset = 0x4;
 constexpr uintptr_t kSpawnRecordIdOffset = 0x10;
+
+// state mode: phase 16 (session; docs/RE0_NOTES.md "State mode: session")
+// The game over request: thiscall on the sGameOver singleton (player, cause) ret 8, called by the death states of the think
+// (0x5036f0, 0x503840, 0x503a90), the GameOver script op and the up-cut. It returns at once when the room phase is already Dead
+// (0xe) or requested to be, otherwise it requests that phase. Cause 0 is a death.
+constexpr uintptr_t kGameOverGlobal = 0xdce11c;  // sGameOver*
+constexpr uintptr_t kGameOverRequestFunction = 0x5adca0;
+constexpr int32_t kGameOverCauseDeath = 0;
+
+// state mode: phase 15 (boss hand-over; docs/RE0_NOTES.md "State mode: boss hand-over")
+// The boss classes the hand-over covers: uEnemy31 (Proto-Tyrant), 37 and 38 (Stinger), 46 (Queen Leech), all Observer
+// policy. Marcus (43) and the second Queen Leech form (47) stay Legacy until phase 18. Each has the engine's unit move at
+// slot 8 (0x526b30, the CharPause path), its own update at slot 41 and setAction at slot 63 (0x4cc670; 0x4bbc70 for 46).
+constexpr std::array<uintptr_t, 4> kBossVtables = {0xcbfe58, 0xcc08c0, 0xcc5ae8, 0xcc3248};
+
+// state mode: phase 7 (enemy observers, docs/RE0_NOTES.md "State mode: enemy observers")
+// Slot 8 of all 38 enemy vtables and both players: fastcall(this), no stack arguments. When sGameInfo +0x50 bit 0 (the
+// CharPause bit, script op 160; tested at 0x526c7d) is set it runs only slot 31 (motion), the root-motion cancel and
+// slots 18 and 19 (joints, hit shapes) and skips slot 41, the class's update (jump at 0x526d4e).
+constexpr uintptr_t kUnitMoveFunction = 0x526b30;
+constexpr uint32_t kCharPauseBit = 0x1;
+constexpr uintptr_t kEnemyFlags6a0cOffset = 0x6a0c;  // u32, read by the player's aim filter and weapon hit path 0x52f520
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC
 constexpr std::array<uintptr_t, 38> kEnemyVtables = {
     0xcbdcd8, 0xcc4f28, 0xcc50a0, 0xcc5218, 0xcc5390, 0xcc5508, 0xcc5680, 0xcc57f8, 0xcc5970, 0xcc3fe8,
@@ -345,6 +480,57 @@ constexpr uintptr_t kThinkPadSlotOffset = 0x50;         // vtable slot 20, which
 constexpr uintptr_t kControlledThinkPadFunction = 0x4f9f10;  // getPad(0)
 constexpr uintptr_t kPartnerThinkPadFunction = 0x4f4be0;     // getPad(1)
 
+// Pose puppet (docs/RE0_NOTES.md "Pose puppet", static analysis of build 17178773).
+// sGameInfo +0x50 bit 1 is the script pause (PlayerPause 0x56c620): uPlayerBase::move (test at 0x5131d4) then skips
+// the think and the locomotion and only animates, cancels the root motion (unless kPlayerKeepRootMotionOffset is
+// set), rebuilds the matrices and the collision shapes. The bit is global, so the puppet holds it for one move only.
+constexpr uintptr_t kGameInfoModeFlagsOffset = 0x50;  // u32
+constexpr uint32_t kPlayerPauseBit = 0x2;
+// Every motion request of a character ends in cAnimControl::set, a member of the character at kAnimControlOffset:
+// thiscall (layer < 8, motionNo, flags, f32 interp, f32 start), ret 0x14, no return value (0x4144d0).
+constexpr uintptr_t kAnimControlOffset = 0xff8;
+constexpr uintptr_t kAnimControlSetFunction = 0x4144d0;
+constexpr uintptr_t kMotionAvailableFunction = 0x73e650;  // thiscall on the character (motionNo) ret 4: nonzero when its bank holds it
+constexpr uintptr_t kPlayerResetFunction = 0x516440;      // thiscall, plain ret: the script's Player_Reset (back to neutral)
+// Vtable slot 34 of both players: the damage / grab entry, thiscall with five stack dwords (ret 0x14), 0 = refused.
+constexpr uintptr_t kPlayerDamageEntryFunction = 0x512570;
+// uModel::Motion layers: 8 of 0x140 bytes from +0x4a0.
+constexpr uintptr_t kMotionLayerBaseOffset = 0x4a0;
+constexpr uintptr_t kMotionLayerStride = 0x140;
+constexpr uintptr_t kMotionNumberOffset = 0x4;    // within a layer: u16, bank in bits 8..11, 0xffff = none
+constexpr uintptr_t kMotionFrameOffset = 0x4c;    // f32 current frame
+constexpr uintptr_t kMotionFrameMaxOffset = 0x54; // f32 motion length - 1
+constexpr uintptr_t kThinkGroupOffset = 0x8;      // within the think: i32 group / state / phase
+constexpr uintptr_t kThinkStateOffset = 0xc;
+constexpr uintptr_t kThinkPhaseOffset = 0x10;
+constexpr uintptr_t kPlayerStatusFlagsOffset = 0x68c4;     // u32, read by enemies
+constexpr uintptr_t kPlayerKeepRootMotionOffset = 0x6a70;  // u8, playMotion's flags & 0x10; 0 = the position is the caller's
+
+// state mode: phase 3 (POSE_STATE v2 fields; docs/RE0_NOTES.md "State mode: timeline and POSE v2")
+constexpr uintptr_t kPlayerX1034Offset = 0x1034;       // u32, uCharaBase; zombie grabs require 0 (meaning open, probe F1)
+constexpr uintptr_t kPlayerHitAttributesOffset = 0x16ec;  // u32, low 10 bits are the hit attributes (0x528ee0 sets, 0x528ec0 clears)
+constexpr uintptr_t kPlayerAimTierOffset = 0x6954;     // i32, 0..2: the vertical aim band
+constexpr uintptr_t kPlayerManualPitchOffset = 0x695c; // f32, radians: the analog up/down pitch while aiming
+
+// state mode: phase 5 (weapon effect replay; docs/RE0_NOTES.md "State mode: weapon effects", read in the decrypted image)
+constexpr uintptr_t kWeaponGlobal = 0xdce0a4;                // sWeapon*
+constexpr uintptr_t kEffectGlobal = 0xe2da7c;                // sEffect*
+constexpr uintptr_t kEffectFlagsGlobal = 0xdc20dc;           // u32: first dword of the {flags, 0x10} pair every listed effect call passes
+constexpr uint32_t kEffectFlagsSecond = 0x10;
+constexpr uintptr_t kWeaponPlaySeFunction = 0x532bb0;        // thiscall(sWeapon; chara, soundId, f32 volume) ret 0xc
+constexpr uintptr_t kWeaponGenericSeFunction = 0x532ce0;     // stdcall(chara, soundId, f32 volume), Wesker's attack
+constexpr uintptr_t kWeaponShootFunction = 0x530ec0;         // thiscall(sWeapon; player, mat4*, kind) ret 0xc
+constexpr uintptr_t kMuzzleFlashFunction = 0x50cb40;         // thiscall(player; index, f32 scale) ret 8
+constexpr uintptr_t kEffectCreateFunction = 0x55a6d0;        // thiscall(sEffect; out*, owner, set, index, attach, joint, pos*, rot*, flags*, extra) ret 0x28
+constexpr uintptr_t kStowThrowableFunction = 0x50f8b0;       // thiscall(player), molotov stow
+constexpr uintptr_t kLightWickFunction = 0x50d6e0;           // thiscall(player), molotov wick
+constexpr uintptr_t kWaterRippleFunction = 0x532880;         // stdcall(chara, sub, vec3*)
+constexpr uintptr_t kMuzzleMatrixFunction = 0x50e490;        // thiscall(player; mat4*, muzzle) ret 8
+constexpr uintptr_t kPlayerWeaponUnitOffset = 0x6838;        // uWeapon* held in sub-unit slot 3
+constexpr uintptr_t kEffectSetOffset = 0x6790;               // effect set pointer of a character or weapon unit (0x522d20)
+constexpr uintptr_t kPlayerAutoPitchOffset = 0x68ec;         // f32: auto-aim pitch, read by the projectile launch
+constexpr size_t kEffectHandleBytes = 16;                    // room for the handle sEffect::create writes (two dwords)
+
 // sGamePad
 constexpr uintptr_t kGetPadFunction = 0x600630;  // thiscall, 1 stack arg, i < 2
 constexpr uintptr_t kPadTableOffset = 0xc24;
@@ -364,12 +550,84 @@ constexpr uintptr_t kSetPartnerFunction = 0x4ece00;       // sPlayer::setPartner
 // sUnit::updateAll (vtable slot 6, thiscall, no args, plain ret), once per frame: walks every unit group through
 // slot 9 (0x7279e0, thiscall, group index, ret 4), which calls each unit's vtable slot 8 (the move chain).
 constexpr uintptr_t kUnitUpdateAllFunction = 0x727b50;
+
+// state mode: phase 4 (puppet body fidelity; docs/RE0_NOTES.md "State mode: puppet body")
+// A character holds 7 sub-unit slots of 0x20 bytes from +0x67d8; slot 3 is the held weapon. A slot starts with the
+// unit pointer and embeds its cAnimControl 4 bytes in (0x521a80 adds 4 before it calls cAnimControl::set).
+constexpr uintptr_t kSubSlotOffset = 0x67d8;
+constexpr uintptr_t kSubSlotStride = 0x20;
+constexpr uintptr_t kSubControlInSlot = 0x4;
+constexpr uintptr_t kPlayerStatusLockOffset = 0x67a0;      // CRITICAL_SECTION (0x18 bytes, up to the think) guarding +0x68c4
+constexpr uint32_t kPlayerStatusMask = 0x1ffff;            // the bits 0x512050 keeps when it clears flags
+constexpr uintptr_t kPlayerSetHitAttributesFunction = 0x528ee0;    // thiscall (mask) ret 4: |= mask
+constexpr uintptr_t kPlayerClearHitAttributesFunction = 0x528ec0;  // thiscall (mask) ret 4: &= ~mask & 0x3ff
+constexpr uintptr_t kPlayerHandPoseFunction = 0x50f910;    // fastcall (player): hand pose from motion and weapon type
+constexpr uintptr_t kPlayerSpineBendFunction = 0x518f70;   // fastcall (player): spine joints bent by +0x695c, after slot 31
+constexpr uintptr_t kPlayerLightProbeFunction = 0x50a880;  // fastcall (player), vtable slot 47: branch B of move only
+constexpr uintptr_t kPlayerHandSwapFunction = 0x5178b0;    // fastcall (player): frame-driven hand / holster swaps, move step G
+constexpr uintptr_t kPlayerRoomRecordFunction = 0x526490;  // thiscall (player) -> room record (+0xff4)
+constexpr uintptr_t kAreaGlobal = 0xdce9dc;                // the object 0x53faa0 runs on
+constexpr uintptr_t kAreaIdFunction = 0x53faa0;            // thiscall on kAreaGlobal (record, vec3*, mode) ret 0xc -> area id
+constexpr uint32_t kAreaIdMode = 2;                        // what move passes (0x514a41)
+constexpr uintptr_t kPlayerSetAreaIdFunction = 0x5295a0;   // thiscall (areaId) ret 4: +0x16e8
+constexpr uintptr_t kUnitMotionUpdateFunction = 0x5286c0;  // vtable slot 31 of every uModel unit: fastcall (unit)
+constexpr uintptr_t kThinkRumbleFunction = 0x4fac40;       // cPlayerThink slot 15, thiscall (strength) ret 4
+constexpr uintptr_t kThinkOwnerOffset = 0x4;               // within the think: the character it belongs to
+
 constexpr uint32_t kPlayerThinkSize = 0xd0;
 constexpr uint32_t kPartnerThinkSize = 0x1a0;  // cPlayerSubThink
 // Partner code may still treat the partner's think as a cPlayerSubThink and touch its larger layout, so a
 // cPlayerThink handed to a partner is allocated at the larger size with the tail zeroed.
 constexpr uint32_t kThinkAllocationSize = kPartnerThinkSize > kPlayerThinkSize ? kPartnerThinkSize : kPlayerThinkSize;
 constexpr uint32_t kPlayerThinkAlign = 0x10;
+
+// state mode: phase 10 (native rooms; docs/RE0_NOTES.md "State mode: native rooms")
+// sRoomControl::changeRoom: thiscall (scene, entry, flags) ret 0xc, the door's commit point. It runs the room change
+// 0x61e2c0 before it returns and its only caller is the door thunk 0x552720 (sDoorLoad update phase 4, once per door).
+constexpr uintptr_t kChangeRoomFunction = 0x610c60;
+
+// state mode: phase 9 (contact router and grab lease; docs/RE0_NOTES.md "State mode: contact and lease")
+// The player damage entry 0x512570 indexes this table by its kind argument: row `kind` is a pair {begin, end} of
+// 16-byte entries {i32 think state, i32 motion front, i32 motion back (-1 = none), f32 speed}, entry `level` is at
+// begin + level * 16; a null row or a level at or past `end` makes the entry assert and read null. The entry's first word
+// is the group-2 think state the victim is put in (changeState(2, state, 0)).
+constexpr uintptr_t kReactionTable = 0xd8d6f8;
+constexpr uintptr_t kReactionRowSize = 8;
+constexpr uintptr_t kReactionEntrySize = 0x10;
+// For reference, not hooked: an enemy writes the victim's grab command (+0x69cc) through 0x517340 and the struggle
+// reads the pad through 0x4c8ed0, both on the victim's own machine once the enemy runs there.
+constexpr uintptr_t kGrabCommandFunction = 0x517340;
+constexpr uintptr_t kStruggleFunction = 0x4c8ed0;
+
+// Menu text and the Options screen (docs/RE0_NOTES.md "Menus: text hook and the Co-op entry in Options")
+constexpr uintptr_t kGameGuiGlobal = 0xe2daa4;        // sGameGUI*
+constexpr uintptr_t kGuiTablesOffset = 0x158;         // rGUIMessage*[kGuiTableSlots], one per message table slot
+constexpr int kGuiTableSlots = 19;
+constexpr int kGuiOptionTableSlot = 5;                // "option": the Options help lines
+constexpr uintptr_t kGetStringFunction = 0x887090;    // thiscall(rGUIMessage table, id) ret 4 -> UTF-8 char*, "" past the count
+constexpr uintptr_t kOptionHelpTable = 0xcdf8b8;      // u32 per Options item id: the help line's id in the option table, -1 none
+constexpr uintptr_t kOptionTopBuildFunction = 0x5c8970;   // uGUIOptionTop::v5, fastcall(top): fills the item list
+constexpr uintptr_t kOptionManagerMoveFunction = 0x5cb5a0;  // uOptionManager::v8, fastcall(manager): the screen router
+constexpr uintptr_t kOptionKeyGuideFunction = 0x5cc1b0;   // thiscall(manager, bool) ret 4: the button guide of the screen
+constexpr uintptr_t kOptionRouterJumpCheck = 0x5cba3d;    // dec eax; cmp eax, 0x15; ja default: the router's state dispatch
+constexpr uintptr_t kOptionRouterDefault = 0x5cc07e;      // default case: unlock and return
+// uOptionManager
+constexpr uintptr_t kOptionCreatingOffset = 0x48;         // u8: 1 until the pages are built
+constexpr uintptr_t kOptionDialogOffset = 0x4d;           // u8: 1 while a confirm dialog is up
+constexpr uintptr_t kOptionStateOffset = 0x54;            // u32 router state, 0 closed
+constexpr uintptr_t kOptionTopOffset = 0x15c;             // uGUIOptionTop*
+// uGUIOptionTop (the field block from +0x264 is read in one copy)
+constexpr uintptr_t kOptionTopFieldsOffset = 0x264;       // u8 cancel pressed
+constexpr uintptr_t kOptionTopStateOffset = 0x268;        // u32 screen state, 0 closed
+constexpr uintptr_t kOptionTopItemsOffset = 0x26c;        // u32[10] item ids in list order
+constexpr uintptr_t kOptionTopCountOffset = 0x294;        // u32 item count
+constexpr uintptr_t kOptionTopScrollOffset = 0x298;       // u32 first visible item
+constexpr uintptr_t kOptionTopCursorOffset = 0x29c;       // u32 cursor row within the visible rows
+constexpr size_t kOptionTopFieldsSize = 0x3c;
+// Menu input as every screen reads it: the trigger bits of pad, keyboard and mouse merged (cdecl() -> bits)
+constexpr uintptr_t kMenuTriggerFunction = 0x5ef420;
+constexpr uintptr_t kPadDecideMaskOffset = 0xb6c;         // sGamePad: the trigger bit mask of confirm
+constexpr uintptr_t kPadCancelMaskOffset = 0xb70;         // sGamePad: the trigger bit mask of cancel
 
 // MSVC cannot declare a free thiscall pointer; __fastcall with edx unused has the same register and stack layout.
 template <class R, class... Args>
@@ -437,10 +695,14 @@ inline bool isRealPad(const void* object) {
     return object && readPointer(reinterpret_cast<uintptr_t>(object)) == kPadVtable;
 }
 
-inline bool codeDecrypted() {
-    std::array<uint8_t, kDecryptProbeBytes.size()> actual{};
-    return readMemory(kDecryptProbeAddress, actual) && actual == kDecryptProbeBytes;
+// True when the game memory at `address` holds exactly `expected`: the check before hooking or patching a site.
+template <size_t N>
+bool bytesMatch(uintptr_t address, const std::array<uint8_t, N>& expected) {
+    std::array<uint8_t, N> actual{};
+    return readMemory(address, actual) && actual == expected;
 }
+
+inline bool codeDecrypted() { return bytesMatch(kDecryptProbeAddress, kDecryptProbeBytes); }
 
 // Pointer stored at sPlayer + offset, or 0 when sPlayer or the field is missing.
 inline uintptr_t playerField(uintptr_t offset) {

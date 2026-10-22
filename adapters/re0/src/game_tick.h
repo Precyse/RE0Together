@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace game_tick {
@@ -15,13 +16,22 @@ void addCallback(const char* name, Callback callback);
 // next frame. A fault that persists disables them again.
 void rearmAfterResync();
 
-// Called with true just before and false just after each player's own move runs.
-using MoveScope = void (*)(uintptr_t player, bool entering);
-void setMoveScope(MoveScope scope);
+// Any thread: true on the thread that runs the ticks (the game thread), false anywhere else and before the first tick.
+// Recorders that fill game-thread-only buffers from engine calls the engine also makes off-thread check it first.
+bool onGameThread();
 
-// Called after each player's own move has run (game thread, guarded like the callbacks).
+// Called with true just before and false just after each player's own move runs. Scopes enter in registration order
+// and exit in reverse; at most kMaxMoveScopes. Safe to add while the hook is live (the game thread reads a published count).
+// `name` picks the SLOW_FRAME column the scope's time is added to (slow_frame_rule.h) and names it when it raises an
+// exception: that is logged, toasted and the scope (enter and exit) is disabled until the next resync, like a callback.
+constexpr size_t kMaxMoveScopes = 4;
+using MoveScope = void (*)(uintptr_t player, bool entering);
+void addMoveScope(MoveScope scope, const char* name = "move_scope");
+
+// Called after each player's own move has run, in registration order (game thread). Guarded like the callbacks: an
+// exception is logged, toasted under `name` and the entry is disabled until the next resync. Call before install().
 using PostMove = void (*)(uintptr_t player);
-void setPostMove(PostMove postMove);
+void addPostMove(const char* name, PostMove postMove);
 
 // Hooks uPlayerBase::move. Call once, after the game code is decrypted.
 bool install();

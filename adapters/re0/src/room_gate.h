@@ -8,7 +8,8 @@
 // ready, the peer turns away, the link drops, or after 5 s; a hold over 2 s shows "Waiting for partner".
 namespace room_gate {
 
-// Hooks the door's finish check. False when the hook failed.
+// Hooks the door's finish check. False when the hook failed. In partner_mode=state nothing is hooked and no door ever
+// waits: the second arrival's enemies are observers of the first one's from their first frame.
 bool install();
 
 // Any thread: this machine's running door is ready to finish (ROOM_STATE tells the peer).

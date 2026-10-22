@@ -32,7 +32,7 @@ arrived first ("claim", sent in ROOM_STATE), the host on a tie or while the peer
 | Think skip | | 0x41db20 not run (15 vtables) | decisions |
 | Record restore | | +0x67a4..+0x67b0 saved before and written back after every slot-41 update | record |
 | Record replay | | owner's record applied through the original setAction whenever it differs from the local one, every 100 ms | record, motion start |
-| Target override | | after both selectors, the owner's target written into +0x6b80/84/88 | target fields |
+| Target override | hysteresis on the large classes | after each class's selector, the owner's target written into the class's target fields | target fields |
 | Hit routing | local shooter: apply, send HIT_APPLIED | local shooter: HIT_REQUEST, no local apply | |
 | Hit receive | accepts HIT_REQUEST only (drops HIT_APPLIED) | accepts HIT_APPLIED only (drops HIT_REQUEST); runs the damage function with its own RNG | HP, reaction |
 | Room entry | first to arrive owns; nothing waits for the other machine | | |
@@ -127,8 +127,11 @@ two decisions runs natively on both machines.
   travel; the follower starts that reaction (and a replay's, if it ended on another) through the class's own setAction. Whoever receives a request
   applies it and whoever receives an applied hit replays it. Every hit names the enemy's class; a slot holding
   another class on the receiver is dropped.
-- **Target.** The base classes' selector 0x421b20 and uEnemy2b's 0x439e90 are hooked; on the follower the hooked
-  selector's result is the owner's character, so the selector call stays the only writer of the target fields.
+- **Target.** Each class's own nearest-player selector is hooked (`game::kTargetSelectors`: the base family 0x421b20,
+  uEnemy31, 37/38, 43, 46; plus uEnemy2b's 0x439e90, see RE0_NOTES "Boss targets"). On the follower the hooked
+  selector's result is the owner's character, so the selector call stays the only writer of the target fields. On the
+  owner the large classes (31, 37/38, 43, 46) keep their choice with hysteresis (`target_hysteresis_rule`: attacker
+  bonus, switch lock, margin), and the owner now sends their target too (it was `kNoTarget` for every boss class).
 - **Door barrier** (the user's idea). When one player takes a door in TEAM, both machines play that door and load the
   room inside it; the room starts when the door finishes (room phase DoorLoad -> Main). The door's own finish check
   0x551c70 is hooked: the faster machine reports its door ready and its door waits on its last frame until the

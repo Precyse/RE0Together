@@ -90,6 +90,18 @@ void testAllAndClear() {
     check(queue.total() == 0 && queue.all().empty(), "clear empties every room");
 }
 
+void testLoadDropsEventsForTheOldWorld() {
+    Queue pending;
+    pending.add(kRoomB, put(kHerb, {10.0f, 0.0f, 0.0f}));
+    pending.add(kRoomB, take(kKnife, {20.0f, 0.0f, 0.0f}));
+    pending.clear();
+    check(pending.take(kRoomB).empty(), "a put or take queued for an unloaded room is gone after a load");
+    const auto result = pending.add(kRoomB, take(kHerb, {10.0f, 0.0f, 0.0f}));
+    check(!result.cancelledPut, "a take in the new world does not cancel the old world's put");
+    const std::vector<Event> events = pending.take(kRoomB);
+    check(events.size() == 1 && events[0].isTake, "only the new world's event is applied when the room loads");
+}
+
 void testSnapshotRoundTrip() {
     Queue queue;
     queue.add(kRoomA, {false, kHerb, 3, {1.0f, 2.0f, 3.0f}, {0.0f, 0.5f, 0.0f}});
@@ -130,6 +142,7 @@ int main() {
     testCapDropsOldest();
     testTakeReturnsOrderAndClears();
     testAllAndClear();
+    testLoadDropsEventsForTheOldWorld();
     testSnapshotRoundTrip();
     testSnapshotRejectsBadSizes();
     testSnapshotCapsEvents();

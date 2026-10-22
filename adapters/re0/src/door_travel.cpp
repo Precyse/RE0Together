@@ -17,11 +17,13 @@
 #include "protocol.h"
 #include "resync.h"
 #include "door_sync.h"
+#include "room_authority.h"
 #include "room_gate.h"
 #include "room_phase.h"
 #include "scene.h"
 #include "split_rooms.h"
 #include "state_correction.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -160,7 +162,7 @@ void onTick() {
     }
     const auto now = Clock::now();
     if (now - g_lastSend >= kRoomStateInterval) sendRoomState();
-    checkDesync(now);
+    if (!state_mode::on()) checkDesync(now);  // state mode: ROOM_MOVE and the pose room keep the puppet right (room_move)
     logEnemyAuthority();
 }
 
@@ -192,6 +194,7 @@ PeerPlace peerPlace() {
 }
 
 bool enemyAuthority() {
+    if (state_mode::on()) return room_authority::runsHere(scene::current());
     RoomState peer{};
     peerReport(peer);
     return control_rule::runsEnemies(peerPlace(), character_owner::isHost(), g_enemyClaim, peer.enemyClaim != 0);

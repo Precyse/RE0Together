@@ -6,6 +6,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "net_pad.h"
+#include "puppet.h"
 
 namespace {
 
@@ -16,14 +17,16 @@ constexpr size_t kAnalogBytes = 0x40;  // bytes of the analog block the player t
 
 GetPadFunction g_originalGetPad = nullptr;
 AnalogFunction g_originalAnalog = nullptr;
-// Input source for the character whose update is running on this thread.
-enum class Route : uint8_t { Real, Remote, Blocked };
+// Input source for the character whose update is running on this thread. A puppet (partner_mode=state) is shown from
+// the owner's pose, its think never runs; it reads the neutral pad should anything ask.
+enum class Route : uint8_t { Real, Remote, Puppet, Blocked };
 thread_local Route t_route = Route::Real;
 uint8_t g_neutralAnalog[kAnalogBytes] = {};  // an untouched stick
 
 void* gamePad() { return reinterpret_cast<void*>(game::readPointer(game::kGamePadGlobal)); }
 
 Route routeFor(uintptr_t player) {
+    if (puppet::active(player)) return Route::Puppet;
     switch (character_owner::controlOf(character_owner::identify(player))) {
         case character_owner::Control::Remote: return Route::Remote;
         case character_owner::Control::Locked: return Route::Blocked;
@@ -37,13 +40,13 @@ void* __fastcall getPadDetour(void* self, void* edx, uint32_t index) {
     void* pad = g_originalGetPad(self, edx, index);
     if (!game::isRealPad(pad)) return pad;
     if (t_route == Route::Remote) return net_pad::object(pad);
-    if (t_route == Route::Blocked) return static_cast<uint8_t*>(self) + game::kBlockedPadOffset;
+    if (t_route == Route::Blocked || t_route == Route::Puppet) return static_cast<uint8_t*>(self) + game::kBlockedPadOffset;
     return pad;
 }
 
 void* __fastcall analogDetour(void* self, void* edx) {
     if (t_route == Route::Remote) return net_pad::analog();
-    if (t_route == Route::Blocked) return g_neutralAnalog;
+    if (t_route == Route::Blocked || t_route == Route::Puppet) return g_neutralAnalog;
     return g_originalAnalog(self, edx);
 }
 
@@ -58,7 +61,7 @@ bool install() {
                         reinterpret_cast<void**>(&g_originalAnalog))) {
         return false;
     }
-    game_tick::setMoveScope(onPlayerMove);
+    game_tick::addMoveScope(onPlayerMove);
     return true;
 }
 
@@ -67,7 +70,7 @@ void uninstall() {
     hooks::remove(game::kAnalogGetterFunction);
 }
 
-bool replayingRemoteInput() { return t_route == Route::Remote; }
+bool replayingRemoteInput() { return t_route == Route::Remote || t_route == Route::Puppet; }
 
 void* realPad(uint32_t index) {
     void* self = gamePad();

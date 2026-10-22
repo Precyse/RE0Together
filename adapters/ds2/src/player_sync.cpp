@@ -1,5 +1,6 @@
 #include "player_sync.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -27,6 +28,7 @@
 #include "game.h"
 #include "gear_restore.h"
 #include "log.h"
+#include "peer_joins.h"
 #include "position_blend.h"
 #include "reject_counters.h"
 #include "resync.h"
@@ -60,6 +62,8 @@ std::map<uint8_t, std::string> g_names;
 Clock::time_point g_lastSend;
 Clock::time_point g_lastLog;
 uint32_t g_seq = 0;
+PeerJoins g_hostJoins;      // guest: the host's joins seen so far
+bool g_hostSeen = false;    // guest: the host has been announced once
 
 // Toasts the partner's death on the report that first says dead (caller holds g_mutex).
 void toastDeath(uint8_t slot, const Heard* last, const Heard& now) {
@@ -102,6 +106,22 @@ void rememberNames(const SessionSnapshot& session) {
     }
     g_names = std::move(now);
     std::erase_if(g_heard, [](const auto& entry) { return !g_names.contains(entry.first); });
+}
+
+// A guest hears the host announced again (a new join serial after the first) when the host was unreachable for a while and
+// came back inside the launcher's grace: frames may be lost, so it asks for everything the host sends a new peer.
+void resyncAfterHostReturn(NetClient& net, const SessionSnapshot& session) {
+    const bool guest = session.linked && session.localSlot != session.hostSlot;
+    if (!guest) {
+        g_hostJoins.clear();
+        g_hostSeen = false;
+        return;
+    }
+    const std::vector<uint8_t> joined = g_hostJoins.takeNew(session);
+    const bool hostJoined = std::ranges::find(joined, session.hostSlot) != joined.end();
+    const bool hostPresent = std::ranges::any_of(session.peers, [&](const PeerInfo& peer) { return peer.slot == session.hostSlot; });
+    if (hostJoined && g_hostSeen) resync::request(net, session.hostSlot, resync::kAll);
+    g_hostSeen = hostPresent;
 }
 
 void sendLocal(NetClient& net) {
@@ -150,6 +170,7 @@ void tick(NetClient& net) {
     });
     debug_stats::setSession(session);
     rememberNames(session);
+    resyncAfterHostReturn(net, session);
     const bool guest = session.linked && session.localSlot != session.hostSlot;
     game::blockScriptedInteractions(guest);
     game::blockOrders(guest);

@@ -11,7 +11,8 @@
 // Once the guest's game is loaded it asks for a snapshot; the host answers with where each character is (room, the
 // last door it took, position), both inventories and the story flags. The guest takes its own character through that
 // door if it is elsewhere (a normal door on its screen), moves the host's character into its room without touching
-// the screen (scene::move), and places its own character where the host last saw it.
+// the screen (scene::move), and places its own character where the host last saw it. In state mode the host's character is
+// not moved: the puppet follows ROOM_MOVE and the pose room, and the host sends JOIN_EXTRAS after the snapshot (join_extras.h).
 namespace join_sync {
 
 // Where one character is on the host.
@@ -35,8 +36,12 @@ static_assert(sizeof(JoinSnapshot) == 2 * 56 + 128 + flag_diff::kWords * 4);
 
 // True on the host, and on a guest once the host's snapshot is applied and its character stands where the host last
 // saw it. Until then the guest keeps its own character's state (inventory, position) to itself: it comes from an
-// older save.
+// older save. In state mode a guest is caught up only when the host's SESSION_READY echo has arrived (session_ready.h).
 bool caughtUp();
+
+// True on the host, and on a guest once the host's snapshot is applied and the guest's own character stands where the host
+// last saw it (state mode: the pose stream may start, the handshake that makes it `caughtUp` needs it).
+bool placed();
 
 // Guest, any thread: ask for a new snapshot and apply it like the first one (resync.h). Does not hold back the
 // guest's own state: it is live.

@@ -6,6 +6,8 @@
 
 #include "debug_stats.h"
 #include "enemy_net.h"
+#include "enemy_policy.h"
+#include "enemy_observer.h"
 #include "enemy_registry.h"
 #include "enemy_state.h"
 #include "game.h"
@@ -13,6 +15,7 @@
 #include "log.h"
 #include "position_blend.h"
 #include "scene.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -45,9 +48,10 @@ enemy_follow_rule::PendingDecision& pendingFor(uint8_t slot) {
 
 bool readAction(uintptr_t enemy, Action& out) { return game::readMemory(enemy + game::kEnemyActionOffset, out.word); }
 
-// The class's own setAction (vtable slot 63), the way its code starts an action.
+// The class's own setAction (vtable slot 63), the way its code starts an action; a class without one is left alone.
 void setAction(void* enemy, const Action& action) {
     const uintptr_t vtable = game::readPointer(reinterpret_cast<uintptr_t>(enemy));
+    if (!enemy_policy::hasSetAction(vtable)) return;
     const uintptr_t function = game::readPointer(vtable + game::kEnemySetActionSlot * sizeof(uint32_t));
     game::callThiscall<void>(function, enemy, action.word[0], action.word[1], action.word[2], action.word[3]);
 }
@@ -106,6 +110,7 @@ void __fastcall thinkDetour(void* enemy, void* edx) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
     const int slot = enemy_registry::slotOf(self);
     if (slot == enemy_registry::kNoSlot) return g_originalThink(enemy, edx);
+    if (state_mode::on() && enemy_observer::replicates(self)) return g_originalThink(enemy, edx);
     if (enemy_state::followsOwner()) return thinkForOwner(enemy, edx, static_cast<uint8_t>(slot));
     Action before;
     const bool reports = enemy_state::leadsPeer() && readAction(self, before);
@@ -131,6 +136,7 @@ void boundaryForOwner(void* enemy, uint8_t slot, const Action& local) {
 // the call is an action boundary. A replacement set after the call starts as a new action on the next frame.
 void runExecutor(size_t executor, void* enemy, void* edx) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(enemy);
+    if (state_mode::on() && enemy_observer::replicates(self)) return g_originalExecutors[executor](enemy, edx);
     Action before;
     const bool readBefore = readAction(self, before);
     g_originalExecutors[executor](enemy, edx);
@@ -198,5 +204,7 @@ void onOwnerOutcome(uintptr_t enemy, uint8_t slot, bool reacted, const Action& r
     logger::write("enemy_decision: slot %u took the owner's reaction (%d,%d), was (%d,%d)", slot, reaction.word[0],
                   reaction.word[1], local.word[0], local.word[1]);
 }
+
+void startAction(uintptr_t enemy, const Action& action) { setAction(reinterpret_cast<void*>(enemy), action); }
 
 }  // namespace enemy_decision

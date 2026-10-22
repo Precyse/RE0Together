@@ -14,8 +14,14 @@
 #include "game_tick.h"
 #include "hooks.h"
 #include "input_redirect.h"
+#include "item_ledger.h"
 #include "log.h"
 #include "protocol.h"
+#include "puppet.h"
+#include "settled_copy.h"
+#include "state_mode.h"
+#include "stream_clock.h"
+#include "world_epoch.h"
 
 namespace {
 
@@ -37,6 +43,7 @@ using RemoveFunction = void*(__fastcall*)(void* self, void* edx, void* item);
 struct Incoming {
     uint16_t room;
     Event event;
+    uint32_t dueMs;  // monotonic ms from which the event applies (state mode: a puppet's take waits one render delay)
 };
 
 NetClient* g_net = nullptr;
@@ -49,6 +56,7 @@ std::vector<Incoming> g_incoming;  // guarded by g_mutex
 floor_pending::Queue g_pending;    // game thread only: events for rooms that are not loaded and settled
 floor_pending::Queue g_journal;    // game thread only: floor changes since the last save or load, for a joining guest
 uint32_t g_settleFrames = 0;       // game thread only: frames left before the arrived room takes events
+std::vector<Incoming> g_delayed;   // game thread only, state mode: arrived events waiting for their time, in order
 
 bool readRecords(Records& out) {
     const uintptr_t table = game::readPointer(game::kItemPutGlobal);
@@ -67,12 +75,12 @@ float distanceSquared(const Vec3& a, const Vec3& b) {
     return sum;
 }
 
-// The live uItem of the given id nearest to `pos` within kMatchDistance, or 0.
-uint32_t findItem(uint32_t itemId, const Vec3& pos) {
+// The live uItem of the given id nearest to `pos` within `radius` (kMatchDistance by default), or 0.
+uint32_t findItem(uint32_t itemId, const Vec3& pos, float radius = kMatchDistance) {
     Records records;
     if (!readRecords(records)) return 0;
     uint32_t best = 0;
-    float bestDistance = kMatchDistance * kMatchDistance;
+    float bestDistance = radius * radius;
     for (const game::ItemPutRecord& record : records) {
         Vec3 itemPos;
         if (!isLive(record) || record.itemId != itemId || !readPosition(record.item, itemPos)) continue;
@@ -97,17 +105,30 @@ bool itemIdOf(uint32_t item, uint32_t& itemId) {
     return false;
 }
 
+item_ledger::Key ledgerKey(uint16_t room, uint32_t itemId, const Vec3& pos) { return {room, itemId, pos}; }
+
 void sendPut(const game::ItemDesc& desc, const Vec3& pos, const Vec3& rot) {
-    const FloorPut message{game_state::currentRoom(), 0, desc.itemId, desc.count, pos, rot};
+    const FloorPut message{game_state::currentRoom(), world_epoch::stamp(), desc.itemId, desc.count, pos, rot};
     if (g_net->send(proto::kMsgFloorPut, true, proto::kSlotAll, proto::bytesOf(message))) {
         debug_stats::count(Counter::FloorPutSent);
     }
 }
 
 void sendTake(uint32_t itemId, const Vec3& pos) {
-    const FloorTake message{game_state::currentRoom(), 0, itemId, pos};
+    const FloorTake message{game_state::currentRoom(), world_epoch::stamp(), itemId, pos};
     if (g_net->send(proto::kMsgFloorTake, true, proto::kSlotAll, proto::bytesOf(message))) {
         debug_stats::count(Counter::FloorTakeSent);
+    }
+}
+
+// State mode: an item of any source (own drop, room script, a peer's put applied here) puts a new item on the floor, so
+// the ledger forgets what it knew about that spot.
+void noteLedgerPut(const game::ItemDesc* desc, const Vec3* pos) {
+    game::ItemDesc descCopy{};
+    Vec3 posCopy{};
+    if (game::readMemory(reinterpret_cast<uintptr_t>(desc), descCopy) &&
+        game::readMemory(reinterpret_cast<uintptr_t>(pos), posCopy)) {
+        item_ledger::notePut(ledgerKey(game_state::currentRoom(), descCopy.itemId, posCopy));
     }
 }
 
@@ -115,6 +136,7 @@ void sendTake(uint32_t itemId, const Vec3& pos) {
 // The room script puts the map items itself on every machine that loads the room: announcing those would duplicate
 // them for a peer already there (and a pending put would duplicate them at its next load). Only their pickup crosses.
 void* __fastcall putDetour(void* self, void* edx, const game::ItemDesc* desc, const Vec3* pos, const Vec3* rot) {
+    if (state_mode::on()) noteLedgerPut(desc, pos);
     if (g_applying || reinterpret_cast<uintptr_t>(_ReturnAddress()) == game::kScriptItemPutReturn) {
         return g_originalPut(self, edx, desc, pos, rot);
     }
@@ -144,6 +166,7 @@ void* __fastcall removeDetour(void* self, void* edx, void* item) {
     if (known) {
         sendTake(itemId, pos);
         g_journal.add(game_state::currentRoom(), {true, itemId, 0, pos, {}});
+        if (state_mode::on()) item_ledger::noteTaken(ledgerKey(game_state::currentRoom(), itemId, pos));
     }
     return result;
 }
@@ -190,12 +213,25 @@ void applyPending(uint16_t room) {
     }
 }
 
+// State mode: the arrived events join the ones still waiting; those whose time has come are returned in order. An event
+// that has to wait holds back everything that arrived after it.
+std::vector<Incoming> releaseDue(std::vector<Incoming> arrived) {
+    g_delayed.insert(g_delayed.end(), arrived.begin(), arrived.end());
+    const uint32_t now = static_cast<uint32_t>(monotonicMs());
+    size_t due = 0;
+    while (due < g_delayed.size() && !stream_clock::after(g_delayed[due].dueMs, now)) ++due;
+    std::vector<Incoming> released(g_delayed.begin(), g_delayed.begin() + static_cast<std::ptrdiff_t>(due));
+    g_delayed.erase(g_delayed.begin(), g_delayed.begin() + static_cast<std::ptrdiff_t>(due));
+    return released;
+}
+
 void onTick() {
     std::vector<Incoming> incoming;
     {
         std::lock_guard lock(g_mutex);
         incoming.swap(g_incoming);
     }
+    if (state_mode::on()) incoming = releaseDue(std::move(incoming));
     if (g_settleFrames > 0 && !game_state::doorActive()) --g_settleFrames;
     const uint16_t room = game_state::currentRoom();
     const bool ready = roomReady();
@@ -212,9 +248,18 @@ void onTick() {
     debug_stats::set(debug_stats::Gauge::FloorPending, static_cast<int>(g_pending.total()));
 }
 
-void enqueue(uint16_t room, const Event& event) {
+void enqueue(uint16_t room, const Event& event, uint32_t delayMs = 0) {
+    const uint32_t dueMs = static_cast<uint32_t>(monotonicMs()) + delayMs;
     std::lock_guard lock(g_mutex);
-    if (g_incoming.size() < kMaxIncoming) g_incoming.push_back({room, event});
+    if (g_incoming.size() < kMaxIncoming) g_incoming.push_back({room, event, dueMs});
+}
+
+// State mode: a take by the owner of a puppet applies one render delay after it arrives, when the puppet shown at that
+// instant reaches for the item (FLOOR_TAKE carries no sender clock; the transit is small against the delay).
+uint32_t takeDelayMs(uint8_t slot) {
+    if (!state_mode::on()) return 0;
+    const auto clock = puppet::clockFor(slot);
+    return clock && clock->ready() ? stream_clock::kRenderDelayMs : 0;
 }
 
 }  // namespace
@@ -225,11 +270,14 @@ void onFrame(const GameFrame& frame) {
     if (frame.type == proto::kMsgFloorPut && frame.payload.size() == sizeof(FloorPut)) {
         FloorPut message;
         std::memcpy(&message, frame.payload.data(), sizeof(message));
+        if (!world_epoch::acceptsFromGuest(message.worldEpoch, "floor put")) return;
         enqueue(message.room, {false, message.itemId, message.count, message.pos, message.rot});
     } else if (frame.type == proto::kMsgFloorTake && frame.payload.size() == sizeof(FloorTake)) {
         FloorTake message;
         std::memcpy(&message, frame.payload.data(), sizeof(message));
-        enqueue(message.room, {true, message.itemId, 0, message.pos, {}});
+        if (!world_epoch::acceptsFromGuest(message.worldEpoch, "floor take")) return;
+        enqueue(message.room, {true, message.itemId, 0, message.pos, {}}, takeDelayMs(frame.slot));
+        if (state_mode::on()) item_ledger::noteTaken(ledgerKey(message.room, message.itemId, message.pos));
     } else if (frame.type == proto::kMsgFloorSnapshot) {
         const auto events = floor_snapshot::decode(frame.payload);
         if (!events) return;
@@ -237,7 +285,23 @@ void onFrame(const GameFrame& frame) {
     }
 }
 
-void clearJournal() { g_journal.clear(); }
+void onSave() {
+    g_journal.clear();
+    if (state_mode::on()) item_ledger::clear();
+}
+
+void onLoad() {
+    onSave();
+    g_pending.clear();
+    g_delayed.clear();
+    std::lock_guard lock(g_mutex);
+    g_incoming.clear();
+}
+
+bool locateItem(uint32_t itemId, const Vec3& around, float reach, Vec3& out) {
+    const uint32_t item = findItem(itemId, around, reach);
+    return item && readPosition(item, out);
+}
 
 void sendJournal() {
     const std::vector<floor_pending::RoomEvent> events = g_journal.all();

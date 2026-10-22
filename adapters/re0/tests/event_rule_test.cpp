@@ -1,5 +1,6 @@
 // Checks the room event replication rules (no game). Exit 0 when every check passes.
 #include <cstdio>
+#include <string>
 
 #include "../src/event_rule.h"
 #include "../src/event_sync.h"
@@ -101,6 +102,38 @@ void testLead() {
     check(rule::leadsHere(false, false), "nobody follows: the machine that has it leads");
 }
 
+void testBusyThreads() {
+    constexpr uint32_t kStart = 100000;
+    rule::Activity thread;
+    check(!thread.busy(kStart), "a thread that has done nothing is not busy");
+    thread.note(OpRole::Run, kStart);
+    thread.note(OpRole::Wait, kStart + 10);
+    check(!thread.busy(kStart + 20), "a thread that only polls (Run and Wait ops) is never busy");
+    check(!thread.busy(kStart + 60000), "however long it runs");
+    for (const OpRole role : {OpRole::LeaderOnly, OpRole::Body, OpRole::Switch}) {
+        rule::Activity acting;
+        acting.note(role, kStart);
+        check(acting.busy(kStart) && acting.busy(kStart + rule::kBusyHoldMs - 1), "a message, door, body or switch op makes it busy");
+        check(!acting.busy(kStart + rule::kBusyHoldMs), "it stops being busy after the hold");
+    }
+    rule::Activity message;
+    message.note(rule::roleOf(rule::op::kMes), kStart);
+    check(message.busy(kStart + 1), "Mes is busy");
+    message.note(rule::roleOf(rule::op::kWait), kStart + 1500);
+    check(message.busy(kStart + 1999), "a wait between busy ops does not end the busy time");
+    message.note(rule::roleOf(rule::op::kMes), kStart + 1900);
+    check(message.busy(kStart + 3000), "a long message that is dispatched every frame keeps it busy");
+    check(!message.busy(kStart + 1900 + rule::kBusyHoldMs), "and it ends the hold after the last one");
+    rule::Activity wrapped;
+    constexpr uint32_t kNearWrap = 0xfffffff0u;
+    wrapped.note(OpRole::LeaderOnly, kNearWrap);
+    check(wrapped.busy(kNearWrap + 100) && !wrapped.busy(kNearWrap + rule::kBusyHoldMs), "the hold survives the clock wrapping");
+    check(!rule::makesBusy(rule::roleOf(rule::op::kFrame)) && !rule::makesBusy(rule::roleOf(5000)),
+          "Frame and unknown opcodes do not");
+    check(rule::makesBusy(rule::roleOf(rule::op::kDoor)) && rule::makesBusy(rule::roleOf(rule::op::kSubMove)),
+          "doors and body ops do");
+}
+
 void testStartFate() {
     using rule::StartFate;
     check(rule::startFate(kRoom, kRoom, false, 0) == StartFate::Apply, "same room: follow");
@@ -109,6 +142,95 @@ void testStartFate() {
     check(rule::startFate(kRoom, kOtherRoom, false, 100) == StartFate::Drop, "another room: drop");
     check(rule::startFate(kRoom, rule::kNoScene, false, rule::kPendingStartMs) == StartFate::Drop, "too old: drop");
     check(rule::startFate(kRoom, kRoom, false, rule::kPendingStartMs * 2) == StartFate::Apply, "same room even late");
+}
+
+void testBodyRoles() {
+    namespace o = rule::op;
+    const uint16_t bodyOps[] = {o::kSubMove, o::kCharPoint, o::kCharPointY, o::kCharAddY, o::kChPosSet, o::kCorrectPos,
+                                o::kPlayerAnimSet, o::kPlayerAnimSet2, o::kPlayerAnimSetSpeed, o::kNeckRotation,
+                                o::kPlayerAnimPause, o::kPlayerReset, o::kPlayerReset2, o::kPlayerClimb,
+                                o::kPlayerClimbPos, o::kPlayerAddChild, o::kPlayerEventStart, o::kGameOver};
+    for (const uint16_t code : bodyOps) check(rule::roleOf(code) == OpRole::Body, "a single-target body op is Body");
+    constexpr uint16_t kDemoEntryPos = 226, kCorrectPos2 = 276, kAfterDemo = 233, kAfterDemo2 = 236, kAfterDemoNc = 270;
+    constexpr uint16_t kPlayerPause = 158, kControlPause = 277;
+    for (const uint16_t code : {kDemoEntryPos, kCorrectPos2, kAfterDemo, kAfterDemo2, kAfterDemoNc, kPlayerPause, kControlPause}) {
+        check(rule::roleOf(code) == OpRole::Run, "a two-target op and the pause families keep Run");
+    }
+    check(rule::beforeOp(true, OpRole::Body) == Follow::Run, "a finished Body op runs on the follower");
+}
+
+void testSubjects() {
+    namespace o = rule::op;
+    check(rule::subjectOperand(o::kChPosSet) == 0 && rule::subjectOperand(o::kPlayerClimb) == 0, "the subject is operand 0");
+    check(rule::subjectOperand(o::kCharPoint) == rule::kCharPointSubjectOperand, "CharPoint names it third");
+    check(rule::subjectOperand(o::kSubMove) == rule::kNoOperand && rule::subjectOperand(o::kPlayerEventStart) == rule::kNoOperand,
+          "SubMove and PlayerEventStart name no subject");
+    check(rule::targetOf(o::kChPosSet, rule::kSubjectControlled) == rule::Target::Controlled, "0x20000 is the controlled one");
+    check(rule::targetOf(o::kChPosSet, rule::kSubjectPartner) == rule::Target::Partner, "0x30000 is the partner");
+    check(rule::targetOf(o::kChPosSet, 3) == rule::Target::Unit, "ChPosSet names units by ordinal");
+    check(rule::targetOf(o::kCharAddY, 3) == rule::Target::Unit, "CharAddY names units by ordinal");
+    check(rule::targetOf(o::kPlayerReset, 3) == rule::Target::Nobody, "Player_Reset ignores any other word");
+    check(rule::targetOf(o::kSubMove, 0) == rule::Target::Partner, "SubMove moves the partner");
+    check(rule::targetOf(o::kPlayerEventStart, 0) == rule::Target::Both, "PlayerEventStart reaches both");
+}
+
+void testBodyRun() {
+    namespace o = rule::op;
+    using rule::BodyRun;
+    using rule::Puppets;
+    const Puppets none{};
+    const Puppets partnerPuppet{false, true, false};
+    const Puppets controlledPuppet{true, false, false};
+    const Puppets both{true, true, false};
+    check(rule::runFor(o::kChPosSet, rule::kSubjectControlled, none, true) == BodyRun::Run, "owned characters run");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectPartner, partnerPuppet, true) == BodyRun::Skip, "a puppet partner skips");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectControlled, partnerPuppet, true) == BodyRun::Run, "the owned one still runs");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectControlled, controlledPuppet, true) == BodyRun::Skip,
+          "a swapped perspective skips the puppet that became controlled");
+    check(rule::runFor(o::kChPosSet, 3, Puppets{false, false, true}, true) == BodyRun::Skip, "a puppet unit skips");
+    check(rule::runFor(o::kChPosSet, 3, partnerPuppet, true) == BodyRun::Run, "an ordinary unit runs");
+    check(rule::runFor(o::kPlayerReset, 3, both, true) == BodyRun::Run, "an op that names no character runs");
+    check(rule::runFor(o::kPlayerEventStart, 0, none, true) == BodyRun::Run, "both owned: PlayerEventStart runs");
+    check(rule::runFor(o::kPlayerEventStart, 0, partnerPuppet, true) == BodyRun::RunLocalHalf,
+          "PlayerEventStart runs on the owned half only");
+    check(rule::runFor(o::kPlayerEventStart, 0, both, true) == BodyRun::Skip, "two puppets: nothing to start");
+    check(rule::runFor(o::kSubMove, 0, partnerPuppet, true) == BodyRun::Skip, "SubMove skips when the owner runs the thread");
+    check(rule::runFor(o::kSubMove, 0, partnerPuppet, false) == BodyRun::Run, "SubMove runs for an owner without the thread");
+    check(rule::runFor(o::kChPosSet, rule::kSubjectPartner, partnerPuppet, false) == BodyRun::Skip,
+          "only SubMove runs for an absent owner");
+    check(rule::movesAbsentOwner(o::kSubMove, false) && !rule::movesAbsentOwner(o::kSubMove, true), "absent owner rule");
+}
+
+void testClimbPlacement() {
+    namespace o = rule::op;
+    check(rule::placesPartner(o::kPlayerClimb, rule::kClimbWithPartner), "climb type 7 places the partner");
+    check(rule::placesPartner(o::kPlayerClimbPos, rule::kClimbWithPartner), "also with a position");
+    check(!rule::placesPartner(o::kPlayerClimb, 1), "other climbs do not");
+    check(!rule::placesPartner(o::kChPosSet, rule::kClimbWithPartner), "only climbs");
+    check(rule::isClimb(o::kPlayerClimb) && !rule::isClimb(o::kPlayerReset), "climb ops");
+}
+
+void testObstacleTriggers() {
+    constexpr uint32_t kBox = 1;
+    check(rule::classify(4, kBox) == TriggerKind::Shared, "a box in a zone is shared in input mode");
+    check(rule::classify(4, kBox, true) == TriggerKind::Obstacle, "a box in a zone is the pusher's in state mode");
+    check(rule::classify(5, rule::kLastObstacleUnit, true) == TriggerKind::Obstacle, "the last obstacle unit too");
+    check(rule::classify(5, rule::kLastObstacleUnit + 1, true) == TriggerKind::Shared, "past the table it is a plain unit");
+    check(rule::classify(4, rule::kSubjectControlled, true) == TriggerKind::Local, "the controlled character stays local");
+    check(rule::classify(4, kPartnerSubject, true) == TriggerKind::Shared, "the partner stays shared");
+    check(rule::classify(14, kBox, true) == TriggerKind::Shared, "either character in a zone stays shared");
+    check(rule::classify(11, kBox, true) == TriggerKind::Shared, "other conditions are untouched");
+    check(rule::isObstacleUnit(0) && rule::isObstacleUnit(4) && !rule::isObstacleUnit(5), "obstacle unit words are 0..4");
+
+    using Owner = rule::PropOwner;
+    check(rule::mayFire(TriggerKind::Obstacle, true, false, Owner::Mine), "the pusher fires its box's trigger");
+    check(rule::mayFire(TriggerKind::Obstacle, true, true, Owner::Mine), "also when it is not the room authority");
+    check(!rule::mayFire(TriggerKind::Obstacle, true, true, Owner::Theirs), "the other machine does not, authority or not");
+    check(rule::mayFire(TriggerKind::Obstacle, true, true, Owner::Unknown), "a box nobody pushed is the authority's");
+    check(!rule::mayFire(TriggerKind::Obstacle, true, false, Owner::Unknown), "and not the other machine's");
+    check(rule::mayFire(TriggerKind::Obstacle, false, false, Owner::Theirs), "a player alone in the room fires everything");
+    check(rule::mayFire(TriggerKind::Shared, true, true, Owner::Theirs), "the owner only matters to obstacle triggers");
+    check(std::string(rule::name(TriggerKind::Obstacle)) == "obstacle", "obstacle triggers are named in the log");
 }
 
 void testWire() {
@@ -124,7 +246,13 @@ int main() {
     testOpRoles();
     testFollow();
     testLead();
+    testBodyRoles();
+    testSubjects();
+    testBodyRun();
+    testClimbPlacement();
+    testBusyThreads();
     testStartFate();
+    testObstacleTriggers();
     testWire();
     if (g_failures == 0) std::printf("event_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

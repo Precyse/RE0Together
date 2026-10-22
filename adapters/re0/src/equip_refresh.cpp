@@ -112,6 +112,14 @@ void request(Character character) {
     job.planned = false;
 }
 
+bool pending(Character character) { return g_jobs[static_cast<size_t>(character)].pending; }
+
+bool requestFromMirror(Character character) {
+    if (!character_owner::isRemoteOwned(character) || pending(character)) return false;
+    request(character);
+    return true;
+}
+
 void tick(Character character) {
     Job& job = g_jobs[static_cast<size_t>(character)];
     if (job.pending && !character_owner::isRemoteOwned(character)) job = Job{};

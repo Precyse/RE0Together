@@ -31,7 +31,8 @@ struct HitPayload {
     uint32_t random[4];   // HIT_APPLIED: the owner's random state just before the hit (game::RandomState)
     uint32_t vtable;      // the sender's enemy class in that slot: a hit on another class there is dropped
     uint8_t reacted;      // HIT_APPLIED: the damage function changed the enemy's action (a flinch, a fall, a death)
-    uint8_t reserved[3];
+    uint8_t forwarded;    // HIT_REQUEST: a machine that no longer simulated the enemy sent it on once (state mode); 0 in input mode
+    uint8_t reserved[2];
     int32_t reaction[4];  // HIT_APPLIED: the owner's behaviour record right after the hit
 };
 static_assert(sizeof(HitPayload) == 80);

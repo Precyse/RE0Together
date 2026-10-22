@@ -15,6 +15,10 @@ void onFrame(const GameFrame& frame);
 // Game thread: the live flag words, false when unreadable.
 bool read(flag_diff::Words& out);
 
+// Game thread, state mode: this machine requested a load of a player save. The load rewrites the flags, so nothing is
+// proposed, committed or applied until the loaded room is in, and the flags it holds then are the new baseline.
+void onLocalLoad();
+
 // Game thread: overwrites the flags with the host's live words (join snapshot) and treats them as known.
 void applySnapshot(const flag_diff::Words& words);
 

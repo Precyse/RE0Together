@@ -10,7 +10,9 @@
 #include "log.h"
 #include "net_pad.h"
 #include "party_mode.h"
+#include "room_authority.h"
 #include "scene.h"
+#include "state_mode.h"
 
 namespace {
 
@@ -110,7 +112,10 @@ bool travelsTogether() { return !apart() && party_mode::current() == control_rul
 
 bool independent() { return apart() || party_mode::current() == control_rule::PartyMode::LeaveBehind; }
 
-bool localEnemyAuthority() { return door_travel::enemyAuthority(); }
+bool localEnemyAuthority() {
+    if (state_mode::on()) return room_authority::runsHere(scene::current());
+    return door_travel::enemyAuthority();
+}
 
 void enable() { game_tick::addCallback("split_rooms", onTick); }
 

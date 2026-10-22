@@ -27,6 +27,7 @@ std::array<std::atomic<int>, kGaugeCount> g_gauge{0, debug_stats::kUnknownOwner,
                                                   static_cast<int>(JitterTarget::kInitial)};
 
 std::atomic<bool> g_linked{false};
+std::atomic<bool> g_stateMode{false};
 std::atomic<uint8_t> g_localSlot{0};
 std::atomic<uint8_t> g_hostSlot{0};
 std::atomic<uint32_t> g_epoch{0};
@@ -41,6 +42,7 @@ Clock::time_point g_commandTime;
 std::string g_lastDecision;
 Clock::time_point g_decisionTime;
 std::string g_partnerLine;
+std::string g_roomAuthorityLine;
 Clock::time_point g_windowStart = Clock::now();
 std::array<uint32_t, kCounterCount> g_windowBase{};
 std::array<uint32_t, kCounterCount> g_rate{};
@@ -58,6 +60,8 @@ void count(Counter counter, uint32_t amount) {
 }
 
 void set(Gauge gauge, int value) { g_gauge[static_cast<size_t>(gauge)].store(value, std::memory_order_relaxed); }
+
+void setStateMode(bool on) { g_stateMode = on; }
 
 void setSession(const SessionSnapshot& session) {
     g_linked = session.linked;
@@ -111,9 +115,20 @@ std::string partnerLine() {
     return g_partnerLine;
 }
 
+void setRoomAuthorityLine(const std::string& line) {
+    std::lock_guard lock(g_mutex);
+    g_roomAuthorityLine = line;
+}
+
+std::string roomAuthorityLine() {
+    std::lock_guard lock(g_mutex);
+    return g_roomAuthorityLine;
+}
+
 Snapshot snapshot() {
     Snapshot out;
     out.linked = g_linked;
+    out.stateMode = g_stateMode;
     out.localSlot = g_localSlot;
     out.hostSlot = g_hostSlot;
     out.epoch = g_epoch;

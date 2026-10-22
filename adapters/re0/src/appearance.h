@@ -11,6 +11,9 @@ namespace appearance {
 // Hooks the game start and registers the per-frame work. Call after character_owner::enable.
 bool enable(NetClient& net, const Config& config);
 
+// The model byte of the character's current outfit, appearance_rule::kNoOutfit while the game is not ready. Game thread.
+uint8_t outfitOf(character_owner::Character character);
+
 // Net thread: APPEARANCE from the owner of the character it names.
 void onFrame(const GameFrame& frame);
 
