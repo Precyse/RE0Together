@@ -71,11 +71,12 @@ std::vector<uint8_t> helloPayload(const std::string& gameId) {
 
 }  // namespace
 
-void NetClient::start(uint16_t port, std::string gameId, TickHandler onTick) {
+void NetClient::start(uint16_t port, std::string gameId, TickHandler onTick, FrameHandler onFrame) {
     if (running_.exchange(true)) return;
     port_ = port;
     gameId_ = std::move(gameId);
     onTick_ = std::move(onTick);
+    onFrame_ = std::move(onFrame);
     thread_ = std::thread([this] { run(); });
 }
 
@@ -185,7 +186,7 @@ bool NetClient::parseFrames(std::vector<uint8_t>& rx) {
 }
 
 bool NetClient::handleFrame(uint16_t type, uint8_t flags, uint8_t slot, std::span<const uint8_t> payload) {
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
     switch (type) {
         case proto::kWelcome:
             if (payload.size() < proto::kWelcomeSize) return true;
@@ -195,6 +196,9 @@ bool NetClient::handleFrame(uint16_t type, uint8_t flags, uint8_t slot, std::spa
             session_.hostSlot = payload[1];
             session_.maxPlayers = payload[2];
             session_.epoch = proto::readLe<uint32_t>(payload.data() + 3);
+            if (payload.size() >= proto::kWelcomeSteamIdSize) {
+                session_.localSteamId = proto::readLe<uint64_t>(payload.data() + proto::kWelcomeSize);
+            }
             inbox_.clear();
             logger::write("net: WELCOME local=%u host=%u max=%u epoch=%u", session_.localSlot,
                           session_.hostSlot, session_.maxPlayers, session_.epoch);
@@ -236,6 +240,11 @@ bool NetClient::handleFrame(uint16_t type, uint8_t flags, uint8_t slot, std::spa
             break;
     }
     if (type >= proto::kFirstGameType && session_.linked) {
+        if (onFrame_) {
+            lock.unlock();
+            onFrame_({type, flags, slot, std::vector<uint8_t>(payload.begin(), payload.end())});
+            return true;
+        }
         if (inbox_.size() >= kMaxQueuedFrames) inbox_.erase(inbox_.begin());
         inbox_.push_back({type, flags, slot, std::vector<uint8_t>(payload.begin(), payload.end())});
     }

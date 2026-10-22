@@ -111,6 +111,14 @@ Used only when the host's `transport` option is `steam`: the game's UDP datagram
 |---|---|---|---|---|
 | 0x0100 | GAME_DATAGRAM | adapter to adapter | no | u32 dst (IPv4 in host order; 0xFFFFFFFF = broadcast), then the game's UDP payload (1..1300 bytes). The sender's frame slot is the peer's current slot, or 0xFF for a broadcast; the receiver reads the source slot the launcher wrote. |
 
+## Game messages of the SR2 adapter (0x0100 and up, adapter-owned)
+
+Used only when the host's `transport` option is `steam`: the game's UDP datagrams travel through the launchers (`bridgeWhen` in `games/sr2.json`, port 27962). The launcher relays them as opaque bytes and overwrites the source slot, as for every game message. Integers little-endian.
+
+| type | name | dir | reliable | payload |
+|---|---|---|---|---|
+| 0x0100 | GAME_DATAGRAM | adapter to adapter | no | u32 dst (IPv4 in host order; 0xFFFFFFFF = broadcast), then the game's UDP payload (1..1300 bytes). The sender's frame slot is the peer's current slot, or 0xFF for a broadcast; the receiver reads the source slot the launcher wrote. |
+
 ## Game messages of the DS2 adapter (0x0100 and up, adapter-owned)
 
 The launcher relays these as opaque bytes; the source slot is the transport's. Integers little-endian, structs packed as written (`adapters/ds2/src`). Ids in `adapters/ds2` are not shared with RE0's (`adapters/re0/src/protocol.h` reuses the range for its own messages).

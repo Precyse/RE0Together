@@ -1,0 +1,36 @@
+"""Rules applied to every story mission script after its own edits: the forms of the two-player code that always
+change the same way. Each rule is (regular expression, replacement)."""
+
+NAME = r"[A-Za-z_][A-Za-z0-9_.]*"
+VALUE = r"\{\}|[^,{}\[\]]+?"
+
+RULES = [
+    # name == REMOTE_PLAYER, REMOTE_PLAYER == name
+    (rf"\b({NAME})\s*==\s*REMOTE_PLAYER\b", r"coop_is_remote_player(\1)"),
+    (rf"\bREMOTE_PLAYER\s*==\s*({NAME})\b", r"coop_is_remote_player(\1)"),
+    # name ~= REMOTE_PLAYER, REMOTE_PLAYER ~= name
+    (rf"\b({NAME})\s*~=\s*REMOTE_PLAYER\b", r"not coop_is_remote_player(\1)"),
+    (rf"\bREMOTE_PLAYER\s*~=\s*({NAME})\b", r"not coop_is_remote_player(\1)"),
+    # { [LOCAL_PLAYER] = a, [REMOTE_PLAYER] = b }
+    (
+        rf"\{{\s*\[LOCAL_PLAYER\]\s*=\s*({VALUE})\s*[,;]\s*\[REMOTE_PLAYER\]\s*=\s*({VALUE})\s*[,;]?\s*\}}",
+        r"coop_player_table(\1, \2)",
+    ),
+    # state[LOCAL_PLAYER] and state[REMOTE_PLAYER], state[LOCAL_PLAYER] or state[REMOTE_PLAYER]
+    (rf"\b({NAME})\[LOCAL_PLAYER\]\s+and\s+\1\[REMOTE_PLAYER\]", r"coop_all_players_in(\1)"),
+    (rf"\b({NAME})\[LOCAL_PLAYER\]\s+or\s+\1\[REMOTE_PLAYER\]", r"coop_any_player_in(\1)"),
+    # a per-player sync table read for a native the adapter can target (coop_outfit_sync.lua)
+    (
+        rf"\b(customization_item_wear|inv_weapon_enable_or_disable_all_slots)\s*\(([^()]*?),\s*PLAYER_SYNC\[({NAME})\]\s*\)",
+        r"\1(\2, coop_sync_for(PLAYER_SYNC, \3))",
+    ),
+    # a per-player waypoint, sent to that player's machine alone when there is more than one remote player (coop_waypoints.lua)
+    (
+        rf"\b(mission_waypoint_add|waypoint_add)\(\s*([^(),]+?)\s*,\s*PLAYER_SYNC\[({NAME})\]\s*\)",
+        r"coop_waypoint_add_for(\3, \1, \2, PLAYER_SYNC[\3])",
+    ),
+    (
+        rf"\b(mission_waypoint_remove|waypoint_remove)\(\s*PLAYER_SYNC\[({NAME})\]\s*\)",
+        r"coop_waypoint_remove_for(\2, \1, PLAYER_SYNC[\2])",
+    ),
+]

@@ -1,0 +1,95 @@
+// Milestones 5h and 11 B2 (no game): when a member is welcomed, the set of welcomed members, which of them are owed our look,
+// and the G1 site's clearance.
+#include <cstdio>
+
+#include "../src/guest_welcome_rules.h"
+#include "../src/partner_sites.h"
+#include "../src/player_cap_patches.h"
+#include "check.h"
+
+namespace {
+
+using guest_welcome_rules::Key;
+using guest_welcome_rules::WelcomedSet;
+
+constexpr uintptr_t kSession = 0x20000000;
+constexpr uintptr_t kOtherSession = 0x20100000;
+constexpr uintptr_t kFirstMember = 0x30000000;
+constexpr uintptr_t kSecondMember = 0x30100000;
+constexpr uintptr_t kOwnMember = 0x30200000;
+constexpr uintptr_t kNearby = 0x2E0;  // no milestone 4 site closer to the guest branch (J5 at 0x8CB747 is 0x2ED away)
+constexpr uintptr_t kThunk = 0x10006000;
+
+}  // namespace
+
+int main() {
+    using namespace guest_welcome_rules;
+
+    check(!due(0) && !due(0xA) && due(0xB) && due(0xC) && due(0xD), "a member is due from the ready state 0xB on, also when 0xB was skipped");
+    check(looksSyncable(0xD) && !looksSyncable(0xB) && !looksSyncable(0xC), "the look sync waits for our own member to be in the game (0xD)");
+
+    WelcomedSet set;
+    const Key first{kSession, kFirstMember, 1};
+    const Key second{kSession, kSecondMember, 2};
+    check(set.add(first), "a member is welcomed the first time");
+    check(!set.add(first), "and not again");
+    check(set.add(second), "another member is welcomed too");
+
+    set.keepOnly(kSession, {first, second});
+    check(set.size() == 2 && !set.add(first), "members still in the session stay welcomed");
+    set.keepOnly(kSession, {second});
+    check(set.size() == 1 && set.add(first), "a member that left the session is forgotten and welcomed again when it returns");
+    set.forget(second);
+    check(set.add(second), "a member seen below the ready state is forgotten");
+    check(set.add({kSession, kFirstMember, 3}), "the same member object with another slot is another member");
+    set.keepOnly(kOtherSession, {first, second});
+    check(set.size() == 0, "a new session forgets everybody");
+
+    // The look is a second step: owed from the welcome until our own member is in the game, then sent once.
+    WelcomedSet looks;
+    const Key joiner{kSession, kSecondMember, 2};
+    looks.add(first);
+    looks.add(joiner);
+    check(looks.takeOwedLooks(kOwnMember, false).empty(), "the look is owed while our own member is not yet in the game (0xD)");
+    check(looks.takeOwedLooks(kOwnMember, false).empty() && looks.size() == 2, "and stays owed, the members stay welcomed");
+    const std::vector<Key> owed = looks.takeOwedLooks(kOwnMember, true);
+    check(owed.size() == 2 && owed[0] == first && owed[1] == joiner, "once our own member is in the game every welcomed member is owed it");
+    check(looks.takeOwedLooks(kOwnMember, true).empty(), "and gets it once");
+    check(!looks.add(first) && looks.takeOwedLooks(kOwnMember, true).empty(), "a member welcomed again is not owed it again");
+
+    WelcomedSet late;
+    late.add(first);
+    check(late.takeOwedLooks(kOwnMember, true).size() == 1, "a member that is welcomed while we are in the game is owed it at once");
+    const Key third{kSession, kFirstMember + 1, 3};
+    late.add(third);
+    const std::vector<Key> next = late.takeOwedLooks(kOwnMember, true);
+    check(next.size() == 1 && next[0] == third, "only the newcomer is owed it then");
+    late.forget(third);
+    late.add(third);
+    check(late.takeOwedLooks(kOwnMember, true).size() == 1, "a member that was forgotten and returns is owed it again");
+
+    WelcomedSet self;
+    self.add({kSession, kOwnMember, 0});
+    check(self.takeOwedLooks(kOwnMember, true).empty(), "our own member is never owed our look");
+
+    const player_cap_patches::Thunks thunks{kThunk, kThunk, kThunk};
+    bool found = false;
+    for (const CodePatch& patch : player_cap_patches::forPlayers(4, thunks)) {
+        if (patch.address != 0x8CBA34) continue;
+        const uint32_t displacement = static_cast<uint32_t>(kThunk - (0x8CBA34 + 5));
+        found = patch.expected == std::vector<uint8_t>{0x83, 0x7F, 0x3C, 0x0D, 0x75, 0x0D} &&
+                patch.replacement == std::vector<uint8_t>{0xE9, static_cast<uint8_t>(displacement),
+                                                          static_cast<uint8_t>(displacement >> 8),
+                                                          static_cast<uint8_t>(displacement >> 16),
+                                                          static_cast<uint8_t>(displacement >> 24), 0x90};
+    }
+    check(found, "G1: 83 7F 3C 0D 75 0D at 0x8CBA34 is checked and becomes jmp rel32 to the thunk and a nop");
+
+    bool clear = true;
+    for (const partner_sites::Site& site : partner_sites::kSites) {
+        const uintptr_t distance = site.address > 0x8CBA34 ? site.address - 0x8CBA34 : 0x8CBA34 - site.address;
+        clear = clear && distance >= kNearby;
+    }
+    check(clear, "no milestone 4 site within 0x2E0 bytes of the guest branch");
+    return g_failures == 0 ? 0 : 1;
+}

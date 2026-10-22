@@ -83,6 +83,16 @@ void applyBatch() {
     g_queued.clear();
 }
 
-void remove(uintptr_t address) { MH_DisableHook(reinterpret_cast<void*>(address)); }
+void remove(uintptr_t address) {
+    void* target = reinterpret_cast<void*>(address);
+    // Inside a batch the hook is not enabled yet: take back the queued enable and forget it, so that the one-by-one enable of a failed
+    // batch does not turn it on again.
+    if (t_batching) {
+        MH_QueueDisableHook(target);
+        std::erase_if(g_queued, [target](const QueuedHook& hook) { return hook.target == target; });
+    } else {
+        MH_DisableHook(target);
+    }
+}
 
 }  // namespace hooks

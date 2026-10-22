@@ -32,6 +32,14 @@ jobs:
           cmake --build build
           Get-ChildItem build/*_test.exe -Exclude net_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
 
+      - name: Build SR2 adapter
+        shell: pwsh
+        working-directory: adapters/sr2
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          Get-ChildItem build/*_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
+
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
@@ -61,9 +69,10 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
-          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/ds2 | Out-Null
+          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/sr2, pkg/adapters/ds2 | Out-Null
           Copy-Item launcher/games/*.json pkg/launcher/games/
           Copy-Item adapters/re0/dinput8.dll pkg/adapters/re0/
+          Copy-Item adapters/sr2/dinput8.dll pkg/adapters/sr2/
           Copy-Item adapters/ds2/version.dll pkg/adapters/ds2/
           Copy-Item launcher/package/README.txt pkg/
           Set-Content -NoNewline -Path pkg/launcher/app/version.txt -Value $env:GITHUB_RUN_NUMBER

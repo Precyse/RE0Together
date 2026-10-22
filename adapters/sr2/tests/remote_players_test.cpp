@@ -1,0 +1,411 @@
+// The session and player list reads and the partner getters of milestone 4, against a made-up game state placed at the
+// addresses the real game uses (the exe's .data is not mapped in a test, so the pages are allocated here).
+#include <windows.h>
+
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+#include "../src/activity_state.h"
+#include "../src/partner_scope.h"
+#include "../src/remote_players.h"
+#include "../src/sr2_addresses.h"
+#include "check.h"
+
+namespace logger {
+void write(const char*, ...) {}
+}  // namespace logger
+
+namespace {
+
+constexpr uintptr_t kPlayerPage = 0x2170000;
+constexpr uintptr_t kSessionPage = 0x2528000;
+constexpr uintptr_t kObjectTablePage = 0x2149000;  // the object table: a handle names a human by its index
+constexpr uintptr_t kMissionPage = 0x27B3000;      // the running mission pointer
+constexpr uintptr_t kActivityPage = 0x2527000;     // the co-op race flag and the mission participants: one range with the session page
+constexpr size_t kPageBytes = 0x2000;
+constexpr size_t kPlayers = 3;
+constexpr size_t kHumanBytes = 0x1400;
+constexpr size_t kMemberBytes = 0x2400;
+constexpr size_t kSessionBytes = 0x1000;
+constexpr size_t kRecordBytes = 0x20;
+constexpr uintptr_t kFakeOriginal = 0x77;
+constexpr uint32_t kFirstHandle = 0x10;  // the handle of the human of slot n is kFirstHandle + n
+
+uint32_t& at(void* base, uintptr_t offset) { return *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(base) + offset); }
+uint32_t& word(uintptr_t address) { return *reinterpret_cast<uint32_t*>(address); }
+uintptr_t addr(void* pointer) { return reinterpret_cast<uintptr_t>(pointer); }
+
+// Three players, slot 0 the host. Humans and members of slot n are humans[n] and members[n].
+struct World {
+    std::vector<uint8_t> humans[kPlayers];
+    std::vector<uint8_t> members[kPlayers];
+    std::vector<uint8_t> records[kPlayers];
+    std::vector<uint8_t> session = std::vector<uint8_t>(kSessionBytes);
+
+    World() {
+        for (size_t slot = 0; slot < kPlayers; ++slot) {
+            humans[slot].assign(kHumanBytes, 0);
+            members[slot].assign(kMemberBytes, 0);
+            records[slot].assign(kRecordBytes, 0);
+            records[slot][0] = static_cast<uint8_t>(slot);
+            at(humans[slot].data(), sr2::kObjectNetRecordOffset) = addr(records[slot].data());
+            members[slot][sr2::kMemberSlotOffset] = static_cast<uint8_t>(slot);
+            at(members[slot].data(), sr2::kMemberStateOffset) = sr2::kMemberStateInGame;
+        }
+    }
+
+    uintptr_t human(size_t slot) { return addr(humans[slot].data()); }
+    uintptr_t member(size_t slot) { return addr(members[slot].data()); }
+
+    // The player list and the member list in the given slot order; the member list is circular, the player list ends
+    // with a null. `local` is the slot of this machine.
+    void place(const size_t (&memberOrder)[kPlayers], const size_t (&humanOrder)[kPlayers], size_t local) {
+        for (size_t i = 0; i < kPlayers; ++i) {
+            at(members[memberOrder[i]].data(), sr2::kMemberNextOffset) = member(memberOrder[(i + 1) % kPlayers]);
+            at(humans[humanOrder[i]].data(), sr2::kHumanNextOffset) = i + 1 < kPlayers ? human(humanOrder[i + 1]) : 0;
+        }
+        at(session.data(), sr2::kSessionMemberListOffset) = member(memberOrder[0]);
+        at(session.data(), sr2::kSessionHostMemberOffset) = member(0);
+        at(session.data(), sr2::kSessionLocalMemberOffset) = member(local);
+        word(sr2::kSessionPointer) = addr(session.data());
+        word(sr2::kPlayerListHead) = human(humanOrder[0]);
+        word(sr2::kLocalPlayer) = human(local);
+        *reinterpret_cast<uint8_t*>(sr2::kCoopFlag) = 1;
+    }
+};
+
+uintptr_t __cdecl fakeOriginalGetter() { return kFakeOriginal; }
+
+using GetterFn = uintptr_t(__cdecl*)();
+
+GetterFn humanGetter() {
+    const partner_scope::GetterHook hook = partner_scope::humanHook();
+    *hook.original = reinterpret_cast<void*>(&fakeOriginalGetter);
+    return reinterpret_cast<GetterFn>(hook.detour);
+}
+
+GetterFn memberGetter() {
+    const partner_scope::GetterHook hook = partner_scope::memberHook();
+    *hook.original = reinterpret_cast<void*>(&fakeOriginalGetter);
+    return reinterpret_cast<GetterFn>(hook.detour);
+}
+
+bool mapPages() {
+    return VirtualAlloc(reinterpret_cast<void*>(kPlayerPage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) &&
+           VirtualAlloc(reinterpret_cast<void*>(kActivityPage), kSessionPage + kPageBytes - kActivityPage, MEM_RESERVE | MEM_COMMIT,
+                        PAGE_READWRITE) &&
+           VirtualAlloc(reinterpret_cast<void*>(kObjectTablePage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) &&
+           VirtualAlloc(reinterpret_cast<void*>(kMissionPage), kPageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+}
+
+void hostPicksTheLowestSlot() {
+    World world;
+    const size_t members[] = {2, 0, 1};
+    const size_t humans[] = {2, 1, 0};
+    world.place(members, humans, 0);
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    check(snapshot.active && snapshot.memberCount == 3 && snapshot.humanCount == 2, "host: 3 members, 2 remote humans");
+    check(snapshot.pairing.trusted && snapshot.pairing.count == 2 && snapshot.pairing.items[0].slot == 1,
+          "host: remotes paired in slot order whatever the list order");
+    const remote_players::Partner partner = remote_players::defaultPartner(snapshot);
+    check(partner.trusted && partner.human == world.human(1) && partner.member == world.member(1),
+          "host: the default partner is the slot 1 player, not the first of the list");
+    check(humanGetter()() == world.human(1) && memberGetter()() == world.member(1), "host: both getters answer it");
+}
+
+void guestPicksTheHost() {
+    World world;
+    const size_t members[] = {1, 2, 0};
+    const size_t humans[] = {1, 0, 2};
+    world.place(members, humans, 2);
+    check(humanGetter()() == world.human(0) && memberGetter()() == world.member(0),
+          "guest: the host is the partner although another guest comes first in the list");
+    world.place(members, humans, 1);
+    check(humanGetter()() == world.human(0), "the other guest agrees");
+}
+
+void aJoiningMemberHasNoHumanYet() {
+    World world;
+    const size_t members[] = {0, 1, 2};
+    const size_t humans[] = {0, 1, 2};
+    world.place(members, humans, 0);
+    at(world.humans[0].data(), sr2::kHumanNextOffset) = 0;
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    check(snapshot.pairing.trusted && snapshot.pairing.count == 2 && snapshot.pairing.items[0].human == 0 &&
+              snapshot.pairing.items[0].member == world.member(1),
+          "host alone with two joining members: the members are listed without humans");
+    check(humanGetter()() == 0, "no remote human: the human getter answers none");
+    check(memberGetter()() == kFakeOriginal, "no default member: the member getter keeps the game's answer");
+}
+
+void anUnmatchedOwnerSlotKeepsTheGamesAnswer() {
+    World world;
+    const size_t members[] = {0, 1, 2};
+    const size_t humans[] = {2, 1, 0};
+    world.place(members, humans, 0);
+    world.records[1][0] = 9;
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    check(!snapshot.pairing.trusted && snapshot.pairing.count == 1 && snapshot.pairing.items[0].human == world.human(2) &&
+              snapshot.pairing.items[0].member == world.member(1),
+          "an owner slot with no member: the fallback is the first of each list");
+    check(humanGetter()() == kFakeOriginal && memberGetter()() == kFakeOriginal,
+          "the getters pass the call on to the game");
+}
+
+void outsideCoopTheGamesAnswerStands() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    *reinterpret_cast<uint8_t*>(sr2::kCoopFlag) = 0;
+    check(humanGetter()() == kFakeOriginal && memberGetter()() == kFakeOriginal, "co-op flag clear: the game answers");
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    check(!snapshot.active, "co-op flag clear: the snapshot is inactive");
+    remote_players::takeMembers(snapshot);
+    check(snapshot.memberCount == 3, "the members can still be read");
+}
+
+void overridesAnswerTheirTurn() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    {
+        partner_scope::Override outer({world.human(2), world.member(2)});
+        check(humanGetter()() == world.human(2) && memberGetter()() == world.member(2), "override answers");
+        {
+            partner_scope::Override inner({world.human(1), world.member(1)});
+            check(humanGetter()() == world.human(1), "a nested override answers");
+        }
+        check(humanGetter()() == world.human(2), "the outer override is back");
+    }
+    check(humanGetter()() == world.human(1), "no override: the default again");
+
+    uintptr_t seen[4] = {};
+    size_t visits = 0;
+    partner_scope::eachRemoteHuman([&](uintptr_t human) {
+        seen[visits++] = human;
+        seen[visits++] = humanGetter()();
+    });
+    check(visits == 4 && seen[0] == world.human(1) && seen[1] == world.human(1) && seen[2] == world.human(2) &&
+              seen[3] == world.human(2),
+          "each remote human in slot order, and the getter answers that human meanwhile");
+    check(humanGetter()() == world.human(1), "the override is gone after the loop");
+
+    visits = 0;
+    const bool found = partner_scope::anyRemoteHuman([&](uintptr_t human) {
+        ++visits;
+        return human == world.human(1);
+    });
+    check(found && visits == 1, "anyRemoteHuman stops at the first true");
+
+    visits = 0;
+    uintptr_t members[4] = {};
+    partner_scope::eachRemoteMember([&](uintptr_t member) { members[visits++] = member; });
+    check(visits == 2 && members[0] == world.member(1) && members[1] == world.member(2), "each remote member in slot order");
+}
+
+void withoutRemotesALoopRunsOnceWithoutAnOverride() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    at(world.humans[0].data(), sr2::kHumanNextOffset) = 0;
+    word(sr2::kPlayerListHead) = world.human(0);
+    size_t visits = 0;
+    uintptr_t seen = 1;
+    partner_scope::eachRemoteHuman([&](uintptr_t human) {
+        ++visits;
+        seen = human;
+    });
+    check(visits == 1 && seen == 0, "no remote human: one call with 0, as the shipped game would run it");
+}
+
+void nearestAndIdentity() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    const float farAway[3] = {500, 0, 0};
+    const float close[3] = {5, 0, 0};
+    std::memcpy(world.humans[1].data() + sr2::kObjectPositionOffset, farAway, sizeof(farAway));
+    std::memcpy(world.humans[2].data() + sr2::kObjectPositionOffset, close, sizeof(close));
+    check(remote_players::nearestRemoteTo({0, 0, 0}) == world.human(2), "the nearest remote human to a point");
+    partner_rules::Remote nearest;
+    check(remote_players::nearestRemote({600, 0, 0}, nearest) && nearest.human == world.human(1) &&
+              nearest.member == world.member(1),
+          "the nearest remote with its member");
+    check(remote_players::isRemotePlayerHuman(world.human(2)) && !remote_players::isRemotePlayerHuman(world.human(0)) &&
+              !remote_players::isRemotePlayerHuman(0) && !remote_players::isRemotePlayerHuman(0x1234),
+          "remote player human: in the list and not the local one");
+    at(world.humans[1].data(), sr2::kHumanDownedTimerOffset) = static_cast<uint32_t>(-1);
+    world.humans[1][sr2::kHumanJoinFlagsOffset] = sr2::kHumanJoiningBit;
+    check(remote_players::downedTimerOf(world.human(1)) == -1 && remote_players::isJoining(world.human(1)) &&
+              !remote_players::isJoining(world.human(2)),
+          "downed timer and join flag");
+}
+
+void anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    const uintptr_t session = addr(world.session.data());
+    constexpr int32_t kReady = static_cast<int32_t>(sr2::kMemberStateReady);
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "two remotes in the game: ready");
+    at(world.members[1].data(), sr2::kMemberStateOffset) = kReady - 1;
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "one remote still joining, the other ready: ready");
+    at(world.members[2].data(), sr2::kMemberStateOffset) = kReady - 1;
+    check(!remote_players::anyRemoteMemberAtLeast(session, kReady), "both remotes joining: not ready");
+    at(world.members[2].data(), sr2::kMemberStateOffset) = kReady;
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "a remote at exactly the ready state counts");
+    world.place(order, order, 2);
+    at(world.members[1].data(), sr2::kMemberStateOffset) = kReady - 1;
+    at(world.members[0].data(), sr2::kMemberStateOffset) = kReady - 1;
+    at(world.members[2].data(), sr2::kMemberStateOffset) = sr2::kMemberStateInGame;
+    check(!remote_players::anyRemoteMemberAtLeast(session, kReady), "only the local member is in the game: not ready");
+    at(world.members[0].data(), sr2::kMemberStateOffset) = sr2::kMemberStateInGame;
+    check(remote_players::anyRemoteMemberAtLeast(session, kReady), "a guest sees the host in the game: ready");
+}
+
+void membersAndHumansMapToEachOther() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    check(remote_players::humanOfMember(world.member(1)) == world.human(1) &&
+              remote_players::humanOfMember(world.member(2)) == world.human(2),
+          "the human of a remote member is the one that member owns");
+    check(remote_players::humanOfMember(world.member(0)) == 0 && remote_players::humanOfMember(0) == 0,
+          "the local member and no member have no remote human");
+    check(remote_players::memberOfHuman(world.human(2)) == world.member(2) && remote_players::memberOfHuman(world.human(0)) == 0 &&
+              remote_players::memberOfHuman(0) == 0,
+          "the member of a remote human is its owner, none for the local player");
+    check(remote_players::isRemoteMember(world.member(1)) && !remote_players::isRemoteMember(world.member(0)) &&
+              !remote_players::isRemoteMember(0x1234),
+          "a remote member is in the session and not the local one");
+    check(remote_players::remoteHumanCount() == 2, "two remote humans");
+    world.records[1][0] = 9;
+    check(remote_players::humanOfMember(world.member(1)) == 0 && remote_players::memberOfHuman(world.human(1)) == 0,
+          "an owner slot that matches no member gives no mapping");
+}
+
+void aMessageIsAnsweredForItsSender() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    partner_scope::Target target{};
+    check(partner_scope::targetOfSender(world.member(2), target) && target.human == world.human(2) &&
+              target.member == world.member(2),
+          "a message from slot 2 is answered with slot 2's human and member, not the default partner's");
+    check(!partner_scope::targetOfSender(world.member(0), target) && !partner_scope::targetOfSender(0, target) &&
+              !partner_scope::targetOfSender(0x1234, target),
+          "the local member, no member and an unknown member run as they are");
+    at(world.humans[2].data(), sr2::kHumanNextOffset) = 0;
+    at(world.humans[1].data(), sr2::kHumanNextOffset) = 0;
+    word(sr2::kPlayerListHead) = world.human(0);
+    check(partner_scope::targetOfSender(world.member(2), target) && target.human == 0 && target.member == world.member(2),
+          "a member that has no human yet is answered with none, as the 2-player game would");
+    world.records[1][0] = 9;
+    world.place(order, order, 0);
+    check(!partner_scope::targetOfSender(world.member(2), target), "an untrusted pairing leaves the handler alone");
+
+    world.records[1][0] = 1;
+    world.place(order, order, 0);
+    at(world.members[1].data(), sr2::kMemberNextOffset) = world.member(0);
+    at(world.humans[1].data(), sr2::kHumanNextOffset) = 0;
+    remote_players::Snapshot snapshot;
+    remote_players::take(snapshot);
+    const remote_players::Partner partner = remote_players::defaultPartner(snapshot);
+    check(snapshot.pairing.count == 1 && partner_scope::targetOfSender(world.member(1), target) && target.human == partner.human &&
+              target.member == partner.member,
+          "with one remote the sender is the default partner, the 2-player answer");
+}
+
+void activityStateReadsTheSession() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    world.session[sr2::kSessionHostFlagOffset] = 1;
+    check(activity_state::isHost(), "the host flag of the session");
+    world.session[sr2::kSessionHostFlagOffset] = 0;
+    check(!activity_state::isHost(), "a guest is not the host");
+    uint32_t context[2] = {0, static_cast<uint32_t>(world.member(2))};
+    check(activity_state::senderOf(addr(context)) == world.member(2) && activity_state::senderOf(0) == 0,
+          "the sender of a message is [context + 4]");
+    uintptr_t members[activity_rules::kMaxMembers];
+    check(activity_state::remoteMembersInGame(members) == 2 && members[0] == world.member(1) && members[1] == world.member(2),
+          "both remote members are in the game");
+    at(world.members[1].data(), sr2::kMemberStateOffset) = sr2::kMemberStateReady;
+    check(activity_state::remoteMembersInGame(members) == 1 && members[0] == world.member(2),
+          "a member still joining is left out");
+    activity_state::setRacePeer(world.member(2));
+    check(activity_state::takeRacePeer() == world.member(2) && activity_state::takeRacePeer() == 0,
+          "the race peer is taken once");
+}
+
+// Milestone 16 wave 2, rule PIN: in a 2+S activity the default partner is the other participant. The co-op race diversion is
+// 2+S whatever the mission, so its flag and the pair of participant handles are enough to try the rule.
+void theOtherParticipantIsTheDefaultPartner() {
+    World world;
+    const size_t order[] = {0, 1, 2};
+    world.place(order, order, 0);
+    for (size_t slot = 0; slot < kPlayers; ++slot) {
+        const uint32_t handle = kFirstHandle + static_cast<uint32_t>(slot);
+        at(world.humans[slot].data(), sr2::kObjectHandleOffset) = handle;
+        word(sr2::kObjectTable + handle * sr2::kObjectTableStride) = world.human(slot);
+    }
+    uint8_t& raceFlag = *reinterpret_cast<uint8_t*>(sr2::kCoopRaceFlag);
+    raceFlag = 0;
+    word(sr2::kMissionOwnerHandle) = kFirstHandle;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle + 2;
+    check(humanGetter()() == world.human(1), "no 2+S activity: the lowest slot is the partner");
+    raceFlag = 1;
+    check(humanGetter()() == world.human(2) && memberGetter()() == world.member(2),
+          "the host races the player of slot 2: both getters answer that player, not slot 1");
+    word(sr2::kMissionOwnerHandle) = kFirstHandle + 1;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle + 2;
+    check(humanGetter()() == world.human(1), "the host is a spectator: the shipped answer");
+    word(sr2::kMissionOwnerHandle) = kFirstHandle + 2;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle;
+    check(humanGetter()() == world.human(2), "the pair may be either way round");
+    {
+        partner_scope::Override turn({world.human(1), world.member(1)});
+        check(humanGetter()() == world.human(1), "an override still wins over the pin");
+    }
+    world.place(order, order, 1);
+    word(sr2::kMissionOwnerHandle) = kFirstHandle + 1;
+    word(sr2::kMissionPartnerHandle) = kFirstHandle + 2;
+    check(humanGetter()() == world.human(2), "a guest racing a guest: the other guest, not the host");
+    raceFlag = 0;
+    check(humanGetter()() == world.human(0), "the race over: the host again");
+    world.place(order, order, 0);
+    at(world.humans[1].data(), sr2::kHumanNextOffset) = 0;  // the host and the player of slot 1 only
+    at(world.members[1].data(), sr2::kMemberNextOffset) = world.member(0);
+    raceFlag = 1;
+    check(humanGetter()() == world.human(1), "with one remote the pin changes nothing");
+    raceFlag = 0;
+}
+
+}  // namespace
+
+int main() {
+    if (!mapPages()) {
+        std::printf("FAIL the game's addresses 0x%X and 0x%X could not be mapped in this process\n",
+                    static_cast<unsigned>(kPlayerPage), static_cast<unsigned>(kSessionPage));
+        return 1;
+    }
+    hostPicksTheLowestSlot();
+    guestPicksTheHost();
+    aJoiningMemberHasNoHumanYet();
+    anUnmatchedOwnerSlotKeepsTheGamesAnswer();
+    outsideCoopTheGamesAnswerStands();
+    overridesAnswerTheirTurn();
+    withoutRemotesALoopRunsOnceWithoutAnOverride();
+    nearestAndIdentity();
+    anyRemoteMemberReadyIgnoresTheLocalAndJoiningOnes();
+    membersAndHumansMapToEachOther();
+    aMessageIsAnsweredForItsSender();
+    activityStateReadsTheSession();
+    theOtherParticipantIsTheDefaultPartner();
+    return g_failures == 0 ? 0 : 1;
+}

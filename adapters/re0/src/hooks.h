@@ -14,6 +14,7 @@ bool install(const char* name, uintptr_t address, void* detour, void** original)
 void beginBatch();
 void applyBatch();
 
+// Disables the hook at `address`; inside a batch, takes back its queued enable.
 void remove(uintptr_t address);
 
 }  // namespace hooks

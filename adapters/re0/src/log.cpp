@@ -12,6 +12,11 @@
 
 namespace {
 
+// An adapter that shares this file names its own log by defining COOP_LOG_FILE.
+#ifndef COOP_LOG_FILE
+#define COOP_LOG_FILE L"adapter.log"
+#endif
+
 constexpr size_t kLineCapacity = 1024;
 constexpr auto kRepeatWindow = std::chrono::seconds(1);
 
@@ -27,7 +32,7 @@ void append(const char* message) {
 
     std::lock_guard lock(g_mutex);
     if (!g_file) {
-        const std::wstring path = coopDirectory() + L"\\adapter.log";
+        const std::wstring path = coopDirectory() + L"\\" COOP_LOG_FILE;
         g_file = _wfsopen(path.c_str(), L"a", _SH_DENYNO);
         if (!g_file) return;
     }

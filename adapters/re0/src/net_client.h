@@ -22,6 +22,7 @@ struct SessionSnapshot {
     uint8_t hostSlot = 0;
     uint8_t maxPlayers = 0;
     uint32_t epoch = 0;
+    uint64_t localSteamId = 0;  // 0 when the launcher did not send it
     std::vector<PeerInfo> peers;
 };
 
@@ -48,8 +49,9 @@ public:
 
     ~NetClient() { stop(); }
 
-    // onTick runs on the net thread every few milliseconds while connected.
-    void start(uint16_t port, std::string gameId, TickHandler onTick = {});
+    // onTick runs on the net thread every few milliseconds while connected. When onFrame is set, game frames go to it on
+    // the net thread (outside the client's lock) instead of the queue that poll drains.
+    void start(uint16_t port, std::string gameId, TickHandler onTick = {}, FrameHandler onFrame = {});
     void stop();
 
     // Queues a game frame (type >= 0x0100). False while not linked.
@@ -70,6 +72,7 @@ private:
     uint16_t port_ = 0;
     std::string gameId_;
     TickHandler onTick_;
+    FrameHandler onFrame_;
     std::thread thread_;
     std::atomic<bool> running_{false};
 
