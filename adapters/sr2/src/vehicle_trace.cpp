@@ -14,7 +14,8 @@ namespace {
 // The vehicle class create 0x873F30: thiscall(out handle*, offset*, payload, net id, owner slot), the callee pops 5 arguments.
 using VehicleCreateFn = uint32_t(__thiscall*)(void*, uint32_t*, int*, const uint8_t*, uint32_t, uint32_t);
 
-// The vehicle class's apply 0x878A90 (vtable +0x48): thiscall(this = the vehicle, 3 stack arguments), the callee pops 12 bytes.
+// The vehicle class's apply 0x878A90 (vtable +0x48): thiscall(this = the class handler, vehicle handle, payload, offset*),
+// the callee pops 12 bytes. 0x804710 calls it with ecx = kRecordClassTable[class] and the record's handle (+4) first.
 using VehicleApplyFn = uint32_t(__thiscall*)(void*, uint32_t, uint32_t, uint32_t);
 
 constexpr uint32_t kNetIdMask = 0xFFFF;
@@ -54,16 +55,16 @@ uint32_t __fastcall traceRemoteVehicle(void* handler, void*, uint32_t* out, int*
     return result;
 }
 
-// VT2, entered through the vehicle class's vtable +0x48 with ecx = the vehicle. The apply destroys a vehicle whose stream
-// container is not loaded on this machine; the vehicle's handle then no longer names it. Its owner and net id are read before.
-uint32_t __fastcall traceVehicleApply(void* vehicle, void*, uint32_t first, uint32_t second, uint32_t third) {
-    const uintptr_t object = reinterpret_cast<uintptr_t>(vehicle);
-    const uint32_t handle = readDword(object + sr2::kObjectHandleOffset);
+// VT2, entered through the vehicle class's vtable +0x48 with ecx = the class handler and the vehicle's handle first. The apply
+// destroys a vehicle whose stream container is not loaded on this machine; the handle then no longer names it. Its owner and
+// net id are read before.
+uint32_t __fastcall traceVehicleApply(void* handler, void*, uint32_t handle, uint32_t payload, uint32_t offset) {
+    const uintptr_t object = remote_players::objectOfHandle(handle);
     const uint16_t id = remote_players::netIdOf(object);
-    const uintptr_t record = readDword(object + sr2::kObjectNetRecordOffset);
+    const uintptr_t record = object ? readDword(object + sr2::kObjectNetRecordOffset) : 0;
     const uint32_t ownerSlot = record ? readByte(record + sr2::kRecordOwnerOffset) : 0;
-    const uint32_t result = reinterpret_cast<VehicleApplyFn>(g_applyOriginal)(vehicle, first, second, third);
-    if (handle != 0 && remote_players::objectOfHandle(handle) != object) {
+    const uint32_t result = reinterpret_cast<VehicleApplyFn>(g_applyOriginal)(handler, handle, payload, offset);
+    if (object != 0 && remote_players::objectOfHandle(handle) != object) {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_totals.recordDropped();
         if (g_dropped.failed(id) == 1) {
