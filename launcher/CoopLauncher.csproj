@@ -15,10 +15,6 @@
     <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(LauncherUi)' == 'Classic'">
-    <DefineConstants>$(DefineConstants);CLASSIC_UI</DefineConstants>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Steamworks.NET" Version="2024.8.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />

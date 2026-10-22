@@ -1,7 +1,7 @@
 namespace CoopLauncher;
 
 /// <summary>The launcher's per-user folder (%AppData%\CoopLauncher, or the folder named by COOP_LAUNCHER_DATA, which tests
-/// and the UI harness point at a temp folder): its settings, its logs, the pictures it took from games and the web view's data.</summary>
+/// point at a temp folder): its settings, its logs, the pictures it took from games and the web view's data.</summary>
 public static class AppData
 {
     /// <summary>The timestamp every file the launcher names by time uses (archives, reports, peer logs).</summary>

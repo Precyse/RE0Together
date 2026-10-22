@@ -325,9 +325,9 @@ puppet and `state_correction` skips it.
 ### Phase 1 builder brief (Sonnet `builder`, effort high)
 
 > **Task.** Add an experimental partner mode in which the remote-owned character is a pose puppet, behind
-> `partner_mode=state` in `coop/adapter.ini` (default `input`). Repo `C:\Users\ahmal\coop-re0-phase4`, branch
+> `partner_mode=state` in `coop/adapter.ini` (default `input`). Branch
 > `re0-phase4`, adapter `adapters/re0`. Read `CODEMAP.md`, `docs/RE0_NOTES.md` and
-> `C:\Users\ahmal\coop-scratch\re0\POSE_REPLICATION.md` (sections 1-3, 5) first. Do not launch the game; build and
+> `coop-scratch\re0\POSE_REPLICATION.md` (sections 1-3, 5) first. Do not launch the game; build and
 > unit tests only. No commits unless asked.
 >
 > **Rules.** `partner_mode=input` must behave exactly as now (no new hook changes behaviour unless the mode is

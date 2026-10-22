@@ -1,7 +1,7 @@
 # RE0 enemy sync: review and redesign (2026-10-07)
 
 Scope: everything the RE0 adapter does to an enemy, reviewed from the engine up after the Build 158 live session
-(host `coop/adapter.log`, guest `coop/peer_76561198150990292.log`, sessions starting 2026-10-07 00:02 and 00:42).
+(host `coop/adapter.log`, guest `coop/peer_<guest steamid>.log`, sessions starting 2026-10-07 00:02 and 00:42).
 Reported: enemies jitter and teleport on both machines, sometimes stick in an animation, hits register on one
 screen only, crits show on one screen only.
 
