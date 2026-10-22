@@ -99,5 +99,6 @@ Spec: `docs/CONTRACT.md`. This file is the index: which file holds the table of 
 - Players in different rooms / independent play: `adapters/re0/src/split_rooms.cpp` (moving a character between rooms: `scene.cpp`), camera rule in `camera_parity.cpp`, control rule in `control_rule.h`; test on one PC with `tools/re0/fake_session.py`
 - Tuning input delay without a partner: `adapters/re0/build/trace_replay.exe --synthetic 120 --jitter 60`, or record with `net_trace=1` and replay the file
 - A crash on a player's machine: `coop\crash-*.dmp` next to adapter.log, read with `tools/re0/dump_stack.py`
+- SR2 a game that stopped or vanished without a Juiced report: `coop\dumps\<stamp>.dmp` and `.txt` (the watchdog, `adapters/sr2/src/watchdog.cpp`), the `watchdog:` and `the game exits (ExitProcess N)` lines in sr2_adapter.log; docs/SR2_NOTES.md "Watchdog and exits"
 - Launcher web page (WebView2): shell and browse screens `launcher/web/js/main.js`, motion recipes `css/motion.css` + `js/motion.js`, tokens `css/tokens.css`; screenshots without the launcher: `python tools/launcher_web/render.py <fixture|sequence> --out <dir>`
 - Launcher web page, session screens (joining, hosting, lobby, mini, select), cards, steps, spinner: `launcher/web/js/cards.js`, `steps.js`, `session.js`; card state edge CSS `css/cards.css`; fixtures `dev/fixtures`, sequences `dev/sequences`

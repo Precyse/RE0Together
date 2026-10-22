@@ -3,9 +3,9 @@
 #include <unknwn.h>
 
 #include <mutex>
-#include <string>
 
 #include "init.h"
+#include "system_dll.h"
 
 namespace {
 
@@ -16,15 +16,8 @@ constexpr const char* kRealExport = "DirectInput8Create";
 std::once_flag g_loadOnce;
 DirectInput8CreateFn g_real = nullptr;
 
-std::wstring realDllPath() {
-    wchar_t dir[MAX_PATH];
-    UINT n = GetSystemWow64DirectoryW(dir, MAX_PATH);
-    if (n == 0) n = GetSystemDirectoryW(dir, MAX_PATH);
-    return std::wstring(dir, n) + L"\\dinput8.dll";
-}
-
 void loadReal() {
-    const HMODULE module = LoadLibraryW(realDllPath().c_str());
+    const HMODULE module = LoadLibraryW(systemDllPath(L"dinput8.dll").c_str());
     if (module) g_real = reinterpret_cast<DirectInput8CreateFn>(GetProcAddress(module, kRealExport));
 }
 

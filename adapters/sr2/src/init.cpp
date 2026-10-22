@@ -41,6 +41,7 @@
 #include "vehicle_seating.h"
 #include "version_gate.h"
 #include "walk_patches.h"
+#include "watchdog.h"
 #include "world_walks.h"
 #include "zombie_uprising.h"
 
@@ -98,6 +99,7 @@ DWORD WINAPI initThread(LPVOID) {
         version_gate::install(config.maxPlayers, tunnelled, contentHash, config.trace);
 
         hooks::beginBatch();
+        watchdog::install();
         if (replicating) {
             coop_limits::install(config.maxPlayers);
         } else {

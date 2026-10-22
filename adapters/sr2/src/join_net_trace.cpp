@@ -23,6 +23,8 @@ constexpr uintptr_t kRequestMemberOffset = 4;  // ctx[1]: the member the sender 
 constexpr uintptr_t kDenyReasonOffset = 4;     // the reason byte inside a join_deny payload
 constexpr size_t kNatResultArg = 0;
 constexpr size_t kNatQueuedArg = 3;
+constexpr uintptr_t kMemberRateOffset = 0x2200;       // dword: the upload rate the member reported
+constexpr uintptr_t kMemberRateCountOffset = 0x2208;  // dword: how many rate messages it sent
 
 void* g_natRequest = nullptr;
 void* g_natComplete = nullptr;
@@ -33,6 +35,7 @@ void* g_memberCreate = nullptr;
 void* g_joinReqSend = nullptr;
 void* g_denyReceive = nullptr;
 void* g_joinAccReceive = nullptr;
+void* g_rateReceive = nullptr;
 
 const uintptr_t g_mappedContinue = join_net_trace_sites::kJoinReqMappedDrop + join_net_trace_sites::kBranchBytes;
 const uintptr_t g_duplicateContinue = join_net_trace_sites::kJoinReqDuplicateDrop + join_net_trace_sites::kBranchBytes;
@@ -173,6 +176,17 @@ void __cdecl traceDenyReceive(GuestFrame* frame) {
 
 void __cdecl traceJoinAccReceive(GuestFrame*) { logger::write("trace: join_acc received"); }
 
+// T11, on every machine: a member's rate message sets the upload rate the others share their sends to it by (+0x2200), counts it
+// (+0x2208) and holds it for count x 30 s (docs/SR2_NOTES.md "Upload share (W9a)"). Logged before the handler stores it.
+void __cdecl traceRateReceive(GuestFrame* frame) {
+    const uint32_t* args = argsOf(frame);
+    const uintptr_t member = readDword(args[1] + kRequestMemberOffset);
+    if (!member) return;
+    logger::write("trace: net rate: slot %u reports rate %u (was %u), count %u -> %u", readByte(member + sr2::kMemberSlotOffset),
+                  readDword(args[0]), readDword(member + kMemberRateOffset), readDword(member + kMemberRateCountOffset),
+                  readDword(member + kMemberRateCountOffset) + 1);
+}
+
 TRACE_ENTRY_STUB(natRequestStub, traceNatRequest, g_natRequest)
 TRACE_ENTRY_STUB(natCompleteStub, traceNatComplete, g_natComplete)
 TRACE_ENTRY_STUB(joinReqStub, traceJoinReq, g_joinReq)
@@ -182,6 +196,7 @@ TRACE_RETURN_STUBS(memberCreateStub, exitMemberCreateStub, enterMemberCreate, le
 TRACE_ENTRY_STUB(joinReqSendStub, traceJoinReqSend, g_joinReqSend)
 TRACE_ENTRY_STUB(denyReceiveStub, traceDenyReceive, g_denyReceive)
 TRACE_ENTRY_STUB(joinAccReceiveStub, traceJoinAccReceive, g_joinAccReceive)
+TRACE_ENTRY_STUB(rateReceiveStub, traceRateReceive, g_rateReceive)
 
 // The drop branches: the flags are the game's own `jne`. A drop is logged, anything else carries on.
 void __declspec(naked) mappedDropStub() {
@@ -231,6 +246,7 @@ const Binding kBindings[] = {
     {"T5", denySendStub, &g_denySend},         {"T6", memberAddStub, &g_memberAdd},
     {"T7", memberCreateStub, &g_memberCreate}, {"T8", joinReqSendStub, &g_joinReqSend},
     {"T9", denyReceiveStub, &g_denyReceive},   {"T10", joinAccReceiveStub, &g_joinAccReceive},
+    {"T11", rateReceiveStub, &g_rateReceive},
 };
 
 const Binding* bindingOf(const Site& site) {

@@ -147,6 +147,7 @@ add_library(sr2_adapter SHARED
     src/force_join.cpp
     src/force_join_guest.cpp
     src/force_join_lan.cpp
+    src/watchdog.cpp
     ${RE0_DIR}/dinput8.def)
 target_include_directories(sr2_adapter PRIVATE src ${SHARED_DIR})
 # The shared logger writes <game>\coop\<this name>.
@@ -210,6 +211,7 @@ add_unit_test(code_patch_test src/code_patch.cpp src/memory.cpp)
 add_unit_test(hooks_batch_test ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(hooks_batch_test PRIVATE minhook)
 add_unit_test(pool_size_test)
+add_unit_test(watchdog_rules_test)
 add_unit_test(replication_sites_test)
 add_unit_test(partner_rules_test)
 add_unit_test(partner_sites_test)

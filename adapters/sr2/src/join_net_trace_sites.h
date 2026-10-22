@@ -39,6 +39,7 @@ inline constexpr Site kSites[] = {
     {"T8", Kind::Entry, 0x815930, "81 EC 28 05 00 00 A1 50"},
     {"T9", Kind::Entry, 0x8163F0, "80 3D 56 8B 52 02 00 8B"},
     {"T10", Kind::Entry, 0x8162E0, "55 8B EC 83 E4 F8 81 EC"},
+    {"T11", Kind::Entry, 0x80B620, "8B 44 24 04 8B 08 8B 44"},  // the rate message handler: cdecl(payload, context)
 };
 inline constexpr size_t kSiteCount = std::size(kSites);
 
