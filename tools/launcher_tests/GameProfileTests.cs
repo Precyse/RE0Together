@@ -17,7 +17,7 @@ public static class GameProfileTests
         var threw = false;
         try
         {
-            GameProfile.Parse("broken", """{ "id": "broken", "name": "Broken", "steamAppId": 1, "exe": "b.exe", "maxPlayers": 2, "port": 1, "adapterFiles": [], "adapterIni": "", "freshTypes": ["0x0001"] }""");
+            GameProfile.Parse("broken", """{ "id": "broken", "name": "Broken", "steamAppId": 1, "exe": "b.exe", "maxPlayers": 2, "port": 1, "adapterFiles": [], "adapterIni": "", "freshTypes": ["0x0001"] }""", RepoPaths.RepoRoot);
         }
         catch (InvalidDataException e)
         {
@@ -25,7 +25,7 @@ public static class GameProfileTests
         }
         Check.That(threw, "a bad fresh type throws at load, naming the profile");
 
-        var fine = GameProfile.Parse("fine", """{ "id": "fine", "name": "Fine", "steamAppId": 1, "exe": "f.exe", "maxPlayers": 2, "port": 1, "adapterFiles": [], "adapterIni": "", "freshTypes": ["0x0140"] }""");
+        var fine = GameProfile.Parse("fine", """{ "id": "fine", "name": "Fine", "steamAppId": 1, "exe": "f.exe", "maxPlayers": 2, "port": 1, "adapterFiles": [], "adapterIni": "", "freshTypes": ["0x0140"] }""", RepoPaths.RepoRoot);
         Check.That(fine.FreshTypes!.Count == 1, "a valid fresh type loads");
     }
 }

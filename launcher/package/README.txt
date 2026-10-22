@@ -4,6 +4,7 @@ Start launcher\app\coop-launcher.exe. One package holds the launcher and the mod
 
 Each game in the list shows its mod: Not installed, Mod N, Mod update M or Mod modified.
 Pick a game and use the button next to Host: Install, Update or Repair (the game must be closed). Uninstall is in Settings, in the game's section.
+The mod button installs every file the game needs (Saints Row 2 also gets its coop\scripts folder); nothing has to be sent or copied separately. An update also removes files the new mod no longer uses. Your own files in the way are kept as .cfbak and put back by Uninstall.
 Host and Join need the mod installed and a game version the mod supports (Game build N unsupported). Both players need the same game version.
 If the game closes or crashes during a session, Relaunch starts it again and it catches up. If the game was started outside the launcher the status reads Game not linked: close it and start it from the launcher.
 

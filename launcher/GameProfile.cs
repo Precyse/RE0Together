@@ -4,7 +4,9 @@ using System.Text.Json.Serialization;
 
 namespace CoopLauncher;
 
-public sealed record AdapterFile(string Src, string Dst);
+/// <summary>A file the game folder gets: Src in the package, Dst in the game folder. With Folder set both name a folder; the profile
+/// load replaces it by one entry per file (see <see cref="ModFiles.Expand"/>), each with the folder's Dst in FolderDst.</summary>
+public sealed record AdapterFile(string Src, string Dst, bool Folder = false, string? FolderDst = null);
 
 /// <summary>Save sync settings. Fixed files come from the Steam cloud folder (SteamRemoteFiles). A game that keeps its
 /// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host
@@ -90,11 +92,12 @@ public sealed record GameProfile(
     {
         var path = Path.Combine(RepoPaths.GamesDir, id + ".json");
         if (!File.Exists(path)) throw new FileNotFoundException($"No game profile for '{id}'", path);
-        return Parse(id, File.ReadAllText(path));
+        return Parse(id, File.ReadAllText(path), RepoPaths.RepoRoot);
     }
 
-    /// <summary>A profile from its JSON; the fresh frame types must be valid (the queue would refuse them mid-session).</summary>
-    internal static GameProfile Parse(string id, string json)
+    /// <summary>A profile from its JSON, its folder entries expanded against <paramref name="root"/> (the package folder); the fresh
+    /// frame types must be valid (the queue would refuse them mid-session).</summary>
+    internal static GameProfile Parse(string id, string json, string root)
     {
         var profile = JsonSerializer.Deserialize<GameProfile>(json, JsonOptions) ?? throw new InvalidDataException($"Empty profile {id}");
         try
@@ -105,7 +108,7 @@ public sealed record GameProfile(
         {
             throw new InvalidDataException($"Profile {id}: {e.Message}", e);
         }
-        return profile;
+        return profile with { AdapterFiles = ModFiles.Expand(profile.AdapterFiles, root) };
     }
 
     private static IReadOnlyList<string> ReadIds() =>

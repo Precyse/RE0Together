@@ -16,14 +16,18 @@ public static class Check
 
 public static class Program
 {
-    /// <summary>Setting this variable to <c>web</c> runs only the web window's suites (UiCommands, UiSnapshot, UiContract).</summary>
+    /// <summary>Setting this variable to <c>web</c> runs only the web window's suites (UiCommands, UiSnapshot, UiContract); to
+    /// <c>mod</c> only the mod install suites.</summary>
     private const string OnlyVariable = "LAUNCHER_TESTS_ONLY";
     private const string WebSuites = "web";
+    private const string ModSuites = "mod";
 
     [STAThread]
     public static int Main()
     {
-        if (Environment.GetEnvironmentVariable(OnlyVariable) == WebSuites) return RunWebSuites();
+        var only = Environment.GetEnvironmentVariable(OnlyVariable);
+        if (only == WebSuites) return RunWebSuites();
+        if (only == ModSuites) return RunModSuites();
         ContentHashTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
@@ -50,7 +54,7 @@ public static class Program
         FramingTests.Run();
         InstanceGuardTests.Run();
         UpdaterTests.Run();
-        ModInstallerTests.Run();
+        RunModInstallSuites();
         SaveSenderTests.Run();
         SaveReceiverTests.Run();
         SaveSyncTimeoutTests.Run();
@@ -73,6 +77,22 @@ public static class Program
         UiSnapshotTests.Run();
         UiContractTests.Run();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests: all checks passed");
+        return Check.Failures == 0 ? 0 : 1;
+    }
+
+    private static void RunModInstallSuites()
+    {
+        ModFilesTests.Run();
+        ModInstallerTests.Run();
+        ModFolderTests.Run();
+    }
+
+    private static int RunModSuites()
+    {
+        GameProfileTests.Run();
+        ContentHashTests.Run();
+        RunModInstallSuites();
+        if (Check.Failures == 0) Console.WriteLine("launcher_tests (mod): all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
 

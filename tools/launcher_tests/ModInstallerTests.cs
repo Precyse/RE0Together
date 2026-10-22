@@ -9,7 +9,7 @@ public static class ModInstallerTests
     private const string AdapterIni = "coop/adapter.ini";
     private const string Dll = "dinput8.dll";
 
-    private sealed class Rig : IDisposable
+    internal sealed class Rig : IDisposable
     {
         public Rig(params string[] dsts)
         {
@@ -30,7 +30,11 @@ public static class ModInstallerTests
 
         public string GamePath(string relative) => Path.Combine(Game, relative);
 
-        public void SetPackage(string dst, string text) => File.WriteAllText(Path.Combine(Package, dst), text);
+        public void SetPackage(string dst, string text)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(Package, dst))!);
+            File.WriteAllText(Path.Combine(Package, dst), text);
+        }
 
         public void SetGame(string relative, string text)
         {

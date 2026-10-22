@@ -10,49 +10,34 @@ public enum ModState { NotInstalled, Installed, UpdateAvailable, Modified }
 public readonly record struct ModStatus(ModState State, int Build);
 
 /// <summary>
-/// Installs and removes a game's mod: the profile's adapter files in the game folder. A file is ours when its ownership marker
-/// (<c>.cfown</c>, holding the installed hash) records the file's own hash, or when it equals the package copy (an install that
-/// was cut short before the marker). Any other file in the way is the player's: it is kept as <c>.cfbak</c> (<c>.cfbak2</c>, ...
-/// when one exists, never overwritten) and the original <c>.cfbak</c> is restored on uninstall. A file that carries our marker
-/// but another hash was replaced by another mod or damaged (<see cref="ModState.Modified"/>); install repairs it. The installed
-/// package build is recorded beside the first file (<c>.cfbuild</c>). An install changes all files or none.
+/// Installs and removes a game's mod: the profile's adapter files in the game folder (a folder entry is one file per file in
+/// it). A file is ours when its ownership marker (<c>.cfown</c>, holding the installed hash) records the file's own hash, or when
+/// it equals the package copy (an install that was cut short before the marker). Any other file in the way is the player's: it
+/// is kept as <c>.cfbak</c> (<c>.cfbak2</c>, ... when one exists, never overwritten) and the original <c>.cfbak</c> is restored
+/// on uninstall. A file that carries our marker but another hash was replaced by another mod or damaged
+/// (<see cref="ModState.Modified"/>); install repairs it. The installed package build is recorded beside the first file
+/// (<c>.cfbuild</c>). The files a folder entry installed are listed in its manifest, so an update removes the ones the package
+/// dropped. Markers, backups and the manifest of a folder entry sit under <c>.cfmod</c> beside the folder (see
+/// <see cref="ModFile"/>). An install, with the removals of an update, changes all files or none.
 /// </summary>
 public static class ModInstaller
 {
-    private const string BackupSuffix = ".cfbak";
-    private const string OwnershipSuffix = ".cfown";
-    private const string BuildSuffix = ".cfbuild";
-    private const string TempSuffix = ".tmp";
-    private const string PreviousSuffix = ".prev";
     private const byte NameEnd = 0;
 
     private static bool _hashFailureLogged;
 
-    private readonly record struct ModFile(string Src, string Dst)
-    {
-        public string Marker => Dst + OwnershipSuffix;
-    }
-
-    /// <summary>Installed when every adapter file carries the marker and matches it; modified when one does not match its marker;
-    /// an update is available when a package copy differs from the installed one.</summary>
+    /// <summary>The state of the whole mod from all its files (<see cref="ModFiles.Decide"/>) and the package build recorded when
+    /// it was installed.</summary>
     public static ModStatus Status(GameProfile profile, string? gameDir)
     {
         if (gameDir == null) return new ModStatus(ModState.NotInstalled, 0);
         var files = Files(profile, gameDir);
-        if (files.Count == 0 || !files.All(f => File.Exists(f.Dst) && File.Exists(f.Marker)))
-            return new ModStatus(ModState.NotInstalled, 0);
         try
         {
-            var modified = false;
-            var stale = false;
-            foreach (var file in files)
-            {
-                var installed = Hash(file.Dst);
-                modified |= installed != ReadMarker(file);
-                stale |= File.Exists(file.Src) && Hash(file.Src) != installed;
-            }
-            var state = modified ? ModState.Modified : stale ? ModState.UpdateAvailable : ModState.Installed;
-            return new ModStatus(state, ReadBuild(files[0].Dst));
+            var manifests = Manifests(files, gameDir);
+            var dropped = manifests.SelectMany(manifest => manifest.Dropped()).Any(file => File.Exists(file.Dst));
+            var state = ModFiles.Decide(files.Select(file => Facts(file, manifests)).ToList(), dropped);
+            return new ModStatus(state, state == ModState.NotInstalled ? 0 : ReadBuild(files[0]));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -61,21 +46,21 @@ public static class ModInstaller
         }
     }
 
-    /// <summary>SHA-256 over the profile's adapter files as installed in the game folder (what runs), in profile order: per file the
-    /// lowercase destination name with '/' separators, a 0x00 byte, the u64 little-endian length and the bytes. Null when a file is
-    /// missing or unreadable (an unreadable one is logged once).</summary>
+    /// <summary>SHA-256 over the profile's adapter files as installed in the game folder (what runs), in profile order (a folder
+    /// entry is already expanded to its files): per file the lowercase destination name with '/' separators, a 0x00 byte, the u64
+    /// little-endian length and the bytes. Null when a file is missing or unreadable (an unreadable one is logged once).</summary>
     public static byte[]? ContentHash(GameProfile profile, string gameDir)
     {
         try
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            foreach (var (adapter, file) in profile.AdapterFiles.Zip(Files(profile, gameDir)))
+            foreach (var file in Files(profile, gameDir))
             {
                 if (!File.Exists(file.Dst)) return null;
                 var bytes = File.ReadAllBytes(file.Dst);
                 var length = new byte[sizeof(ulong)];
                 BinaryPrimitives.WriteUInt64LittleEndian(length, (ulong)bytes.Length);
-                hash.AppendData(Encoding.UTF8.GetBytes(adapter.Dst.Replace('\\', '/').ToLowerInvariant()));
+                hash.AppendData(Encoding.UTF8.GetBytes(file.Entry.Dst.Replace('\\', '/').ToLowerInvariant()));
                 hash.AppendData([NameEnd]);
                 hash.AppendData(length);
                 hash.AppendData(bytes);
@@ -91,8 +76,9 @@ public static class ModInstaller
         }
     }
 
-    /// <summary>Copies the package's adapter files into the game folder (also how an update or a repair re-copies them). All files
-    /// are staged beside their targets first; a failure while moving them into place puts every file back.</summary>
+    /// <summary>Copies the package's adapter files into the game folder (also how an update or a repair re-copies them) and removes
+    /// the files an earlier install put there that the package no longer has. All files are staged beside their targets first; a
+    /// failure while moving them into place puts every file back.</summary>
     public static bool Install(GameProfile profile, string gameDir)
     {
         if (GameLauncher.IsRunning(profile))
@@ -107,27 +93,32 @@ public static class ModInstaller
             Log.Info($"Mod files missing from the package: {missing}");
             return false;
         }
-        var placements = new List<Placement>();
+        var steps = new List<IStep>();
+        var manifests = Manifests(files, gameDir);
         try
         {
-            placements.AddRange(files.Select(Plan).OfType<Placement>());
-            foreach (var placement in placements) placement.Stage();
-            foreach (var placement in placements) placement.Place();
+            steps.AddRange(files.Select(Plan).OfType<Placement>());
+            steps.AddRange(manifests.SelectMany(manifest => manifest.Dropped()).Select(file => new Removal(file)));
+            foreach (var step in steps) step.Stage();
+            foreach (var step in steps) step.Place();
             WriteBuild(files[0]);
-            foreach (var placement in placements) placement.Commit();
+            foreach (var manifest in manifests) manifest.Write();
+            foreach (var step in steps) step.Commit();
             Log.Info($"Installed the {profile.Name} mod");
             return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            foreach (var placement in Enumerable.Reverse(placements)) placement.Undo();
+            foreach (var step in Enumerable.Reverse(steps)) step.Undo();
+            foreach (var manifest in manifests) manifest.Restore();
             Log.Info($"Could not install the {profile.Name} mod: {e.Message}");
             return false;
         }
     }
 
-    /// <summary>Removes the adapter files the launcher installed, puts back any original it backed up, and deletes the game's
-    /// coop folder (adapter ini, logs, session) except its archive of saved sessions; the session's saves are archived first.</summary>
+    /// <summary>Removes the adapter files the launcher installed (also the ones a package dropped), puts back any original it
+    /// backed up, and deletes the game's coop folder (adapter ini, logs, session) except its archive of saved sessions and a folder
+    /// that still holds the player's own files; the session's saves are archived first.</summary>
     public static bool Uninstall(GameProfile profile, string gameDir)
     {
         if (GameLauncher.IsRunning(profile))
@@ -138,9 +129,12 @@ public static class ModInstaller
         try
         {
             var files = Files(profile, gameDir);
-            foreach (var file in files) Remove(file);
-            File.Delete(files[0].Dst + BuildSuffix);
-            RemoveCoopFolder(profile, gameDir);
+            var manifests = Manifests(files, gameDir);
+            foreach (var file in files.Concat(manifests.SelectMany(manifest => manifest.Dropped()))) Remove(file);
+            File.Delete(files[0].Build);
+            foreach (var manifest in manifests) File.Delete(manifest.FilePath);
+            RemoveCoopFolder(profile, gameDir, files);
+            foreach (var file in files.Where(f => f.Entry.FolderDst != null)) PruneEmptyFolders(file, gameDir);
             Log.Info($"Removed the {profile.Name} mod");
             return true;
         }
@@ -152,7 +146,24 @@ public static class ModInstaller
     }
 
     private static List<ModFile> Files(GameProfile profile, string gameDir) =>
-        profile.AdapterFiles.Select(f => new ModFile(Path.Combine(RepoPaths.RepoRoot, f.Src), Path.Combine(gameDir, f.Dst))).ToList();
+        profile.AdapterFiles.Select(entry => ToModFile(entry, gameDir, Path.Combine(RepoPaths.RepoRoot, entry.Src))).ToList();
+
+    private static ModFile ToModFile(AdapterFile entry, string gameDir, string src) =>
+        new(entry, src, Path.GetFullPath(Path.Combine(gameDir, entry.Dst)), Path.GetFullPath(ModFiles.SidePath(gameDir, entry)));
+
+    /// <summary>One manifest per folder entry of the profile.</summary>
+    private static List<FolderManifest> Manifests(List<ModFile> files, string gameDir) =>
+        files.Select(f => f.Entry.FolderDst).OfType<string>().Distinct()
+            .Select(folder => new FolderManifest(gameDir, folder, files.Where(f => f.Entry.FolderDst == folder).Select(f => f.Entry.Dst).ToList()))
+            .ToList();
+
+    private static FileFacts Facts(ModFile file, List<FolderManifest> manifests)
+    {
+        if (!File.Exists(file.Dst) || !File.Exists(file.Marker))
+            return new FileFacts(false, false, false, Added: manifests.Any(manifest => manifest.IsNew(file)));
+        var installed = Hash(file.Dst);
+        return new FileFacts(true, installed != ReadMarker(file), File.Exists(file.Src) && Hash(file.Src) != installed);
+    }
 
     /// <summary>What installing this file needs, or null when it is already the package copy with its marker. A file in the way
     /// that is not ours is backed up first.</summary>
@@ -164,13 +175,13 @@ public static class ModInstaller
         var markerHash = ReadMarker(file);
         if (installedHash == packageHash && markerHash == packageHash) return null;
         var ours = installedHash == packageHash || installedHash == markerHash;
-        return new Placement(file, packageHash, ours ? null : NextBackupPath(file.Dst));
+        return new Placement(file, packageHash, ours ? null : NextBackupPath(file));
     }
 
-    private static string NextBackupPath(string dst)
+    private static string NextBackupPath(ModFile file)
     {
-        var path = dst + BackupSuffix;
-        for (var number = 2; File.Exists(path); number++) path = $"{dst}{BackupSuffix}{number}";
+        var path = file.Backup;
+        for (var number = 2; File.Exists(path); number++) path = $"{file.Side}{ModFile.BackupSuffix}{number}";
         return path;
     }
 
@@ -181,8 +192,7 @@ public static class ModInstaller
         else
         {
             File.Delete(file.Dst);
-            var backup = file.Dst + BackupSuffix;
-            if (File.Exists(backup)) File.Move(backup, file.Dst);
+            if (File.Exists(file.Backup)) File.Move(file.Backup, file.Dst);
         }
         File.Delete(file.Marker);
     }
@@ -193,9 +203,10 @@ public static class ModInstaller
         return installedHash == ReadMarker(file) || (File.Exists(file.Src) && installedHash == Hash(file.Src));
     }
 
-    /// <summary>Deletes the coop folder's content except the archive. The session's saves are archived first (the same reset as
+    /// <summary>Deletes the coop folder's content except the archive and any folder that holds a mod file's place (what is left
+    /// there is the player's: a restored original or a numbered backup). The session's saves are archived first (the same reset as
     /// after a session); a session folder that could not be archived is kept, so no save is ever lost.</summary>
-    private static void RemoveCoopFolder(GameProfile profile, string gameDir)
+    private static void RemoveCoopFolder(GameProfile profile, string gameDir, List<ModFile> files)
     {
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameDir));
         var coopDir = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(root, profile.AdapterIni)));
@@ -210,7 +221,8 @@ public static class ModInstaller
             {
                 var archive = Path.GetFileName(entry).Equals(AdapterSettings.ArchiveFolder, StringComparison.OrdinalIgnoreCase);
                 var holdsSession = keptSession != null && (keptSession.Equals(entry, StringComparison.OrdinalIgnoreCase) || IsInside(keptSession, entry));
-                if (!archive && !holdsSession) Directory.Delete(entry, recursive: true);
+                var holdsModFile = files.Any(f => IsInside(f.Dst, entry) || IsInside(f.Side, entry));
+                if (!archive && !holdsSession && !holdsModFile) Directory.Delete(entry, recursive: true);
             }
             else File.Delete(entry);
         }
@@ -219,20 +231,28 @@ public static class ModInstaller
     private static bool IsInside(string path, string folder) =>
         path.StartsWith(Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Deletes the folders left empty above a folder entry's file and its bookkeeping, up to the folder's parent.</summary>
+    private static void PruneEmptyFolders(ModFile file, string gameDir)
+    {
+        var stop = Path.GetFullPath(Path.Combine(gameDir, Path.GetDirectoryName(file.Entry.FolderDst!) ?? ""));
+        foreach (var start in new[] { file.Dst, file.Side })
+            for (var dir = Path.GetDirectoryName(start); dir != null && IsInside(dir, stop) && IsEmptyFolder(dir); dir = Path.GetDirectoryName(dir))
+                Directory.Delete(dir);
+    }
+
+    private static bool IsEmptyFolder(string dir) => Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any();
+
     private static void WriteBuild(ModFile first)
     {
-        var path = first.Dst + BuildSuffix;
-        File.WriteAllText(path + TempSuffix, BuildCheck.LocalBuild().ToString());
-        File.Move(path + TempSuffix, path, overwrite: true);
+        Directory.CreateDirectory(Path.GetDirectoryName(first.Build)!);
+        File.WriteAllText(first.Build + ".tmp", BuildCheck.LocalBuild().ToString());
+        File.Move(first.Build + ".tmp", first.Build, overwrite: true);
     }
 
     private static string? ReadMarker(ModFile file) => File.Exists(file.Marker) ? File.ReadAllText(file.Marker).Trim() : null;
 
-    private static int ReadBuild(string dst)
-    {
-        var path = dst + BuildSuffix;
-        return File.Exists(path) && int.TryParse(File.ReadAllText(path).Trim(), out var build) ? build : 0;
-    }
+    private static int ReadBuild(ModFile first) =>
+        File.Exists(first.Build) && int.TryParse(File.ReadAllText(first.Build).Trim(), out var build) ? build : 0;
 
     private static string Hash(string path)
     {
@@ -240,9 +260,19 @@ public static class ModInstaller
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
+    /// <summary>One step of an install. Files are staged first, then every step is placed, then committed; <see cref="Undo"/> puts
+    /// back what a failed install changed.</summary>
+    private interface IStep
+    {
+        void Stage();
+        void Place();
+        void Commit();
+        void Undo();
+    }
+
     /// <summary>One file of an install: staged beside its target, then moved into place with its marker, the old copy kept
     /// aside until the whole install has succeeded so <see cref="Undo"/> can put everything back.</summary>
-    private sealed class Placement(ModFile file, string packageHash, string? backupPath)
+    private sealed class Placement(ModFile file, string packageHash, string? backupPath) : IStep
     {
         private string? _previousMarker;
         private bool _backedUp;
@@ -251,9 +281,11 @@ public static class ModInstaller
 
         public void Stage()
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(file.Dst)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(file.Side)!);
             _previousMarker = ReadMarker(file);
-            File.Copy(file.Src, file.Dst + TempSuffix, overwrite: true);
-            File.WriteAllText(file.Marker + TempSuffix, packageHash);
+            File.Copy(file.Src, file.Temp, overwrite: true);
+            File.WriteAllText(file.Marker + ".tmp", packageHash);
         }
 
         public void Place()
@@ -266,26 +298,26 @@ public static class ModInstaller
             }
             if (File.Exists(file.Dst))
             {
-                File.Move(file.Dst, file.Dst + PreviousSuffix, overwrite: true);
+                File.Move(file.Dst, file.Previous, overwrite: true);
                 _movedAside = true;
             }
             _placed = true;
-            File.Move(file.Dst + TempSuffix, file.Dst);
-            File.Move(file.Marker + TempSuffix, file.Marker, overwrite: true);
+            File.Move(file.Temp, file.Dst);
+            File.Move(file.Marker + ".tmp", file.Marker, overwrite: true);
         }
 
         public void Commit()
         {
-            if (_movedAside) Quietly(() => File.Delete(file.Dst + PreviousSuffix));
+            if (_movedAside) Quietly(() => File.Delete(file.Previous));
         }
 
         /// <summary>Puts the file, its marker and any backup made back as they were; never throws, a step that cannot be undone is skipped.</summary>
         public void Undo()
         {
-            Quietly(() => File.Delete(file.Dst + TempSuffix));
-            Quietly(() => File.Delete(file.Marker + TempSuffix));
+            Quietly(() => File.Delete(file.Temp));
+            Quietly(() => File.Delete(file.Marker + ".tmp"));
             if (_placed) Quietly(() => File.Delete(file.Dst));
-            if (_movedAside) Quietly(() => File.Move(file.Dst + PreviousSuffix, file.Dst, overwrite: true));
+            if (_movedAside) Quietly(() => File.Move(file.Previous, file.Dst, overwrite: true));
             if (_backedUp) Quietly(() => File.Delete(backupPath!));
             if (!_placed) return;
             Quietly(() =>
@@ -294,6 +326,76 @@ public static class ModInstaller
                 else File.Delete(file.Marker);
             });
         }
+    }
+
+    /// <summary>A file an earlier install put there that the package dropped: moved aside (our own file only, the original backup
+    /// takes its place), deleted with its marker once the whole install has succeeded.</summary>
+    private sealed class Removal(ModFile file) : IStep
+    {
+        private bool _movedAside;
+        private bool _restoredBackup;
+
+        public void Stage()
+        {
+        }
+
+        public void Place()
+        {
+            if (!File.Exists(file.Dst)) return;
+            if (!IsOurs(file))
+            {
+                Log.Info($"{file.Dst} was replaced by another mod, leaving it in place");
+                return;
+            }
+            File.Move(file.Dst, file.Previous, overwrite: true);
+            _movedAside = true;
+            if (!File.Exists(file.Backup)) return;
+            File.Move(file.Backup, file.Dst);
+            _restoredBackup = true;
+        }
+
+        public void Commit()
+        {
+            if (_movedAside) Quietly(() => File.Delete(file.Previous));
+            Quietly(() => File.Delete(file.Marker));
+        }
+
+        public void Undo()
+        {
+            if (_restoredBackup) Quietly(() => File.Move(file.Dst, file.Backup));
+            if (_movedAside) Quietly(() => File.Move(file.Previous, file.Dst, overwrite: true));
+        }
+    }
+
+    /// <summary>The files a folder entry owns in the game folder, as of the last install (read when this is made) and now.</summary>
+    private sealed class FolderManifest(string gameDir, string folderDst, List<string> currentDsts)
+    {
+        private readonly string? _previousText = File.Exists(ModFiles.ManifestPath(gameDir, folderDst))
+            ? File.ReadAllText(ModFiles.ManifestPath(gameDir, folderDst)) : null;
+
+        public string FilePath { get; } = ModFiles.ManifestPath(gameDir, folderDst);
+
+        /// <summary>The files the last install put there that the current package no longer has.</summary>
+        public IEnumerable<ModFile> Dropped() =>
+            ModFiles.Removed(ModFiles.ParseManifest(_previousText), currentDsts, folderDst)
+                .Select(dst => ToModFile(new AdapterFile("", dst, FolderDst: folderDst), gameDir, ""));
+
+        /// <summary>A file of this folder that the last install did not list.</summary>
+        public bool IsNew(ModFile file) =>
+            file.Entry.FolderDst == folderDst && !ModFiles.ParseManifest(_previousText).Contains(file.Entry.Dst, StringComparer.OrdinalIgnoreCase);
+
+        public void Write()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            File.WriteAllText(FilePath + ".tmp", ModFiles.FormatManifest(currentDsts));
+            File.Move(FilePath + ".tmp", FilePath, overwrite: true);
+        }
+
+        public void Restore() => Quietly(() =>
+        {
+            if (_previousText != null) File.WriteAllText(FilePath, _previousText);
+            else File.Delete(FilePath);
+        });
     }
 
     /// <summary>For steps that must not fail the install: the old copy kept aside, and undoing a failed install.</summary>
