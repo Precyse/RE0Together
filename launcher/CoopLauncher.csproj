@@ -13,6 +13,7 @@
     <RollForward>LatestMajor</RollForward>
     <UseWindowsForms>true</UseWindowsForms>
     <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

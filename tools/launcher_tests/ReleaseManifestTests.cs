@@ -21,9 +21,9 @@ public static class ReleaseManifestTests
         { "build": 7, "channel": "next", "commit": "abc",
           "full": { "asset": "Coop.zip", "sha256": "{{Hash}}", "size": 100 },
           "components": [
-            { "id": "launcher", "version": 8, "fingerprint": "f1", "asset": "launcher.zip", "sha256": "{{Hash}}", "size": 60,
+            { "id": "launcher", "version": 8, "asset": "launcher.zip", "sha256": "{{Hash}}", "size": 60,
               "files": [ { "path": "launcher/app/coop-launcher.exe", "sha256": "{{Hash}}", "size": 60 } ] },
-            { "id": "re0", "version": 3, "fingerprint": "f2", "asset": "mod-re0.zip", "sha256": "{{Hash}}", "size": 4,
+            { "id": "re0", "version": 3, "asset": "mod-re0.zip", "sha256": "{{Hash}}", "size": 4,
               "files": [ { "path": "adapters/re0/dinput8.dll", "sha256": "{{Hash}}", "size": 4 } ] } ] }
         """)!.AsObject();
 

@@ -1,7 +1,6 @@
 """Turns an assembled package into the files of a release channel: Coop.zip, launcher.zip, mod-<id>.zip per game and manifest.json.
 
-usage: python tools/release_manifest.py PACKAGE OUT --repo OWNER/REPO --channel next --build N --commit SHA --fingerprints FILE
-                                         [--previous DIR] [--legacy-zip NAME]
+usage: python tools/release_manifest.py PACKAGE OUT --repo OWNER/REPO --channel next --build N --commit SHA [--previous DIR] [--legacy-zip NAME]
 
 PACKAGE holds launcher/app (the published launcher), launcher/games/<id>.json, adapters/<id>/** per game and README.txt. The
 script writes launcher/app/update.json ({repo, channel}) and launcher/installed.json ({build, channel, commit, components}) into it,
@@ -12,11 +11,15 @@ then zips (entries sorted, fixed timestamps, forward slashes, so the same packag
 manifest.json lists every asset with its SHA-256 and size, and every component's files with theirs (the launcher reads it,
 see launcher/ReleaseManifest.cs). installed.json is not in any component: the launcher writes it last when an update is done.
 
-Every component has its own `version` and the `fingerprint` of its inputs (FILE, written by tools/release_inputs.py). DIR (--previous)
-holds the channel's previous manifest.json and component zips. A component with the same fingerprint as there keeps that zip, its
-version and its file hashes unchanged: the zip is copied byte for byte and its files replace the package's, so the build is not
-shipped. A changed component gets the previous version + 1 (1 when there is no previous entry); `build` stays the CI run number
-(release title, and the launchers released before component versions compare it).
+Every component has its own `version`. DIR (--previous) holds the channel's previous manifest.json and component zips. A component
+whose built files are exactly the previous entry's (the same paths and the same SHA-256 per file) keeps that zip, its version and its
+entry unchanged: the zip is copied byte for byte, so players do not see an update for a mod that did not change. Reuse depends on the
+output, never on the sources: the adapters build with /Brepro, the launcher publishes without the commit in its version, and nothing
+in a component carries the build number (update.json holds repo and channel; the build number is in installed.json, which is no
+component's file, and the launcher reads it from there), so the same sources give the same bytes and a change in shared sources that
+leaves a DLL's bytes alone (an RE0-only edit and the SR2 DLL) is no update. A changed component gets the previous version + 1
+(1 when there is no previous entry); `build` stays the CI run number (release title, and the launchers released before component
+versions compare it).
 --legacy-zip NAME also writes OUT/NAME: the full package plus launcher/app/version.txt (the build number), the file the launchers
 released before installed.json check after they replace their package. It is what the `latest` channel serves as RE0-Coop.zip so
 those launchers can still update once; it is in no component.
@@ -30,7 +33,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from release_inputs import LAUNCHER_ID
+LAUNCHER_ID = "launcher"
 APP_DIR = "launcher/app"
 LAUNCHER_EXE = "launcher/app/coop-launcher.exe"
 GAMES_DIR = "launcher/games"
@@ -159,59 +162,56 @@ def previous_version(entry):
     return version if isinstance(version, int) and not isinstance(version, bool) and version > 0 else 0
 
 
-def reusable_zip(entry, fingerprint, paths, previous_dir):
-    """(zip path, {file path: bytes}) of a component's previous zip when it can be shipped again, else None. It can when the fingerprint
-    and the file list are the same and the zip and every file in it are exactly what the previous manifest says."""
-    if previous_version(entry) == 0 or entry.get("fingerprint") != fingerprint:
+def built_hashes(package, paths):
+    """{path: SHA-256} of a component's freshly built files."""
+    return {path: sha256_of(package / path) for path in paths}
+
+
+def reusable_zip(entry, built, previous_dir):
+    """The path of a component's previous zip when it can be shipped again, else None. It can when the previous entry lists exactly the
+    built files with the built hashes, and the zip and every file in it are exactly what that entry says."""
+    if previous_version(entry) == 0:
         return None
     try:
         listed = {file["path"]: file for file in entry["files"]}
         zip_path = previous_dir / entry["asset"]
-        if Path(entry["asset"]).name != entry["asset"] or set(listed) != set(paths) or not zip_path.is_file():
+        if Path(entry["asset"]).name != entry["asset"] or {path: file["sha256"] for path, file in listed.items()} != built or not zip_path.is_file():
             return None
         if zip_path.stat().st_size != entry["size"] or sha256_of(zip_path) != entry["sha256"]:
             return None
         with zipfile.ZipFile(zip_path) as archive:
-            contents = {name: archive.read(name) for name in archive.namelist()}
-        intact = all(path in contents and len(contents[path]) == file["size"] and hashlib.sha256(contents[path]).hexdigest() == file["sha256"]
-                     for path, file in listed.items())
+            intact = set(archive.namelist()) == set(listed) and all(
+                len(data := archive.read(path)) == file["size"] and hashlib.sha256(data).hexdigest() == file["sha256"] for path, file in listed.items())
     except (KeyError, TypeError, AttributeError, OSError, zipfile.BadZipFile):
         return None
-    return (zip_path, contents) if intact else None
+    return zip_path if intact else None
 
 
-def build_release(package, out, repo, channel, build, commit, fingerprints, previous_dir=None, legacy_zip=None):
-    """Writes the zips and manifest.json into out and returns the manifest. A component that has the previous release's fingerprint
-    ships that release's zip and files again with its version; any other gets the previous version + 1 (see the module doc)."""
+def build_release(package, out, repo, channel, build, commit, previous_dir=None, legacy_zip=None):
+    """Writes the zips and manifest.json into out and returns the manifest. A component whose built files equal the previous release's
+    ships that release's zip again with its version; any other gets the previous version + 1 (see the module doc)."""
     write_json(package / UPDATE_FILE, {"repo": repo, "channel": channel})
     parts = components(package)
     check_covered(package, parts)
-    unknown = [part for part in parts if part not in fingerprints]
-    if unknown:
-        raise PackageError("no fingerprint for component " + ", ".join(unknown) + " (add its inputs to tools/release_inputs.py)")
     previous = load_previous(previous_dir, channel)
     reused = {}
     versions = {}
     for part, paths in parts.items():
         entry = previous_entry(previous, part)
-        reuse = reusable_zip(entry, fingerprints[part], paths, previous_dir) if entry else None
+        reuse = reusable_zip(entry, built_hashes(package, paths), previous_dir)
         if reuse:
             reused[part] = reuse
         versions[part] = previous_version(entry) + (0 if reuse else 1)
-    for part, (_, contents) in reused.items():
-        for path in parts[part]:
-            (package / path).write_bytes(contents[path])
     write_json(package / INSTALLED_FILE, {"build": build, "channel": channel, "commit": commit, "components": versions})
     write_zip(package, package_files(package, "."), out / FULL_ASSET)
     entries = []
     for part, paths in parts.items():
         zip_path = out / asset_name(part)
         if part in reused:
-            shutil.copyfile(reused[part][0], zip_path)
+            shutil.copyfile(reused[part], zip_path)
         else:
             write_zip(package, paths, zip_path)
-        entries.append({"id": part, "version": versions[part], "fingerprint": fingerprints[part], **asset_entry(zip_path),
-                        "files": [file_entry(package, path) for path in paths]})
+        entries.append({"id": part, "version": versions[part], **asset_entry(zip_path), "files": [file_entry(package, path) for path in paths]})
     manifest = {"build": build, "channel": channel, "commit": commit, "full": asset_entry(out / FULL_ASSET), "components": entries}
     write_json(out / MANIFEST_FILE, manifest)
     if legacy_zip:
@@ -227,13 +227,11 @@ def main(argv):
     parser.add_argument("--channel", required=True)
     parser.add_argument("--build", required=True, type=int)
     parser.add_argument("--commit", required=True)
-    parser.add_argument("--fingerprints", required=True, type=Path)
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--legacy-zip")
     args = parser.parse_args(argv)
     try:
-        fingerprints = json.loads(args.fingerprints.read_text(encoding="utf-8"))
-        manifest = build_release(args.package, args.out, args.repo, args.channel, args.build, args.commit, fingerprints, args.previous, args.legacy_zip)
+        manifest = build_release(args.package, args.out, args.repo, args.channel, args.build, args.commit, args.previous, args.legacy_zip)
     except (PackageError, OSError, ValueError) as error:
         print(f"release_manifest: {error}", file=sys.stderr)
         return 1

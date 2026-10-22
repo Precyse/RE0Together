@@ -11,7 +11,7 @@ public sealed record ManifestAsset(string Asset, string Sha256, long Size);
 
 /// <summary>A part of the package that updates on its own: the launcher, or one game's mod (its profile and adapter files). Its
 /// zip is <see cref="Asset"/>; <see cref="Files"/> are the files the zip carries, each with its hash. <see cref="Version"/> counts up
-/// only in a release where this component changed (its fingerprint is in the manifest too, for the release build, not read here).</summary>
+/// only in a release where this component changed.</summary>
 public sealed record ManifestComponent(string Id, int Version, string Asset, string Sha256, long Size, List<ManifestFile> Files);
 
 /// <summary>

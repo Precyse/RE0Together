@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
-# Reproducible output (no timestamp or path in the objects and the DLL): a second line of defence beside the release reusing unchanged components.
+# Reproducible output (no timestamp or path in the objects and the DLL): tools/release_manifest.py reuses a component whose built files are byte for byte the previous release's.
 if(MSVC)
     add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/Brepro>)
     add_link_options(/Brepro)

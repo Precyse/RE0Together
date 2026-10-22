@@ -3,7 +3,7 @@ name: release
 # One rolling release per channel: a push to `main` publishes `latest`, a push to `next` publishes the `preview` prerelease (a tag may not share the branch's name). Each holds
 # Coop.zip (the whole package, for first installs), launcher.zip, mod-<id>.zip per game and manifest.json (SHA-256 and size of every
 # asset and file; tools/release_manifest.py). Installed launchers read the manifest and download only the components that changed.
-# Each component has its own version. A component whose inputs (tools/release_inputs.py) are the same as in the channel's current
+# Each component has its own version. A component whose built files (paths and SHA-256) are the same as in the channel's current
 # release ships that release's zip again, byte for byte, with its version; the other components get the previous version + 1.
 # Friends install once from https://github.com/<repo>/releases/download/<channel>/Coop.zip.
 on:
@@ -32,7 +32,6 @@ jobs:
       - name: Release manifest test
         run: |
           python tools/release_manifest_test.py
-          python tools/release_inputs_test.py
 
       - uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -109,10 +108,8 @@ jobs:
           Copy-Item adapters/ds2/version.dll pkg/adapters/ds2/
           Copy-Item launcher/package/README.txt pkg/
           $legacy = if ($env:CHANNEL -eq 'latest') { @('--legacy-zip', 'RE0-Coop.zip') } else { @() }
-          python tools/release_inputs.py $env:GITHUB_SHA fingerprints.json
-          if ($LASTEXITCODE -ne 0) { throw "release_inputs failed" }
           $previous = if (Test-Path previous/manifest.json) { @('--previous', 'previous') } else { @() }
-          python tools/release_manifest.py pkg release --repo "${{ github.repository }}" --channel $env:CHANNEL --build $env:GITHUB_RUN_NUMBER --commit $env:GITHUB_SHA --fingerprints fingerprints.json @previous @legacy
+          python tools/release_manifest.py pkg release --repo "${{ github.repository }}" --channel $env:CHANNEL --build $env:GITHUB_RUN_NUMBER --commit $env:GITHUB_SHA @previous @legacy
           if ($LASTEXITCODE -ne 0) { throw "release_manifest failed" }
 
       - name: Publish rolling release
