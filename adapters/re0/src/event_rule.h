@@ -21,8 +21,12 @@ constexpr uint32_t kBusyHoldMs = 2000;       // a thread stays busy this long af
 // came in by, the item it is using): each machine keeps its own character controlled, so they fire where that player
 // met them. Shared conditions (flags, enemies, units, timers, either character) read state both machines share and
 // fire on the room's authority only, or they would fire twice. In state mode a push block's zone trigger (conditions 4 and
-// 5 naming an obstacle unit) is the pusher's: Obstacle fires on the machine that last pushed the box.
-enum class TriggerKind : uint8_t { Local, Shared, Obstacle };
+// 5 naming an obstacle unit) is the pusher's: Obstacle fires on the machine that last pushed the box. Own conditions read
+// the partner (conditions 4 and 5 naming 0x30000): the answer depends on whose partner is meant, and each machine's
+// partner is the other player's character, so each machine fires them for its own player and keeps the thread to itself.
+// Their bodies only note where the partner stands (a local flag, a presence flag below) or hurt the partner, which only
+// the partner's owner may do (player_damage); every script was read (sh0e, pl0d, pl01, pl0b, pl0c, pl13, bt02, sh06).
+enum class TriggerKind : uint8_t { Local, Shared, Obstacle, Own };
 
 constexpr uint32_t kSubjectControlled = 0x20000;  // p2 of the "unit in zone" types 4 and 5: the controlled character
 constexpr uint32_t kSubjectPartner = 0x30000;     // the partner (sPlayer +0x3c); any other word names a unit
@@ -31,6 +35,11 @@ constexpr uint32_t kLastObstacleUnit = 4;  // p2 0..4 name an obstacle unit thro
 
 constexpr bool isObstacleUnit(uint32_t p2) { return p2 <= kLastObstacleUnit; }
 
+// Presence flags: the story flags Own triggers write, "the partner stands on the lift" (sh0e 0x93, triggers 12 / 13,
+// read by the lift panel, trigger 10) and "the partner is at the fence" (pl0d 0x10d, triggers 7 / 8). Each machine's
+// value is about its own player's partner, so flag sync leaves them out.
+constexpr uint32_t kPresenceFlags[] = {0x93, 0x10d};
+
 // `obstaclesByPusher` is state mode: an obstacle unit's trigger belongs to its pusher.
 constexpr TriggerKind classify(uint32_t type, uint32_t p2, bool obstaclesByPusher = false) {
     switch (type) {
@@ -38,6 +47,7 @@ constexpr TriggerKind classify(uint32_t type, uint32_t p2, bool obstaclesByPushe
             return TriggerKind::Local;
         case 4: case 5:
             if (p2 == kSubjectControlled) return TriggerKind::Local;
+            if (p2 == kSubjectPartner) return TriggerKind::Own;
             return obstaclesByPusher && isObstacleUnit(p2) ? TriggerKind::Obstacle : TriggerKind::Shared;
         default:
             return TriggerKind::Shared;
@@ -50,7 +60,7 @@ enum class PropOwner : uint8_t { Mine, Theirs, Unknown };
 // An Obstacle trigger fires on the box's pusher; a box nobody pushed (Unknown) is the room authority's like any shared
 // trigger. A player alone in a room fires everything.
 constexpr bool mayFire(TriggerKind kind, bool peerInRoom, bool roomAuthority, PropOwner owner = PropOwner::Unknown) {
-    if (kind == TriggerKind::Local || !peerInRoom) return true;
+    if (kind == TriggerKind::Local || kind == TriggerKind::Own || !peerInRoom) return true;
     if (kind == TriggerKind::Obstacle && owner != PropOwner::Unknown) return owner == PropOwner::Mine;
     return roomAuthority;
 }
@@ -60,6 +70,7 @@ constexpr const char* name(TriggerKind kind) {
         case TriggerKind::Local: return "local";
         case TriggerKind::Shared: return "shared";
         case TriggerKind::Obstacle: return "obstacle";
+        case TriggerKind::Own: return "own";
     }
     return "shared";
 }

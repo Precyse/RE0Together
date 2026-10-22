@@ -35,6 +35,12 @@ int main() {
     check(untouched == to, "out-of-range word ignored");
 
     check(flag_diff::diff(to, to).empty(), "no changes between equal words");
+
+    auto dropped = changes;
+    flag_diff::dropBit(dropped, 3 * 32 + 2);
+    check(dropped.size() == 2 && dropped[0].set == 0 && dropped[0].clear == 0b1000, "a dropped bit leaves the rest");
+    flag_diff::dropBit(dropped, 3 * 32 + 3);
+    check(dropped.size() == 1 && dropped[0].word == 70, "a change with no bit left is removed");
     if (g_failures == 0) std::printf("flag_diff_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

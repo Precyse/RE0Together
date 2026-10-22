@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "debug_stats.h"
+#include "event_rule.h"
 #include "flag_diff.h"
 #include "flag_family.h"
 #include "flag_load_hold_rule.h"
@@ -139,7 +140,8 @@ void onTick() {
     }
     // A guest that has not joined the host's world yet keeps its flags to itself: they come from an older save.
     const bool mayPropose = !state_mode::on() || join_sync::caughtUp();
-    const std::vector<Change> local = mayPropose ? flag_diff::diff(g_known, words) : std::vector<Change>{};
+    std::vector<Change> local = mayPropose ? flag_diff::diff(g_known, words) : std::vector<Change>{};
+    for (const uint32_t bit : event_rule::kPresenceFlags) flag_diff::dropBit(local, bit);  // each machine's own
     if (!local.empty()) {
         logChanges("sent", local);
         send(local);

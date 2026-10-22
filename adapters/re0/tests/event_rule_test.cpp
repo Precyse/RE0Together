@@ -15,7 +15,6 @@ using rule::TriggerKind;
 constexpr uint16_t kRoom = 0x25;
 constexpr uint16_t kOtherRoom = 0x2c;
 constexpr uint32_t kAnySubject = 0x10000;
-constexpr uint32_t kPartnerSubject = 0x30000;
 
 int g_failures = 0;
 
@@ -32,7 +31,8 @@ void testClassify() {
     check(rule::classify(6, 0) == TriggerKind::Local, "the entry a player came in by is that player's");
     check(rule::classify(8, 0x47) == TriggerKind::Local, "using an item in a zone is the player's");
     check(rule::classify(4, rule::kSubjectControlled) == TriggerKind::Local, "controlled character in a zone");
-    check(rule::classify(4, kPartnerSubject) == TriggerKind::Shared, "partner in a zone is shared");
+    check(rule::classify(4, rule::kSubjectPartner) == TriggerKind::Own, "partner in a zone (the sh0e lift) is each machine's");
+    check(rule::classify(5, rule::kSubjectPartner) == TriggerKind::Own, "partner out of a zone too");
     check(rule::classify(5, kAnySubject) == TriggerKind::Shared, "any unit in a zone is shared");
     check(rule::classify(11, 0) == TriggerKind::Shared, "flag condition is shared");
     check(rule::classify(14, 6) == TriggerKind::Shared, "either character in a zone (the train crows) is shared");
@@ -46,6 +46,7 @@ void testMayFire() {
     check(rule::mayFire(TriggerKind::Shared, true, true), "the authority fires shared triggers");
     check(!rule::mayFire(TriggerKind::Shared, true, false), "the other machine does not");
     check(rule::mayFire(TriggerKind::Shared, false, false), "a player alone in a room fires everything");
+    check(rule::mayFire(TriggerKind::Own, true, false), "an own trigger fires on every machine for its own player");
 }
 
 void testOpRoles() {
@@ -217,7 +218,7 @@ void testObstacleTriggers() {
     check(rule::classify(5, rule::kLastObstacleUnit, true) == TriggerKind::Obstacle, "the last obstacle unit too");
     check(rule::classify(5, rule::kLastObstacleUnit + 1, true) == TriggerKind::Shared, "past the table it is a plain unit");
     check(rule::classify(4, rule::kSubjectControlled, true) == TriggerKind::Local, "the controlled character stays local");
-    check(rule::classify(4, kPartnerSubject, true) == TriggerKind::Shared, "the partner stays shared");
+    check(rule::classify(4, rule::kSubjectPartner, true) == TriggerKind::Own, "the partner stays each machine's");
     check(rule::classify(14, kBox, true) == TriggerKind::Shared, "either character in a zone stays shared");
     check(rule::classify(11, kBox, true) == TriggerKind::Shared, "other conditions are untouched");
     check(rule::isObstacleUnit(0) && rule::isObstacleUnit(4) && !rule::isObstacleUnit(5), "obstacle unit words are 0..4");

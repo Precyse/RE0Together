@@ -342,6 +342,13 @@ uintptr_t __fastcall startDetour(void* self, void* edx, uint32_t key, uint32_t i
         return 0;
     }
     const uintptr_t thread = g_originalStart(self, edx, key, index, type);
+    if (kind == TriggerKind::Own) {
+        if (thread && logDue(Line::Fired, key, static_cast<uint16_t>(index))) {
+            logger::write("event_sync: fired scene 0x%02x trigger %u (type 0x%02x, own) for %s's partner, kept here",
+                          key, index, type, character_owner::name(character_owner::localCharacter()));
+        }
+        return thread;
+    }
     const uint8_t i = slotOf(thread);
     if (i != kNoSlot) {
         track(i, thread, static_cast<uint8_t>(type), kind, character_owner::localCharacter(),

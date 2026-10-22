@@ -28,6 +28,17 @@ inline std::vector<Change> diff(const Words& from, const Words& to) {
     return changes;
 }
 
+// Takes one bit out of the changes; a change left with no bit is removed.
+inline void dropBit(std::vector<Change>& changes, uint32_t bit) {
+    const uint32_t mask = 1u << bit % 32;
+    for (Change& change : changes) {
+        if (change.word != bit / 32) continue;
+        change.set &= ~mask;
+        change.clear &= ~mask;
+    }
+    std::erase_if(changes, [](const Change& change) { return !change.set && !change.clear; });
+}
+
 // Applies one change; a change for a word out of range is ignored.
 inline void apply(Words& words, const Change& change) {
     if (change.word >= kWords) return;
