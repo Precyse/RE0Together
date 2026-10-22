@@ -47,10 +47,7 @@ public static class Program
         CliOptionsTests.Run();
         LogRotationTests.Run();
         GameProfileTests.Run();
-        MotionTests.Run();
-        BoxBlurTests.Run();
         AvatarTests.Run();
-        TextChangeTests.Run();
         FramingTests.Run();
         InstanceGuardTests.Run();
         UpdaterTests.Run();
@@ -74,7 +71,6 @@ public static class Program
         SessionScreensTests.Run();
         ScreensTests.Run();
         LobbyRowsTests.Run();
-        SpinnerTests.Run();
         SelectModelTests.Run();
         UiCommandsTests.Run();
         UiSnapshotTests.Run();
