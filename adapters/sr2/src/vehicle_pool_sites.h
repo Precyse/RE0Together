@@ -116,6 +116,29 @@ inline constexpr Bound kBounds[] = {
 
 constexpr size_t kExpectedBounds = 34;
 
+// Stack frames that hold one dword per vehicle. 0xAE3A80 (the per-frame vehicle update) and 0xAE3C60 (the per-frame vehicle
+// checks), both called by sim_frame 0x68CA70, copy the vehicle lists 0x22A84E0 and 0x22A84D4 (and 0xAE3C60 then 0x22A84DC) into
+// a 32 dword local array with no bound, the array the topmost local: the 33rd vehicle on the lists lands on the return address.
+// Every list links through vehicle +0x84DC, so the lists together hold at most the pool. Each frame grows by 32 dwords; the array
+// is addressed from esp upwards and nothing else lives above it, so only the `sub esp` and `add esp` immediates change.
+// (0xAE1CF0 has three interleaved per-candidate arrays of 32 and is not grown: docs/SR2_NOTES.md, "Vehicle pool".)
+struct StackFrame {
+    uintptr_t address;
+    std::string_view expected;
+    std::string_view replacement;
+};
+
+constexpr uint32_t kFrameGrowth = (kGrownEntries - kShippedEntries) * sizeof(uint32_t);
+
+inline constexpr StackFrame kStackFrames[] = {
+    {0xAE3A80, "81 EC 84 00 00 00", "81 EC 04 01 00 00"},  // 0xAE3A80 sub esp, 0x84
+    {0xAE3B23, "81 C4 84 00 00 00", "81 C4 04 01 00 00"},  // its add esp, 0x84 before the ret
+    {0xAE3C66, "81 EC 88 00 00 00", "81 EC 08 01 00 00"},  // 0xAE3C60 sub esp, 0x88
+    {0xAE3DC4, "81 C4 88 00 00 00", "81 C4 08 01 00 00"},  // its add esp, 0x88 before the ret
+};
+
+constexpr size_t kExpectedStackFrames = 4;
+
 // The two spawners of parked vehicles test `0x20 - vehicles in use` (the pool size) in a block of their own: each becomes a call
 // to a thunk that answers with the headroom of the new pool, the result in the register the block loaded.
 inline constexpr partner_sites::Site kHeadroomBlocks[] = {

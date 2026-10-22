@@ -94,8 +94,8 @@ uintptr_t stubOf(partner_sites::Thunk thunk) {
 
 // ---- What the move writes ----
 
-// The checks (no replacement) or the writes of the whole move: every reference dword, every bound immediate, both headroom
-// blocks. `newBase` is where each table lives after the move; null for the checks.
+// The checks (no replacement) or the writes of the whole move: every reference dword, every bound immediate, every stack frame
+// size, both headroom blocks. `newBase` is where each table lives after the move; null for the checks.
 std::vector<CodePatch> movePatches(const uint32_t* newBase) {
     std::vector<CodePatch> patches;
     for (const vehicle_pool_references::Reference& reference : vehicle_pool_references::kReferences) {
@@ -107,6 +107,10 @@ std::vector<CodePatch> movePatches(const uint32_t* newBase) {
     for (const vehicle_pool_sites::Bound& bound : vehicle_pool_sites::kBounds) {
         patches.push_back({vehicle_pool_sites::tableOf(bound.table).name, bound.address, partner_sites::parseHex(bound.expected),
                            newBase ? partner_sites::parseHex(bound.replacement) : std::vector<uint8_t>{}});
+    }
+    for (const vehicle_pool_sites::StackFrame& frame : vehicle_pool_sites::kStackFrames) {
+        patches.push_back({"stack frame", frame.address, partner_sites::parseHex(frame.expected),
+                           newBase ? partner_sites::parseHex(frame.replacement) : std::vector<uint8_t>{}});
     }
     for (const partner_sites::Site& site : vehicle_pool_sites::kHeadroomBlocks) {
         patches.push_back({site.id, site.address, partner_sites::parseHex(site.expected),
@@ -240,8 +244,9 @@ bool request() {
     const bool match = codeMatches(movePatches(nullptr));
     g_wanted = match;
     if (match) {
-        logger::write("vehicle pool: %zu references, %zu bounds and %zu headroom blocks match", std::size(vehicle_pool_references::kReferences),
-                      std::size(vehicle_pool_sites::kBounds), std::size(vehicle_pool_sites::kHeadroomBlocks));
+        logger::write("vehicle pool: %zu references, %zu bounds, %zu stack frames and %zu headroom blocks match",
+                      std::size(vehicle_pool_references::kReferences), std::size(vehicle_pool_sites::kBounds),
+                      std::size(vehicle_pool_sites::kStackFrames), std::size(vehicle_pool_sites::kHeadroomBlocks));
     } else {
         logger::write("vehicle pool: not installed, the exe differs from the research");
     }
@@ -287,8 +292,8 @@ bool install() {
     relinkNodes(base[indexOf(TableId::Nodes)]);
     for (size_t i = 0; i < kAllocatorCount; ++i) growAllocator(vehicle_pool_sites::kCustomAllocators[i], blocks.extra[i]);
     g_installed = true;
-    logger::write("vehicle pool: %u vehicles, %zu references and %zu bounds rewritten", kGrownEntries, std::size(vehicle_pool_references::kReferences),
-                  std::size(vehicle_pool_sites::kBounds));
+    logger::write("vehicle pool: %u vehicles, %zu references, %zu bounds and %zu stack frames rewritten", kGrownEntries,
+                  std::size(vehicle_pool_references::kReferences), std::size(vehicle_pool_sites::kBounds), std::size(vehicle_pool_sites::kStackFrames));
     return true;
 }
 

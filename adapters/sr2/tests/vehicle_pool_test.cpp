@@ -1,5 +1,5 @@
 // The vehicle pool move of milestone 15 B3 (no game): the reference table against the research inventory, the address math of the
-// move, the bound immediates and headroom blocks as data, their clearance from every other site and from Juiced, and the stores
+// move, the bound immediates, stack frames and headroom blocks as data, their clearance from every other site and from Juiced, and the stores
 // that bring the new tables to the state the game's constructors leave the shipped ones in.
 #include <algorithm>
 #include <cstdio>
@@ -23,6 +23,7 @@ namespace {
 using vehicle_pool_references::kReferences;
 using vehicle_pool_sites::kBounds;
 using vehicle_pool_sites::kHeadroomBlocks;
+using vehicle_pool_sites::kStackFrames;
 using vehicle_pool_sites::kTables;
 using vehicle_pool_sites::Table;
 using vehicle_pool_sites::TableId;
@@ -155,6 +156,40 @@ void theBoundsAndTheHeadroomBlocks() {
     check(kHeadroomBlocks[0].thunk != kHeadroomBlocks[1].thunk, "HD1 and HD2 have a thunk each (ecx and eax)");
 }
 
+uint32_t frameImmediate(std::string_view instruction) {
+    const auto bytes = partner_sites::parseHex(instruction);
+    uint32_t value = 0;
+    for (size_t i = 0; i < kDwordBytes; ++i) value |= static_cast<uint32_t>(bytes[bytes.size() - kDwordBytes + i]) << (8 * i);
+    return value;
+}
+
+// 0xAE3A80 and 0xAE3C60 copy the vehicle lists into a 32 dword array, the topmost local: with the shipped frame the 33rd vehicle is
+// written onto the return address (the Juiced crash of 2026-10-22 00:49:25, EIP = a vehicle).
+void theStackFrames() {
+    check(std::size(kStackFrames) == vehicle_pool_sites::kExpectedStackFrames && vehicle_pool_sites::kExpectedStackFrames == 4,
+          "4 stack frame immediates");
+    const std::vector<uint8_t> subEsp = {0x81, 0xEC};
+    const std::vector<uint8_t> addEsp = {0x81, 0xC4};
+    bool grown = true;
+    for (size_t i = 0; i < std::size(kStackFrames); ++i) {
+        const auto before = partner_sites::parseHex(kStackFrames[i].expected);
+        const auto after = partner_sites::parseHex(kStackFrames[i].replacement);
+        const std::vector<uint8_t> opcode(before.begin(), before.begin() + 2);
+        const bool expectedOpcode = i % 2 == 0 ? opcode == subEsp : opcode == addEsp;
+        const bool sameOpcode = before.size() == 6 && after.size() == 6 && std::equal(before.begin(), before.begin() + 2, after.begin());
+        grown = grown && expectedOpcode && sameOpcode &&
+                frameImmediate(kStackFrames[i].replacement) == frameImmediate(kStackFrames[i].expected) + vehicle_pool_sites::kFrameGrowth;
+    }
+    check(grown, "each frame is a sub esp and its add esp, and grows by 32 dwords");
+    bool paired = true;
+    for (size_t i = 0; i + 1 < std::size(kStackFrames); i += 2) {
+        paired = paired && frameImmediate(kStackFrames[i].expected) == frameImmediate(kStackFrames[i + 1].expected) &&
+                 kStackFrames[i].address < kStackFrames[i + 1].address;
+    }
+    check(paired, "the add esp of each function undoes its sub esp, after it");
+    check(vehicle_pool_sites::kFrameGrowth == 0x80, "32 more dwords are 0x80 bytes");
+}
+
 struct Range {
     uintptr_t address;
     size_t size;
@@ -165,6 +200,7 @@ std::vector<Range> everyWrittenRange() {
     std::vector<Range> ranges;
     for (const auto& row : kReferences) ranges.push_back({row.site, kDwordBytes, "reference"});
     for (const auto& bound : kBounds) ranges.push_back({bound.address, partner_sites::parseHex(bound.expected).size(), "bound"});
+    for (const auto& frame : kStackFrames) ranges.push_back({frame.address, partner_sites::parseHex(frame.expected).size(), "stack frame"});
     for (const auto& site : kHeadroomBlocks) ranges.push_back({site.address, partner_sites::parseHex(site.expected).size(), site.id});
     return ranges;
 }
@@ -330,6 +366,7 @@ int main() {
     theReferenceTableMatchesTheInventory();
     theAddressMath();
     theBoundsAndTheHeadroomBlocks();
+    theStackFrames();
     theClearance();
     theConstructors();
     theByteTableReset();
