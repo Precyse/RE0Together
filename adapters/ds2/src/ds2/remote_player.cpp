@@ -9,9 +9,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstring>
-#include <map>
 #include <mutex>
-#include <string>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
@@ -210,8 +208,6 @@ void setBodyVisible(bool visible) {
     logger::write("remote_body: %s", visible ? "unparked" : "parked");
 }
 
-// The world the remote lived in is gone (return to title, another load): the engine destroys its entities with it,
-// so only this module's references are dropped, and the body is created again once gameplay resumes.
 // The world the remote lived in is going: its entity goes with it, so the player is only taken out of the player
 // manager's lists (the load back to the title waits for every listed player to be ready). Its entity pointer is cleared
 // first so the removal does not touch the dead entity, and an extra reference on the player objects keeps the removal
@@ -242,13 +238,9 @@ void removeBodyEntity(uintptr_t entity) {
 
 // The body's baggage owner holds real pieces (the gear it is born with, the mirrored rack). They are saved with the world, and
 // a piece whose owner is gone when the save is loaded lies on the ground at the spawn point, so each body that was taken down
-// or saved with its pieces leaves a pile of the partner's gear there. The pieces of a body taken out of a world that goes on
-// are deleted with it; the log counts the loose pieces around Sam at the start of gameplay (before the body exists) and once the
-// body has been live a while, to tell a pile left by a load from one made by the body's own creation.
-constexpr double kLooseLogRadiusMetres = 30.0;
-constexpr auto kLooseLogAfterLive = std::chrono::seconds(15);
+// or saved with its pieces would leave a pile of the partner's gear there. The pieces of a body taken out of a world that goes
+// on are deleted with it; the ones a load dropped carry the body's mark and equip_sync sweeps them (game::markOwnedCargo).
 std::atomic<uint64_t> g_bodyOwnerKey{0};
-bool g_looseLoggedAtStart = false, g_looseLoggedLive = false;
 
 void deleteBodyCargo() {
     const uint64_t key = g_bodyOwnerKey.exchange(0);
@@ -256,17 +248,6 @@ void deleteBodyCargo() {
     const std::vector<game::Cargo> pieces = game::ownedCargo(key);
     for (const game::Cargo& piece : pieces) game::removeCargoLater(piece.handle);
     logger::write("remote_body: %zu pieces of the body's own cargo deleted with it", pieces.size());
-}
-
-void logLooseCargo(const char* when) {
-    decima::WorldTransform at;
-    if (!ds2::entityTransform(samEntity(), at)) return;
-    std::map<uint32_t, int> kinds;
-    const std::vector<game::LooseCargo> loose = game::looseCargo({at.position.x, at.position.y, at.position.z}, kLooseLogRadiusMetres);
-    for (const game::LooseCargo& piece : loose) ++kinds[piece.type];
-    std::string list;
-    for (const auto& [kind, count] : kinds) list += " " + std::to_string(kind) + "x" + std::to_string(count);
-    logger::write("cargo: %zu loose pieces within %.0f m of Sam %s:%s", loose.size(), kLooseLogRadiusMetres, when, list.c_str());
 }
 
 // `removeEntity`: the world stays (a fast travel, a body that died), so the entity is removed too; when the world itself
@@ -278,7 +259,6 @@ void forgetBody(const char* why, bool removeEntity = false) {
         deleteBodyCargo();  // the owner is gone with the entity, so its pieces can be deleted without touching the live equipment code
     }
     g_bodyOwnerKey = 0;
-    g_looseLoggedAtStart = g_looseLoggedLive = false;
     unlistPlayer();
     g_entity = 0;
     g_netPlayer = 0;
@@ -324,10 +304,6 @@ void advance() {
     if (g_stage != Stage::Idle && (!sim_tick::gameplayActive() || samEntity() != g_samAtSpawn)) worldLeft("gameplay ended", false);
     switch (g_stage) {
         case Stage::Idle:
-            if (!g_looseLoggedAtStart && sim_tick::worldReady()) {
-                g_looseLoggedAtStart = true;
-                logLooseCargo("at the start of gameplay, before the body");
-            }
             if (g_enabled.load() && sim_tick::worldReady() && targetFresh()) {
                 g_samAtSpawn = samEntity();
                 spawn();
@@ -339,10 +315,6 @@ void advance() {
             break;
         case Stage::Live:
             g_bodyOwnerKey = ds2::field<uint64_t>(g_entity.load(), ds2::kEntityNetworkId);
-            if (!g_looseLoggedLive && Clock::now() - g_liveSince > kLooseLogAfterLive) {
-                g_looseLoggedLive = true;
-                logLooseCargo("after the body has been live a while");
-            }
             if (Clock::now() - g_liveSince < kMarkerRepairWindow) remote_marker::repair();
             remote_ride::tick();
             if (diedLongAgo()) {
