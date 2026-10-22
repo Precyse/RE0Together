@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <set>
+#include <vector>
 
 // Pure rules of room event replication (no game access, unit tested; docs/re/RE0_EVENT_SYNC.md). A room script thread
 // runs on both machines. Its leader is the owner of the character the script treats as the player (its subject: the
@@ -26,6 +28,9 @@ constexpr uint32_t kBusyHoldMs = 2000;       // a thread stays busy this long af
 // partner is the other player's character, so each machine fires them for its own player and keeps the thread to itself.
 // Their bodies only note where the partner stands (a local flag, a presence flag below) or hurt the partner, which only
 // the partner's owner may do (player_damage); every script was read (sh0e, pl0d, pl01, pl0b, pl0c, pl13, bt02, sh06).
+// Condition 35 tests this machine's camera cut (scene record +0x10), so it is Local; a camera trigger whose thread writes
+// a presence flag (0x37, "the partner is in one of these cuts", 31 triggers in 13 rooms) is Own: event_sync reads the started
+// thread with `writesPresenceFlag` (both kinds fire anywhere, so the start comes first).
 enum class TriggerKind : uint8_t { Local, Shared, Obstacle, Own };
 
 constexpr uint32_t kSubjectControlled = 0x20000;  // p2 of the "unit in zone" types 4 and 5: the controlled character
@@ -36,14 +41,24 @@ constexpr uint32_t kLastObstacleUnit = 4;  // p2 0..4 name an obstacle unit thro
 constexpr bool isObstacleUnit(uint32_t p2) { return p2 <= kLastObstacleUnit; }
 
 // Presence flags: the story flags Own triggers write, "the partner stands on the lift" (sh0e 0x93, triggers 12 / 13,
-// read by the lift panel, trigger 10) and "the partner is at the fence" (pl0d 0x10d, triggers 7 / 8). Each machine's
-// value is about its own player's partner, so flag sync leaves them out.
-constexpr uint32_t kPresenceFlags[] = {0x93, 0x10d};
+// read by the lift panel, trigger 10), "the partner is at the fence" (pl0d 0x10d, triggers 7 / 8) and "the partner is in
+// one of these camera cuts" (0x37, the camera triggers' `OnCameraBit 0x30000`). Each machine's value is about its own
+// player's partner, so flag sync leaves them out.
+constexpr uint32_t kPresenceFlags[] = {0x37, 0x93, 0x10d};
+
+constexpr bool isPresenceFlag(uint32_t flag) {
+    for (const uint32_t presence : kPresenceFlags) {
+        if (presence == flag) return true;
+    }
+    return false;
+}
+
+constexpr uint32_t kCameraCondition = 35;
 
 // `obstaclesByPusher` is state mode: an obstacle unit's trigger belongs to its pusher.
 constexpr TriggerKind classify(uint32_t type, uint32_t p2, bool obstaclesByPusher = false) {
     switch (type) {
-        case 1: case 2: case 6: case 7: case 8: case 9: case 10: case 22: case 30: case 31:
+        case 1: case 2: case 6: case 7: case 8: case 9: case 10: case 22: case 30: case 31: case kCameraCondition:
             return TriggerKind::Local;
         case 4: case 5:
             if (p2 == kSubjectControlled) return TriggerKind::Local;
@@ -78,6 +93,9 @@ constexpr const char* name(TriggerKind kind) {
 // Opcode indices (rows of the table at 0xcd57d8; tools/re0/bes2.py prints them by name).
 namespace op {
 constexpr uint16_t kFrame = 1, kWait = 2, kWaitMovie = 3;
+constexpr uint16_t kJmp = 4, kExit = 5, kJe = 6, kJl = 7, kJg = 8, kLoop = 9, kLoopReg = 10, kGosub = 13, kRet = 14;
+constexpr uint16_t kFlagSet = 36;
+constexpr uint16_t kCount = 312;  // rows in the table
 constexpr uint16_t kMes = 49, kMesSel = 50, kMesCommon = 51, kMesSe = 52, kMesCommonSe = 53, kNomes = 54, kNomesEnd = 55;
 constexpr uint16_t kDoor = 56, kDoorCamera = 57;
 constexpr uint16_t kItemGet = 60, kItemCheck = 61, kItemGetCheck = 62, kItemSub = 63, kKeyCheck = 64;
@@ -110,7 +128,8 @@ constexpr uint16_t kDoorCancel = 299, kMesDialog = 302, kUseKey = 304;
 //               keeps their own character); the subject changes and the thread's lead passes to its owner.
 //   Follow:     TraceOff / TraceOn: the partner stops or starts following. Run on neither machine (party_mode owns the
 //               game's follow flag): the thread notes it for its doors and the host sets the party mode.
-//   Body:       the op writes one character's body (position, motion, think, attachment, reset): in state mode
+//   Body:       the op writes one character's body (position, motion, think, attachment, reset, the equipped weapon
+//               of PlayerEquip, which names the partner in tr08 and pl18): in state mode
 //               it runs only where that character is owned (`bodyRun`); in input mode it is a Run.
 //   Run:        everything else, on both machines, with the subject as the controlled character.
 enum class OpRole : uint8_t { Run, LeaderOnly, Wait, Switch, Follow, Body };
@@ -128,7 +147,7 @@ constexpr OpRole roleOf(uint16_t opcode) {
         case kSubMove: case kCharPoint: case kCharPointY: case kCharAddY: case kChPosSet: case kCorrectPos:
         case kPlayerAnimSet: case kPlayerAnimSet2: case kPlayerAnimSetSpeed: case kNeckRotation:
         case kPlayerAnimPause: case kPlayerReset: case kPlayerReset2: case kPlayerClimb: case kPlayerClimbPos:
-        case kPlayerAddChild: case kPlayerEventStart: case kGameOver:
+        case kPlayerAddChild: case kPlayerEventStart: case kGameOver: case kPlayerEquip:
             return OpRole::Body;
         case kUpCutNoReload: case kUpCutSetKirari: case kUpCutEndDoff: case kUpCutEndUnreset:
         case kMes: case kMesSel: case kMesCommon: case kMesSe: case kMesCommonSe: case kNomes: case kNomesEnd:
@@ -138,11 +157,44 @@ constexpr OpRole roleOf(uint16_t opcode) {
         case kSubItemJp: case kSubItemRet: case kSubItemRet2: case kSubItem: case kSub: case kSubReadyGet:
         case kSubReadyGetParam: case kSubReadySelect: case kSubReadyTemp: case kSubGetResult: case kSubGetItem:
         case kSubCall: case kSubDelete:
-        case kSavePoint: case kPlayerEquip: case kMemoryWeapon: case kCompWeapon: case kEventExec:
+        case kSavePoint: case kMemoryWeapon: case kCompWeapon: case kEventExec:
             return OpRole::LeaderOnly;
         default:
             return opcode >= kUpCutFirst && opcode <= kUpCutLast ? OpRole::LeaderOnly : OpRole::Run;
     }
+}
+
+// ---- Reading a thread's code ----
+// Whether a thread starting at `start` can reach a FlagSet of a presence flag, following jumps, branches, loops and
+// gosubs to their exits. `code` reads the script: opcode(pc), word(pc) (the op's first operand as a big-endian u16: a
+// target or a flag number) and size(pc) (bytes of the op with its operands). An opcode outside the table ends its path.
+constexpr size_t kMaxWalkOps = 4096;
+
+constexpr bool isBranch(uint16_t opcode) {
+    using namespace op;
+    return opcode == kJe || opcode == kJl || opcode == kJg || opcode == kLoop || opcode == kLoopReg || opcode == kGosub;
+}
+
+template <class Code>
+bool writesPresenceFlag(const Code& code, uint32_t start) {
+    std::vector<uint32_t> paths{start};
+    std::set<uint32_t> seen;
+    while (!paths.empty()) {
+        uint32_t pc = paths.back();
+        paths.pop_back();
+        while (seen.size() < kMaxWalkOps && seen.insert(pc).second) {
+            const uint16_t opcode = code.opcode(pc);
+            if (opcode >= op::kCount || opcode == op::kExit || opcode == op::kRet) break;
+            if (opcode == op::kFlagSet && isPresenceFlag(code.word(pc))) return true;
+            if (opcode == op::kJmp) {
+                pc = code.word(pc);
+                continue;
+            }
+            if (isBranch(opcode)) paths.push_back(code.word(pc));
+            pc += code.size(pc);
+        }
+    }
+    return false;
 }
 
 // ---- Busy threads (partner_mode=state: what a door follow and the host's save gate ask) ----

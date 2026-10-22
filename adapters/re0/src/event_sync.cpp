@@ -152,12 +152,16 @@ void moveTo(uintptr_t thread, uint32_t pc) {
     game::writeMemory(thread + game::kThreadSubStateOffset, uint32_t{0});
 }
 
+// The big-endian u16 at `offset` of a script's code.
+uint16_t codeWord(uintptr_t code, uint32_t offset) {
+    std::array<uint8_t, 2> bytes{};
+    if (!code || !game::readMemory(code + offset, bytes)) return 0;
+    return static_cast<uint16_t>(bytes[0] << 8 | bytes[1]);
+}
+
 // The big-endian opcode at the thread's pc.
 uint16_t opcodeAt(uintptr_t thread) {
-    const uintptr_t code = game::readPointer(thread + game::kThreadCodeOffset);
-    std::array<uint8_t, 2> bytes{};
-    if (!code || !game::readMemory(code + pcOf(thread), bytes)) return 0;
-    return static_cast<uint16_t>(bytes[0] << 8 | bytes[1]);
+    return codeWord(game::readPointer(thread + game::kThreadCodeOffset), pcOf(thread));
 }
 
 // The big-endian dword operand `index` of the op at the thread's pc, for ops whose operands before it are dwords.
@@ -176,6 +180,26 @@ uint32_t opSize(uint16_t opcode) {
         game::readPointer(game::kOpcodeTable + opcode * game::kOpcodeRowSize + game::kOpcodeSignatureOffset));
     const auto operands = reinterpret_cast<OperandSizeFunction>(game::kOperandSizeFunction)(signature);
     return game::kOpcodeSize + static_cast<uint32_t>(operands);
+}
+
+// A thread's script code as event_rule::writesPresenceFlag reads it.
+struct ThreadCode {
+    uintptr_t base;
+    uint16_t opcode(uint32_t pc) const { return codeWord(base, pc); }
+    uint16_t word(uint32_t pc) const { return codeWord(base, pc + game::kOpcodeSize); }
+    uint32_t size(uint32_t pc) const { return opSize(opcode(pc)); }
+};
+
+std::map<uint32_t, bool> g_presenceWriters;  // game thread: (key << 16 | index) of camera triggers read so far
+
+// Whether the trigger's thread writes a presence flag, read once per trigger (a room's script never changes).
+bool writesPresenceFlag(uintptr_t thread, uint32_t key, uint32_t index) {
+    const auto [it, fresh] = g_presenceWriters.try_emplace(key << 16 | index, false);
+    if (fresh) {
+        const ThreadCode code{game::readPointer(thread + game::kThreadCodeOffset)};
+        it->second = event_rule::writesPresenceFlag(code, pcOf(thread));
+    }
+    return it->second;
 }
 
 uint32_t activeMask(uintptr_t script) {
@@ -333,7 +357,7 @@ uintptr_t __fastcall startDetour(void* self, void* edx, uint32_t key, uint32_t i
     if (!net_pad::active() || caller == game::kItemProbeStartReturn) return g_originalStart(self, edx, key, index, type);
     const bool scanned = caller == game::kTriggerScanStartReturn;
     const uint32_t param2 = scanned ? triggerParam2(self, key, index) : 0;
-    const TriggerKind kind = scanned ? event_rule::classify(type, param2, state_mode::on()) : TriggerKind::Local;
+    TriggerKind kind = scanned ? event_rule::classify(type, param2, state_mode::on()) : TriggerKind::Local;
     const event_rule::PropOwner boxOwner = kind == TriggerKind::Obstacle
                                                ? prop_sync::triggerOwner(static_cast<uint16_t>(key), static_cast<uint8_t>(param2))
                                                : event_rule::PropOwner::Unknown;
@@ -342,6 +366,9 @@ uintptr_t __fastcall startDetour(void* self, void* edx, uint32_t key, uint32_t i
         return 0;
     }
     const uintptr_t thread = g_originalStart(self, edx, key, index, type);
+    if (thread && scanned && type == event_rule::kCameraCondition && writesPresenceFlag(thread, key, index)) {
+        kind = TriggerKind::Own;
+    }
     if (kind == TriggerKind::Own) {
         if (thread && logDue(Line::Fired, key, static_cast<uint16_t>(index))) {
             logger::write("event_sync: fired scene 0x%02x trigger %u (type 0x%02x, own) for %s's partner, kept here",

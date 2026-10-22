@@ -1,6 +1,7 @@
 // Checks the room event replication rules (no game). Exit 0 when every check passes.
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "../src/event_rule.h"
 #include "../src/event_sync.h"
@@ -39,6 +40,7 @@ void testClassify() {
     check(rule::classify(12, 0) == TriggerKind::Shared, "an enemy's death is shared");
     check(rule::classify(18, 0) == TriggerKind::Shared, "a timer is shared");
     check(rule::classify(37, 0) == TriggerKind::Shared, "the room-start delay is shared");
+    check(rule::classify(rule::kCameraCondition, 0x3f) == TriggerKind::Local, "this machine's camera cut is its own player's");
 }
 
 void testMayFire() {
@@ -150,7 +152,8 @@ void testBodyRoles() {
     const uint16_t bodyOps[] = {o::kSubMove, o::kCharPoint, o::kCharPointY, o::kCharAddY, o::kChPosSet, o::kCorrectPos,
                                 o::kPlayerAnimSet, o::kPlayerAnimSet2, o::kPlayerAnimSetSpeed, o::kNeckRotation,
                                 o::kPlayerAnimPause, o::kPlayerReset, o::kPlayerReset2, o::kPlayerClimb,
-                                o::kPlayerClimbPos, o::kPlayerAddChild, o::kPlayerEventStart, o::kGameOver};
+                                o::kPlayerClimbPos, o::kPlayerAddChild, o::kPlayerEventStart, o::kGameOver,
+                                o::kPlayerEquip};
     for (const uint16_t code : bodyOps) check(rule::roleOf(code) == OpRole::Body, "a single-target body op is Body");
     constexpr uint16_t kDemoEntryPos = 226, kCorrectPos2 = 276, kAfterDemo = 233, kAfterDemo2 = 236, kAfterDemoNc = 270;
     constexpr uint16_t kPlayerPause = 158, kControlPause = 277;
@@ -200,6 +203,68 @@ void testBodyRun() {
     check(rule::runFor(o::kChPosSet, rule::kSubjectPartner, partnerPuppet, false) == BodyRun::Skip,
           "only SubMove runs for an absent owner");
     check(rule::movesAbsentOwner(o::kSubMove, false) && !rule::movesAbsentOwner(o::kSubMove, true), "absent owner rule");
+    check(rule::runFor(o::kPlayerEquip, rule::kSubjectPartner, partnerPuppet, true) == BodyRun::Skip,
+          "unequipping a puppet partner is its owner's (tr08, pl18)");
+    check(rule::runFor(o::kPlayerEquip, rule::kSubjectPartner, controlledPuppet, true) == BodyRun::Run,
+          "the follower's swapped partner is its own character and is unequipped there");
+}
+
+// A script as writesPresenceFlag reads it: big-endian opcodes and u16 first operands at fixed offsets.
+class FakeCode {
+public:
+    void put(uint32_t pc, uint16_t opcode, uint16_t word = 0) {
+        if (bytes_.size() < pc + 4) bytes_.resize(pc + 4);
+        bytes_[pc] = static_cast<uint8_t>(opcode >> 8);
+        bytes_[pc + 1] = static_cast<uint8_t>(opcode);
+        bytes_[pc + 2] = static_cast<uint8_t>(word >> 8);
+        bytes_[pc + 3] = static_cast<uint8_t>(word);
+    }
+    uint16_t opcode(uint32_t pc) const { return read(pc); }
+    uint16_t word(uint32_t pc) const { return read(pc + 2); }
+    uint32_t size(uint32_t pc) const {
+        namespace o = rule::op;
+        switch (opcode(pc)) {
+            case o::kJmp: case o::kJe: case o::kJl: case o::kJg: case o::kGosub: return 4;
+            case o::kLoop: return 6;
+            case o::kFlagSet: return 5;
+            default: return 2;
+        }
+    }
+
+private:
+    uint16_t read(uint32_t at) const {
+        return at + 1 < bytes_.size() ? static_cast<uint16_t>(bytes_[at] << 8 | bytes_[at + 1]) : rule::op::kExit;
+    }
+    std::vector<uint8_t> bytes_;
+};
+
+// sh0e trigger 25's shape: a branch to a gosub whose subroutine sets the flag.
+FakeCode cameraTrigger(uint16_t flag) {
+    namespace o = rule::op;
+    FakeCode code;
+    code.put(0x00, o::kJe, 0x0a);
+    code.put(0x04, o::kJmp, 0x10);
+    code.put(0x0a, o::kGosub, 0x14);
+    code.put(0x0e, o::kExit);
+    code.put(0x10, o::kExit);
+    code.put(0x14, o::kFlagSet, flag);
+    code.put(0x19, o::kRet);
+    return code;
+}
+
+void testPresenceWalk() {
+    namespace o = rule::op;
+    check(rule::isPresenceFlag(0x37) && rule::isPresenceFlag(0x93) && !rule::isPresenceFlag(0x92), "presence flags");
+    check(rule::writesPresenceFlag(cameraTrigger(0x37), 0), "a presence flag behind a branch and a gosub is found");
+    check(!rule::writesPresenceFlag(cameraTrigger(0x92), 0), "another flag is not a presence flag");
+    FakeCode unreachable;
+    unreachable.put(0x00, o::kExit);
+    unreachable.put(0x02, o::kFlagSet, 0x37);
+    check(!rule::writesPresenceFlag(unreachable, 0), "code after exit is not reached");
+    FakeCode loop;
+    loop.put(0x00, o::kFlagSet, 0x10);
+    loop.put(0x05, o::kJmp, 0x00);
+    check(!rule::writesPresenceFlag(loop, 0), "a loop back ends the walk");
 }
 
 void testClimbPlacement() {
@@ -254,6 +319,7 @@ int main() {
     testBusyThreads();
     testStartFate();
     testObstacleTriggers();
+    testPresenceWalk();
     testWire();
     if (g_failures == 0) std::printf("event_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

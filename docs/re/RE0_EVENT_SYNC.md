@@ -20,7 +20,7 @@ actions and branches, the same spawned enemies, the same cutscene, in step, run 
 | Trigger scan | **0x568270** (thiscall, key; ret 4), from cRoomPhaseMain's update 0x608ad0 (call 0x6097e7) every frame, key = loaded scene id (scene record +8) | for each trigger i: `cond = table[type](key, entry)` (condition table **0xd97368**, 45 types); true starts the thread. Only the Main phase scans. |
 | Thread start | `startThreadOnce` **0x57f800** (thiscall (key, index, type); ret 0xc; returns the thread or 0) | 0 when a thread of (key, index) already runs. Callers: the scan (return 0x568530), the inventory's item use 0x568080 (return 0x568193) and the item-use probe 0x567e90 (return 0x567fa1, which runs the thread's first ops and kills it at once: a "can this item be used here" test). Forks: EventExec 0x5714c0 calls startThread 0x57f7e0 (key, pc). |
 | Thread run | sEventScript update **0x5835a0** (thiscall, no args), from the Main phase right after the scan and from three other phase updates | per active slot, op dispatch **0x57ce80** (thiscall (thread); ret 4) calls the opcode's handler: 1 = run the next op now, 0 = yield to the next frame, 2 = thread ends (0x581b90 ends a thread). An op that waits returns 0 with the pc unchanged; a finished op moves the pc (some, like `frame`, move it and yield). |
-| Condition types | 0xd97368[type] | Read the controlled character only (sPlayer +0x2c: zone, pad, inventory, entry the room was entered by, the item being used): 1, 2, 6, 7, 8, 9, 10, 22, 30, 31, and 4/5 with p2 = 0x20000. 4/5 with p2 = 0x30000 read the partner (sPlayer +0x3c, 0x96cd30). The rest read flags, enemies or other units, timers, or both characters (14: controlled or partner in zone). |
+| Condition types | 0xd97368[type] | Read the controlled character only (sPlayer +0x2c: zone, pad, inventory, entry the room was entered by, the item being used): 1, 2, 6, 7, 8, 9, 10, 22, 30, 31, and 4/5 with p2 = 0x20000. 4/5 with p2 = 0x30000 read the partner (sPlayer +0x3c, 0x96cd30). 35 (0x566d70) reads this machine's camera cut (scene record +0x10). The rest read flags, enemies or other units, timers, or both characters (14: controlled or partner in zone). |
 
 Every script guards its body with story flags: `ResFlag G; if G == 0 { FlagSet G, 1; ...body... }`. A crows event,
 most likely train room tr07 (trigger 6, type 14 = either character in zone 6; inferred from the script, the live
@@ -46,7 +46,8 @@ player's screen, is done by that character's owner; everything else runs on both
    - *Shared* conditions (flags, enemies, units, timers, either character) fire only on the room's authority, the
      machine that runs the room's enemies (`door_travel::enemyAuthority`, the same claim enemy sync uses), while the
      peer is in the room; the other machine's start is refused. A player alone in a room fires everything (vanilla).
-   - *Own* conditions (4/5 naming the partner, 0x30000) fire on every machine for its own player and are not sent:
+   - *Own* conditions (4/5 naming the partner, 0x30000, and camera triggers, 35, whose thread writes a presence flag,
+     0x37 "the partner is in these cuts") fire on every machine for its own player and are not sent:
      each machine's partner is the other player's character, and the flag they write ("the partner is on the lift",
      sh0e 0x93, read by the lift panel) must answer for the player who reads it. flag_sync leaves these presence flags
      out (`event_rule::kPresenceFlags`). Fired on the authority alone they told Billy's panel whether Billy was aboard.
