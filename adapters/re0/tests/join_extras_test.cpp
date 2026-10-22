@@ -44,7 +44,7 @@ wire::JoinExtras sample() {
     extras.worldEpoch = 6;
     extras.claims = {claim(0x2d, 2, 0), claim(0x08, 1, 0)};
     extras.props = {commitAt(0x2d, 1)};
-    extras.items = {takeAt(0x2d, 0x2b), takeAt(0x08, 0x14), takeAt(0x08, 0x0f)};
+    extras.items = {takeAt(0x0109, 0x2b), takeAt(0x010b, 0x14), takeAt(0x010b, 0x0f)};
     return extras;
 }
 
@@ -65,12 +65,12 @@ void testRoundTrip() {
     check(got->props.size() == 1 && got->props[0].scene == 0x2d && got->props[0].unitId == 1 && got->props[0].yaw == 1.5f &&
               got->props[0].committer == 1,
           "the prop commit survives");
-    check(got->items.size() == 3 && got->items[1].itemId == 0x14 && got->items[2].scene == 0x08,
-          "the items survive in order");
+    check(got->items.size() == 3 && got->items[1].itemId == 0x14 && got->items[2].scene == 0x010b,
+          "the items survive in order, their rooms (stage << 8 | room, above the scene id limit) too");
     const item_ledger_rule::Key key = wire::keyOf(got->items[0]);
-    check(key.scene == 0x2d && key.itemId == 0x2b && key.pos[2] == 200.0f, "an item becomes a ledger key");
+    check(key.scene == 0x0109 && key.itemId == 0x2b && key.pos[2] == 200.0f, "an item becomes a ledger key");
     const wire::ItemTake back = wire::takeOf(key);
-    check(back.scene == 0x2d && back.itemId == 0x2b && back.pos[0] == 100.0f && back.reserved == 0, "and back");
+    check(back.scene == 0x0109 && back.itemId == 0x2b && back.pos[0] == 100.0f && back.reserved == 0, "and back");
 }
 
 void testEmpty() {
@@ -139,8 +139,6 @@ void testEntryRefusals() {
     extras.items[2].pos[1] = std::numeric_limits<float>::infinity();
     check(!wire::decode(raw(extras)), "an item at a non-finite position is refused");
     extras = sample();
-    extras.items[1].scene = wire::kSceneLimit;
-    check(!wire::decode(raw(extras)), "an item of a scene the game does not have is refused");
     extras = sample();
     extras.items[1].reserved = 1;
     check(!wire::decode(raw(extras)), "a reserved item field must be zero");
@@ -151,7 +149,7 @@ void testEncodeCutsToLimits() {
     extras.snapshotSerial = 2;
     extras.worldEpoch = 1;
     extras.props.assign(wire::kMaxProps + 5, commitAt(0x2d, 0));
-    extras.items.assign(wire::kMaxItems + 5, takeAt(0x2d, 0x2b));
+    extras.items.assign(wire::kMaxItems + 5, takeAt(0x0109, 0x2b));
     const auto got = wire::decode(raw(extras));
     check(got && got->props.size() == wire::kMaxProps && got->items.size() == wire::kMaxItems,
           "lists beyond their limits are cut to them, so the message still decodes");

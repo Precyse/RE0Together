@@ -56,7 +56,7 @@ constexpr size_t kMaxItems = item_ledger_rule::kMaxEntries;
 
 // An item the host's ledger knows was taken since the last save or load.
 struct ItemTake {
-    uint16_t scene;
+    uint16_t scene;  // the room, stage << 8 | room (item_ledger_rule::Key), not a scene id
     uint16_t reserved;
     uint32_t itemId;
     float pos[3];
@@ -157,7 +157,7 @@ inline std::optional<JoinExtras> decode(std::span<const uint8_t> bytes) {
         if (!prop_wire::decodeCommit(proto::bytesOf(commit))) return std::nullopt;
     }
     for (const ItemTake& take : extras.items) {
-        if (take.reserved != 0 || take.scene >= kSceneLimit || take.itemId > item_wire::kMaxItemId ||
+        if (take.reserved != 0 || take.itemId > item_wire::kMaxItemId ||
             !detail::finite(take.pos)) {
             return std::nullopt;
         }
