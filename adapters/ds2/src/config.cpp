@@ -21,6 +21,45 @@ std::string trim(const std::string& s) {
     return s.substr(begin, s.find_last_not_of(" \t\r") - begin + 1);
 }
 
+// The on/off settings: "1" turns one on, "0" off, anything else leaves its default (config.h).
+struct Flag {
+    const char* key;
+    bool Config::*field;
+};
+constexpr Flag kFlags[] = {
+    {"overlay", &Config::overlay},
+    {"self_marker", &Config::selfMarker},
+    {"mirror_animation", &Config::mirrorAnimation},
+    {"enemy_sync", &Config::enemySync},
+    {"log_facts", &Config::logFacts},
+    {"diagnostics", &Config::diagnostics},
+    {"orders_diagnostics", &Config::ordersDiagnostics},
+    {"test_commands", &Config::testCommands},
+    {"god_mode", &Config::godMode},
+    {"cutscene_log", &Config::cutsceneLog},
+    {"cutscene_sync", &Config::cutsceneSync},
+    {"weapon_sync", &Config::weaponSync},
+    {"gear_restore", &Config::gearRestore},
+    {"remote_body", &Config::remoteBody},
+};
+
+unsigned long number(const std::string& value) { return std::strtoul(value.c_str(), nullptr, kDecimalBase); }
+
+void apply(Config& config, const std::string& key, const std::string& value) {
+    for (const Flag& flag : kFlags) {
+        if (key != flag.key) continue;
+        if (value == "1" || value == "0") config.*flag.field = value == "1";
+        return;
+    }
+    if (key == "port") {
+        config.port = static_cast<uint16_t>(number(value));
+    } else if (key == "cutscene_share_min_frames") {
+        config.cutsceneShareMinFrames = static_cast<uint32_t>(number(value));
+    } else if (key == "weapon_attach_mode") {
+        config.weaponAttachMode = static_cast<uint8_t>(number(value));
+    }
+}
+
 }  // namespace
 
 Config loadConfig() {
@@ -33,43 +72,7 @@ Config loadConfig() {
     while (std::getline(file, line)) {
         const auto eq = line.find('=');
         if (eq == std::string::npos) continue;
-        const std::string key = trim(line.substr(0, eq));
-        const std::string value = trim(line.substr(eq + 1));
-        if (key == "port") {
-            config.port = static_cast<uint16_t>(std::strtoul(value.c_str(), nullptr, kDecimalBase));
-        } else if (key == "overlay") {
-            config.overlay = value != "0";
-        } else if (key == "self_marker") {
-            config.selfMarker = value == "1";
-        } else if (key == "mirror_animation") {
-            config.mirrorAnimation = value == "1";
-        } else if (key == "enemy_sync") {
-            config.enemySync = value != "0";
-        } else if (key == "log_facts") {
-            config.logFacts = value == "1";
-        } else if (key == "diagnostics") {
-            config.diagnostics = value == "1";
-        } else if (key == "orders_diagnostics") {
-            config.ordersDiagnostics = value == "1";
-        } else if (key == "test_commands") {
-            config.testCommands = value == "1";
-        } else if (key == "god_mode") {
-            config.godMode = value == "1";
-        } else if (key == "cutscene_log") {
-            config.cutsceneLog = value == "1";
-        } else if (key == "cutscene_share_min_frames") {
-            config.cutsceneShareMinFrames = static_cast<uint32_t>(std::strtoul(value.c_str(), nullptr, 10));
-        } else if (key == "cutscene_sync") {
-            config.cutsceneSync = value == "1";
-        } else if (key == "weapon_sync") {
-            config.weaponSync = value != "0";
-        } else if (key == "gear_restore") {
-            config.gearRestore = value == "1";
-        } else if (key == "weapon_attach_mode") {
-            config.weaponAttachMode = static_cast<uint8_t>(std::strtoul(value.c_str(), nullptr, kDecimalBase));
-        } else if (key == "remote_body") {
-            config.remoteBody = value != "0";
-        }
+        apply(config, trim(line.substr(0, eq)), trim(line.substr(eq + 1)));
     }
     logger::write("config: port=%u overlay=%d self_marker=%d remote_body=%d", config.port, config.overlay,
                   config.selfMarker, config.remoteBody);
