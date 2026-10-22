@@ -105,7 +105,7 @@ void enableCoop(const Config& config) {
     enemy_damage_hook::install();
     enemy_target::install();
     enemy_decision::install();
-    enemy_spawn::install();
+    enemy_spawn::install(config.trace);
     player_damage::install(g_net);
     menu_mirror::enable();
     if (!gui_text::enable()) logger::write("adapter: menu text hook unavailable");

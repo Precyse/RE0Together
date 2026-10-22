@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 #include <vector>
 
 #include "debug_stats.h"
@@ -30,16 +31,20 @@ struct Created {
 };
 std::array<std::optional<Created>, game::kEnemyPoolSlots> g_created{};  // state mode, game thread only
 
-// A created enemy is not in sEnemy's pool when the create returns: its class's start (vtable slot 32, e.g. 0x420ab0,
-// which calls the pool insert 0x416c40) puts it there on a later frame. Until then it waits here, and each game tick
-// binds the ones that took a slot.
+// A created enemy is not in sEnemy's pool when the create returns (every create of the 2026-10-22 runs): its class's
+// start (vtable slot 32) puts it in its class's table later, through one of game::kEnemyTableInserts, which are hooked.
+// Until then it waits here; the insert binds it.
 struct Pending {
     uintptr_t enemy;
     std::optional<enemy_spawn::Origin> origin;  // state mode
     uint32_t ticks = 0;
 };
-constexpr uint32_t kMaxPendingTicks = 600;  // a created enemy that never takes a slot (refused by its start) is dropped
+constexpr uint32_t kMaxPendingTicks = 600;  // a created enemy that never takes a slot (an object, not an enemy) is dropped
 std::vector<Pending> g_pending;             // game thread only
+bool g_trace = false;                       // config trace=1: log every table insert and every dropped create
+
+using InsertFunction = uint32_t(__fastcall*)(void* self, void* edx, void* enemy);
+std::array<InsertFunction, game::kEnemyTableInserts.size()> g_originalInsert{};
 
 // The random state this record's creation starts from on every machine, or false when the record is unreadable.
 bool seedFor(void* self, uint32_t index, spawn_seed::State& out) {
@@ -99,11 +104,45 @@ bool settle(Pending& pending) {
         return true;
     }
     if (++pending.ticks < kMaxPendingTicks) return false;
-    logger::write("enemy_spawn: created enemy %p never took a pool slot", reinterpret_cast<void*>(pending.enemy));
+    if (g_trace) logger::write("enemy_spawn: created unit %p never took a pool slot", reinterpret_cast<void*>(pending.enemy));
     return true;
 }
 
 void settlePending() { std::erase_if(g_pending, settle); }
+
+// A class's start put `enemy` in table `table` at `index` (the engine's own moment for the pool slot).
+void onInsert(size_t table, void* enemy, uint32_t index) {
+    const auto address = reinterpret_cast<uintptr_t>(enemy);
+    const int slot = index < game::kEnemyTableEntries
+                         ? static_cast<int>((game::kEnemyTableInserts[table].table - game::kEnemyPoolOffset) /
+                                                game::kEnemyPoolEntrySize + index)
+                         : enemy_registry::kNoSlot;
+    const auto pending = std::find_if(g_pending.begin(), g_pending.end(),
+                                      [address](const Pending& waiting) { return waiting.enemy == address; });
+    const bool addressable = slot != enemy_registry::kNoSlot && slot < game::kEnemyPoolSlots;
+    if (g_trace) {
+        logger::write("enemy_spawn: table 0x%03x insert of %p -> index %u (slot %d%s%s)",
+                      static_cast<unsigned>(game::kEnemyTableInserts[table].table), enemy, index, slot,
+                      addressable ? "" : ", not a pool slot here", pending != g_pending.end() ? ", created here" : "");
+    }
+    if (!addressable || pending == g_pending.end()) return;
+    bind(slot, *pending);
+    g_pending.erase(pending);
+}
+
+template <size_t Table>
+uint32_t __fastcall insertDetour(void* self, void* edx, void* enemy) {
+    const uint32_t index = g_originalInsert[Table](self, edx, enemy);
+    onInsert(Table, enemy, index);
+    return index;
+}
+
+template <size_t... Tables>
+bool installInserts(std::index_sequence<Tables...>) {
+    return (hooks::install("enemy table insert", game::kEnemyTableInserts[Tables].function,
+                           reinterpret_cast<void*>(&insertDetour<Tables>), reinterpret_cast<void**>(&g_originalInsert[Tables])) &&
+            ...);
+}
 
 // A create returned this enemy (new, or the one already standing for the record): bound now when it has a slot, else
 // on a later tick.
@@ -194,10 +233,13 @@ bool spawnIdOf(const Context& context, uint16_t record, uint16_t& out) {
 
 namespace enemy_spawn {
 
-bool install() {
+bool install(bool trace) {
+    g_trace = trace;
     game_tick::addCallback("enemy_spawn", settlePending);
-    return hooks::install("enemy create", game::kEnemyCreateFunction, reinterpret_cast<void*>(createDetour),
-                          reinterpret_cast<void**>(&g_originalCreate));
+    const bool create = hooks::install("enemy create", game::kEnemyCreateFunction, reinterpret_cast<void*>(createDetour),
+                                       reinterpret_cast<void**>(&g_originalCreate));
+    const bool inserts = installInserts(std::make_index_sequence<game::kEnemyTableInserts.size()>{});
+    return create && inserts;
 }
 
 std::optional<Origin> originOf(int slot, uintptr_t enemy) {

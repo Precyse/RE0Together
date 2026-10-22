@@ -7,8 +7,8 @@
 // base family's variant +0x6ab0 = rand % 3 on a first spawn). The create runs with the random state set from the record
 // (spawn_seed.h) and the game's own state is put back right after, so both machines create the same enemy and the rest
 // of the game's randomness is untouched. Always on in co-op: a room created before the partner joined matches too.
-// A created enemy takes its sEnemy pool slot only in its class's start (vtable slot 32, pool insert 0x416c40), a frame
-// or more after the create returned; a game tick binds it then. Bound, it clears its pool slot's waiting decision and
+// A created enemy takes its sEnemy pool slot only in its class's start (vtable slot 32: its class table's insert,
+// game::kEnemyTableInserts), after the create returned; the hooked insert binds it then (a game tick also looks). Bound, it clears its pool slot's waiting decision and
 // follow state (enemy_decision, enemy_state), so a script spawn that reuses a freed slot never inherits the previous
 // enemy's, and the slot remembers which spawn record its enemy was created from: the identity both machines share, which
 // the enemy observers bind a stream entry to the local enemy by (until 2026-10-22 the binding ran at the create, found
@@ -21,8 +21,9 @@ struct Origin {
     uint16_t spawnId;  // low word of the record's spawn id (+0x10), the word the game's flag tests use
 };
 
-// Hooks the create. False when the hook failed.
-bool install();
+// Hooks the create and the seven per-class table inserts (game::kEnemyTableInserts). `trace` (config trace=1) logs
+// every insert with its table, index and pool slot. False when a hook failed.
+bool install(bool trace);
 
 // Game thread: the spawn the enemy `enemy` standing in pool slot `slot` was created from, or nothing when it was not
 // created through the hook (the slot may have been reused by a creation that bypassed it).
