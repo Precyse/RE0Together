@@ -100,7 +100,7 @@ jobs:
           $tag = $env:CHANNEL
           $firstInstall = "https://github.com/${{ github.repository }}/releases/download/$tag/Coop.zip"
           $notes = "Automated build $env:GITHUB_RUN_NUMBER of $env:GITHUB_SHA on $env:GITHUB_REF_NAME. First install: unzip $firstInstall anywhere and run launcher\app\coop-launcher.exe; it updates itself from then on."
-          $flags = if ($tag -eq 'latest') { @() } else { @('--prerelease') }
+          [string[]]$flags = if ($tag -eq 'latest') { @() } else { @('--prerelease') }
           $assets = Get-ChildItem release -File | Where-Object { $_.Name -ne 'manifest.json' } | ForEach-Object { $_.FullName }
 
           gh release view $tag *> $null
