@@ -23,9 +23,10 @@ internal static class LobbyRowModels
     /// <summary>The rows for a status: the lobbies of the search plus the friends' lobbies it did not find (a friends-only lobby
     /// is not in a public search), narrowed to the filter and to one game (null: every game). A lobby of a game this launcher does
     /// not know is dropped. <paramref name="statusOf"/> is a game's mod state; <paramref name="localBuild"/> is this launcher's
-    /// build and <paramref name="newerBuild"/> the newer one on offer (0 when none).</summary>
+    /// version and <paramref name="newerBuild"/> the newer one on offer (0 when none); <paramref name="newerModOf"/> gives the mod
+    /// version on offer for a game (0 when none).</summary>
     public static IReadOnlyList<LobbyRowModel> Of(AppStatus status, LobbyFilter filter, string? gameId, IReadOnlyList<GameProfile> games,
-        Func<string, GameStatus> statusOf, int localBuild, int newerBuild)
+        Func<string, GameStatus> statusOf, int localBuild, int newerBuild, Func<string, int> newerModOf)
     {
         var friends = status.FriendLobbies.Select(friend => friend.Listing).OfType<LobbyListing>().ToList();
         var listings = filter == LobbyFilter.Friends
@@ -37,7 +38,7 @@ internal static class LobbyRowModels
             var game = games.FirstOrDefault(known => known.Id == listing.GameId);
             if (game == null || gameId != null && game.Id != gameId) continue;
             var mod = statusOf(game.Id);
-            rows.Add(new LobbyRowModel(listing, game, ActionFor(listing, mod, localBuild, newerBuild), ModDiffers(listing, mod)));
+            rows.Add(new LobbyRowModel(listing, game, ActionFor(listing, mod, localBuild, newerBuild, newerModOf(game.Id)), ModDiffers(listing, mod)));
         }
         return rows;
     }
@@ -45,11 +46,11 @@ internal static class LobbyRowModels
     /// <summary>The host's mod build is known and is not the one installed here.</summary>
     public static bool ModDiffers(LobbyListing listing, GameStatus mod) => listing.ModBuild > 0 && listing.ModBuild != mod.Mod.Build;
 
-    /// <summary>The button of a lobby, first that applies: another launcher build is an Update when it is the newer build on offer,
-    /// else unavailable; a full lobby; another mod build is an Update when this launcher's package carries that build (it is
-    /// installed) or when it is the newer launcher build on offer, else unavailable; a game or a build here that does not match the
-    /// host's is unavailable; otherwise Join. A build of 0 is unknown and never differs.</summary>
-    public static LobbyAction ActionFor(LobbyListing listing, GameStatus mod, int localBuild, int newerBuild)
+    /// <summary>The button of a lobby, first that applies: another launcher version is an Update when it is the newer one on offer,
+    /// else unavailable; a full lobby; another mod version is an Update when this launcher's package carries that version (it is
+    /// installed) or when it is the game's newer mod version on offer (<paramref name="newerMod"/>), else unavailable; a game or a
+    /// build here that does not match the host's is unavailable; otherwise Join. A version of 0 is unknown and never differs.</summary>
+    public static LobbyAction ActionFor(LobbyListing listing, GameStatus mod, int localBuild, int newerBuild, int newerMod)
     {
         if (listing.LauncherBuild != 0 && listing.LauncherBuild != localBuild)
             return newerBuild == listing.LauncherBuild ? LobbyAction.UpdateLauncher : LobbyAction.Unavailable;
@@ -57,7 +58,7 @@ internal static class LobbyRowModels
         if (ModDiffers(listing, mod))
         {
             if (mod.PackageBuild == listing.ModBuild && mod.GameFound) return LobbyAction.UpdateMod;
-            return newerBuild == listing.ModBuild ? LobbyAction.UpdateLauncher : LobbyAction.Unavailable;
+            return newerMod == listing.ModBuild ? LobbyAction.UpdateLauncher : LobbyAction.Unavailable;
         }
         if (!mod.GameFound || listing.GameBuild != 0 && listing.GameBuild != mod.GameBuild) return LobbyAction.Unavailable;
         return LobbyAction.Join;

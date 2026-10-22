@@ -6,7 +6,7 @@ namespace CoopLauncher;
 
 public enum ModState { NotInstalled, Installed, UpdateAvailable, Modified }
 
-/// <summary>A game's mod as found in its game folder: the state and the package build recorded when it was installed (0 if unknown).</summary>
+/// <summary>A game's mod as found in its game folder: the state and the mod version recorded when it was installed (0 if unknown).</summary>
 public readonly record struct ModStatus(ModState State, int Build);
 
 /// <summary>
@@ -15,14 +15,15 @@ public readonly record struct ModStatus(ModState State, int Build);
 /// it equals the package copy (an install that was cut short before the marker). Any other file in the way is the player's: it
 /// is kept as <c>.cfbak</c> (<c>.cfbak2</c>, ... when one exists, never overwritten) and the original <c>.cfbak</c> is restored
 /// on uninstall. A file that carries our marker but another hash was replaced by another mod or damaged
-/// (<see cref="ModState.Modified"/>); install repairs it. The installed package build is recorded beside the first file
-/// (<c>.cfbuild</c>). The files a folder entry installed are listed in its manifest, so an update removes the ones the package
+/// (<see cref="ModState.Modified"/>); install repairs it. The package's version of the mod (the mod component in installed.json) is
+/// recorded beside the first file (<c>.cfbuild</c>, "v12"). The files a folder entry installed are listed in its manifest, so an update removes the ones the package
 /// dropped. Markers, backups and the manifest of a folder entry sit under <c>.cfmod</c> beside the folder (see
 /// <see cref="ModFile"/>). An install, with the removals of an update, changes all files or none.
 /// </summary>
 public static class ModInstaller
 {
     private const byte NameEnd = 0;
+    private const string VersionPrefix = "v";
 
     private static bool _hashFailureLogged;
 
@@ -100,6 +101,8 @@ public static class ModInstaller
         var placements = new List<Placement>();
         var removals = new List<Removal>();
         var manifests = Manifests(files, gameDir);
+        var wasInstalled = File.Exists(files[0].Build);
+        var previousVersion = ReadBuild(files[0]);
         try
         {
             report.Begin(ModStep.Checking, files.Sum(PackageWeight), files.Count);
@@ -135,11 +138,13 @@ public static class ModInstaller
                 removal.Place();
                 report.Advance(1);
             }
-            WriteBuild(files[0]);
+            var version = BuildCheck.LocalModVersion(profile.Id);
+            WriteBuild(files[0], version);
             foreach (var manifest in manifests) manifest.Write();
             foreach (var placement in placements) placement.Commit();
             foreach (var removal in removals) removal.Commit();
-            Log.Info($"Installed the {profile.Name} mod");
+            var subject = $"{profile.Name} mod";
+            Log.Info(wasInstalled ? VersionLines.Updated(subject, version, previousVersion) : VersionLines.Installed(subject, version));
             report.Finish();
             return true;
         }
@@ -312,17 +317,35 @@ public static class ModInstaller
 
     private static bool IsEmptyFolder(string dir) => Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any();
 
-    private static void WriteBuild(ModFile first)
+    /// <summary>Records the package's mod version for an installed mod whose files already are the package's (a release that changed
+    /// nothing in them still counts the component up), so the version other players see for it is the package's. True when it changed.</summary>
+    public static bool RecordPackageVersion(GameProfile profile, string gameDir)
+    {
+        var version = BuildCheck.LocalModVersion(profile.Id);
+        var first = Files(profile, gameDir)[0];
+        var was = ReadBuild(first);
+        if (version == BuildInfo.DevBuild || version == was) return false;
+        WriteBuild(first, version);
+        Log.Info(VersionLines.Updated($"{profile.Name} mod", version, was));
+        return true;
+    }
+
+    private static void WriteBuild(ModFile first, int version)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(first.Build)!);
-        File.WriteAllText(first.Build + ".tmp", BuildCheck.LocalBuild().ToString());
+        File.WriteAllText(first.Build + ".tmp", VersionPrefix + version);
         File.Move(first.Build + ".tmp", first.Build, overwrite: true);
     }
 
     private static string? ReadMarker(ModFile file) => File.Exists(file.Marker) ? File.ReadAllText(file.Marker).Trim() : null;
 
-    private static int ReadBuild(ModFile first) =>
-        File.Exists(first.Build) && int.TryParse(File.ReadAllText(first.Build).Trim(), out var build) ? build : 0;
+    /// <summary>The mod version recorded in <c>.cfbuild</c> ("v12"); 0 when none. A bare number is the release number an earlier
+    /// launcher recorded, a count the per-mod versions do not continue, so it reads as unknown.</summary>
+    private static int ReadBuild(ModFile first)
+    {
+        var text = File.Exists(first.Build) ? File.ReadAllText(first.Build).Trim() : string.Empty;
+        return text.StartsWith(VersionPrefix) && int.TryParse(text[VersionPrefix.Length..], out var version) ? version : 0;
+    }
 
     private static string Hash(string path)
     {

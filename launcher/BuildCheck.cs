@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 namespace CoopLauncher;
 
 /// <summary>
-/// One machine's build, as BUILD_INFO carries it: launcher build (the release build in installed.json; 0 = dev build), installed game build (Steam
+/// One machine's build, as BUILD_INFO carries it: launcher build (the launcher component's version in installed.json; 0 = dev build), installed game build (Steam
 /// buildid; 0 = unknown), and the hash of the installed mod files (<see cref="ModInstaller.ContentHash"/>; null = not
 /// installed or unknown, sent as all zero). A payload from an older launcher is shorter: the missing fields skip their check.
 /// </summary>
@@ -85,8 +85,12 @@ public sealed class BuildCheck
         _isHost = session.IsHost;
     }
 
-    /// <summary>This package's release build (<see cref="InstalledRelease"/>); 0 for a dev build.</summary>
-    public static int LocalBuild() => InstalledRelease.ReadBuild(InstalledRelease.PathFor(AppContext.BaseDirectory));
+    /// <summary>This launcher's version, the one the release gives the launcher component (<see cref="InstalledRelease"/>); 0 for a dev
+    /// build. Two machines whose launchers differ in it do not play together; the mods have their own gate (the content hash).</summary>
+    public static int LocalBuild() => InstalledRelease.ReadLocal().VersionOf(InstalledRelease.LauncherId);
+
+    /// <summary>The version of a game's mod in this package (the mod component of the release); 0 for a dev build.</summary>
+    public static int LocalModVersion(string gameId) => InstalledRelease.ReadLocal().VersionOf(gameId);
 
     /// <summary>Subscribe before the save sync, so BUILD_INFO goes out ahead of the save files.</summary>
     public static BuildCheck Create(GameProfile profile, string? gameDir, Session session, ITransport transport)

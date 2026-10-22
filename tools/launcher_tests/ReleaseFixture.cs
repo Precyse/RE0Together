@@ -6,7 +6,8 @@ using CoopLauncher;
 namespace LauncherTests;
 
 /// <summary>A release built in a temp folder, with no network: <see cref="Set"/> puts files into a package, <see cref="Publish"/>
-/// zips each component and writes the manifest, and <see cref="Source"/> hands the zips to the updater like the release does.</summary>
+/// zips each component and writes the manifest, and <see cref="Source"/> hands the zips to the updater like the release does.
+/// A component's version counts up in the publish where its files changed, like the real release does.</summary>
 internal sealed class ReleaseFixture : IDisposable
 {
     public const string LauncherExe = "launcher/app/coop-launcher.exe";
@@ -21,6 +22,8 @@ internal sealed class ReleaseFixture : IDisposable
         ["ds2"] = ["launcher/games/ds2.json", Ds2Dll],
     };
 
+    private readonly Dictionary<string, int> _versions = [];
+    private readonly Dictionary<string, string> _digests = [];
     private int _published;
 
     public ReleaseFixture()
@@ -54,7 +57,7 @@ internal sealed class ReleaseFixture : IDisposable
     }
 
     /// <summary>Zips the components of the package as it is now into the asset folder and returns the release's manifest
-    /// (also written as manifest.json). Build numbers count up with each call.</summary>
+    /// (also written as manifest.json). Build numbers count up with each call, a component's version only when its files changed.</summary>
     public ReleaseManifest Publish()
     {
         _published++;
@@ -69,7 +72,7 @@ internal sealed class ReleaseFixture : IDisposable
     public void InstallPackage()
     {
         Directory.CreateDirectory(Path.Combine(Root, "launcher"));
-        new InstalledRelease(_published).Write(Path.Combine(Root, "launcher", InstalledRelease.FileName));
+        new InstalledRelease(_published, Components: new Dictionary<string, int>(_versions)).Write(Path.Combine(Root, "launcher", InstalledRelease.FileName));
         foreach (var path in Components.Values.SelectMany(paths => paths))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(Root, path))!);
@@ -79,7 +82,10 @@ internal sealed class ReleaseFixture : IDisposable
 
     public string ReadRoot(string path) => File.ReadAllText(Path.Combine(Root, path));
 
-    public int InstalledBuild() => InstalledRelease.ReadBuild(Path.Combine(Root, "launcher", InstalledRelease.FileName));
+    public InstalledRelease Installed() => InstalledRelease.Read(Path.Combine(Root, "launcher", InstalledRelease.FileName));
+
+    /// <summary>installed.json names exactly the versions of <paramref name="manifest"/>.</summary>
+    public bool IsAt(ReleaseManifest manifest) => Installed().Matches(manifest);
 
     public void Dispose() => Directory.Delete(Dir, recursive: true);
 
@@ -87,7 +93,10 @@ internal sealed class ReleaseFixture : IDisposable
     {
         var asset = ZipAsset(Path.Combine(Assets, id + ".zip"), paths);
         var files = paths.Select(path => new ManifestFile(path, ComponentUpdate.Sha256Of(Path.Combine(Package, path)), new FileInfo(Path.Combine(Package, path)).Length)).ToList();
-        return new ManifestComponent(id, id + ".zip", asset.Sha256, asset.Size, files);
+        var digest = string.Join('|', files.Select(file => file.Sha256));
+        if (!_digests.TryGetValue(id, out var last) || last != digest) _versions[id] = _versions.GetValueOrDefault(id) + 1;
+        _digests[id] = digest;
+        return new ManifestComponent(id, _versions[id], id + ".zip", asset.Sha256, asset.Size, files);
     }
 
     private ManifestAsset ZipAsset(string zipPath, IEnumerable<string> paths)

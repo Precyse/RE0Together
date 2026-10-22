@@ -4,8 +4,8 @@ namespace CoopLauncher.Gui;
 /// nothing newer (shown for a moment).</summary>
 internal enum UpdateCheck { Idle, Checking, UpToDate }
 
-/// <summary>The window's one update path: the release is read in the background, a newer build is offered (Update to N),
-/// downloaded and installed in the background without starting it (Downloading), and then waits for the player's restart
+/// <summary>The window's one update path: the release is read in the background, a change to any component (the launcher or a
+/// game's mod) is offered (Update launcher vN, Update mods), downloaded and installed in the background without starting it (Downloading), and then waits for the player's restart
 /// (Restart); an update that leaves the launcher as it is (mods only) needs no restart. With "Check for updates at start" on the
 /// download starts by itself, but only while no session is open (the package is replaced on disk); with it off it starts on the
 /// click. A failed install returns to the offer. The player can also ask for a check (<see cref="CheckNow"/>); it follows the same path. <see cref="Settled"/> says when the package on disk will not change by itself.
@@ -15,6 +15,8 @@ internal sealed class UpdateFlow
     private enum Phase { None, Offered, Downloading, Ready }
 
     private const int UpToDateShownMs = 1500;
+
+    private static readonly IReadOnlyDictionary<string, int> NoMods = new Dictionary<string, int>();
 
     private readonly TaskScheduler _ui = TaskScheduler.FromCurrentSynchronizationContext();
     private Phase _phase = Phase.None;
@@ -35,8 +37,11 @@ internal sealed class UpdateFlow
     /// waits for the click, or an installed update needs no restart. The mods can be brought up to the package now.</summary>
     public event Action? Settled;
 
-    /// <summary>The newer build on offer, 0 while none is known.</summary>
+    /// <summary>The launcher version on offer, 0 while the launcher is not among the changes.</summary>
     public int NewerBuild { get; private set; }
+
+    /// <summary>The mod version on offer for each game whose mod component changed.</summary>
+    public IReadOnlyDictionary<string, int> NewerMods { get; private set; } = NoMods;
 
     /// <summary>A download is under way (the package is being replaced).</summary>
     public bool Busy => _phase == Phase.Downloading;
@@ -47,7 +52,7 @@ internal sealed class UpdateFlow
     /// <summary>The top bar button's label, or null while there is nothing to offer.</summary>
     public string? Label => _phase switch
     {
-        Phase.Offered => $"Update to {NewerBuild}",
+        Phase.Offered => NewerBuild > 0 ? $"Update launcher v{NewerBuild}" : "Update mods",
         Phase.Downloading => _percent > 0 ? $"Downloading {_percent}%" : "Downloading",
         Phase.Ready => "Restart",
         _ => null,
@@ -91,11 +96,10 @@ internal sealed class UpdateFlow
             _reading = false;
             var wasAsked = _asked;
             _asked = false;
-            var release = task.Result;
-            if (release?.Build is { } build && build > BuildCheck.LocalBuild()) Offer(build);
+            if (task.Result is { UpdateAvailable: true } release) Offer(release);
             else
             {
-                if (wasAsked && release != null) ShowUpToDate();
+                if (wasAsked && task.Result != null) ShowUpToDate();
                 Settled?.Invoke();
             }
         }, _ui);
@@ -126,14 +130,23 @@ internal sealed class UpdateFlow
         if (RestartOffered) RestartRequested?.Invoke();
     }
 
-    internal void Offer(int build)
+    internal void Offer(ReleaseFeed.Release release)
     {
         if (_phase == Phase.Downloading) return;
-        NewerBuild = build;
+        var changed = release.Changed;
+        var launcherChanged = changed.Any(component => component.Id == InstalledRelease.LauncherId);
+        if (launcherChanged || _phase != Phase.Ready) NewerBuild = launcherChanged ? release.Build : 0;
+        NewerMods = changed.Where(component => component.Id != InstalledRelease.LauncherId).ToDictionary(component => component.Id, component => component.Version);
         _phase = Updater.Staged ? Phase.Ready : Phase.Offered;
         Changed?.Invoke();
         StartAutomaticDownload();
         if (_phase != Phase.Downloading) Settled?.Invoke();
+    }
+
+    private void ClearOffer()
+    {
+        NewerBuild = 0;
+        NewerMods = NoMods;
     }
 
     private void StartAutomaticDownload()
@@ -157,7 +170,7 @@ internal sealed class UpdateFlow
             _percent = 0;
             _phase = !task.Result ? Phase.Offered : Updater.Staged ? Phase.Ready : Phase.None;
             if (_phase == Phase.Ready) Log.Event($"Build {NewerBuild} ready");
-            if (_phase == Phase.None) NewerBuild = 0;
+            if (_phase == Phase.None) ClearOffer();
             Changed?.Invoke();
             if (_phase == Phase.None) Settled?.Invoke();
         }, _ui);

@@ -21,10 +21,10 @@ public static class LobbyRowsTests
         new(id, game, 7, "Zed", players, max, launcher, mod, build, new Dictionary<string, string>(), [], 0, ping);
 
     private static IReadOnlyList<LobbyRowModel> Rows(AppStatus status, LobbyFilter filter = LobbyFilter.All, string? game = null) =>
-        LobbyRowModels.Of(status, filter, game, Games, _ => Status(), Local, 0);
+        LobbyRowModels.Of(status, filter, game, Games, _ => Status(), Local, 0, _ => 0);
 
-    private static LobbyAction Action(LobbyListing listing, GameStatus? status = null, int newer = 0) =>
-        LobbyRowModels.ActionFor(listing, status ?? Status(), Local, newer);
+    private static LobbyAction Action(LobbyListing listing, GameStatus? status = null, int newer = 0, int newerMod = 0) =>
+        LobbyRowModels.ActionFor(listing, status ?? Status(), Local, newer, newerMod);
 
     public static void Run()
     {
@@ -58,7 +58,8 @@ public static class LobbyRowsTests
         Check.That(Action(Listing(mod: 409)) == LobbyAction.Unavailable, "action: another mod build that nothing here provides is unavailable");
         Check.That(Action(Listing(mod: 409), Status(installedMod: 409, packageBuild: 412)) == LobbyAction.Join, "action: the installed mod matching the host's joins");
         Check.That(Action(Listing(mod: 412), Status(installedMod: 409, packageBuild: 412)) == LobbyAction.UpdateMod, "action: the package carrying the host's mod build installs it");
-        Check.That(Action(Listing(mod: Newer), Status(installedMod: 412), Newer) == LobbyAction.UpdateLauncher, "action: a mod build only the newer launcher has is a launcher Update");
+        Check.That(Action(Listing(mod: Newer), Status(installedMod: 412), newerMod: Newer) == LobbyAction.UpdateLauncher, "action: a mod version only the release on offer has is an Update");
+        Check.That(Action(Listing(mod: Newer), Status(installedMod: 412), newer: Newer) == LobbyAction.Unavailable, "action: the launcher's newer version is not the mod's");
         Check.That(Action(Listing(build: 999)) == LobbyAction.Unavailable, "action: another game build is unavailable");
         Check.That(Action(Listing(), Status(found: false)) == LobbyAction.Unavailable, "action: a game that is not installed here is unavailable");
         Check.That(Action(Listing(launcher: 0, mod: 0, build: 0)) == LobbyAction.Join, "action: builds a host does not publish never differ");

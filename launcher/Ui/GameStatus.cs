@@ -4,8 +4,8 @@ namespace CoopLauncher.Gui;
 internal readonly record struct ModAction(string Label, bool Enabled);
 
 /// <summary>What the rail, the mod button and the settings view say about a game's mod. Every game ships in one package,
-/// so an update's build is the package build. A game build the profile does not list, or a required file the game folder
-/// lacks (named by MissingRequirement), is shown instead of the mod state.</summary>
+/// so an update names the game's mod version in the package (<see cref="PackageBuild"/>). A game build the profile does not list,
+/// or a required file the game folder lacks (named by MissingRequirement), is shown instead of the mod state.</summary>
 internal sealed record GameStatus(
     ModStatus Mod, bool GameFound, int PackageBuild, int GameBuild = GameBuilds.Unknown, bool BuildSupported = true,
     string? MissingRequirement = null, bool GameRunning = false)
@@ -74,7 +74,7 @@ internal sealed record GameStatus(
         var gameDir = GameFolders.Find(game);
         var gameBuild = GameBuilds.Installed(game, gameDir);
         return new GameStatus(
-            ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalBuild(), gameBuild, GameBuilds.IsSupported(game, gameBuild),
+            ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalModVersion(game.Id), gameBuild, GameBuilds.IsSupported(game, gameBuild),
             gameDir == null ? null : game.MissingRequirement(gameDir), GameLauncher.IsRunning(game));
     }
 }

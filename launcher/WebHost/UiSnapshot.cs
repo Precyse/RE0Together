@@ -11,7 +11,12 @@ internal enum PopupKind { None, Options, Lobby, Update }
 
 /// <summary>The update button as the top bar shows it: its label (null while there is nothing to offer), whether it can be
 /// clicked, the newer build on offer (0 when none), whether a build is staged and how a check the player asked for stands.</summary>
-internal sealed record UpdateView(string? Label, bool Enabled, int NewerBuild, bool Staged, UpdateCheck Check = UpdateCheck.Idle);
+internal sealed record UpdateView(string? Label, bool Enabled, int NewerBuild, bool Staged, UpdateCheck Check = UpdateCheck.Idle,
+    IReadOnlyDictionary<string, int>? NewerMods = null)
+{
+    /// <summary>The mod version on offer for a game, 0 when its mod is not among the changes.</summary>
+    public int NewerModOf(string gameId) => NewerMods?.GetValueOrDefault(gameId) ?? 0;
+}
 
 /// <summary>Everything a snapshot is made from: the controller's state and the world around it, so that the mapping is a pure
 /// function that tests feed with fake statuses.</summary>
@@ -41,7 +46,7 @@ internal sealed record SnapshotInput(
 
     /// <summary>The rows of the Lobbies tab for this input (also the rows a command may name while the tab shows).</summary>
     public IReadOnlyList<LobbyRowModel> LobbyRows() =>
-        LobbyRowModels.Of(Status, Filter, LobbyGameId, Games.Select(game => game.Profile).ToList(), ModOf, LocalBuild, Update.NewerBuild);
+        LobbyRowModels.Of(Status, Filter, LobbyGameId, Games.Select(game => game.Profile).ToList(), ModOf, LocalBuild, Update.NewerBuild, Update.NewerModOf);
 }
 
 /// <summary>The pure mapping from the controller's state to the JSON the pages are sent (SPEC 3.2): only the output of the

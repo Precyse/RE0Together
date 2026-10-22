@@ -3,6 +3,8 @@ name: release
 # One rolling release per channel: a push to `main` publishes `latest`, a push to `next` publishes the `preview` prerelease (a tag may not share the branch's name). Each holds
 # Coop.zip (the whole package, for first installs), launcher.zip, mod-<id>.zip per game and manifest.json (SHA-256 and size of every
 # asset and file; tools/release_manifest.py). Installed launchers read the manifest and download only the components that changed.
+# Each component has its own version. A component whose inputs (tools/release_inputs.py) are the same as in the channel's current
+# release ships that release's zip again, byte for byte, with its version; the other components get the previous version + 1.
 # Friends install once from https://github.com/<repo>/releases/download/<channel>/Coop.zip.
 on:
   push:
@@ -28,7 +30,9 @@ jobs:
         run: python tools/publish_check.py
 
       - name: Release manifest test
-        run: python tools/release_manifest_test.py
+        run: |
+          python tools/release_manifest_test.py
+          python tools/release_inputs_test.py
 
       - uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -75,6 +79,22 @@ jobs:
           python tools/diagnostics_test.py
           if ($LASTEXITCODE -ne 0) { throw "diagnostics_test failed" }
 
+      - name: Fetch current release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The channel's current manifest and component zips, read before the publish step replaces the release. No release, or one
+          # without a manifest, means every component is new; any other failure stops the run (versions must never restart).
+          $assets = gh release view $env:CHANNEL --json assets --jq '.assets[].name' 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            if ("$assets" -match 'release not found') { Write-Host "No $env:CHANNEL release yet: every component is new"; exit 0 }
+            throw "could not read the $env:CHANNEL release: $assets"
+          }
+          if ($assets -notcontains 'manifest.json') { Write-Host "The $env:CHANNEL release has no manifest: every component is new"; exit 0 }
+          gh release download $env:CHANNEL --dir previous --pattern manifest.json --pattern launcher.zip --pattern 'mod-*.zip'
+          if ($LASTEXITCODE -ne 0) { throw "could not download the $env:CHANNEL release" }
+
       - name: Assemble package
         shell: pwsh
         run: |
@@ -89,7 +109,10 @@ jobs:
           Copy-Item adapters/ds2/version.dll pkg/adapters/ds2/
           Copy-Item launcher/package/README.txt pkg/
           $legacy = if ($env:CHANNEL -eq 'latest') { @('--legacy-zip', 'RE0-Coop.zip') } else { @() }
-          python tools/release_manifest.py pkg release --repo "${{ github.repository }}" --channel $env:CHANNEL --build $env:GITHUB_RUN_NUMBER --commit $env:GITHUB_SHA @legacy
+          python tools/release_inputs.py $env:GITHUB_SHA fingerprints.json
+          if ($LASTEXITCODE -ne 0) { throw "release_inputs failed" }
+          $previous = if (Test-Path previous/manifest.json) { @('--previous', 'previous') } else { @() }
+          python tools/release_manifest.py pkg release --repo "${{ github.repository }}" --channel $env:CHANNEL --build $env:GITHUB_RUN_NUMBER --commit $env:GITHUB_SHA --fingerprints fingerprints.json @previous @legacy
           if ($LASTEXITCODE -ne 0) { throw "release_manifest failed" }
 
       - name: Publish rolling release

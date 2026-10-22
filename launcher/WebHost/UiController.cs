@@ -148,7 +148,7 @@ internal sealed partial class UiController : IDisposable
 
     internal SnapshotInput Input()
     {
-        var update = new UpdateView(_update.Label, _update.Enabled, _update.NewerBuild, Updater.Staged, _update.CheckState);
+        var update = new UpdateView(_update.Label, _update.Enabled, _update.NewerBuild, Updater.Staged, _update.CheckState, _update.NewerMods);
         return new SnapshotInput(
             _app.Status, _games, _selectedId, _screen, _view, _tab, _popup, _popupLobbyId, _filter, _lobbyGameId, _target, _watch.Condition,
             update, _events, _buildLabel, BuildCheck.LocalBuild(), _selectFocus, Environment.TickCount64, DateTimeOffset.UtcNow.ToUnixTimeSeconds(),

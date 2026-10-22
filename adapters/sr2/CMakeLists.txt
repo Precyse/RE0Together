@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+# Reproducible output (no timestamp or path in the objects and the DLL): a second line of defence beside the release reusing unchanged components.
+if(MSVC)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/Brepro>)
+    add_link_options(/Brepro)
+endif()
 
 # Shared with the RE0 adapter: logging, paths, the MinHook wrapper, the vendored MinHook and the dinput8 export list.
 set(RE0_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../re0)
