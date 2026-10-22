@@ -262,7 +262,7 @@ std::vector<fact_wire::Entry> takeFactWrites();
 std::vector<fact_wire::Entry> factSnapshot();
 
 // Whether the local player has been in gameplay long enough for the world to have settled (not loading, not on the
-// title screen); the same gate the fact queue uses. Any thread.
+// title screen): the simulation tick's gameplay clock, the same gate the fact queue uses. Any thread.
 bool gameplaySettled();
 
 // Writes one fact into this world's fact database as the game's own writer does (the guest following the host).

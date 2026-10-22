@@ -13,8 +13,7 @@
 #include <vector>
 
 #include "ds2/engine.h"
-#include "ds2/player.h"
-#include "ds2/player_state.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -31,7 +30,6 @@ constexpr uintptr_t kWriteInt = 0x14064d080;
 constexpr size_t kGuidSize = fact_wire::kUuidSize;
 constexpr int kMaxLogged = 4000;
 constexpr int64_t kCheckIntervalMs = 500;
-constexpr int64_t kClockIntervalMs = 250;  // how often the writers re-check that gameplay has started
 constexpr size_t kMaxQueued = 4096;
 constexpr size_t kMaxKnown = 16384;  // distinct facts remembered for a join snapshot
 
@@ -46,8 +44,6 @@ std::atomic<uint64_t> g_calls{0};
 
 std::atomic<uintptr_t> g_database{0};  // seen as the first argument of every write
 std::atomic<bool> g_share{false};
-ds2::GameplayClock g_clock;
-std::atomic<int64_t> g_clockAt{0};
 std::mutex g_queueMutex;
 std::vector<fact_wire::Entry> g_queue;
 using FactKey = std::array<uint8_t, kGuidSize + 1>;  // the kind, then the UUID
@@ -80,19 +76,9 @@ void record(const char* kind, const uint8_t* uuid, double value) {
     logger::write("world_facts: %s fact %s = %g", kind, uuidHex, value);
 }
 
-// Whether the world is in gameplay, not loading or on the title screen (checked a few times a second).
-bool gameplayRunning() {
-    const int64_t now = GetTickCount64();
-    if (now - g_clockAt.load() > kClockIntervalMs) {
-        g_clockAt = now;
-        g_clock.update(ds2::localPlayerEntity());
-    }
-    return g_clock.settled();
-}
-
 // Queues a change for the guests: one entry per fact, the last value.
 void queue(uint8_t kind, const uint8_t* uuid, uint32_t value, uintptr_t flag5, uintptr_t flag6) {
-    if (!g_share.load() || remote_apply::active() || !static_cast<uint8_t>(flag5) || !gameplayRunning()) return;  // only Persistent facts
+    if (!g_share.load() || remote_apply::active() || !static_cast<uint8_t>(flag5) || !sim_tick::gameplaySettled()) return;  // only Persistent facts
     fact_wire::Entry entry{};
     entry.kind = kind;
     entry.flags = (static_cast<uint8_t>(flag5) ? fact_wire::kFlagArg5 : 0) | (static_cast<uint8_t>(flag6) ? fact_wire::kFlagArg6 : 0);
@@ -174,8 +160,6 @@ std::vector<fact_wire::Entry> factSnapshot() {
     for (const auto& [key, entry] : g_known) out.push_back(entry);
     return out;
 }
-
-bool gameplaySettled() { return gameplayRunning(); }
 
 bool applyFact(const fact_wire::Entry& fact) {
     const uintptr_t database = g_database.load();

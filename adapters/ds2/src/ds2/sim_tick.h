@@ -25,6 +25,9 @@ uint32_t frame();
 // (what building anything in the world waits for). `gameplayActive` is the state machine alone: it stops when the world
 // is torn down, not while a loading screen covers a world that stays (a teleport). Any thread.
 bool gameplayActive();
+// The state machine has run long enough (ds2::GameplayClock::kGameplaySettle) for the world to have settled, whether or not
+// a loading screen is up; game::gameplaySettled.
+bool gameplaySettled();
 bool inWorld();
 // The world is built (the loading screen has been gone a moment) but not yet settled: what must be done to the world
 // before the remote body is built in it (sweeping the pieces a load dropped) runs here.

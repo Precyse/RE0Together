@@ -11,6 +11,7 @@
 #include "ds2/loading_screen.h"
 #include "ds2/player.h"
 #include "ds2/player_state.h"
+#include "game.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -108,6 +109,8 @@ uint32_t frame() { return g_frame.load(); }
 
 bool gameplayActive() { return g_gameplay.active(); }
 
+bool gameplaySettled() { return g_gameplay.settled(); }
+
 bool worldBuilt() { return g_gameplay.active() && loading_screen::goneFor(kBuiltAfterLoadingScreen); }
 
 bool inWorld() { return g_gameplay.active() && !loading_screen::shown(); }
@@ -117,3 +120,9 @@ bool worldReady() { return g_gameplay.settled() && loading_screen::goneFor(kAfte
 void add(Callback callback, const char* name, Gate gate) { g_entries.push_back({callback, name, gate, 0}); }
 
 }  // namespace sim_tick
+
+namespace game {
+
+bool gameplaySettled() { return sim_tick::gameplaySettled(); }
+
+}  // namespace game
