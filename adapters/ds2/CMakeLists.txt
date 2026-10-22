@@ -47,7 +47,9 @@ add_library(ds2_adapter SHARED
     src/input_filter.cpp
     src/player_sync.cpp
     src/dx12_hook.cpp
+    src/ds2/frame_gen.cpp
     src/marker_overlay.cpp
+    src/peer_pose.cpp
     src/load_overlay.cpp
     src/cargo_transfer.cpp
     src/cargo_ground.cpp
@@ -59,8 +61,15 @@ add_library(ds2_adapter SHARED
     src/equip_sync.cpp
     src/weapon_sync.cpp
     src/rack_sync.cpp
+    src/order_handoff.cpp
     src/env_sync.cpp
     src/bt_sync.cpp
+    src/crater_sync.cpp
+    src/locker_sync.cpp
+    src/ping_sync.cpp
+    src/ds2/user_markers.cpp
+    src/ds2/checked_hook.cpp
+    src/ds2/lockers.cpp
     src/struct_sync.cpp
     src/story_sync.cpp
     src/cutscene_sync.cpp
@@ -91,8 +100,6 @@ add_library(ds2_adapter SHARED
     src/resync_trigger.cpp
     src/clock_sync.cpp
     src/anim_event.cpp
-    src/pending_queue.cpp
-    src/main_thread.cpp
     ${SHARED_DIR}/toast_queue.cpp
     src/pattern_scan.cpp
     src/msvc_rtti.cpp
@@ -114,9 +121,11 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_marker.cpp
     src/ds2/remote_guards.cpp
     src/ds2/remote_update.cpp
+    src/ds2/queue_diag.cpp
     src/ds2/remote_appearance.cpp
     src/ds2/remote_animation.cpp
     src/ds2/remote_ride.cpp
+    src/ds2/ride_probe.cpp
     src/ds2/remote_context.cpp
     src/ds2/setdriver_guard.cpp
     src/ds2/use_gate.cpp
@@ -129,6 +138,9 @@ add_library(ds2_adapter SHARED
     src/ds2/player_system_guard.cpp
     src/ds2/world_pause.cpp
     src/ds2/bt_events.cpp
+    src/ds2/bt_diag.cpp
+    src/ds2/bt_grab.cpp
+    src/ds2/craters.cpp
     src/ds2/enemy_spawn.cpp
     src/ds2/enemy_vitals.cpp
     src/ds2/health_watch.cpp
@@ -141,10 +153,11 @@ add_library(ds2_adapter SHARED
     src/ds2/remote_weapon.cpp
     src/ds2/damage_veto.cpp
     src/ds2/partner_focus.cpp
-    src/ds2/sneaking_focus.cpp)
+    src/ds2/sneaking_focus.cpp
+    src/ds2/sneaking_diag.cpp)
 target_include_directories(ds2_adapter PRIVATE src ${SHARED_DIR})
 set_target_properties(ds2_adapter PROPERTIES OUTPUT_NAME version PREFIX "")
-target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32)
+target_link_libraries(ds2_adapter PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi ole32 advapi32)
 add_custom_command(TARGET ds2_adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:ds2_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/version.dll)
 
@@ -166,9 +179,9 @@ target_include_directories(enemy_wire_test PRIVATE src ${SHARED_DIR})
 add_executable(story_wire_test tests/story_wire_test.cpp)
 target_include_directories(story_wire_test PRIVATE src ${SHARED_DIR})
 
-add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp ${SHARED_SOURCES})
+add_executable(overlay_test tests/overlay_test.cpp src/dx12_hook.cpp src/ds2/frame_gen.cpp ${SHARED_SOURCES})
 target_include_directories(overlay_test PRIVATE src ${SHARED_DIR})
-target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi)
+target_link_libraries(overlay_test PRIVATE minhook64 imgui_dx12 ws2_32 dbghelp d3d12 dxgi advapi32)
 
 add_executable(proxy_load_test tests/proxy_load_test.cpp)
 add_dependencies(proxy_load_test ds2_adapter)
@@ -193,13 +206,22 @@ endfunction()
 add_unit_test(authority_test src/authority.cpp src/reject_counters.cpp)
 add_unit_test(resync_test src/resync.cpp src/reject_counters.cpp)
 add_unit_test(peer_joins_test)
+add_unit_test(cargo_give_wire_test)
 add_unit_test(timing_test)
 add_unit_test(anim_wire_test src/anim_event.cpp src/reject_counters.cpp)
-add_unit_test(fact_snapshot_test src/pending_queue.cpp src/reject_counters.cpp)
+add_unit_test(fact_snapshot_test)
 add_unit_test(bt_wire_test)
+add_unit_test(crater_wire_test)
+add_unit_test(locker_wire_test)
+add_unit_test(ping_wire_test)
+add_unit_test(cargo_diff_test)
+add_unit_test(locker_table_test)
 add_unit_test(cutscene_test)
 add_unit_test(combat_wire_test src/enemy_directory.cpp)
 add_unit_test(weapon_wire_test)
+add_unit_test(vehicle_wire_test)
 add_unit_test(partner_status_test src/partner_status.cpp)
+add_unit_test(frame_gen_test src/ds2/frame_gen.cpp)
+target_link_libraries(frame_gen_test PRIVATE advapi32)
 add_unit_test(gear_snapshot_test src/gear_snapshot.cpp)
 add_unit_test(build_guard_test src/build_guard.cpp ${SHARED_DIR}/log.cpp ${SHARED_DIR}/paths.cpp)

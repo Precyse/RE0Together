@@ -7,6 +7,9 @@
 // DSPlayerComponent), and the action plugins it holds.
 namespace ds2 {
 
+// The DSPlayerState of the player entity (through its DSPlayerComponent), or 0.
+uintptr_t playerState(uintptr_t playerEntity);
+
 // The DSPlayerRideVehicleActionPlugin of the player entity, or 0.
 uintptr_t ridePlugin(uintptr_t playerEntity);
 

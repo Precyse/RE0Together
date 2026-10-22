@@ -5,8 +5,8 @@
 namespace combat_hook {
 
 // Start-up: the detour on ApplyDamage and the simulation tick that applies the partner's hits and kills, and on the
-// host reports which enemies died.
-void installEarly();
+// host reports which enemies died. `logCombat` writes the per-hit combat log (config diagnostics).
+void installEarly(bool logCombat);
 
 // Test only: while on, every hit on the local player is dropped (the way a hit on the partner's body is), whoever sent it.
 void setGodMode(bool on);

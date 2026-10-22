@@ -4,6 +4,7 @@
 
 #include "bt_wire.h"
 #include "ds2/bt_events.h"
+#include "ds2/bt_grab.h"
 #include "log.h"
 
 namespace {
@@ -64,6 +65,7 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_guest = session.linked && !host;
     g_hostSlot = session.hostSlot;
     bt_events::setRole(host, g_guest);
+    bt_grab::setRole(g_guest);
     if (!host) {
         g_sentOnce = false;
         return;

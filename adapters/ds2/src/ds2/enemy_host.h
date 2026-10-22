@@ -8,7 +8,7 @@
 namespace enemy_host {
 
 // Start-up: the simulation tick that announces, samples and reports the enemies.
-void installEarly();
+void installEarly(bool diagnostics);
 
 // Any thread (spawn workers): `entity` was just built from an entity resource with this UUID.
 void add(uintptr_t entity, const std::array<uint8_t, 16>& resourceUuid);

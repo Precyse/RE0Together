@@ -49,7 +49,7 @@ bool answersAsPassenger(uintptr_t vehicle, const uint64_t* key, bool enter) {
 // The vehicle the partner reports driving, if it is this one.
 bool partnerDrives(uintptr_t vehicle) {
     const auto riding = vehicle_sync::partnerRiding(remote_player::slot());
-    return riding && riding->role == vehicle_sync::kRoleDriver &&
+    return riding && riding->role == vehicle_wire::kRoleDriver &&
            riding->id == ds2::field<uint64_t>(vehicle, ds2::kEntityNetworkId);
 }
 

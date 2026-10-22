@@ -46,9 +46,16 @@ bool entityUuid(uintptr_t entity, std::array<uint8_t, 16>& out) {
     return decima::safeCopy(out.data(), entity + kEntityUuid, out.size());
 }
 
-bool entityIsDead(uintptr_t entity) {
+bool readDeadFlag(uintptr_t entity, bool& dead) {
     uint64_t flags = 0;
-    return !decima::safeRead(entity + kEntityFlags, flags) || (flags & kDeadFlag) != 0;
+    if (!decima::safeRead(entity + kEntityFlags, flags)) return false;
+    dead = (flags & kDeadFlag) != 0;
+    return true;
+}
+
+bool entityIsDead(uintptr_t entity) {
+    bool dead = false;
+    return !readDeadFlag(entity, dead) || dead;
 }
 
 }  // namespace ds2

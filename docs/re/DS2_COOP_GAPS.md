@@ -19,15 +19,15 @@ What a real two-player session hits that the single-player game assumes away. Ea
 ### Gameplay sync
 | candidate | status | owner | file |
 |---|---|---|---|
-| Local Sam as passenger when the partner drives ("Use Vehicle" prompt red) | missing | ds2-live | `ds2/remote_ride.cpp`, `vehicle_sync.cpp` |
+| Local Sam as passenger when the partner drives ("Use Vehicle" prompt red) | partial: main opens the prompt (free-gate detour), answers Sam's SetDriver as a passenger, seats him in the second pod and boards on an F poll; ds2-passenger adds the passenger report to the driver, one parent-link clear on every exit and probe P1; the F poll is not replaced yet | ds2-passenger | `ds2/remote_ride.cpp`, `vehicle_sync.cpp`, `ds2/setdriver_guard.cpp`, `ds2/ride_probe.cpp` |
 | Spawn crash 0x140F75E12 (DSPlayerSystem singleton writes) | partial | ds2-live | `ds2/remote_player.cpp` (guard on ds2-live) |
 | Enemies and weapons in a normal session | partial | ds2-tester | `config.h`: `enemy_sync` and `weapon_sync` default off |
-| BT grab of the guest's body | missing | ds2-streaming | `ds2/bt_events.h` TODO |
+| BT grab of the guest's body | probe built, behaviour undecided (the catch reads local index 0, the host's Sam; `bt_diag:` logs with diagnostics=1 say whether the remote body is ever the target) | ds2-bt | `ds2/bt_diag.cpp`, `ds2/bt_events.h` |
 | Guest builds structures and roads | built, not run live (STRUCT_REQUEST, guest collapse; roads: plan in DS2_NOTES, needs live observation) | ds2-streaming | `ds2/structures.cpp` refuses the guest's placements; ladders only |
-| Guest voidout or death crater | missing | ds2-streaming | none; a world change made only in the dying player's world |
+| Guest voidout or death crater | built, not run live (CRATER_SET 0x0137: the host's crater set is followed through AddCrater / RemoveCrater, a guest's own annihilation event is vetoed; the guest's own death and respawn rule is separate) | ds2-bt | `crater_sync.cpp`, `ds2/craters.cpp`, `crater_wire.h`, test command `crater.txt` |
 | Partner in another region or map | partial (a "too far" line past 700 m; options in "Far partner" below) | ds2-streaming | `ds2/remote_player.cpp` (body leaves on area change), `marker_overlay.cpp` (distance only) |
-| Guest-initiated hand-over | missing | ds2-orders | `cargo_menu.cpp` is the host's (F7) |
-| Guest orders and deliveries | missing (by design for now) | ds2-orders | `ds2/order_gate.cpp` |
+| Guest-initiated hand-over | built, not run live (F7 on a guest sends CARGO_ASK; a piece the game moves into the host's rack is CARGO_GIVE, taken or sent back by the host) | ds2-orders | `cargo_menu.cpp`, `cargo_transfer.cpp`, `partner_cargo_sync.cpp`, `ds2/partner_cargo.cpp` |
+| Guest orders and deliveries | built, not run live (accept forwarded as OrderRequest, the host starts the order and hands the cargo over; turn-in forwarded as OrderDelivered) | ds2-orders | `ds2/order_gate.cpp`, `order_handoff.cpp`, `ds2/story.cpp` |
 | Shared locker | missing | ds2-orders | none |
 | Cutscenes for the partner | partial | ds2-story | `cutscene_log.cpp`; cutscene sync on `ds2-integration` |
 
@@ -90,7 +90,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Verify:** `fake_launcher.py` prints the RESYNC it receives; `tests/resync_test.cpp` unchanged.
 
 ### 7. Local Sam cannot ride as passenger when the partner drives (L, ds2-live)
-- **Root change:** roadmap item 4 and audit E1: hook the action request 0x140E5B3F0 (kind 3 = enter vehicle) to see why the prompt is red on a vehicle the partner drives, then seat Sam with the passenger request and keep the local vehicle copy kinematic under him.
+- **Root change:** the red prompt is the single-seat rule (the free gate 0x140beec80 reads vehicle +0x4e8 bit 0, cleared while +0x4fc has a driver); main already detours it, answers Sam's SetDriver as a passenger and boards on an F poll. Left: replace the F poll with the game's own confirm turned into request kind 3 (waits for probe P1, `ds2/ride_probe.cpp`, `diagnostics=1`) and measure the seat against a moving vehicle.
 - **Files:** `adapters/ds2/src/ds2/remote_ride.cpp`, `vehicle_sync.cpp`, `ds2/setdriver_guard.cpp`.
 - **Verify:** `fake_launcher.py --drive ID --drive-role 0` drives a loop with Sam pressing F at the door: Sam seated, camera follows, exits beside the vehicle.
 
@@ -99,10 +99,10 @@ What a real two-player session hits that the single-player game assumes away. Ea
 - **Files:** `adapters/ds2/src/ds2/world_pause.cpp`.
 - **Verify:** one PC with `fake_launcher.py --follow`: open the pause menu, the partner body keeps walking and the clock advances (two screenshots 5 s apart).
 
-### 9. The guest cannot hand cargo over (M, ds2-orders)
-- **Root change:** the same F7 menu on the guest sends a give request to the host (the host stays the decider, as with CARGO_TAKE), so either player can start a hand-over.
-- **Files:** `adapters/ds2/src/cargo_menu.cpp`, `cargo_transfer.cpp`.
-- **Verify:** `tools/ds2/fake_peer.py --host --pickup-answers` style host answering a guest give; the piece leaves the game's backpack and is reported added.
+### 9. The guest cannot hand cargo over (done, not run live; ds2-orders)
+- **Root change (built):** the F7 menu on the guest sends a give request to the host (CARGO_ASK, the host stays the decider); a piece the game itself moves into the partner's rack is reported to the host as CARGO_GIVE instead of being dropped and then deleted by rack_sync, and the host takes it or sends it back.
+- **Files:** `adapters/ds2/src/cargo_menu.cpp`, `cargo_transfer.cpp`, `partner_cargo_sync.cpp`, `ds2/partner_cargo.cpp`.
+- **Verify:** `fake_launcher.py --guest --accept-gives` / `--refuse-gives` (see DS2_NOTES, "Native gives and guest orders").
 
 ### 10. The guest's own progress is lost at session end (L, new; first step done: `AdapterSettings.Reset` archives the session saves; the merge is open)
 - **Root change:** the save files hold world and personal state together, and every join overwrites the guest's copy with the host's, so the real fix is a merge: find which save blocks are personal (equipment, levels, private locker) and carry them from the guest's last session save into the next session's copy. First step (S): archive the guest's session save at session end instead of deleting it, so nothing is lost while the merge is worked out.
@@ -131,3 +131,16 @@ Measured live: the engine streams tiles and simulates entities around ONE point,
 Recommendation: A (done), B as the next step if the notice is not enough (warp the partner back, limit separation), D only if long-range split play becomes a goal.
 
 Built: `marker_overlay.cpp` draws one line per partner farther than `kBeyondLoadedWorldMetres` (700 m, a margin under the 768 / 800 m table radii) under the toasts.
+
+## BT grab and voidout of the guest: plan (ds2-streaming, static, 2026-10-06)
+
+Known from ENEMIES.md section 4/5 and `ds2/bt_events.h`: the host's catchers (big BTs: Hand, Octopus, Quad, Ray, Titan, Whale, Crab, Face; `DSCatcherManager` global 0x14623F020) and gazers are real entities there and puppets on the guest (AI off). Their attacks reach the guest's Sam only as forwarded hits (PLAYER_HIT 0x0121 from the host's damage on the remote body). Territory and tar activation already replay on the guest (CATCHER_EVENT 0x0129, BT_ENV 0x0128).
+
+| case | what happens today | plan | live proof needed |
+|---|---|---|---|
+| Damage by a catcher attack | forwarded as PLAYER_HIT | nothing new | one catcher fight with the fake guest as the target |
+| Grab (catcher or gazer holds the player: `AnimEventGrabCheck/Hit/Loop/Miss`, `AnimVarGrabState`, `DSCatcherInteractionAttachResource`, `CatcherAttachJoints`) | the host's grab reads "the player" (Sam); on the remote body it either does not start or attaches the body only on the host | host: detect the grab target being the remote body (hook the attach / `AnimVarGrabState` write on the catcher), send `CatcherKind::GrabGuest {catcher entity UUID}` to the guest, hold the remote body still (its pose keeps arriving through ANIM_STATE); guest: run its own grab on its Sam against its puppet of that catcher (the puppet runs only that animation, AI stays off); the outcome (released, killed) returns as PLAYER_HIT or a fact | where the host's grab picks its target (player manager list or Sam), and that the remote body is accepted as a target at all: read `AnimVarGrabState` of a catcher next to the fake guest |
+| Voidout (`DSCatcherAnnihilationComponent`: AI action 0x141a07c50, anim events 0x141a07d30, `MsgDSBTDieAllowed` 0x141a07c00; `AnnihilationAreaComponent`; facts `WantsAnnihilationFact` / `SucceededAnnihilationFact`, `IsGameOverIfAnnihilate`; crater `DSCatcherCraterLocator`, `RemoveCrater` 0x1418dfda0) | the area kills whatever stands in it on the host, the remote body included (as damage); the crater facts flow through FACT_SET; the guest's own Sam is only hurt by forwarded damage; whether the guest sees the crater and the death is unchecked | the crater is a world change: leave it to FACT_SET (host-authoritative); the guest's death: treat the forwarded lethal PLAYER_HIT as the game-over of the guest only (the game's own death flow runs on the guest's Sam); never run the host's game-over because the guest died | a voidout near the fake guest: does the lethal damage arrive, do the crater facts reach the guest, does the guest's world show the crater |
+| Guest dies elsewhere (any cause) | partial (checked once on one PC) | same death rule; the host marks the remote body down | covered by the death checks above |
+
+Order: first the two live observations (grab target of a catcher next to the fake guest; a voidout near it), because the plan above is only worth building when the host's grab accepts the remote body as a target.

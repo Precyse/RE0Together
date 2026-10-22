@@ -8,6 +8,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "ds2/frame_gen.h"
 #include "hooks.h"
 #include "imgui.h"
 #include "backends/imgui_impl_dx12.h"
@@ -46,6 +47,8 @@ dx12_hook::DrawFn g_draw = nullptr;
 std::atomic<ID3D12CommandQueue*> g_swapChainQueue{nullptr};  // the queue the game created its swap chain on
 std::atomic<ID3D12CommandQueue*> g_seenQueue{nullptr};       // fallback: a direct queue seen executing
 std::atomic<bool> g_disabled{false};
+std::atomic<int> g_frameGenMode{-1};  // the last frame_gen::Mode seen, -1 before the first swap chain
+std::atomic<bool> g_frameGenBlocked{false};  // FSR or XeSS frame generation owns the present path
 thread_local bool t_drawing = false;  // Present1 and Present may call each other inside DXGI: draw once per frame
 
 // Everything the overlay owns on the game's device; built on the first Present, render thread only.
@@ -222,7 +225,7 @@ void renderFrame(IDXGISwapChain* chain) {
 }
 
 void guardedRender(IDXGISwapChain* chain) {
-    if (g_disabled.load()) return;
+    if (g_disabled.load() || g_frameGenBlocked.load()) return;
     __try {
         renderFrame(chain);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -237,7 +240,17 @@ void drawOnce(IDXGISwapChain* chain, UINT flags) {
     guardedRender(chain);
 }
 
+// The game's frame generation setting is read at every swap chain creation, which is when the game applies a change.
+void checkFrameGeneration() {
+    const frame_gen::Mode mode = frame_gen::current();
+    const bool blocked = !frame_gen::overlaySafe(mode);
+    g_frameGenBlocked = blocked;
+    if (g_frameGenMode.exchange(static_cast<int>(mode)) == static_cast<int>(mode)) return;
+    logger::write("dx12: frame generation %s, overlay %s", frame_gen::name(mode), blocked ? "off" : "on");
+}
+
 void rememberSwapChainQueue(IUnknown* device) {
+    checkFrameGeneration();
     ID3D12CommandQueue* queue = nullptr;
     if (device && SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&queue)))) {
         g_swapChainQueue = queue;  // the reference is kept: the queue lives as long as the swap chain

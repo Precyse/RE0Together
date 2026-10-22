@@ -38,10 +38,6 @@ partner_status::Status localStatus();
 // The camera the game renders from.
 std::optional<world_to_screen::Camera> camera();
 
-// A function the game's simulation thread calls every frame, taking one pointer and returning one
-// (DS2: Player::GetLastActivatedCamera); 0 before resolve() succeeds.
-uintptr_t frameFunction();
-
 // Starts following which use locations are driven by the story's sequence networks (terminals, order and quest
 // triggers). Call once at start-up, before the world loads, so none is missed. False on an unsupported build.
 bool watchInteractions();
@@ -50,8 +46,12 @@ bool watchInteractions();
 // the world's progress; vehicles, cargo and other interactions stay usable. Needs watchInteractions(). Any thread.
 void blockScriptedInteractions(bool block);
 
-// Guest restriction on orders: hooks the terminal menus' accept and turn-in callbacks (once, at start-up), and while
-// `block` is true they refuse with a toast. Terminals themselves stay usable. Any thread.
+// The local player's use location claim candidates (count and the first one), for a test log. False when its controller is
+// not readable.
+bool localUseCandidates(int32_t& count, uintptr_t& first);
+
+// Guest orders: hooks the terminal menu's start command (once, at start-up); while `block` is true, accepting an order
+// sends it to the host instead of preparing it here. Terminals themselves stay usable. Any thread.
 void watchOrders();
 void blockOrders(bool block);
 
@@ -72,6 +72,9 @@ struct VehiclePose {
 
 // The vehicle the local player is driving now, where it is. Any thread.
 std::optional<VehiclePose> drivenVehicle();
+
+// Where the loaded vehicle `id` is, empty when it is not loaded here. Any thread.
+std::optional<VehiclePose> vehiclePose(uint64_t id);
 
 // Moves this world's copy of the vehicle `pose.id` there, with the velocity it moves at so its physics can follow.
 // False when no such vehicle is loaded or the move faulted. Simulation thread only.
@@ -111,6 +114,10 @@ std::vector<LooseCargo> looseCargo(const world_to_screen::Vec3& around, double r
 // The handle of the piece of this order (an order id, as in Cargo::orderId) that this world holds anywhere outside the
 // local backpack (a locker, a shelf, the ground): order pieces are matched by identity, not by where they lie.
 std::optional<uint64_t> findOrderPiece(uint64_t orderId);
+
+// The pieces of the order with this mission id (as in story events) that lie outside the local backpack and outside the
+// body `bodyKey` (a shelf, a locker, the ground): an accepted order's cargo before anyone carries it. Simulation thread.
+std::vector<Cargo> orderPieces(uint64_t missionId, std::optional<uint64_t> bodyKey);
 
 // What addCargo did: made the request, must be asked again shortly (a stale copy of an order piece was being removed
 // first), or will never work (the backpack already holds that order piece, the game refused).
@@ -189,6 +196,52 @@ bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type);
 // (Retry), and one the local backpack holds is refused. Refused too when the game refused (e.g. its pool is full). Any
 // thread.
 AddResult placeCargo(const Cargo& piece, const world_to_screen::Vec3& at);
+
+// Lockers (docs/DS2_NOTES.md, "Shared locker"). Every construction object (key ~0) holds baggage slots of kind 27 (Private),
+// 28 (Public: the shared locker) and 29 (PublicReceived); a locker is named by the owner's identifier (a hash of the
+// construction id, the same in both worlds) and the slot kind.
+constexpr uint8_t kSlotPrivate = 27, kSlotPublic = 28, kSlotPublicReceived = 29;
+
+struct LockerRef {
+    uint32_t key = 0;
+    uint8_t kind = 0;
+};
+
+// The locker a runtime slot (the argument of the slot add and remove calls) belongs to; empty for any other slot. Any thread.
+std::optional<LockerRef> lockerOfSlot(uintptr_t slot);
+
+// Whether the baggage owner is a construction object with a slot of kind 28 or 29. Any thread.
+bool isLockerOwner(uintptr_t owner);
+
+struct LockerContents {
+    uint32_t key = 0;
+    uint8_t kind = 0;
+    std::vector<Cargo> pieces;  // without display names
+};
+
+// Every locker of kind 28 or 29 in this world with what it holds (empty ones too), in one pass over the pool. Any thread.
+std::vector<LockerContents> lockerContents();
+
+// What one locker holds; empty when this world has no such locker. Any thread.
+std::optional<std::vector<Cargo>> lockerPieces(uint32_t key, uint8_t kind);
+
+// Asks the game to create `piece` (kind, order link, durability) in that locker. Refused: no such locker, the slot is full, or
+// this world's backpack or that locker already holds the order piece. Retry: stale copies of an order piece were removed first.
+// Any thread.
+AddResult addLockerPiece(uint32_t key, uint8_t kind, const Cargo& piece);
+
+// A construction object's private locker (kind 27) and the handles of what it holds.
+struct PrivateLocker {
+    uintptr_t owner = 0;
+    std::vector<uint64_t> handles;
+};
+std::vector<PrivateLocker> privateLockers();
+
+// Test commands: logs every owner with a locker slot (kind 27 to 29): address, carrier, key, identifier, slot kinds and counts.
+void logLockerOwners();
+
+// Whether a menu is up that the cargo and locker code must not be changed under: the pause menu or the co-op cargo menu. Any thread.
+bool uiMenuOpen();
 
 // Asks the game to delete a piece, carried or on the ground. Any thread.
 bool removeCargo(uint64_t handle);
@@ -309,6 +362,14 @@ void requestStorySnapshot();
 
 // The mission object (DSMissionSystem's map entry, +0x10 its resource) with this full mission id, 0 when there is none.
 uintptr_t missionById(uint64_t id);
+
+// The state of the mission with this full id (story_replay::kStateProgress while in progress), nothing when it is not found.
+// Simulation thread.
+std::optional<uint16_t> missionState(uint64_t id);
+
+// Guest: asks the host to start the order `missionId` reserved at a terminal (`row` and `extra` as the terminal's commit
+// carries them); the host runs it in its world. Any thread.
+void forwardOrderRequest(uint64_t missionId, uint32_t row, int32_t extra);
 
 // Makes the game's own success request for this mission (through the story hook, so a guest's is vetoed and a delivery's
 // forwarded to the host); false when the mission is not found. Test commands only.

@@ -20,6 +20,7 @@ constexpr uint16_t kMsgCargoList = proto::kFirstGameType + 1;  // 0x0101, each p
 constexpr uint16_t kMsgCargoTake = proto::kFirstGameType + 2;  // 0x0102, host to guest, reliable: CargoTake
 constexpr uint16_t kMsgCargoAdd = proto::kFirstGameType + 3;   // 0x0103, giver to receiver, reliable: CargoAdd
 constexpr uint16_t kMsgCargoAsk = proto::kFirstGameType + 0x31;  // 0x0131, guest to host, reliable: CargoAsk
+constexpr uint16_t kMsgCargoGive = proto::kFirstGameType + 0x33;  // 0x0133, guest to host, reliable: CargoAdd
 
 constexpr size_t kNameBytes = 44;
 constexpr uint32_t kMaxListed = 64;
@@ -66,13 +67,36 @@ struct CargoAdd {
 };
 static_assert(sizeof(CargoAdd) == 32);
 
+// A piece as it travels (the display name and this machine's handle stay behind), and back (handle 0, no name).
+inline CargoAdd toAdd(const game::Cargo& piece) {
+    return {piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
+}
+
+inline game::Cargo fromAdd(const CargoAdd& add) {
+    return {0, add.type, {}, add.orderId, add.secondId, add.category, add.durability};
+}
+
+// False for a payload that is not exactly one CargoAdd (CARGO_ADD and CARGO_GIVE).
+inline bool decodeAdd(std::span<const uint8_t> payload, CargoAdd& out) {
+    if (payload.size() != sizeof(CargoAdd)) return false;
+    std::memcpy(&out, payload.data(), sizeof(out));
+    return true;
+}
+
 struct Partner {
     uint8_t slot = 0;
     std::vector<game::Cargo> cargo;
 };
 
-// Net thread: asks `slot` to create `piece` (kind and order link) on its own player.
-void sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece);
+// Net thread: asks `slot` to create `piece` (kind and order link) on its own player. False when the send failed.
+bool sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece);
+
+// Net thread, guest: reports `piece`, which the game moved into the host's rack, as CARGO_GIVE. The caller holds it on the body.
+void offerPiece(NetClient& net, uint8_t hostSlot, const game::Cargo& piece);
+
+// Net thread, host: sends `piece` to the guest in `slot` and, once that is sent, deletes the local copy. False (nothing deleted)
+// when the send fails or the piece is gone.
+bool handOver(NetClient& net, uint8_t slot, const game::Cargo& piece);
 
 // Net thread: messages from the partner, and the periodic work (refresh, report, queued transfers).
 void onFrame(NetClient& net, const GameFrame& frame);

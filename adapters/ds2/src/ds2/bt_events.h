@@ -5,14 +5,10 @@
 
 #include "bt_wire.h"
 
-// TODO (open problem, docs/DS2_NOTES.md "BT and catcher sync"): a BT that grabs the guest's body on the host. On the
-// host the guest is the remote body, an entity that is not Sam, and the catch sequence reads "the player". Best design:
-// the grabbed player's own machine runs its own catch. The host detects the catcher's interaction target
-// (DSCatcherInteractionAttachResource / DSPlayerCatcherAttachJointInfo) being the remote body, sends a new
-// CatcherKind::GrabGuest {catcher entity UUID} to that guest and holds the remote body inert (its animation keeps
-// arriving through ANIM_STATE); the guest replays the catch on its own Sam against its puppet of that catcher; the
-// outcome (escape, or a voidout through the crater facts) returns to the host as facts. Not built until a live test
-// shows what the host's catch does with the remote body.
+// Open problem (docs/DS2_NOTES.md "BT and catcher sync", "Voidout craters"): a BT that grabs the guest's body on the host. The
+// catch reads "the player" as local index 0 (the host's Sam), so the remote body may never be a target; `bt_diag` (host,
+// diagnostics=1) logs the catch events and the player index the annihilation targets. A guest catch is built only if those
+// logs show the remote body being grabbed.
 
 namespace bt_events {
 

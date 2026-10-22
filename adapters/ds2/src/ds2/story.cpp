@@ -22,6 +22,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "order_handoff.h"
 #include "story_ledger.h"
 #include "story_replay.h"
 #include "story_wire.h"
@@ -96,13 +97,26 @@ bool vetoed() { return g_guest.load() && !t_replaying; }
 
 // Guest: a terminal order start, refused here, is asked of the host.
 void forwardOrder(uintptr_t mission, uintptr_t args) {
-    story_wire::Event event{};
-    event.kind = static_cast<uint8_t>(story_wire::Kind::OrderRequest);
-    decima::safeRead(args, event.a);
-    decima::safeRead(args + sizeof(event.a), event.b);
-    decima::safeRead(mission + kMissionId, event.missionId);
-    std::lock_guard lock(g_mutex);
-    if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
+    uint64_t id = 0;
+    uint32_t a = 0;
+    int32_t b = 0;
+    decima::safeRead(args, a);
+    decima::safeRead(args + sizeof(a), b);
+    decima::safeRead(mission + kMissionId, id);
+    game::forwardOrderRequest(id, a, b);
+}
+
+// Host: a mission request the script made, reported when it is made (before the drain applies it and before the section it
+// activates) with the arguments the guest's replay needs; the poll below stays as the catch for starts that bypass these calls.
+void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
+    story_wire::Event event = missionEvent(kind, mission, a, b);
+    if (section) decima::safeCopy(event.section, section, sizeof(event.section));
+    {
+        std::lock_guard lock(g_mutex);
+        if (kind == story_wire::Kind::MissionStart) g_ledger.noteStart(event);
+        else g_ledger.noteEnd(event.missionId);
+    }
+    report(event);
 }
 
 bool isDelivery(uintptr_t mission) {
@@ -119,19 +133,6 @@ void forwardDelivery(uintptr_t mission, uintptr_t flag) {
     decima::safeRead(mission + kMissionId, event.missionId);
     std::lock_guard lock(g_mutex);
     if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
-}
-
-// Host: a mission request the script made, reported when it is made (before the drain applies it and before the section it
-// activates) with the arguments the guest's replay needs; the poll below stays as the catch for starts that bypass these calls.
-void reportRequest(story_wire::Kind kind, uintptr_t mission, uint32_t a, int32_t b, uintptr_t section) {
-    story_wire::Event event = missionEvent(kind, mission, a, b);
-    if (section) decima::safeCopy(event.section, section, sizeof(event.section));
-    {
-        std::lock_guard lock(g_mutex);
-        if (kind == story_wire::Kind::MissionStart) g_ledger.noteStart(event);
-        else g_ledger.noteEnd(event.missionId);
-    }
-    report(event);
 }
 
 uint64_t requestStartDetour(uintptr_t c, uintptr_t mission, uintptr_t args, uintptr_t section, uintptr_t reserve,
@@ -333,6 +334,7 @@ void replayMission(const story_wire::Event& event) {
         reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, const void*, const void*, bool)>(ds2::at(kRequestStart))(
             c, mission, &args, section, false);
         logger::write("story: replayed the start of mission %llx", static_cast<unsigned long long>(event.missionId));
+        if (kind == story_wire::Kind::OrderRequest) order_handoff::expect(event.missionId);
     } else if (kind == story_wire::Kind::MissionSuccess || kind == story_wire::Kind::OrderDelivered) {
         reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, uint32_t)>(ds2::at(kRequestSuccess))(c, mission, event.a);
         logger::write("story: replayed the success of mission %llx", static_cast<unsigned long long>(event.missionId));
@@ -417,6 +419,22 @@ bool requestMissionSuccess(uint64_t id, uint32_t flag) {
     if (!mission || !c) return false;
     reinterpret_cast<uint64_t (*)(uintptr_t, uintptr_t, uint32_t)>(ds2::at(kRequestSuccess))(c, mission, flag);
     return true;
+}
+
+std::optional<uint16_t> missionState(uint64_t id) {
+    const uintptr_t mission = missionById(id);
+    if (!mission) return std::nullopt;
+    return ds2::field<uint16_t>(mission, kMissionState);
+}
+
+void forwardOrderRequest(uint64_t missionId, uint32_t row, int32_t extra) {
+    story_wire::Event event{};
+    event.kind = static_cast<uint8_t>(story_wire::Kind::OrderRequest);
+    event.a = row;
+    event.b = extra;
+    event.missionId = missionId;
+    std::lock_guard lock(g_mutex);
+    if (g_requests.size() < kMaxQueued) g_requests.push_back(event);
 }
 
 uintptr_t missionById(uint64_t id) {

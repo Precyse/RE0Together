@@ -5,43 +5,86 @@
 // NPCs: found live by a write watch on a woken enemy, 24 ms after the wake the inlined sleep at 0x141bd43b1 ran.
 //
 // The partner's body has to count as a focus here too. Running the update twice on split member lists crashed the game at
-// the body's spawn (3 of 3 launches), so the update runs once and only its decision changes: the instructions that turn a
-// member's position into a squared distance (0x141bd3ffa..0x141bd406e) are replaced by a call that returns the squared
-// distance to the nearer of the two foci, and the two instructions of the old block that the next test needs. The stub
-// lives in the 116 bytes of the old distance block, followed by a short jump over the rest.
+// the body's spawn (3 of 3 launches), so the update runs once and only its decisions change:
+//  - the instructions that turn a member's position into a squared distance (0x141bd3ffa..0x141bd406e) are replaced by a
+//    call that returns the squared distance to the nearer of the two foci, and the two instructions of the old block that the
+//    next test needs;
+//  - the wake test of a sleeping member in range, `call [component+0x78]` at 0x141bd4333 (true: do not wake), goes through
+//    wakeBlocked, which the test switch can make say "not blocked" for members nearer the partner;
+//  - the enabled test that opens every member's classification, `call [component+0xE8]` at 0x141bd3f91 (false: the member
+//    gets distance -1 and is slept whatever its position), goes through memberEnabled, which only logs what it says.
+// The stubs live in the 116 bytes of the old distance block: the distance stub first, a short jump over the rest, then the
+// wake stub and the enabled stub.
 #include "ds2/sneaking_focus.h"
 
 #include <windows.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstring>
 
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
+#include "ds2/entity_wake.h"
 #include "ds2/partner_focus.h"
+#include "ds2/sneaking_diag.h"
+#include "ds2/sneaking_groups.h"
+#include "hooks.h"
 #include "log.h"
 
 namespace {
+
+constexpr uintptr_t kUpdateBody = 0x141bd3d50;  // (manager*): the activity update of the NPC managers
 
 constexpr uintptr_t kDistanceBlock = 0x141bd3ffa;  // first instruction of the distance computation
 constexpr size_t kDistanceBlockBytes = 0x74;       // up to the `test cl, 1` (0x141bd406e) that uses its result
 constexpr uint8_t kBlockStart[] = {0xC5, 0xFB, 0x10, 0x44, 0x24, 0x50};  // vmovsd xmm0, [rsp+0x50]
 constexpr uint8_t kBlockEnd[] = {0xC5, 0xE8, 0x58, 0xF1};                // vaddps xmm6, xmm2, xmm1 (the block's last instruction)
 
+constexpr uintptr_t kWakeSite = 0x141bd432d;  // mov rcx, rax / mov rdx, [rax] / call [rdx+0x78]: the wake test
+constexpr size_t kWakeSiteBytes = 9;
+constexpr uint8_t kWakeSiteCode[] = {0x48, 0x8B, 0xC8, 0x48, 0x8B, 0x10, 0xFF, 0x52, 0x78};
+constexpr uintptr_t kWakeReturn = 0x141bd4336;  // the `test al, al` after the call
+constexpr size_t kWakeBlockedSlot = 0x78 / sizeof(uintptr_t);
+
+constexpr uintptr_t kEnabledSite = 0x141bd3f8e;  // mov rdx, [rax] / call [rdx+0xE8]: the enabled test (rcx = component already)
+constexpr size_t kEnabledSiteBytes = 9;
+constexpr uint8_t kEnabledSiteCode[] = {0x48, 0x8B, 0x10, 0xFF, 0x92, 0xE8, 0x00, 0x00, 0x00};
+constexpr uintptr_t kEnabledReturn = 0x141bd3f97;  // the `test al, al` after the call
+constexpr size_t kEnabledSlot = 0xE8 / sizeof(uintptr_t);
+constexpr uintptr_t kComponentFlags = 0x68;  // component +0x68 bit 3: the member is held (distance 0)
+constexpr unsigned kHeldBit = 3;
+constexpr double kSightMetres = 80.0;  // members this close to the watched point are logged
+
 constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
 constexpr uintptr_t kFocusOffset = 0xA0;  // WorldPosition: the point the update measures from
+constexpr ULONGLONG kLogEveryMs = 5000;
+
+void (*g_original)(uintptr_t manager) = nullptr;
+
+// Test switch (test command npcpartner.txt "wake"), off by default: a sleeping member nearer the partner than the player is
+// never held asleep by the component's wake test. It tells whether that test keeps a member next to the partner asleep.
+std::atomic<bool> g_skipWakeBlock{false};
+bool g_diagnostics = false;
+
 // What the distance stub does, in the registers the code after the old block expects: rax holds the member's Entity on entry;
 // the squared distance goes to xmm6 and cl gets "the owner entity (rbx+0x48) is not asleep" (flags +0x98 bit 9 clear).
 //   mov rcx, rax / vzeroupper / mov rax, <nearestSquaredDistance> / call rax / vmovaps xmm6, xmm0
 //   mov rax, [rbx+0x48] / mov rcx, [rax+0x98] / shr rcx, 9 / not cl / jmp over the rest
+// And the wake stub: wakeBlocked(component = rax, entity = [rbx]) in place of the engine's call, then back to its `test al, al`.
+//   mov rcx, rax / mov rdx, [rbx] / vzeroupper / mov rax, <wakeBlocked> / call rax / jmp back
 constexpr uint8_t kMovRcxRax[] = {0x48, 0x89, 0xC1};
+constexpr uint8_t kMovRdxRbxTarget[] = {0x48, 0x8B, 0x13};  // mov rdx, [rbx]
+constexpr uint8_t kMovRdxItemEntity[] = {0x48, 0x8B, 0x97, 0x88, 0x00, 0x00, 0x00};  // mov rdx, [rdi+0x88]
 constexpr uint8_t kVzeroupper[] = {0xC5, 0xF8, 0x77};
 constexpr uint8_t kMovRaxImm[] = {0x48, 0xB8};
 constexpr uint8_t kCallRax[] = {0xFF, 0xD0};
 constexpr uint8_t kMoveResult[] = {0xC5, 0xF8, 0x28, 0xF0};
 constexpr uint8_t kLoadOwnerFlags[] = {0x48, 0x8B, 0x43, 0x48, 0x48, 0x8B, 0x88, 0x98, 0x00, 0x00, 0x00, 0x48, 0xC1, 0xE9, 0x09, 0xF6, 0xD1};
+constexpr uint8_t kJumpNear = 0xE9;
 constexpr uint8_t kJumpShort = 0xEB;
+constexpr uint8_t kNop = 0x90;
 constexpr uint8_t kFiller = 0xCC;
 
 float squaredDistanceToFocus(const decima::WorldPosition& focus, const decima::WorldPosition& at) {
@@ -50,9 +93,70 @@ float squaredDistanceToFocus(const decima::WorldPosition& focus, const decima::W
     return (dy * dy + dx * dx) + dz * dz;
 }
 
+// Whether the entity stands nearer the partner's body than this machine's player.
+bool nearerPartner(uintptr_t entity) {
+    decima::WorldPosition at, partner;
+    const uintptr_t manager = decima::readPointer(ds2::at(kEntityManagerGlobal));
+    if (!manager || !decima::safeRead(entity + ds2::kEntityTransform, at) || !partner_focus::partnerPosition(partner)) return false;
+    return squaredDistanceToFocus(partner, at) < squaredDistanceToFocus(ds2::field<decima::WorldPosition>(manager, kFocusOffset), at);
+}
+
+// Diagnostics: once per interval per test, what a test said about a sleeping member standing near the watched point.
+bool shouldLogMember(uintptr_t entity, ULONGLONG& nextLog) {
+    const ULONGLONG now = GetTickCount64();
+    decima::WorldPosition at, point;
+    const char* label = "";
+    if (now < nextLog || !ds2::entityAsleep(entity) || !decima::safeRead(entity + ds2::kEntityTransform, at) ||
+        !sneaking_focus::watchedPoint(point, label) || std::sqrt(partner_focus::squaredDistance(at, point)) > kSightMetres) {
+        return false;
+    }
+    nextLog = now + kLogEveryMs;
+    return true;
+}
+
+void logWakeTest(uintptr_t entity, bool blocked) {
+    static ULONGLONG nextLog = 0;
+    if (shouldLogMember(entity, nextLog)) {
+        logger::write("sneaking_focus: sleeping member %p near the watched point: the component's wake test says %s",
+                      reinterpret_cast<void*>(entity), blocked ? "blocked" : "free");
+    }
+}
+
+void logEnabledTest(uintptr_t entity, uintptr_t component, bool enabled) {
+    static ULONGLONG nextLog = 0;
+    if (!shouldLogMember(entity, nextLog)) return;
+    uint32_t flags = 0;
+    decima::safeRead(component + kComponentFlags, flags);
+    logger::write("sneaking_focus: sleeping member %p near the watched point: enabled test %s, held flag %u",
+                  reinterpret_cast<void*>(entity), enabled ? "true" : "false", (flags >> kHeldBit) & 1);
+}
+
+// Called from the patched enabled test, for every member: the engine's own answer (and a log of it for a sleeper).
+bool memberEnabled(uintptr_t component, uintptr_t entity) {
+    using Enabled = bool (*)(uintptr_t component);
+    const bool enabled = reinterpret_cast<const Enabled*>(decima::readPointer(component))[kEnabledSlot](component);
+    if (g_diagnostics) logEnabledTest(entity, component, enabled);
+    return enabled;
+}
+
+// Called from the patched wake test for a member that is asleep and in range.
+bool wakeBlocked(uintptr_t component, uintptr_t entity) {
+    using Blocks = bool (*)(uintptr_t component);
+    const bool blocked = reinterpret_cast<const Blocks*>(decima::readPointer(component))[kWakeBlockedSlot](component);
+    if (g_diagnostics) logWakeTest(entity, blocked);
+    return blocked && !(g_skipWakeBlock.load() && nearerPartner(entity));
+}
+
+void updateDetour(uintptr_t manager) {
+    g_original(manager);
+    sneaking_diag::logGroups(manager);
+}
+
 bool codeIsAsExpected(const uint8_t* block) {
     return std::memcmp(block, kBlockStart, sizeof(kBlockStart)) == 0 &&
-           std::memcmp(block + kDistanceBlockBytes - sizeof(kBlockEnd), kBlockEnd, sizeof(kBlockEnd)) == 0;
+           std::memcmp(block + kDistanceBlockBytes - sizeof(kBlockEnd), kBlockEnd, sizeof(kBlockEnd)) == 0 &&
+           std::memcmp(reinterpret_cast<const void*>(ds2::at(kWakeSite)), kWakeSiteCode, sizeof(kWakeSiteCode)) == 0 &&
+           std::memcmp(reinterpret_cast<const void*>(ds2::at(kEnabledSite)), kEnabledSiteCode, sizeof(kEnabledSiteCode)) == 0;
 }
 
 void writeCode(void* address, const uint8_t* bytes, size_t count) {
@@ -67,6 +171,14 @@ void writeCode(void* address, const uint8_t* bytes, size_t count) {
 uint8_t* append(uint8_t* to, const uint8_t* bytes, size_t count) {
     std::memcpy(to, bytes, count);
     return to + count;
+}
+
+// Appends a near jump from `from` (the address its opcode will have) to `target`.
+uint8_t* appendJump(uint8_t* to, uintptr_t from, uintptr_t target) {
+    *to++ = kJumpNear;
+    const int32_t displacement = static_cast<int32_t>(target - (from + 5));
+    std::memcpy(to, &displacement, sizeof(displacement));
+    return to + sizeof(displacement);
 }
 
 // Appends `mov rax, function / call rax`.
@@ -89,7 +201,30 @@ void writePatches() {
     const size_t afterJump = static_cast<size_t>(at - block) + kJumpShortBytes;
     *at++ = kJumpShort;
     *at++ = static_cast<uint8_t>(kDistanceBlockBytes - afterJump);  // lands on the `test cl, 1` after the old block
+
+    const uintptr_t wakeStub = ds2::at(kDistanceBlock) + afterJump;
+    at = append(at, kMovRcxRax, sizeof(kMovRcxRax));
+    at = append(at, kMovRdxRbxTarget, sizeof(kMovRdxRbxTarget));
+    at = append(at, kVzeroupper, sizeof(kVzeroupper));
+    at = appendCall(at, reinterpret_cast<uintptr_t>(&wakeBlocked));
+    at = appendJump(at, ds2::at(kDistanceBlock) + static_cast<size_t>(at - block), ds2::at(kWakeReturn));
+
+    const uintptr_t enabledStub = ds2::at(kDistanceBlock) + static_cast<size_t>(at - block);
+    at = append(at, kMovRdxItemEntity, sizeof(kMovRdxItemEntity));  // rcx already holds the component
+    at = append(at, kVzeroupper, sizeof(kVzeroupper));
+    at = appendCall(at, reinterpret_cast<uintptr_t>(&memberEnabled));
+    appendJump(at, ds2::at(kDistanceBlock) + static_cast<size_t>(at - block), ds2::at(kEnabledReturn));
+
+    uint8_t wakeSite[kWakeSiteBytes];
+    std::memset(wakeSite, kNop, sizeof(wakeSite));
+    appendJump(wakeSite, ds2::at(kWakeSite), wakeStub);
+    uint8_t enabledSite[kEnabledSiteBytes];
+    std::memset(enabledSite, kNop, sizeof(enabledSite));
+    appendJump(enabledSite, ds2::at(kEnabledSite), enabledStub);
+
     writeCode(reinterpret_cast<void*>(ds2::at(kDistanceBlock)), block, sizeof(block));
+    writeCode(reinterpret_cast<void*>(ds2::at(kWakeSite)), wakeSite, sizeof(wakeSite));
+    writeCode(reinterpret_cast<void*>(ds2::at(kEnabledSite)), enabledSite, sizeof(enabledSite));
 }
 
 }  // namespace
@@ -108,12 +243,34 @@ float nearestSquaredDistance(uintptr_t entity) {
     return nearest;
 }
 
-void installEarly() {
+bool watchedPoint(decima::WorldPosition& out, const char*& label) {
+    if (partner_focus::partnerPosition(out)) {
+        label = "the partner";
+        return true;
+    }
+    const uintptr_t manager = decima::readPointer(ds2::at(kEntityManagerGlobal));
+    if (!manager) return false;
+    out = ds2::field<decima::WorldPosition>(manager, kFocusOffset);
+    label = "the player";
+    return true;
+}
+
+void setSkipWakeBlock(bool skip) {
+    g_skipWakeBlock = skip;
+    logger::write("sneaking_focus: the wake test is %s for members nearer the partner", skip ? "skipped" : "left to the component");
+}
+
+void installEarly(bool diagnostics) {
     if (!codeIsAsExpected(reinterpret_cast<const uint8_t*>(ds2::at(kDistanceBlock)))) {
         logger::write("sneaking_focus: the NPC managers' update is not the expected code, left alone");
         return;
     }
+    g_diagnostics = diagnostics;
     writePatches();
+    if (diagnostics) {
+        hooks::install("npc manager update (diagnostics)", ds2::at(kUpdateBody), reinterpret_cast<void*>(&updateDetour),
+                       reinterpret_cast<void**>(&g_original));
+    }
     logger::write("sneaking_focus: the NPC managers' distance is the nearer of the player and the partner");
 }
 

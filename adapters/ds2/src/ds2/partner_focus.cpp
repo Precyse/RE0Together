@@ -19,6 +19,7 @@
 #include "decima/safe_read.h"
 #include "decima/world_transform.h"
 #include "ds2/engine.h"
+#include "ds2/entity_wake.h"
 #include "ds2/remote_player.h"
 #include "ds2/sim_tick.h"
 #include "hooks.h"
@@ -37,6 +38,18 @@ constexpr uintptr_t kTableFocus = 0x30;        // WorldPosition: the point the u
 constexpr uintptr_t kTableMemberCount = 0xD8;  // int32
 constexpr uintptr_t kTableMembers = 0xE0;      // Entity*[count]
 
+// Fields the log prints for a table that still has sleeping members near the partner after the update.
+constexpr uintptr_t kTableBudget = 0x18;      // int32: awake budget
+constexpr uintptr_t kTableNearRadius = 0x24;  // float
+constexpr uintptr_t kTableFarRadius = 0x28;   // float
+constexpr uintptr_t kTableArea = 0x48;        // optional area object: members outside it sleep
+constexpr uintptr_t kEntityManagerGlobal = 0x14623DEB0;
+constexpr uintptr_t kTables = 0x20E0;
+constexpr uintptr_t kTableSize = 0xE8;
+constexpr uintptr_t kStreamingManagerGlobal = 0x146266958;  // StreamingStrategyManagerGame*
+constexpr uintptr_t kStreamTest = 0x1426E64F0;              // (manager, position*, radius) -> 2 when streamed in
+constexpr float kNearStreamRadius = 4.0f, kMidStreamRadius = 2.0f;  // the radii the update passes (constants in the code)
+
 constexpr ULONGLONG kLogEveryMs = 5000;
 
 using UpdateFn = void (*)(uintptr_t table);
@@ -51,6 +64,8 @@ uintptr_t g_lastTable = 0;
 size_t g_sweepTotal = 0;
 size_t g_lastSweepTotal = 0;
 ULONGLONG g_nextLogAt = 0;
+bool g_diagnostics = false;
+bool g_logSweep = false;  // this sweep prints its tables' sleepers
 
 // Splits the table's members by the nearer focus. Members without a readable position stay with this machine's player.
 void splitMembers(uintptr_t table, const decima::WorldPosition& partner) {
@@ -90,20 +105,44 @@ void updateBothFoci(uintptr_t table, const decima::WorldPosition& partner) {
     ds2::field<int32_t>(table, kTableMemberCount) = savedCount;
 }
 
-// Tables are walked in ascending order each frame: a lower address starts a new sweep, and the first sweep after the log is
-// due prints the finished one's total.
+// Tables are walked in ascending order each frame: a lower address starts a new sweep, and the sweep after the log is due
+// prints the finished one's total and each table's sleepers.
 void countSweep(uintptr_t table, size_t handedToPartner) {
     if (table <= g_lastTable) {
         g_lastSweepTotal = g_sweepTotal;
         g_sweepTotal = 0;
         const ULONGLONG now = GetTickCount64();
-        if (now >= g_nextLogAt) {
+        g_logSweep = now >= g_nextLogAt;
+        if (g_logSweep) {
             g_nextLogAt = now + kLogEveryMs;
             logger::write("partner_focus: %zu entities simulated around the partner last frame", g_lastSweepTotal);
         }
     }
     g_lastTable = table;
     g_sweepTotal += handedToPartner;
+}
+
+// Names why members near the partner are still asleep: the table's budget, radii and area decide it.
+void logSleepers(uintptr_t table) {
+    size_t asleep = 0;
+    uintptr_t sample = 0;
+    for (const uintptr_t member : g_nearPartner) {
+        if (!member || !ds2::entityAsleep(member)) continue;
+        ++asleep;
+        sample = member;
+    }
+    if (asleep == 0) return;
+    const uintptr_t manager = decima::readPointer(ds2::at(kStreamingManagerGlobal));
+    const auto streamTest = reinterpret_cast<uint8_t (*)(uintptr_t, uintptr_t, float)>(ds2::at(kStreamTest));
+    logger::write("partner_focus: a sleeper's stream test: near radius %d, mid radius %d (2 = streamed in)",
+                  streamTest(manager, sample + ds2::kEntityTransform, kNearStreamRadius),
+                  streamTest(manager, sample + ds2::kEntityTransform, kMidStreamRadius));
+    const uintptr_t first = decima::readPointer(ds2::at(kEntityManagerGlobal)) + kTables;
+    logger::write("partner_focus: table %llu has %zu of %zu members near the partner asleep (budget %d, awake %d, near %.0f, far %.0f, area %p)",
+                  static_cast<unsigned long long>((table - first) / kTableSize), asleep, g_nearPartner.size(),
+                  ds2::field<int32_t>(table, kTableBudget), ds2::field<int32_t>(table, kTableAwakeCount),
+                  ds2::field<float>(table, kTableNearRadius), ds2::field<float>(table, kTableFarRadius),
+                  reinterpret_cast<void*>(ds2::field<uintptr_t>(table, kTableArea)));
 }
 
 void categoryUpdateDetour(uintptr_t table) {
@@ -119,6 +158,7 @@ void categoryUpdateDetour(uintptr_t table) {
         updateBothFoci(table, partner);
     }
     countSweep(table, g_nearPartner.size());
+    if (g_diagnostics && g_logSweep) logSleepers(table);
 }
 
 }  // namespace
@@ -135,7 +175,8 @@ double squaredDistance(const decima::WorldPosition& a, const decima::WorldPositi
     return dx * dx + dy * dy + dz * dz;
 }
 
-void installEarly() {
+void installEarly(bool diagnostics) {
+    g_diagnostics = diagnostics;
     hooks::install("entity activity update", ds2::at(kCategoryUpdate), reinterpret_cast<void*>(&categoryUpdateDetour),
                    reinterpret_cast<void**>(&g_original));
 }

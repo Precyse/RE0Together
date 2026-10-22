@@ -51,6 +51,31 @@ int main() {
     loading.known = loading.loading = true;
     check(stateText(decode(encode(loading))) == "LOADING", "loading text");
 
+    Status menu;
+    menu.known = menu.menu = true;
+    const Status menuBack = decode(encode(menu));
+    check(menuBack.menu && !menuBack.dead && encode(menu) & kMenu, "menu bit round trip");
+    check(stateText(menuBack) == "MENU", "menu text");
+    Status loadingMenu = menu;
+    loadingMenu.loading = true;
+    check(stateText(loadingMenu) == "LOADING", "loading wins over menu");
+    check(decode(0x10fe).health == kHealthFull && !decode(0x10fe).menu, "an old sender's word has no menu");
+
+    Status alive;
+    alive.known = true;
+    Status dying = alive;
+    dying.dead = true;
+    check(transition(alive, dying) == Change::Died, "alive then dead is a death");
+    check(transition(dying, dying) == Change::None, "dead then dead is nothing new");
+    check(transition(dying, alive) == Change::Back, "dead then up is back");
+    check(transition(dying, loading) == Change::None, "dead then loading is not back yet");
+    check(transition(dying, Status{}) == Change::None, "an unknown report changes nothing");
+    check(transition(Status{}, dying) == Change::Died, "the first report can be a death");
+    check(transition(alive, alive) == Change::None, "up then up is nothing");
+
+    check(away(dying) && away(loading) && !away(alive) && !away(menu), "dead and loading park the body");
+    check(!away(Status{}), "an unknown status does not park the body");
+
     std::printf(g_failures ? "FAILED\n" : "PASS\n");
     return g_failures ? 1 : 0;
 }

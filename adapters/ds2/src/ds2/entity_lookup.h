@@ -21,7 +21,10 @@ uintptr_t entityByUuid(const uint8_t* uuid);
 // The entity's UUID (entity +0x10); false when the memory cannot be read.
 bool entityUuid(uintptr_t entity, std::array<uint8_t, 16>& out);
 
-// Whether the entity's dead flag (+0x98 bit 8) is set; an unreadable entity counts as dead.
+// Reads the entity's dead flag (+0x98 bit 8) into `dead`; false when the memory cannot be read.
+bool readDeadFlag(uintptr_t entity, bool& dead);
+
+// Whether the dead flag is set; an unreadable entity counts as dead (a dropped enemy needs no more work).
 bool entityIsDead(uintptr_t entity);
 
 // The engine's EntityManagerGame (the object of the damage function), 0 before it exists.

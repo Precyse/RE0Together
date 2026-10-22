@@ -13,12 +13,16 @@
 #include "cargo_transfer.h"
 #include "clock_sync.h"
 #include "debug_stats.h"
+#include "order_handoff.h"
 #include "partner_cargo_sync.h"
 #include "cutscene_sync.h"
 #include "story_sync.h"
 #include "rack_sync.h"
 #include "struct_sync.h"
 #include "bt_sync.h"
+#include "crater_sync.h"
+#include "locker_sync.h"
+#include "ping_sync.h"
 #include "env_sync.h"
 #include "enemy_combat.h"
 #include "camp_sync.h"
@@ -53,6 +57,7 @@ struct Heard {
     player_sync::PlayerState state;
     Clock::time_point at;
     float velocity[3] = {};  // metres per second between the two newest reports
+    partner_status::Status lastKnown;  // the newest report whose status was known
 };
 
 std::mutex g_mutex;  // guards g_heard and g_names (net thread writes, render thread reads)
@@ -65,13 +70,23 @@ uint32_t g_seq = 0;
 PeerJoins g_hostJoins;      // guest: the host's joins seen so far
 bool g_hostSeen = false;    // guest: the host has been announced once
 
-// Toasts the partner's death on the report that first says dead (caller holds g_mutex).
-void toastDeath(uint8_t slot, const Heard* last, const Heard& now) {
-    const bool wasDead = last && partner_status::decode(last->state.status).dead;
-    if (wasDead || !partner_status::decode(now.state.status).dead) return;
+// The name the launcher reported for the slot (caller holds g_mutex).
+std::string nameOf(uint8_t slot) {
     const auto name = g_names.find(slot);
-    toast_queue::push(((name == g_names.end() ? "Player " + std::to_string(slot) : name->second) + " died").c_str(),
-                      kToastSeconds);
+    return name == g_names.end() ? "Player " + std::to_string(slot) : name->second;
+}
+
+// Toasts the partner's death and return on the report that changes it, and carries the last known status forward into
+// `now` (caller holds g_mutex).
+void toastTransition(uint8_t slot, const Heard* last, Heard& now) {
+    const partner_status::Status before = last ? last->lastKnown : partner_status::Status{};
+    const partner_status::Status status = partner_status::decode(now.state.status);
+    now.lastKnown = status.known ? status : before;
+    switch (partner_status::transition(before, status)) {
+        case partner_status::Change::Died: toast_queue::push((nameOf(slot) + " died").c_str(), kToastSeconds); break;
+        case partner_status::Change::Back: toast_queue::push((nameOf(slot) + " is back").c_str(), kToastSeconds); break;
+        case partner_status::Change::None: break;
+    }
 }
 
 void onFrame(const GameFrame& frame) {
@@ -89,7 +104,7 @@ void onFrame(const GameFrame& frame) {
             restarted ? 0.0f : static_cast<float>(heard.state.seq - last.state.seq) / player_sync::kSendHz;
         position_blend::velocity(last.state.pos, heard.state.pos, gapSeconds, heard.velocity);
     }
-    toastDeath(frame.slot, previous != g_heard.end() ? &previous->second : nullptr, heard);
+    toastTransition(frame.slot, previous != g_heard.end() ? &previous->second : nullptr, heard);
     g_heard[frame.slot] = heard;
 }
 
@@ -153,6 +168,9 @@ void tick(NetClient& net) {
         fact_sync::onFrame(frame);
         env_sync::onFrame(frame);
         bt_sync::onFrame(frame);
+        crater_sync::onFrame(frame);
+        locker_sync::onFrame(net, frame);
+        ping_sync::onFrame(frame);
         struct_sync::onFrame(frame);
         story_sync::onFrame(frame);
         cutscene_sync::onFrame(frame);
@@ -182,8 +200,12 @@ void tick(NetClient& net) {
     fact_sync::tick(net, session);
     env_sync::tick(net, session);
     bt_sync::tick(net, session);
+    crater_sync::tick(net, session);
+    locker_sync::tick(net, session);
+    ping_sync::tick(net, session);
     struct_sync::tick(net, session);
     story_sync::tick(net, session);
+    order_handoff::tick(net, session);
     cutscene_sync::tick(net, session);
     enemy_sync::tick(net, session);
     camp_sync::tick(net, session);
@@ -219,8 +241,7 @@ std::vector<RemotePlayer> remotePlayers() {
     std::lock_guard lock(g_mutex);
     for (const auto& [slot, heard] : g_heard) {
         if (now - heard.at > kStaleAfter) continue;
-        const auto name = g_names.find(slot);
-        RemotePlayer peer{slot, name == g_names.end() ? "Player " + std::to_string(slot) : name->second, {},
+        RemotePlayer peer{slot, nameOf(slot), {},
                           {heard.velocity[0], heard.velocity[1], heard.velocity[2]}, heard.state.yaw,
                           partner_status::decode(heard.state.status)};
         const float elapsed = std::chrono::duration<float>(now - heard.at).count();

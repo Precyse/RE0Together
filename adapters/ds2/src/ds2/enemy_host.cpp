@@ -17,6 +17,7 @@
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/entity_wake.h"
+#include "ds2/health_watch.h"
 #include "enemy_directory.h"
 #include "ds2/place.h"
 #include "ds2/remote_animation.h"
@@ -33,21 +34,23 @@ constexpr uintptr_t kEntityUuid = 0x10;
 constexpr uintptr_t kEntityFlags = 0x98;
 constexpr ULONGLONG kSampleMs = 100;
 constexpr size_t kMaxTracked = 512;
-// partner_focus keeps the enemies around the partner's body simulated; enemies within this range of it are counted, with the
-// sleeping ones among them, to show it holds.
+// partner_focus keeps the enemies around the partner's body simulated; enemies within this range of it are counted (and the
+// sleeping ones among them logged) to show it holds.
 constexpr double kPartnerWatchMetres = 80.0;
 constexpr ULONGLONG kPartnerWatchLogMs = 5000;
 constexpr size_t kMaxQueued = 1024;
 constexpr float kMillisecondsPerSecond = 1000.0f;
 constexpr double kMinMoveMeters = 0.03;  // an enemy that moved less than this and did not turn is not reported again...
 constexpr float kMinTurn = 0.01f;
-constexpr double kAnimationRadius = 50.0;  // metres around the partner: further enemies are not animated on its side
+constexpr double kNearPartnerRadius = 50.0;  // metres around the partner: enemies inside are animated and kept sent often
 constexpr ULONGLONG kAnimationSnapshotMs = 10000;  // a new enemy in range and a requested snapshot send one at once
-constexpr ULONGLONG kKeepaliveMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
+constexpr ULONGLONG kKeepaliveNearMs = 2000;  // ...for this long (a camp holds hundreds of enemies that stand still)
+constexpr ULONGLONG kKeepaliveFarMs = 10000;
 
 struct PartnerWatch {
     int inRange = 0;
     int asleep = 0;
+    uintptr_t firstSleeper = 0;
 };
 
 struct Tracked {
@@ -75,6 +78,7 @@ std::vector<enemy_wire::EnemyState> g_states;
 std::vector<enemy_wire::EnemyGone> g_gone;
 std::vector<enemy_wire::EnemyAnim> g_anims;
 bool g_sharing = false;
+bool g_diagnostics = false;
 bool g_snapshotRequested = false;
 
 void pushGone(uint16_t netId, enemy_wire::GoneReason reason) {
@@ -90,11 +94,14 @@ bool partnerPosition(decima::WorldPosition& out) {
     return true;
 }
 
+bool nearPartner(const decima::WorldTransform& transform, const decima::WorldPosition* partner) {
+    return partner && std::hypot(transform.position.x - partner->x, transform.position.y - partner->y) <= kNearPartnerRadius;
+}
+
 // The enemy's animation variables that changed since the last report, while the partner is within sight of it.
 void sampleAnimation(Tracked& enemy, const decima::WorldTransform& transform, const decima::WorldPosition* partner,
                      ULONGLONG now) {
-    const bool inSight = partner && std::hypot(transform.position.x - partner->x, transform.position.y - partner->y) <= kAnimationRadius;
-    const uintptr_t manager = inSight ? remote_animation::managerOf(enemy.entity) : 0;
+    const uintptr_t manager = nearPartner(transform, partner) ? remote_animation::managerOf(enemy.entity) : 0;
     if (!manager) {
         enemy.sentVariables.reset();
         return;
@@ -119,6 +126,18 @@ void watchNearPartner(const Tracked& enemy, const decima::WorldTransform& transf
     ++watch.inRange;
     if (!ds2::entityAsleep(enemy.entity)) return;
     ++watch.asleep;
+    if (!watch.firstSleeper) watch.firstSleeper = enemy.entity;
+}
+
+// Diagnostics: once, wakes a sleeping enemy near the partner and watches its flags, so the log names the code that puts it
+// back to sleep (the write watch logs each distinct writing instruction with its stack).
+void watchSleeper(uintptr_t sleeper) {
+    static bool watched = false;
+    if (watched) return;
+    watched = true;
+    health_watch::arm(sleeper + kEntityFlags);
+    ds2::wakeEntity(sleeper);
+    logger::write("enemy_host: watching the flags of the sleeping enemy %p after waking it", reinterpret_cast<void*>(sleeper));
 }
 
 void logPartnerWatch(const PartnerWatch& watch, ULONGLONG now) {
@@ -126,11 +145,12 @@ void logPartnerWatch(const PartnerWatch& watch, ULONGLONG now) {
     if (now - lastLog < kPartnerWatchLogMs || watch.inRange == 0) return;
     lastLog = now;
     logger::write("enemy_host: %d enemies within %.0f m of the partner, %d asleep", watch.inRange, kPartnerWatchMetres, watch.asleep);
+    if (g_diagnostics && watch.firstSleeper) watchSleeper(watch.firstSleeper);
 }
 
-bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now) {
+bool worthSending(const Tracked& enemy, const enemy_wire::EnemyState& state, ULONGLONG now, ULONGLONG keepaliveMs) {
     const enemy_wire::Pose& pose = state.pose;
-    if (now - enemy.sentAt >= kKeepaliveMs || state.healthRatio != enemy.sentHealth) return true;
+    if (now - enemy.sentAt >= keepaliveMs || state.healthRatio != enemy.sentHealth) return true;
     const double dx = pose.position[0] - enemy.sentPose.position[0];
     const double dy = pose.position[1] - enemy.sentPose.position[1];
     const double dz = pose.position[2] - enemy.sentPose.position[2];
@@ -206,7 +226,8 @@ void tick() {
             }
             if (enemy.announced && !dead && g_states.size() < kMaxQueued) {
                 const enemy_wire::EnemyState state = sample(enemy, transform, false, now);
-                if (worthSending(enemy, state, now)) {
+                const ULONGLONG keepaliveMs = nearPartner(transform, havePartner ? &partnerAt : nullptr) ? kKeepaliveNearMs : kKeepaliveFarMs;
+                if (worthSending(enemy, state, now, keepaliveMs)) {
                     enemy.sentPose = state.pose;
                     enemy.sentHealth = state.healthRatio;
                     enemy.sentAt = now;
@@ -300,6 +321,9 @@ std::vector<enemy_wire::EnemyGone> takeEnemyGone() {
 
 namespace enemy_host {
 
-void installEarly() { sim_tick::add(&tick, "enemy host", sim_tick::Gate::Gameplay); }
+void installEarly(bool diagnostics) {
+    g_diagnostics = diagnostics;
+    sim_tick::add(&tick, "enemy host", sim_tick::Gate::Gameplay);
+}
 
 }  // namespace enemy_host

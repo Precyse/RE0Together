@@ -12,10 +12,14 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <map>
+#include <mutex>
+#include <optional>
 #include <vector>
 
 #include "decima/localized_text.h"
 #include "decima/safe_read.h"
+#include "ds2/sim_tick.h"
 #include "game.h"
 #include "log.h"
 #include "pattern_scan.h"
@@ -63,6 +67,11 @@ constexpr uint64_t kFreeHandle = ~0ull;
 constexpr float kBodyPieceMark = 0.98765f;  // a durability no piece of the world has: the remote body's pieces carry it
 // A baggage owner.
 constexpr uintptr_t kOwnerKey = 0x18;  // 0 = the local player
+constexpr uintptr_t kOwnerCarrierType = 0x10;
+constexpr uintptr_t kOwnerIdentifier = 0x20;  // construction owners: StringHash of "construction_%x" % the construction id
+constexpr uint64_t kConstructionOwnerKey = ~0ull;
+constexpr uintptr_t kSlotDefinitionOwner = 0x08;  // runtime slot +0 -> the 0x1D0 slot (kind byte at +0, its owner at +8)
+constexpr uintptr_t kSlotCapacity = 0x24;
 constexpr uintptr_t kOwnerActive = 0xBC;  // the menus' gather skips an owner that is not active
 constexpr uintptr_t kOwnerSlotCount = 0x28, kOwnerSlotData = 0x30;
 constexpr uintptr_t kOwnerChildCount = 0x48, kOwnerChildData = 0x50;
@@ -71,6 +80,7 @@ constexpr uint64_t kLocalPlayerKey = 0;
 // An order id: a mission number in the low bits and an order type in bits 32..37; anything else is plain cargo.
 constexpr uint64_t kOrderNumberMask = 0x1FFFFFFF;
 constexpr uint64_t kOrderTypeMask = 0x3Full << 32;
+constexpr uint64_t kMissionIdMask = 0xE00FFFFFFFFFFFFF;  // an order piece's id without its piece index (bits 52..60): the mission id
 constexpr uint8_t kBackpackSlotKind = 1;  // the main load of the backpack owner
 constexpr uint8_t kBedSlotKind = 0;  // a vehicle's cargo bed (its other slots, kinds 35-37, are not mirrored)
 constexpr uint8_t kNoSlotKind = 0xFF;
@@ -207,6 +217,7 @@ bool inSlots(const std::vector<SlotRange>& slots, uintptr_t slot) {
 }
 
 struct PoolEntry {
+    uintptr_t address;
     uint64_t handle;
     uintptr_t item;
     uintptr_t slot;
@@ -217,7 +228,7 @@ struct PoolEntry {
 };
 
 // Every piece in the pool, from one copy of it (the game may change entries while we read).
-std::vector<PoolEntry> livePool(uintptr_t manager) {
+std::vector<PoolEntry> readPool(uintptr_t manager) {
     std::vector<PoolEntry> out;
     const int32_t count = readCount(manager + kPoolCount, kMaxPool);
     const uintptr_t pool = decima::readPointer(manager + kPoolData);
@@ -226,6 +237,7 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
     for (int32_t i = 0; i < count; ++i) {
         const uint8_t* raw = entries.data() + i * kBaggageSize;
         PoolEntry entry;
+        entry.address = pool + i * kBaggageSize;
         std::memcpy(&entry.handle, raw + kBaggageHandle, sizeof(entry.handle));
         std::memcpy(&entry.item, raw + kBaggageItem, sizeof(entry.item));
         std::memcpy(&entry.slot, raw + kBaggageSlot, sizeof(entry.slot));
@@ -239,46 +251,46 @@ std::vector<PoolEntry> livePool(uintptr_t manager) {
     return out;
 }
 
-// The head of a pool entry (handle .. slot): what a scan needs to pick entries without copying the whole pool.
-constexpr uintptr_t kEntryHead = kBaggageHandle;
-constexpr size_t kEntryHeadSize = kBaggageSlot + sizeof(uintptr_t) - kBaggageHandle;
-
-struct EntryHead {
-    uint64_t handle;
-    uintptr_t item;
-    float durability;
-    uintptr_t slot;
+// The pool is copied once per simulation frame and every reader of that frame shares the copy. A write that changes the
+// pool drops it (dropPool); requests the game serves on its next update show up in the next frame's copy.
+std::mutex g_poolMutex;
+struct PoolCopy {
+    bool valid = false;
+    uint32_t frame = 0;
+    std::vector<PoolEntry> entries;
 };
+PoolCopy g_pool;  // guarded by g_poolMutex
 
-// Calls visit(entryAddress, head) for every used entry, reading only each entry's head (the pool is megabytes; this runs on
-// the simulation thread).
-template <class Visit>
-void scanPool(uintptr_t manager, Visit visit) {
-    const int32_t count = readCount(manager + kPoolCount, kMaxPool);
-    const uintptr_t pool = decima::readPointer(manager + kPoolData);
-    for (int32_t i = 0; pool && i < count; ++i) {
-        const uintptr_t entry = pool + static_cast<uintptr_t>(i) * kBaggageSize;
-        uint8_t raw[kEntryHeadSize];
-        if (!decima::safeCopy(raw, entry + kEntryHead, sizeof(raw))) continue;
-        EntryHead head;
-        std::memcpy(&head.handle, raw + kBaggageHandle - kEntryHead, sizeof(head.handle));
-        std::memcpy(&head.item, raw + kBaggageItem - kEntryHead, sizeof(head.item));
-        std::memcpy(&head.durability, raw + kBaggageDurability - kEntryHead, sizeof(head.durability));
-        std::memcpy(&head.slot, raw + kBaggageSlot - kEntryHead, sizeof(head.slot));
-        if (head.handle != kFreeHandle && head.item) visit(entry, head);
+std::vector<PoolEntry> livePool(uintptr_t manager) {
+    std::lock_guard lock(g_poolMutex);
+    const uint32_t frame = sim_tick::frame();
+    if (!g_pool.valid || g_pool.frame != frame) {
+        g_pool.entries = readPool(manager);
+        g_pool.frame = frame;
+        g_pool.valid = true;
     }
+    return g_pool.entries;
+}
+
+void dropPool() {
+    std::lock_guard lock(g_poolMutex);
+    g_pool.valid = false;
 }
 
 std::string itemName(uintptr_t item) { return decima::localizedText(decima::readPointer(item + kItemName)); }
 
-std::vector<game::Cargo> piecesIn(uintptr_t manager, const std::vector<SlotRange>& slots) {
+game::Cargo cargoOf(const PoolEntry& entry, uint32_t type, bool withName) {
+    return {entry.handle, type, withName ? itemName(entry.item) : std::string(), isOrderId(entry.orderId) ? entry.orderId : 0,
+            entry.secondId, entry.category, entry.durability};
+}
+
+std::vector<game::Cargo> piecesIn(uintptr_t manager, const std::vector<SlotRange>& slots, bool withNames = true) {
     std::vector<game::Cargo> out;
     if (slots.empty()) return out;
     for (const PoolEntry& entry : livePool(manager)) {
         uint32_t type = 0;
         if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
-            out.push_back({entry.handle, type, itemName(entry.item), isOrderId(entry.orderId) ? entry.orderId : 0,
-                           entry.secondId, entry.category, entry.durability});
+            out.push_back(cargoOf(entry, type, withNames));
         }
     }
     return out;
@@ -306,6 +318,7 @@ bool createPiece(uintptr_t manager, uint32_t type, const world_to_screen::Vec3& 
     }
     uint64_t handle = kFreeHandle;
     code().create(manager, &handle, info.data());
+    dropPool();
     return handle != kFreeHandle;
 }
 
@@ -374,6 +387,64 @@ game::AddResult createInBackpack(uintptr_t baggage, uintptr_t owner, const std::
                : game::AddResult::Refused;
 }
 
+// The slots of one kind of one baggage owner: a locker's side of a construction object.
+struct LockerSlots {
+    uintptr_t owner;
+    uint32_t key;  // the owner's identifier
+    uint8_t kind;
+    std::vector<SlotRange> slots;
+};
+
+bool isConstructionOwner(uintptr_t owner, uint32_t& identifier) {
+    uint64_t key = 0;
+    return owner && decima::safeRead(owner + kOwnerKey, key) && key == kConstructionOwnerKey &&
+           decima::safeRead(owner + kOwnerIdentifier, identifier);
+}
+
+bool isSharedLockerKind(uint8_t kind) { return kind == game::kSlotPublic || kind == game::kSlotPublicReceived; }
+
+// Every baggage owner's slots of the kinds firstKind..lastKind, one entry per owner and kind. Without constructionOnly
+// the owners of any key are listed (the probe that checks which owners hold lockers).
+std::vector<LockerSlots> lockerSlots(uintptr_t manager, uint8_t firstKind, uint8_t lastKind, bool constructionOnly = true) {
+    std::vector<LockerSlots> out;
+    const int32_t owners = readCount(manager + kOwnerCount, kMaxOwners);
+    const uintptr_t data = decima::readPointer(manager + kOwnerData);
+    for (int32_t i = 0; data && i < owners; ++i) {
+        const uintptr_t owner = decima::readPointer(data + i * sizeof(uintptr_t));
+        uint32_t identifier = 0;
+        if (!owner || (constructionOnly && !isConstructionOwner(owner, identifier))) continue;
+        if (!constructionOnly) decima::safeRead(owner + kOwnerIdentifier, identifier);
+        const int32_t slotCount = readCount(owner + kOwnerSlotCount, kMaxSlots);
+        const uintptr_t slotData = decima::readPointer(owner + kOwnerSlotData);
+        const size_t first = out.size();
+        for (int32_t s = 0; slotData && s < slotCount; ++s) {
+            const uintptr_t slot = slotData + s * kSlotSize;
+            uint8_t kind = 0;
+            if (!decima::safeRead(slot, kind) || kind < firstKind || kind > lastKind) continue;
+            auto mine = std::find_if(out.begin() + first, out.end(), [kind](const LockerSlots& l) { return l.kind == kind; });
+            if (mine == out.end()) mine = out.insert(out.end(), LockerSlots{owner, identifier, kind, {}});
+            mine->slots.push_back({slot, slot + kSlotSize});
+        }
+    }
+    return out;
+}
+
+std::optional<LockerSlots> findLocker(uintptr_t manager, uint32_t key, uint8_t kind) {
+    if (!isSharedLockerKind(kind)) return std::nullopt;
+    for (LockerSlots& locker : lockerSlots(manager, kind, kind)) {
+        if (locker.key == key) return std::move(locker);
+    }
+    return std::nullopt;
+}
+
+// Creates `piece` in the locker with the manager's own create (which takes the order link and the durability).
+game::AddResult createInLocker(uintptr_t manager, const LockerSlots& locker, const game::Cargo& piece) {
+    if (const game::AddResult guard = orderCopyGuard(manager, piece, locker.slots); guard != game::AddResult::Done) return guard;
+    const bool custom = linkedToOrder(piece) || piece.durability > 0;
+    return createPiece(manager, piece.type, {}, locker.owner, locker.kind, custom ? &piece : nullptr) ? game::AddResult::Done
+                                                                                                        : game::AddResult::Refused;
+}
+
 }  // namespace
 
 namespace game {
@@ -437,15 +508,15 @@ std::vector<SlotPiece> slotPiecesOfKinds(uint64_t ownerKey, const uint8_t* kinds
     if (!owner || sharesWithLocalPlayer(baggage, ownerKey, owner)) return out;
     std::vector<std::pair<uint8_t, std::vector<SlotRange>>> byKind;
     for (size_t i = 0; i < count; ++i) byKind.emplace_back(kinds[i], slotsOfKind(owner, kinds[i]));
-    scanPool(baggage, [&](uintptr_t, const EntryHead& head) {
+    for (const PoolEntry& entry : livePool(baggage)) {
         for (const auto& [kind, slots] : byKind) {
             uint32_t type = 0;
-            if (inSlots(slots, head.slot) && decima::safeRead(head.item + kItemType, type)) {
-                out.push_back({kind, head.handle, type});
-                return;
+            if (inSlots(slots, entry.slot) && decima::safeRead(entry.item + kItemType, type)) {
+                out.push_back({kind, entry.handle, type});
+                break;
             }
         }
-    });
+    }
     return out;
 }
 
@@ -473,18 +544,21 @@ void markOwnedCargo(uint64_t ownerKey) {
     if (!owner || ownerKey == kLocalPlayerKey || sharesWithLocalPlayer(baggage, ownerKey, owner)) return;
     std::vector<SlotRange> slots;
     collectSlots(owner, true, 0, slots);
-    scanPool(baggage, [&](uintptr_t entry, const EntryHead& head) {
-        if (inSlots(slots, head.slot) && head.durability != kBodyPieceMark) writeFloat(entry + kBaggageDurability, kBodyPieceMark);
-    });
+    for (const PoolEntry& entry : livePool(baggage)) {
+        if (inSlots(slots, entry.slot) && entry.durability != kBodyPieceMark) {
+            writeFloat(entry.address + kBaggageDurability, kBodyPieceMark);
+        }
+    }
+    dropPool();
 }
 
 std::vector<uint64_t> markedLooseCargo() {
     std::vector<uint64_t> handles;
     const uintptr_t baggage = manager();
     if (!baggage) return handles;
-    scanPool(baggage, [&](uintptr_t, const EntryHead& head) {
-        if (!head.slot && head.durability == kBodyPieceMark) handles.push_back(head.handle);
-    });
+    for (const PoolEntry& entry : livePool(baggage)) {
+        if (!entry.slot && entry.durability == kBodyPieceMark) handles.push_back(entry.handle);
+    }
     return handles;
 }
 
@@ -497,6 +571,23 @@ bool addSlotPiece(uint64_t ownerKey, uint8_t slotKind, uint32_t type) {
 std::vector<Cargo> vehicleCargo(uint64_t vehicle) { return slotPieces(vehicle, kBedSlotKind); }
 
 bool addVehicleCargo(uint64_t vehicle, uint32_t type) { return addSlotPiece(vehicle, kBedSlotKind, type); }
+
+std::vector<Cargo> orderPieces(uint64_t missionId, std::optional<uint64_t> bodyKey) {
+    std::vector<Cargo> out;
+    const uintptr_t baggage = manager();
+    if (!baggage) return out;
+    std::vector<SlotRange> racks = backpackSlots(baggage);
+    if (const uintptr_t body = bodyKey ? findOwner(baggage, *bodyKey) : 0) collectSlots(body, true, 0, racks);
+    for (const PoolEntry& entry : livePool(baggage)) {
+        uint32_t type = 0;
+        if ((entry.orderId & kMissionIdMask) != missionId || inSlots(racks, entry.slot) ||
+            !decima::safeRead(entry.item + kItemType, type)) {
+            continue;
+        }
+        out.push_back({entry.handle, type, itemName(entry.item), entry.orderId, entry.secondId, entry.category, entry.durability});
+    }
+    return out;
+}
 
 std::optional<uint64_t> findOrderPiece(uint64_t orderId) {
     const uintptr_t baggage = manager();
@@ -532,6 +623,92 @@ AddResult addCargo(const Cargo& piece) {
     if (!code().createAndAdd) return AddResult::Refused;
     code().createAndAdd(piece.type, kToBackpack);
     return AddResult::Done;
+}
+
+std::optional<LockerRef> lockerOfSlot(uintptr_t slot) {
+    const uintptr_t definition = slot ? decima::readPointer(slot) : 0;
+    uint8_t kind = 0;
+    if (!definition || !decima::safeRead(definition, kind) || kind < kSlotPrivate || kind > kSlotPublicReceived) return std::nullopt;
+    uint32_t identifier = 0;
+    if (!isConstructionOwner(decima::readPointer(definition + kSlotDefinitionOwner), identifier)) return std::nullopt;
+    return LockerRef{identifier, kind};
+}
+
+bool isLockerOwner(uintptr_t owner) {
+    uint32_t identifier = 0;
+    if (!isConstructionOwner(owner, identifier)) return false;
+    return !slotsOfKind(owner, kSlotPublic).empty() || !slotsOfKind(owner, kSlotPublicReceived).empty();
+}
+
+std::vector<LockerContents> lockerContents() {
+    const uintptr_t baggage = manager();
+    std::vector<LockerContents> out;
+    if (!baggage) return out;
+    struct Range {
+        SlotRange range;
+        size_t locker;  // index into out
+    };
+    std::vector<Range> ranges;
+    std::map<uint64_t, size_t> index;  // (key, kind) -> out
+    for (const LockerSlots& found : lockerSlots(baggage, kSlotPublic, kSlotPublicReceived)) {
+        const auto [at, added] = index.try_emplace((uint64_t{found.key} << 8) | found.kind, out.size());
+        if (added) out.push_back({found.key, found.kind, {}});
+        for (const SlotRange& range : found.slots) ranges.push_back({range, at->second});
+    }
+    std::sort(ranges.begin(), ranges.end(), [](const Range& a, const Range& b) { return a.range.begin < b.range.begin; });
+    for (const PoolEntry& entry : livePool(baggage)) {
+        auto after = std::upper_bound(ranges.begin(), ranges.end(), entry.slot,
+                                      [](uintptr_t slot, const Range& r) { return slot < r.range.begin; });
+        uint32_t type = 0;
+        if (after == ranges.begin() || entry.slot >= (--after)->range.end || !decima::safeRead(entry.item + kItemType, type)) continue;
+        out[after->locker].pieces.push_back(cargoOf(entry, type, false));
+    }
+    return out;
+}
+
+std::optional<std::vector<Cargo>> lockerPieces(uint32_t key, uint8_t kind) {
+    const uintptr_t baggage = manager();
+    const std::optional<LockerSlots> locker = baggage ? findLocker(baggage, key, kind) : std::nullopt;
+    if (!locker) return std::nullopt;
+    return piecesIn(baggage, locker->slots, false);
+}
+
+AddResult addLockerPiece(uint32_t key, uint8_t kind, const Cargo& piece) {
+    const uintptr_t baggage = manager();
+    const std::optional<LockerSlots> locker = baggage ? findLocker(baggage, key, kind) : std::nullopt;
+    return locker ? createInLocker(baggage, *locker, piece) : AddResult::Refused;
+}
+
+std::vector<PrivateLocker> privateLockers() {
+    std::vector<PrivateLocker> out;
+    const uintptr_t baggage = manager();
+    if (!baggage) return out;
+    for (const LockerSlots& locker : lockerSlots(baggage, kSlotPrivate, kSlotPrivate)) {
+        PrivateLocker priv{locker.owner, {}};
+        for (const Cargo& piece : piecesIn(baggage, locker.slots, false)) priv.handles.push_back(piece.handle);
+        out.push_back(std::move(priv));
+    }
+    return out;
+}
+
+void logLockerOwners() {
+    const uintptr_t baggage = manager();
+    const std::vector<LockerSlots> found =
+        baggage ? lockerSlots(baggage, kSlotPrivate, kSlotPublicReceived, false) : std::vector<LockerSlots>{};
+    logger::write("cargo: %zu owner and slot kind pairs with a locker slot (kinds 27 private, 28 public, 29 received)", found.size());
+    for (const LockerSlots& locker : found) {
+        uint8_t carrier = 0;
+        uint64_t key = 0, identifier = 0;
+        uint16_t capacity = 0;
+        decima::safeRead(locker.owner + kOwnerCarrierType, carrier);
+        decima::safeRead(locker.owner + kOwnerKey, key);
+        decima::safeRead(locker.owner + kOwnerIdentifier, identifier);
+        decima::safeRead(locker.slots.front().begin + kSlotCapacity, capacity);
+        logger::write("cargo: locker owner %p carrier %u key %llx identifier %llx kind %u slots %zu capacity %u pieces %zu",
+                      reinterpret_cast<void*>(locker.owner), carrier, static_cast<unsigned long long>(key),
+                      static_cast<unsigned long long>(identifier), locker.kind, locker.slots.size(), capacity,
+                      piecesIn(baggage, locker.slots, false).size());
+    }
 }
 
 AddResult placeCargo(const Cargo& piece, const world_to_screen::Vec3& at) {

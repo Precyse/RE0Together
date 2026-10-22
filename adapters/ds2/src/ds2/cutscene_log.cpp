@@ -9,15 +9,12 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "decima/safe_read.h"
-#include "ds2/engine.h"
+#include "ds2/game_state.h"
 #include "ds2/sim_tick.h"
 #include "log.h"
 
 namespace {
 
-constexpr uintptr_t kGameStateGlobal = 0x14623E4C0;
-constexpr uintptr_t kBitsLow = 0x160, kBitsHigh = 0x168;
 constexpr ULONGLONG kBitsPollMs = 250;
 constexpr uintptr_t kFrame = 0x34C;
 
@@ -29,9 +26,8 @@ void tick() {
     const ULONGLONG now = GetTickCount64();
     if (now - last < kBitsPollMs) return;
     last = now;
-    const uintptr_t state = decima::readPointer(ds2::at(kGameStateGlobal));
-    if (!state) return;
-    const uint64_t low = ds2::field<uint64_t>(state, kBitsLow), high = ds2::field<uint64_t>(state, kBitsHigh);
+    uint64_t low = 0, high = 0;
+    if (!game_state::read(low, high)) return;
     if (low != lastLow || high != lastHigh) {
         lastLow = low;
         lastHigh = high;

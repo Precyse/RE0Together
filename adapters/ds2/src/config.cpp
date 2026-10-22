@@ -68,7 +68,7 @@ Config loadConfig() {
         } else if (key == "weapon_attach_mode") {
             config.weaponAttachMode = static_cast<uint8_t>(std::strtoul(value.c_str(), nullptr, kDecimalBase));
         } else if (key == "remote_body") {
-            config.remoteBody = value == "1";
+            config.remoteBody = value != "0";
         }
     }
     logger::write("config: port=%u overlay=%d self_marker=%d remote_body=%d", config.port, config.overlay,

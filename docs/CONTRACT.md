@@ -125,10 +125,12 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 
 | type | name | dir | reliable | payload |
 |---|---|---|---|---|
-| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 status (DS2: bits 0-7 health 0-254 or 255 unknown, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 sender reports; 0 = not reported, `partner_status.h`) |
+| 0x0100 | PLAYER_STATE | all | no | u32 seq, f32 pos[3], f32 yaw, u32 status (DS2: bits 0-7 health 0-254 or 255 unknown, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 sender reports, 0x2000 menu; 0 = not reported, `partner_status.h`) |
 | 0x0101-0x0107 | cargo list/take/add, pickups, drops | | see header | `cargo_transfer.h`, `cargo_ground.h` |
 | 0x011A | CARGO_GONE | to the partner | yes | u32 kind, u32 reserved, u64 order id (0 = plain): the partner's rack lost the piece to a terminal or to the sender, delete your copy (`partner_cargo_wire.h`, 16 bytes) |
 | 0x0130 | MOVE_ACK | to the sender | yes | u32 kind, u32 moved (0 = CARGO_GONE done, 1 = a give created), u64 order id: the receiver's own CARGO_LIST shows the move, the sender may stop holding it (`partner_cargo_wire.h`, 16 bytes) |
+| 0x0131 | CARGO_ASK | guest to host | yes | u64 handle, u8 wants it (1 = the host gives its piece, 0 = the guest offers its own), 7 reserved: the host answers with the same give or take it would make itself (`cargo_transfer.h`, 16 bytes) |
+| 0x0133 | CARGO_GIVE | guest to host | yes | the CARGO_ADD layout (`cargo_transfer.h`, 32 bytes): a piece the game moved into the host's rack; the host creates it and answers MOVE_ACK, or sends it back as CARGO_ADD and MOVE_ACK |
 | 0x0108 | VEHICLE_STATE | driver/passenger to all | no | `vehicle_sync.h` (64 bytes) |
 | 0x0109 | VEHICLE_LOAD | driver to all | yes | `vehicle_load.h` |
 | 0x010A | ANIM_STATE | all | no | AnimHeader, optional u64 sender time, entries (below) |
@@ -144,9 +146,15 @@ The launcher relays these as opaque bytes; the source slot is the transport's. I
 | 0x0115 | CLOCK_PONG | to the pinger | no | u64 echoed ping time, u64 answerer time (µs) |
 | 0x0116 | ANIM_EVENT | all | yes | same payload as ANIM_STATE, entries are pulses |
 | 0x0117 | FACT_SNAPSHOT | host to one slot (or all) | yes | u32 snapshot id, u16 chunk index, u16 chunk count, then a FACT_SET payload |
-| 0x0118 | RESYNC | to one slot or all | yes | u32 scopes (1 facts, 2 authority, 4 anim) |
+| 0x0118 | RESYNC | to one slot or all | yes | u32 scopes (1 facts, 2 authority, 4 anim, 8 story, 16 enemies, 32 structures, 64 lockers) |
 | 0x0128 | BT_ENV | host to all | yes | u64 BT-active region set, bit r = region r (`bt_wire.h`, 8 bytes) |
 | 0x0129 | CATCHER_EVENT | host to all | yes | u8 kind (1 territory, 2 tar), u8 flags (bit 0 the territory's bool), u8[2] reserved, u8[16] locator UUID (20 bytes) |
+| 0x0137 | CRATER_SET | host to all | yes | the host's voidout craters (`crater_wire.h`): u16 count (at most 64), u16 reserved, then count x 48 bytes {u8[16] crater locator UUID, f64[3] position, f32 radius, u16 area, u8 kind, u8 reserved}; sent whole on a change, every 5 s and to a joining peer |
+| 0x0138-0x0139 | BT_GRAB, BT_GRAB_STATE | host to the grabbed guest, guest to host | | reserved, not built: the relay of a BT's grab to the guest whose body it acted on needs live probes first (docs/DS2_NOTES.md, "BT grab") |
+| 0x0134 | LOCKER_LIST | host to all, or to a joining or resyncing peer | yes | one shared locker's contents (`locker_wire.h`): u32 key (the construction owner's identifier, a hash of the construction id), u8 slot kind (28 Public, 29 PublicReceived), u8 flags (bit 0 = snapshot end: key, kind and count 0, the lockers not named since the snapshot began are empty), u16 count (at most 128), u32 reply-to request id (0 = none), u32 reserved, then count x 32-byte CARGO_ADD pieces; sent on a change, as a snapshot of every non-empty locker plus the end marker, and after a LOCKER_MOVE |
+| 0x0135 | LOCKER_MOVE | guest to host | yes | 56 bytes: u32 request id (from 1), u32 key, u8 slot kind, u8 direction (1 put, 2 take), u16 + u32 reserved, u64 guest handle (the guest's undo only), one CARGO_ADD piece; the host refuses more than 20 per second per guest |
+| 0x0136 | LOCKER_RESULT | host to the requesting guest | yes | u32 request id, u8 accepted, u8 reason (0 ok, 1 unknown locker, 2 full, 3 not there, 4 order piece held, 5 malformed, 6 rate), u16 reserved; a refusal makes the guest undo its move |
+| 0x013A | PING_SET | each player to all | yes | the sender's placed user markers (`ping_wire.h`): u16 count (at most 100), u16 reserved, then count x 24 bytes {u64 marker id, f32[3] position (world metres, Z up), u8 group 0..4, u8 index 0..19, u8 sequence (1 or more), u8 reserved}; the whole set on a change and to a joining peer, an empty set clears the sender's pings; presentation only, drawn by the partner's overlay |
 | 0x0119 | STORY_EVENT | host to all (a guest sends an order request to the host) | yes | `story_wire.h` (104 bytes): kind (mission start/success/fail, section active/inactive, area change, order request), mission id, args, section or start-section UUID, area transform |
 | 0x012A | CUTSCENE_START | host to all | yes | `cutscene_wire.h` (60 bytes): u32 id, u8 category, u8[3] reserved, i32 stop frame, u8[16] SequenceResource UUID, u8[16] host Sequence entity UUID, u8[16] SequenceNetwork UUID (zero if unknown) |
 | 0x012B | CUTSCENE_READY | guest to host | yes | u32 id (the guest holds its copy) |

@@ -136,6 +136,8 @@ void draw(float, float height) {
     }
 }
 
+bool isOpen() { return g_open.load(); }
+
 bool claimsKey(unsigned virtualKey) {
     if (!g_open.load()) return false;
     switch (virtualKey) {

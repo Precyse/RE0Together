@@ -26,6 +26,7 @@
 #include "ds2/remote_marker.h"
 #include "ds2/remote_player.h"
 #include "ds2/remote_ride.h"
+#include "ds2/queue_diag.h"
 #include "ds2/remote_update.h"
 #include "ds2/setdriver_guard.h"
 #include "ds2/sim_tick.h"
@@ -93,6 +94,7 @@ std::mutex g_targetMutex;
 uint8_t g_slot = kNoSlot;
 game::Pose g_target;
 world_to_screen::Vec3 g_targetVelocity;
+bool g_partnerAway = false;  // the partner is dead or on a loading screen
 Clock::time_point g_targetAt;
 
 uintptr_t playerManager() { return decima::readPointer(ds2::at(kPlayerManagerGlobal)); }
@@ -198,7 +200,8 @@ void follow() {
 // A body whose peer is gone is never removed in a running world (the engine does not remove player entities there: every
 // component that caches a sibling dangles). It is parked: hidden with the engine's own entity visibility switch (the entity
 // flag bit 1 and the change message, Entity::SetVisible), left where it stood and not placed. A peer that reports again
-// shows it and places it at the peer's pose.
+// shows it and places it at the peer's pose. A partner who is dead or on a loading screen parks it the same way; it
+// shows again only when neither reason is left.
 bool g_parked = false;
 
 void setBodyVisible(bool visible) {
@@ -305,6 +308,11 @@ bool peerGone() {
     return Clock::now() - g_targetAt > kPeerGoneAfter;
 }
 
+bool partnerAway() {
+    std::lock_guard lock(g_targetMutex);
+    return g_partnerAway;
+}
+
 // The world is left: `entityAlive` is whether the body's entity still exists (a travel starts with the world intact; a
 // load has freed it already).
 void worldLeft(const char* why, bool entityAlive) {
@@ -342,7 +350,7 @@ void advance() {
                 break;
             }
             if (remote_ride::holdsBody()) break;
-            if (peerGone() != g_parked) setBodyVisible(g_parked);
+            if ((peerGone() || partnerAway()) != g_parked) setBodyVisible(g_parked);
             if (!g_parked) follow();
             break;
         case Stage::Failed:
@@ -383,6 +391,7 @@ void installEarly() {
     setdriver_guard::install();
     remote_guards::installEarly();
     remote_update::installEarly();
+    queue_diag::installEarly();
     remote_camera::installEarly();
     remote_appearance::installEarly();
     remote_animation::installEarly();
@@ -398,13 +407,14 @@ std::optional<uint64_t> ownerKey() {
 
 uint8_t slot() { return remote_player::slot(); }
 
-void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity) {
+void setTarget(uint8_t slot, const game::Pose& pose, const world_to_screen::Vec3& velocity, bool partnerAway) {
     if (!g_enabled.load()) return;
     std::lock_guard lock(g_targetMutex);
     if (g_slot != slot && g_slot != kNoSlot && Clock::now() - g_targetAt <= kTargetStale) return;  // another partner
     g_slot = slot;
     g_target = pose;
     g_targetVelocity = velocity;
+    g_partnerAway = partnerAway;
     g_targetAt = Clock::now();
 }
 

@@ -30,6 +30,8 @@ T& field(uintptr_t object, uintptr_t offset) {
     return *reinterpret_cast<T*>(object + offset);
 }
 
+constexpr uintptr_t kMarkerManagerGlobal = 0x14623E638;  // DSMarkerManager: the map and HUD markers
+
 constexpr uintptr_t kEntityTransform = 0xE8;    // world transform
 constexpr uintptr_t kEntityParent = 0x80;       // the entity it is attached to, 0 when free
 constexpr uintptr_t kEntityHandlerList = 0x2D0;

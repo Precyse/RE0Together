@@ -8,6 +8,7 @@
 
 #include "log.h"
 #include "partner_cargo_sync.h"
+#include "remote_body.h"
 
 namespace {
 
@@ -36,6 +37,7 @@ std::vector<uint32_t> g_awaited;  // host, net thread: kinds asked of the guest 
 struct PendingAdd {
     game::Cargo piece;
     Clock::time_point since;
+    std::optional<uint8_t> returnTo;  // the guest's slot when the piece is one it gave: it goes back if it cannot be created
 };
 std::vector<PendingAdd> g_pendingAdds;  // net thread: pieces received whose creation must wait
 std::vector<cargo_transfer::CargoEntry> g_reported;  // net thread: the list sent last
@@ -75,35 +77,46 @@ std::optional<cargo_transfer::Partner> parseList(uint8_t slot, const std::vector
     return partner;
 }
 
-game::Cargo pieceOf(const cargo_transfer::CargoAdd& add) {
-    return {0, add.type, {}, add.orderId, add.secondId, add.category, add.durability};
-}
-
 // Guest: the host asked for one of our pieces. It goes only if we still carry it.
 void giveUp(NetClient& net, uint8_t hostSlot, uint64_t handle) {
     const std::vector<game::Cargo> carried = game::carriedCargo();
     const auto piece = std::find_if(carried.begin(), carried.end(), [&](const auto& c) { return c.handle == handle; });
-    if (piece == carried.end() || !game::removeCargo(handle)) {
+    if (piece == carried.end() || !cargo_transfer::handOver(net, hostSlot, *piece)) {
         logger::write("cargo: host asked for %llx, not carried", static_cast<unsigned long long>(handle));
         return;
     }
-    cargo_transfer::sendPiece(net, hostSlot, *piece);
     logger::write("cargo: gave %s (%u) to the host", piece->name.c_str(), piece->type);
 }
 
-// Receives a piece: created at once, or kept and retried while the game removes the stale copy of it.
-void receive(const game::Cargo& piece) {
+// Host: sends a guest's piece back and ends the guest's hold on it; its body copy is deleted only after this.
+void returnToGuest(NetClient& net, uint8_t slot, const game::Cargo& piece) {
+    cargo_transfer::sendPiece(net, slot, piece);
+    partner_cargo_sync::acknowledge(net, slot, piece);
+    logger::write("cargo: sent %u back to the guest (order %llx)", piece.type, static_cast<unsigned long long>(piece.orderId));
+}
+
+// Receives a piece: created at once, or kept and retried while the game removes the stale copy of it or until gameplay has
+// settled (nothing is created into a backpack that is still loading). Refused when the game never will.
+game::AddResult receive(const game::Cargo& piece, std::optional<uint8_t> returnTo = std::nullopt) {
     partner_cargo_sync::expectAdded(piece);
-    switch (game::addCargo(piece)) {
-        case game::AddResult::Done:
-            break;
-        case game::AddResult::Retry:
-            g_pendingAdds.push_back({piece, Clock::now()});
-            break;
-        case game::AddResult::Refused:
-            logger::write("cargo: could not receive %s (%u)", piece.name.c_str(), piece.type);
-            break;
+    const game::AddResult result = game::gameplaySettled() ? game::addCargo(piece) : game::AddResult::Retry;
+    if (result == game::AddResult::Retry) {
+        g_pendingAdds.push_back({piece, Clock::now(), returnTo});
+    } else if (result == game::AddResult::Refused) {
+        logger::write("cargo: could not receive %s (%u)", piece.name.c_str(), piece.type);
     }
+    return result;
+}
+
+// Host: a piece the game moved into the guest's rack, reported by the guest (CARGO_GIVE). It becomes the host's when gameplay
+// has settled and the sender is the partner; otherwise it goes back to the guest.
+void acceptGive(NetClient& net, uint8_t slot, const game::Cargo& piece) {
+    const bool accepted = slot == remote_body::slot() && game::gameplaySettled();
+    if (accepted && receive(piece, slot) != game::AddResult::Refused) {
+        logger::write("cargo: took %u from the guest's rack (order %llx)", piece.type, static_cast<unsigned long long>(piece.orderId));
+        return;
+    }
+    returnToGuest(net, slot, piece);
 }
 
 // Host: one piece of the given kind arrived from the guest; only kinds we asked for are accepted.
@@ -118,16 +131,20 @@ void received(const game::Cargo& piece) {
     logger::write("cargo: took %u from the guest (order %llx)", piece.type, static_cast<unsigned long long>(piece.orderId));
 }
 
-void retryPendingAdds(const Clock::time_point now) {
+void retryPendingAdds(NetClient& net, const Clock::time_point now) {
     static Clock::time_point last;
     if (g_pendingAdds.empty() || now - last < kAddRetryInterval) return;
     last = now;
     std::vector<PendingAdd> waiting;
     for (const PendingAdd& pending : g_pendingAdds) {
-        if (now - pending.since > kAddExpiry) {
-            logger::write("cargo: gave up receiving %s (%u)", pending.piece.name.c_str(), pending.piece.type);
-        } else if (game::addCargo(pending.piece) == game::AddResult::Retry) {
+        const bool expired = now - pending.since > kAddExpiry;
+        const game::AddResult result =
+            expired || !game::gameplaySettled() ? game::AddResult::Retry : game::addCargo(pending.piece);
+        if (result == game::AddResult::Retry && !expired) {
             waiting.push_back(pending);
+        } else if (result != game::AddResult::Done) {
+            logger::write("cargo: gave up receiving %s (%u)", pending.piece.name.c_str(), pending.piece.type);
+            if (pending.returnTo) returnToGuest(net, *pending.returnTo, pending.piece);
         }
     }
     g_pendingAdds = std::move(waiting);
@@ -178,8 +195,7 @@ bool claim(std::vector<game::Cargo>& shown, uint64_t handle) {
 // Host: carries out a give or a take, whoever asked for it.
 void carryOut(NetClient& net, uint8_t partnerSlot, const Request& request) {
     if (request.action == Action::Give) {
-        if (!game::removeCargo(request.piece.handle)) return;
-        cargo_transfer::sendPiece(net, partnerSlot, request.piece);
+        if (!cargo_transfer::handOver(net, partnerSlot, request.piece)) return;
         logger::write("cargo: gave %s (%u) to the guest", request.piece.name.c_str(), request.piece.type);
     } else {
         g_awaited.push_back(request.piece.type);
@@ -239,9 +255,16 @@ void runRequests(NetClient& net, bool host) {
 
 namespace cargo_transfer {
 
-void sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece) {
-    const CargoAdd add{piece.type, piece.category, {}, piece.durability, 0, piece.orderId, piece.secondId};
-    net.send(kMsgCargoAdd, true, slot, proto::bytesOf(add));
+bool sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece) {
+    return net.send(kMsgCargoAdd, true, slot, proto::bytesOf(toAdd(piece)));
+}
+
+void offerPiece(NetClient& net, uint8_t hostSlot, const game::Cargo& piece) {
+    if (!net.send(kMsgCargoGive, true, hostSlot, proto::bytesOf(toAdd(piece)))) logger::write("cargo: could not send CARGO_GIVE");
+}
+
+bool handOver(NetClient& net, uint8_t slot, const game::Cargo& piece) {
+    return sendPiece(net, slot, piece) && game::removeCargo(piece.handle);
 }
 
 void onFrame(NetClient& net, const GameFrame& frame) {
@@ -260,16 +283,19 @@ void onFrame(NetClient& net, const GameFrame& frame) {
         CargoAsk request;
         std::memcpy(&request, frame.payload.data(), sizeof(request));
         answerAsk(request);
-    } else if (frame.type == kMsgCargoAdd && frame.payload.size() == sizeof(CargoAdd)) {
+    } else if (frame.type == kMsgCargoAdd) {
         CargoAdd add;
-        std::memcpy(&add, frame.payload.data(), sizeof(add));
+        if (!decodeAdd(frame.payload, add)) return;
         if (host) {
-            received(pieceOf(add));
+            received(fromAdd(add));
         } else {
-            receive(pieceOf(add));
+            receive(fromAdd(add));
             logger::write("cargo: received %u from the host (order %llx)", add.type,
                           static_cast<unsigned long long>(add.orderId));
         }
+    } else if (frame.type == kMsgCargoGive && host) {
+        CargoAdd add;
+        if (decodeAdd(frame.payload, add)) acceptGive(net, frame.slot, fromAdd(add));
     }
 }
 
@@ -279,7 +305,7 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_hostSlot = session.hostSlot;
     const auto now = Clock::now();
     refreshLocal(now);
-    retryPendingAdds(now);
+    retryPendingAdds(net, now);
     forgetDepartedPartner(session);
     if (!session.linked) return;
     report(net, now);

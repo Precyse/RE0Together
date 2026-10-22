@@ -6,7 +6,7 @@ the peer where it starts, e.g. --offset 2 --radius 1.2 --phase 270: 2 m ahead an
 --drive ID (hex) reports the peer in that vehicle (--drive-role 0 driving, 1 riding along), parked at --drive-pos x,y,z with an upright orientation,
 between the seconds --drive-window START,END after the first local state: the adapter's remote body boards the vehicle
 when the reports start and leaves when they stop. --follow stands the peer beside the local player (--offset ahead, --radius to its right, same heading) wherever it goes. --guest makes the local player the guest (slot 1) of a host peer (slot 0). --echo-anim sends the local player's ANIM_STATE back as the peer's
-(the remote then copies the local player through the real wire format). Prints the local player's pose.
+(the remote then copies the local player through the real wire format). Prints the local player's pose and the role of each vehicle report it receives (driver or passenger).
 
 usage: python fake_launcher.py [--port 27980] [--radius 1.2] [--speed 1.4] [--hold 5] [--offset 3.5] [--phase 0]
                                [--drive ID --drive-pos X,Y,Z --drive-window START,END]
@@ -31,11 +31,14 @@ VEHICLE_LOAD = 0x0109
 VEHICLE_LOAD_HEADER = struct.Struct("<QII")  # vehicle id, count, reserved, then count u32 kinds (vehicle_load.h)
 CARGO_ADD = 0x0103
 CARGO_GONE, MOVE_ACK = 0x011A, 0x0130
-CARGO_ASK = 0x0131
+CARGO_ASK, CARGO_GIVE = 0x0131, 0x0133
 CARGO_ENTRY_SIZE = 80  # cargo_transfer.h CargoEntry; the first u64 is the handle
 CARGO_ENTRY_FORMAT = struct.Struct("<QI44sQQfB3x")  # handle, type, name, order id, second id, durability, category
 CARGO_ASK_FORMAT = struct.Struct("<QB7x")  # handle, wants it (cargo_transfer.h)
-CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h)
+CARGO_ADD_FORMAT = struct.Struct("<IB3xfIQQ")  # type, category, durability, reserved, order id, second id (cargo_transfer.h; CARGO_GIVE has the same layout)
+MOVE_ACK_FORMAT = struct.Struct("<IIQ")  # type, moved (0 gone, 1 added), order id (partner_cargo_wire.h)
+MOVED_ADDED = 1
+HEADACHE_PILLS = 306656069
 WORLD_ENV = 0x010D
 STRUCT_CREATE, STRUCT_REMOVE = 0x010F, 0x0110
 STRUCT_REQUEST = 0x0132  # guest to host: STRUCT_CREATE payload with the id left to the host
@@ -49,6 +52,22 @@ CUTSCENE_STOP_SCRIPTED = 3
 CUTSCENE_CATEGORY_STORY = 1
 STORY_EVENT_TYPE = 0x0119
 STORY_EVENT_FORMAT = struct.Struct("<B3xIiIQ16s64s")  # kind, a, b, flags, mission id, section, transform (story_wire.h, 104 bytes)
+CRATER_SET = 0x0137
+CRATER_HEADER = struct.Struct("<HH")  # count, reserved (crater_wire.h)
+CRATER_FORMAT = struct.Struct("<16s3dfHBB")  # uuid, position, radius, area, kind, reserved (48 bytes)
+CRATER_RESEND_SECONDS = 5.0  # the host peer repeats its crater set
+LOCKER_LIST, LOCKER_MOVE, LOCKER_RESULT = 0x0134, 0x0135, 0x0136
+LOCKER_HEADER = struct.Struct("<IBBHII")  # key, slot kind, flags, count, reply to, reserved (locker_wire.h; then count CARGO_ADD pieces)
+LOCKER_MOVE_FORMAT = struct.Struct("<IIBBHIQ")  # request id, key, slot kind, direction, reserved, reserved, guest handle; then one CARGO_ADD piece (56 bytes)
+LOCKER_RESULT_FORMAT = struct.Struct("<IBBH")  # request id, accepted, reason, reserved
+LOCKER_FLAG_SNAPSHOT_END = 1
+LOCKER_PUT, LOCKER_TAKE = 1, 2
+LOCKER_REASON_FULL, LOCKER_REASON_NOT_THERE = 2, 3
+LOCKER_RESEND_SECONDS = 5.0  # the host peer repeats its lockers
+PING_SET = 0x013A
+PING_HEADER = struct.Struct("<HH")  # count, reserved (ping_wire.h)
+PING_FORMAT = struct.Struct("<Q3fBBBB")  # id, position, group, index, sequence, reserved (24 bytes)
+PING_RESEND_SECONDS = 5.0  # the peer repeats its pings
 ENEMY_HIT = 0x0120
 ENEMY_GONE_DIED = 1  # enemy_wire.h GoneReason::Died
 ENEMY_REACH_METRES = 150.0  # --enemy-hit leaves a target this far from the local player (a streamed-out enemy takes no damage)
@@ -114,6 +133,68 @@ STRUCT_KINDS = {2: 0x00, 3: 0x00, 4: 0x08, 5: 0x18, 6: 0x00, 7: 0x00, 9: 0x08, 1
 SUBKIND_DEFAULT = 14  # EDSConstructionPointSubCategory Invalid: the category's own config
 
 
+def crater_set_payload(spec):
+    """UUID:X,Y,Z:RADIUS:AREA[;...] (an empty text is the empty set) as a CRATER_SET payload."""
+    craters = [item.split(":") for item in spec.split(";") if item]
+    body = b"".join(CRATER_FORMAT.pack(bytes.fromhex(uuid), *(float(v) for v in at.split(",")), float(radius), int(area), 0, 0)
+                    for uuid, at, radius, area in craters)
+    return CRATER_HEADER.pack(len(craters), 0) + body
+
+
+def print_crater_set(body):
+    count, _ = CRATER_HEADER.unpack_from(body)
+    print(f"craters: CRATER_SET of {count}", flush=True)
+    for i in range(count):
+        uuid, x, y, z, radius, area, kind, _ = CRATER_FORMAT.unpack_from(body, CRATER_HEADER.size + i * CRATER_FORMAT.size)
+        print(f"craters:   {uuid.hex()} at {x:.1f} {y:.1f} {z:.1f} radius {radius:.1f} area {area} kind {kind}", flush=True)
+
+
+def parse_locker_piece(text):
+    """TYPE or TYPE@ORDER_HEX as (type, order id)."""
+    kind, _, order = text.partition("@")
+    return int(kind), int(order, 16) if order else 0
+
+
+def locker_piece_bytes(piece):
+    return CARGO_ADD_FORMAT.pack(piece[0], 0, 0.0, 0, piece[1], 0)
+
+
+def parse_locker_spec(spec):
+    """KEY_HEX:KIND:PIECE,PIECE;... as {(key, kind): [pieces]} (an empty text names no locker)."""
+    model = {}
+    for item in (part for part in spec.split(";") if part):
+        key, kind, pieces = item.split(":")
+        model[(int(key, 16), int(kind))] = [parse_locker_piece(p) for p in pieces.split(",") if p]
+    return model
+
+
+def locker_list_payload(key, kind, pieces, reply_to=0):
+    return LOCKER_HEADER.pack(key, kind, 0, len(pieces), reply_to, 0) + b"".join(locker_piece_bytes(p) for p in pieces)
+
+
+def print_locker_list(body):
+    key, kind, flags, count, reply_to, _ = LOCKER_HEADER.unpack_from(body)
+    shown = [CARGO_ADD_FORMAT.unpack_from(body, LOCKER_HEADER.size + i * CARGO_ADD_FORMAT.size) for i in range(count)]
+    what = "snapshot end" if flags & LOCKER_FLAG_SNAPSHOT_END else f"locker {key:08x} kind {kind}"
+    print(f"locker: LOCKER_LIST {what}, {count} pieces {[(p[0], hex(p[4])) for p in shown]}, reply to {reply_to}", flush=True)
+
+
+def ping_set_payload(offsets, base):
+    """DX,DY,DZ[;...] (metres from `base`, the local player's first position) as a PING_SET payload: ids 1.., group 0, index by order, sequence 1."""
+    spots = [item.split(",") for item in offsets.split(";") if item]
+    pings = b"".join(PING_FORMAT.pack(i + 1, base[0] + float(dx), base[1] + float(dy), base[2] + float(dz), 0, i, 1, 0)
+                     for i, (dx, dy, dz) in enumerate(spots))
+    return PING_HEADER.pack(len(spots), 0) + pings
+
+
+def print_ping_set(body):
+    count, _ = PING_HEADER.unpack_from(body)
+    print(f"ping: PING_SET of {count}", flush=True)
+    for i in range(count):
+        ping_id, x, y, z, group, index, sequence, _ = PING_FORMAT.unpack_from(body, PING_HEADER.size + i * PING_FORMAT.size)
+        print(f"ping:   id {ping_id} at {x:.1f} {y:.1f} {z:.1f} group {group} index {index} sequence {sequence}", flush=True)
+
+
 def kind_payload(local, kind, index):
     """STRUCT_CREATE of one kind with a zero tail, ahead of the local player on a fan (index spreads them 5 m apart)."""
     fx, fy = math.sin(local["yaw"]), math.cos(local["yaw"])
@@ -142,6 +223,14 @@ def ladder_payload(local, kind=10, struct_id=None):
     return fixed + tail
 
 
+def scheduled_status(a, elapsed):
+    current = a.status
+    for at, word in a.status_steps:
+        if elapsed >= at:
+            current = word
+    return current
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=27980)
@@ -157,7 +246,8 @@ def main():
     p.add_argument("--resync-structures", action="store_true", help="after the first local state ask the host for the structures it placed (RESYNC kStructures)")
     p.add_argument("--resync-enemies", action="store_true", help="after the first local state ask the host for every enemy again (a peer that joins a running host gets the enemy list this way)")
     p.add_argument("--throw-at", action="store_true", help="with --weapon and --fire: each throw is a lob at the announced enemy nearest the peer (needs the enemy list: add --resync-enemies)")
-    p.add_argument("--status", type=lambda v: int(v, 16), default=0, help="HEX: the peer's PLAYER_STATE status word (partner_status.h: bits 0-7 health 0-254, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 reports)")
+    p.add_argument("--status", type=lambda v: int(v, 16), default=0, help="HEX: the peer's PLAYER_STATE status word (partner_status.h: bits 0-7 health 0-254, 0x100 dead, 0x200 down, 0x400 loading, 0x800 driving, 0x1000 reports, 0x2000 menu)")
+    p.add_argument("--status-at", default="", help="SECONDS:HEX,...: switch the status word at these seconds after start, e.g. 30:0x1100,45:0x10fe (dead at 30 s, back at 45 s)")
     p.add_argument("--follow", action="store_true", help="the peer stands beside the local player wherever it goes (--offset ahead, --radius to its right)")
     p.add_argument("--guest", action="store_true", help="the local player is the guest (slot 1) and the peer is the host (slot 0)")
     p.add_argument("--echo-anim", action="store_true", help="send the local player's ANIM_STATE back as the peer's")
@@ -170,6 +260,9 @@ def main():
     p.add_argument("--host-picks-order", default="", help="SECONDS: send HOST_PICKUP of the order piece Special Plant Seeds (matched by order id at a position nowhere near it)")
     p.add_argument("--give-plain", default="", help="SECONDS: send CARGO_ADD of a Headache Pills piece with durability 123 (a worn piece)")
     p.add_argument("--drive-load", default="", help="KIND,KIND: with --drive, the cargo kinds the driven vehicle's bed holds (VEHICLE_LOAD every 5 s)")
+    p.add_argument("--accept-gives", action="store_true", help="as the host (use --guest): print each CARGO_GIVE the adapter sends and answer with MOVE_ACK, as a host that took the piece")
+    p.add_argument("--refuse-gives", action="store_true", help="as the host (use --guest): print each CARGO_GIVE and send the piece back (CARGO_ADD, then MOVE_ACK), as a host that refused it")
+    p.add_argument("--give-native", default="", help="SECONDS: as the guest peer, send CARGO_GIVE of a Headache Pills piece (the game moved it into the host's rack) and print the host's CARGO_ADD / MOVE_ACK answer")
     p.add_argument("--ask-take", default="", help="SECONDS: as the guest, send CARGO_ASK for the first piece in the host's last CARGO_LIST (the host gives it)")
     p.add_argument("--hold-order", action="store_true", help="the peer reports carrying the order piece Special Plant Seeds (CARGO_LIST once a second)")
     p.add_argument("--echo-cargo", action="store_true", help="send the local player's CARGO_LIST back as the peer's (its rack shows on the body)")
@@ -187,6 +280,16 @@ def main():
                     "it) of this amount and attack type every 10 s")
     p.add_argument("--enemy-hit", default="", help="SECONDS:AMOUNT: as the guest, hit the announced enemy nearest to the local player (ENEMY_HIT), again every 10 s; an enemy the host reports gone (died or despawned) is not hit again, and a death is printed")
     p.add_argument("--bt-regions", default="", help="HEXMASK: as the host (use --guest), send BT_ENV with these BT-active regions once a second")
+    p.add_argument("--crater-set", default=None, help='UUID:X,Y,Z:RADIUS:AREA[;...]: as the host (use --guest), send this CRATER_SET every 5 s ("" is the empty set)')
+    p.add_argument("--crater-clear", type=float, default=0.0, help="SECONDS after the first --crater-set send: from then on send the empty set")
+    p.add_argument("--crater-log", action="store_true", help="print every CRATER_SET received")
+    p.add_argument("--locker-list", default=None, help='KEY_HEX:KIND:TYPE[@ORDER_HEX],...;...: as the host (use --guest), send these lockers and then the snapshot end every 5 s ("" sends only the end: every locker the guest has is emptied)')
+    p.add_argument("--locker-answer", choices=("accept", "refuse"), help="as the host (use --guest): answer each LOCKER_MOVE of the adapter (accept applies it to the lockers of --locker-list and sends the list, then the result)")
+    p.add_argument("--locker-move", default="", help="SECONDS:KEY_HEX:KIND:put|take:TYPE[@ORDER_HEX]: as the guest peer (without --guest), send this LOCKER_MOVE once")
+    p.add_argument("--locker-log", action="store_true", help="print every LOCKER_LIST and LOCKER_RESULT received")
+    p.add_argument("--ping", default=None, help="DX,DY,DZ[;...]: the peer pings, metres from the local player first position (empty text is the empty set); sent every 5 s so a joining adapter sees them")
+    p.add_argument("--ping-clear", type=float, default=0.0, help="SECONDS after the first --ping send: from then on send the empty set")
+    p.add_argument("--ping-log", action="store_true", help="print every PING_SET received (the markers of the local player)")
     p.add_argument("--struct-all", type=float, default=0.0, help="SECONDS: from that many seconds after the first local state, replay one structure of EVERY buildable kind every 8 s (zero tails, default sub category)")
     p.add_argument("--enemy-delay", type=float, default=20.0, help="seconds after the first local state before --enemy-replay starts")
     p.add_argument("--echo-equip", action="store_true", help="send the local player's EQUIP_STATE back as the peer's")
@@ -195,8 +298,9 @@ def main():
     p.add_argument("--equip-window", default="0,1e9", help="START,END seconds after the first local state the peer holds them")
     p.add_argument("--drive-window", default="0,1e9", help="START,END seconds after the first local state")
     a = p.parse_args()
+    a.status_steps = sorted((float(at), int(word, 16)) for at, word in (step.split(":") for step in a.status_at.split(",") if step))
     server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # a second fake on the port fails instead of sharing it
     server.bind(("127.0.0.1", a.port))
     server.listen(1)
     print("waiting for the adapter", flush=True)
@@ -238,10 +342,26 @@ def serve(sock, a):
                 if status != local.get("status"):
                     local["status"] = status
                     print(f"local status word {status:#06x}", flush=True)
+            elif msg_type == VEHICLE_STATE and len(body) - 4 == VEHICLE.size:
+                _, role, vehicle_id, x, y, z, *_ = VEHICLE.unpack_from(body, 4)
+                if (role, vehicle_id) != local.get("vehicle"):
+                    local["vehicle"] = (role, vehicle_id)
+                    print(f"vehicle: received role {'passenger' if role else 'driver'} ({role}) id {vehicle_id:x} at {x:.2f},{y:.2f},{z:.2f}", flush=True)
             elif msg_type == WORLD_ENV and len(body) - 4 == ENV.size:
                 flags, slot, hours, day, clock, threshold, *regions = ENV.unpack_from(body, 4)
                 shown = [(i, r) for i, r in enumerate(regions) if r != 0xE]
                 print(f"world env: flags {flags} slot {slot} time {hours:.3f} day {day} clock {clock:.1f} next {threshold:.1f} regions {shown}", flush=True)
+            elif msg_type == CRATER_SET and a.crater_log:
+                print_crater_set(body[4:])
+            elif msg_type == LOCKER_MOVE and len(body) - 4 == LOCKER_MOVE_FORMAT.size + CARGO_ADD_FORMAT.size:
+                on_locker_move(body[4:])
+            elif msg_type == PING_SET and a.ping_log:
+                print_ping_set(body[4:])
+            elif msg_type == LOCKER_LIST and a.locker_log:
+                print_locker_list(body[4:])
+            elif msg_type == LOCKER_RESULT and a.locker_log:
+                request_id, accepted, reason, _ = LOCKER_RESULT_FORMAT.unpack_from(body, 4)
+                print(f"locker: LOCKER_RESULT request {request_id} {'accepted' if accepted else f'refused (reason {reason})'}", flush=True)
             elif msg_type == STRUCT_CREATE and a.struct_request:
                 requested.update(id=struct.unpack_from('<I', body, 8)[0], at=time.time())
                 print(f"struct: STRUCT_CREATE kind {body[4]} id {requested['id']}", flush=True)
@@ -264,10 +384,22 @@ def serve(sock, a):
             elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
                 on_cutscene(msg_type, body)
             elif msg_type == STORY_EVENT_TYPE and len(body) - 4 == STORY_EVENT_FORMAT.size:
-                kind, _, _, _, mission, _, _ = STORY_EVENT_FORMAT.unpack_from(body, 4)
-                print(f"story: received kind {kind} for mission {mission:x}", flush=True)
+                kind, row, extra, _, mission, _, _ = STORY_EVENT_FORMAT.unpack_from(body, 4)
+                print(f"story: received kind {kind} for mission {mission:x} (a {row:#x}, b {extra})", flush=True)
+            elif msg_type == CARGO_GIVE and len(body) - 4 == CARGO_ADD_FORMAT.size:
+                on_give(body[4:])
+            elif msg_type == CARGO_ADD and len(body) - 4 == CARGO_ADD_FORMAT.size:
+                kind, _, _, _, order, _ = CARGO_ADD_FORMAT.unpack_from(body, 4)
+                print(f"cargo: CARGO_ADD kind {kind} order {order:x}", flush=True)
+            elif msg_type == MOVE_ACK and len(body) - 4 == MOVE_ACK_FORMAT.size:
+                kind, moved, order = MOVE_ACK_FORMAT.unpack_from(body, 4)
+                print(f"cargo: MOVE_ACK kind {kind} {'added' if moved == MOVED_ADDED else 'gone'} order {order:x}", flush=True)
             elif msg_type == CARGO_GONE and a.echo_cargo:
                 sock.sendall(encode(MOVE_ACK, peer_slot, body[4:]))  # CargoGone and MoveAck (gone) share their bytes
+            elif msg_type in (CUTSCENE_START, CUTSCENE_READY, CUTSCENE_GO, CUTSCENE_END) and a.cutscene:
+                on_cutscene(msg_type, body)
+            elif msg_type == CARGO_LIST and a.echo_cargo:
+                sock.sendall(encode(CARGO_LIST, peer_slot, body[4:]))
             elif msg_type == CARGO_LIST:
                 (listed,) = struct.unpack_from("<I", body, 4)
                 if listed and len(body) == 8 + listed * CARGO_ENTRY_SIZE:
@@ -282,6 +414,38 @@ def serve(sock, a):
                 sock.sendall(encode(msg_type, peer_slot, body[4:]))
             elif msg_type == ANIM_STATE and a.echo_anim:
                 sock.sendall(encode(ANIM_STATE, peer_slot, body[4:], flags=0))
+
+    def on_give(payload):
+        kind, _, _, _, order, _ = CARGO_ADD_FORMAT.unpack_from(payload)
+        print(f"cargo: CARGO_GIVE kind {kind} order {order:x}", flush=True)
+        if a.refuse_gives:
+            sock.sendall(encode(CARGO_ADD, peer_slot, payload))
+        if a.accept_gives or a.refuse_gives:
+            sock.sendall(encode(MOVE_ACK, peer_slot, MOVE_ACK_FORMAT.pack(kind, MOVED_ADDED, order)))
+            print(f"cargo: {'refused' if a.refuse_gives else 'accepted'} the give", flush=True)
+
+    lockers = parse_locker_spec(a.locker_list) if a.locker_list else {}
+
+    def on_locker_move(payload):
+        request_id, key, kind, direction, _, _, handle = LOCKER_MOVE_FORMAT.unpack_from(payload)
+        type_, _, _, _, order, _ = CARGO_ADD_FORMAT.unpack_from(payload, LOCKER_MOVE_FORMAT.size)
+        print(f"locker: LOCKER_MOVE request {request_id} {'put' if direction == LOCKER_PUT else 'take'} locker {key:08x} kind {kind} piece {type_} order {order:x}", flush=True)
+        if not a.locker_answer:
+            return
+        pieces = lockers.setdefault((key, kind), [])
+        accepted = a.locker_answer == "accept"
+        reason = 0
+        if accepted and direction == LOCKER_PUT:
+            pieces.append((type_, order))
+        elif accepted and (type_, order) in pieces:
+            pieces.remove((type_, order))
+        elif accepted:
+            accepted, reason = False, LOCKER_REASON_NOT_THERE
+        else:
+            reason = LOCKER_REASON_FULL if direction == LOCKER_PUT else LOCKER_REASON_NOT_THERE
+        sock.sendall(encode(LOCKER_LIST, peer_slot, locker_list_payload(key, kind, pieces, request_id)))
+        sock.sendall(encode(LOCKER_RESULT, peer_slot, LOCKER_RESULT_FORMAT.pack(request_id, 1 if accepted else 0, reason, 0)))
+        print(f"locker: request {request_id} {'accepted' if accepted else 'refused'}", flush=True)
 
     cutscene = {"id": 0}
 
@@ -312,7 +476,10 @@ def serve(sock, a):
         at = announced[net_id][1]
         return sum((at[i] - local[axis]) ** 2 for i, axis in enumerate("xyz")) > ENEMY_REACH_METRES ** 2
     struct_added = struct_removed = struct_requested = request_removed = False
-    gave = asked = picked = gave_plain = told_story = False
+    gave = asked = picked = gave_plain = told_story = gave_native = False
+    struct_added = struct_removed = struct_requested = False
+    struct_added = struct_removed = struct_requested = request_removed = False
+    gave = picked = gave_plain = told_story = False
     last_load = 0.0
     replay = load_enemy_recording(a.enemy_replay) if a.enemy_replay else []
     replay_start = None
@@ -321,6 +488,10 @@ def serve(sock, a):
     last_weapon = last_fire = last_player_hit = 0.0
     struct_sent = 0
     last_bt = 0.0
+    last_crater = crater_start = None
+    last_locker = None
+    last_ping = ping_start = ping_base = None
+    locker_moved = False
     while True:
         now = time.monotonic()
         if now - last_hb >= 1.0:
@@ -375,9 +546,13 @@ def serve(sock, a):
             picked = True
             sock.sendall(encode(0x0106, peer_slot, struct.pack("<IIfffIQQB7x", 0, 641900174, 0.0, 0.0, 0.0, 0, 0x1000071000018E, 0, 0)))
             print("cargo: host picked up the order piece", flush=True)
+        if a.give_native and start is not None and not gave_native and now - start >= float(a.give_native):
+            gave_native = True
+            sock.sendall(encode(CARGO_GIVE, peer_slot, CARGO_ADD_FORMAT.pack(HEADACHE_PILLS, 0, 0.0, 0, 0, 0)))
+            print("cargo: CARGO_GIVE of Headache Pills sent", flush=True)
         if a.give_plain and start is not None and not gave_plain and now - start >= float(a.give_plain):
             gave_plain = True
-            sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(306656069, 0, 123.0, 0, 0, 0)))
+            sock.sendall(encode(CARGO_ADD, peer_slot, CARGO_ADD_FORMAT.pack(HEADACHE_PILLS, 0, 123.0, 0, 0, 0)))
             print("cargo: gave a worn plain piece", flush=True)
         if a.story and start is not None and not told_story:
             seconds, kind, mission = a.story.split(":")
@@ -453,6 +628,31 @@ def serve(sock, a):
         if a.bt_regions and now - last_bt >= 1.0:
             last_bt = now
             sock.sendall(encode(0x0128, peer_slot, struct.pack("<Q", int(a.bt_regions, 16))))
+        if a.crater_set is not None and (last_crater is None or now - last_crater >= CRATER_RESEND_SECONDS):
+            last_crater = now
+            crater_start = crater_start or now
+            cleared = a.crater_clear and now - crater_start >= a.crater_clear
+            sock.sendall(encode(CRATER_SET, peer_slot, crater_set_payload("" if cleared else a.crater_set)))
+        if a.ping is not None and local and (ping_base is None or now - last_ping >= PING_RESEND_SECONDS):
+            ping_base = ping_base or (local["x"], local["y"], local["z"])
+            last_ping = now
+            ping_start = ping_start or now
+            cleared = a.ping_clear and now - ping_start >= a.ping_clear
+            sock.sendall(encode(PING_SET, peer_slot, ping_set_payload("" if cleared else a.ping, ping_base)))
+            print(f"ping: sent {0 if cleared else len([s for s in a.ping.split(';') if s])} pings", flush=True)
+        if a.locker_list is not None and (last_locker is None or now - last_locker >= LOCKER_RESEND_SECONDS):
+            last_locker = now
+            for (key, kind), pieces in lockers.items():
+                sock.sendall(encode(LOCKER_LIST, peer_slot, locker_list_payload(key, kind, pieces)))
+            sock.sendall(encode(LOCKER_LIST, peer_slot, LOCKER_HEADER.pack(0, 0, LOCKER_FLAG_SNAPSHOT_END, 0, 0, 0)))
+            print(f"locker: sent {len(lockers)} lockers and the snapshot end", flush=True)
+        if a.locker_move and start is not None and not locker_moved and now - start >= float(a.locker_move.split(":")[0]):
+            locker_moved = True
+            _, key, kind, direction, piece = a.locker_move.split(":")
+            piece_type, piece_order = parse_locker_piece(piece)
+            move = LOCKER_MOVE_FORMAT.pack(1, int(key, 16), int(kind), LOCKER_PUT if direction == "put" else LOCKER_TAKE, 0, 0, 0x77)
+            sock.sendall(encode(LOCKER_MOVE, peer_slot, move + locker_piece_bytes((piece_type, piece_order))))
+            print(f"locker: sent a LOCKER_MOVE ({direction}) for locker {key} kind {kind}", flush=True)
         if a.struct_all and local and start is not None and now - start >= a.struct_all + 8.0 * struct_sent:
             if struct_sent < len(STRUCT_KINDS):
                 kind = sorted(STRUCT_KINDS)[struct_sent]
@@ -498,7 +698,7 @@ def serve(sock, a):
                 y = local["y"] + fy * a.offset - fx * a.radius
                 yaw = local["yaw"]
             seq += 1
-            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, a.status), flags=0))
+            sock.sendall(encode(PLAYER_STATE, peer_slot, STATE.pack(seq, x, y, centre[2], yaw, scheduled_status(a, now - start)), flags=0))
         time.sleep(1.0 / SEND_HZ)
 
 

@@ -10,14 +10,17 @@
 #include "hooks.h"
 #include "input_filter.h"
 #include "log.h"
-#include "main_thread.h"
 #include "marker_overlay.h"
 #include "net_client.h"
+#include "peer_pose.h"
 #include "player_sync.h"
+#include "order_handoff.h"
+#include "rack_sync.h"
 #include "toast_queue.h"
 #include "ds2/remote_animation.h"
 #include "ds2/combat_hook.h"
 #include "ds2/damage_diag.h"
+#include "ds2/ride_probe.h"
 #include "ds2/health_watch.h"
 #include "ds2/orders_diag.h"
 #include "ds2/camp_alert.h"
@@ -43,7 +46,12 @@
 #include "ds2/warp.h"
 #include "ds2/world_pause.h"
 #include "ds2/structures.h"
+#include "ds2/bt_diag.h"
 #include "ds2/bt_events.h"
+#include "ds2/bt_grab.h"
+#include "ds2/craters.h"
+#include "ds2/lockers.h"
+#include "ds2/user_markers.h"
 #include "ds2/world_env.h"
 #include "ds2/world_facts.h"
 #include "remote_body.h"
@@ -57,11 +65,6 @@ constexpr float kBuildToastSeconds = 600.0f;
 
 // Leaked on purpose: joining the net thread from a static destructor would run under the loader lock.
 NetClient& g_net = *new NetClient;
-
-// Engine work on the game's simulation thread: the vehicles partners drive (their bodies run on the engine's own update).
-void simulationTick() {
-    vehicle_sync::place();
-}
 
 void drawOverlay(float width, float height) {
     marker_overlay::draw(width, height);
@@ -90,6 +93,7 @@ DWORD WINAPI initThread(LPVOID) {
     hooks::beginBatch();
     marker_overlay::setSelfMarker(config.selfMarker);
     remote_body::setEnabled(config.remoteBody);
+    peer_pose::installEarly();
     if (config.remoteBody) remote_body::installEarly();
     remote_animation::setMirrorLocalPlayer(config.mirrorAnimation);
     input_filter::install(cargo_menu::claimsKey);
@@ -97,12 +101,15 @@ DWORD WINAPI initThread(LPVOID) {
     world_facts::installEarly(config.logFacts);
     world_env::installEarly();
     bt_events::installEarly();
+    craters::installEarly();
+    if (config.diagnostics) bt_diag::installEarly();
     if (config.enemySync) {
         enemy_spawn::installEarly();
-        enemy_host::installEarly();
+        enemy_host::installEarly(config.diagnostics);
         camp_alert::installEarly();
         enemy_puppet::installEarly();
-        combat_hook::installEarly();
+        bt_grab::installEarly(config.diagnostics);
+        combat_hook::installEarly(config.diagnostics);
         combat_hook::setGodMode(config.godMode && config.testCommands);
         if (config.diagnostics) damage_diag::installEarly();
         health_watch::installEarly();
@@ -126,18 +133,21 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.testCommands) test_commands::installEarly();
     if (config.cutsceneLog) cutscene_log::enable();
     if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync, config.testCommands ? config.cutsceneShareMinFrames : 0);
-    partner_cargo::installEarly();
-    partner_focus::installEarly();
-    sneaking_focus::installEarly();
+    partner_cargo::installEarly(config.diagnostics);
+    lockers::installEarly();
+    user_markers::installEarly(config.diagnostics);
+    partner_focus::installEarly(config.diagnostics);
+    sneaking_focus::installEarly(config.diagnostics);
     structures::installEarly();
+    vehicle_sync::installEarly();
+    if (config.diagnostics) ride_probe::installEarly();
+    rack_sync::installEarly();
+    order_handoff::installEarly();
     sim_tick::installEarly();
     if (!game::watchInteractions()) logger::write("adapter: interaction watch unavailable, guests are not restricted");
     hooks::applyBatch();
     while (!game::resolve()) Sleep(kResolvePollMs);
     logger::write("adapter: engine objects found, linking to the launcher on port %u", config.port);
-    if (!main_thread::install(game::frameFunction(), simulationTick)) {
-        logger::write("adapter: no simulation-thread hook, partners' vehicles stay put");
-    }
     player_sync::start(g_net, config.port);
     return 0;
 }

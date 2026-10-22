@@ -4,12 +4,19 @@
 //   area.txt       "id"       RequestChangeArea to that area (0 = the current one)
 //   addweapon.txt  "id"       give the weapon as a cargo piece, then AddWeapon refreshes it (-1 lists the weapon config ids)
 //   bt.txt         "r on"     SetBtActiveRegion(region, on)
+//   npcpartner.txt "wake"  a sleeping camp NPC nearer the partner is not held asleep by the component's wake test (sneaking_focus)
 //   watchhealth.txt "id"      hardware write watch on that enemy's (net id) health field, logging the code that writes it ("off" clears)
 //   loose.txt      "r [x]"    logs every piece lying on the ground within r metres of the local player (x: deletes those of the kinds the local player's own gear is)
 //   attach.txt     "mode"     attaches the body's weapon again with that SetParent mode and logs the weapon's and the body's position
 //   env.txt        "hours [region type]"  the game's own Game_SetTimeOfDay and SetForecastTypeOfRegionDirect on this machine (the host's WORLD_ENV then carries them); any other text only logs the world env the host would send
 //   alert.txt      any        forces every enemy camp to the alert phase (the game's own SetForceAlertCP)
 //   body.txt       any        logs the handle and kind of every piece in the remote body's mirrored slots
+//   candlog.txt    "on|off"   logs every change of the local player's use location candidates (count, first)
+//   dropnotify.txt "on|off"   the mission-player notifications of the remote body's update are not dispatched
+//   park.txt       "mode"     tries a candidate for parking the remote body: hide / show (Entity::SetVisible), pause (the entity's
+//                             paused-update request, 0x140131420), flags (logs the entity flags)
+//   equpdate.txt   "on|off"   whether the remote body's equipment component skips its update (on by default)
+//   playerupdate.txt "hex mask"  the calls of the remote body's DSPlayerComponent update that are skipped (remote_update.h; 0 = all run)
 //   mission.txt    "id"      logs the mission object (hex id) and its resource as qwords, and 0x60 bytes behind each pointer in the
 //                             resource, to find a delivery's destination (a position for tp.txt)
 //   success.txt    "id"      the game's own success request for that mission (a guest's turn-in end, without the menus)
@@ -18,6 +25,8 @@
 //   cutscene.txt   "uuid"     calls the engine's Sequence start on the loaded Sequence entity with that UUID (32 hex digits): the hold, START, READY and GO of a synced cutscene
 //   missions.txt   any        logs every mission id with its state
 //   networks.txt   any        logs every loaded SequenceNetwork (UUID, main Sequence end frame, playing)
+//   crater.txt     "list", "add [uuid]" or "remove uuid"  the voidout craters: log them, AddCrater at the local player (radius 30 m, a random UUID unless one is given; logged), RemoveCrater by UUID (32 hex digits)
+//   locker.txt     "list" or "add KEY TYPE"  the shared lockers: log every owner with a locker slot (probe P-L1), create a piece of that kind (decimal) in the shared locker with that identifier (hex), as the host's move would (probe P-L3)
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
 #include "ds2/test_commands.h"
@@ -26,18 +35,24 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <random>
 #include <set>
 #include <string>
 
 #include "decima/safe_read.h"
 #include "ds2/camp_alert.h"
+#include "ds2/craters.h"
 #include "ds2/engine.h"
 #include "ds2/cutscene.h"
 #include "ds2/enemy_vitals.h"
 #include "ds2/entity_lookup.h"
 #include "ds2/health_watch.h"
 #include "ds2/place.h"
+#include "ds2/player_system_guard.h"
+#include "ds2/remote_update.h"
+#include "ds2/sneaking_focus.h"
 #include "ds2/remote_player.h"
+#include "ds2/sequence_info.h"
 #include "ds2/remote_weapon.h"
 #include "ds2/sequence_info.h"
 #include "ds2/sim_tick.h"
@@ -69,11 +84,13 @@ constexpr uintptr_t kAreaOffset = 0x60;               // baggage owner +0x60: th
 constexpr uintptr_t kMissionResource = 0x10;
 constexpr size_t kMissionDumpBytes = 0x80, kResourceDumpBytes = 0x108, kPointeeDumpBytes = 0x60;
 constexpr int kMaxListedConfigs = 512;
+constexpr float kTestCraterRadius = 30.0f;
 constexpr size_t kMaxFaultsLogged = 30;
 constexpr size_t kStackWordsScanned = 96;
+constexpr uintptr_t kComponentOwner = 0x48;  // a component's entity
+constexpr uintptr_t kComponentLink = 0x98;   // the component its owner's update reads (what the BB pod caches)
 constexpr int kReturnsLogged = 10;
 constexpr ULONGLONG kPollMs = 500;
-constexpr uintptr_t kImageSpan = 0x20000000;
 constexpr DWORD kFaultCodes[] = {EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ILLEGAL_INSTRUCTION, EXCEPTION_STACK_OVERFLOW};
 
 // The text of a command file, deleted on the way; empty when there is none.
@@ -260,6 +277,35 @@ void worldEnv(const std::string& text) {
     logWorldEnv();
 }
 
+void craterCommand(const std::string& text) {
+    uint8_t uuid[crater_wire::kUuidSize];
+    const bool given = text.find(' ') != std::string::npos && parseUuid(text.substr(text.find(' ') + 1), uuid);
+    if (text.rfind("list", 0) == 0) return craters::logAll();
+    if (text.rfind("remove", 0) == 0) {
+        if (!given) return logger::write("test_commands: crater remove needs a UUID");
+        return logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::remove(uuid) ? "removal requested" : "not removed (unknown or not committed yet)");
+    }
+    decima::WorldTransform where{};
+    if (text.rfind("add", 0) != 0 || !ds2::entityTransform(remote_player::samEntity(), where)) return;
+    if (!given) {
+        std::random_device random;
+        for (uint8_t& byte : uuid) byte = static_cast<uint8_t>(random());
+    }
+    const double position[3] = {where.position.x, where.position.y, where.position.z};
+    logger::write("test_commands: crater %s %s", craters::uuidText(uuid).c_str(), craters::add(position, kTestCraterRadius, uuid) ? "added" : "not added");
+}
+
+void lockerCommand(const std::string& text) {
+    if (text.rfind("list", 0) == 0) return game::logLockerOwners();
+    unsigned key = 0, type = 0;
+    if (sscanf(text.c_str(), "add %x %u", &key, &type) != 2) return logger::write("test_commands: locker.txt takes list or add KEY TYPE");
+    game::Cargo piece;
+    piece.type = type;
+    const game::AddResult result = game::addLockerPiece(key, game::kSlotPublic, piece);
+    const char* names[] = {"created", "retry (stale order copies removed)", "refused (no such locker, full, or held)"};
+    logger::write("test_commands: locker %08x add kind %u: %s", key, type, names[static_cast<int>(result)]);
+}
+
 void watchHealth(const std::string& text) {
     if (text.compare(0, 3, "off") == 0) return health_watch::disarm();
     const int netId = atoi(text.c_str());
@@ -311,6 +357,39 @@ void logBodyPieces() {
 }
 
 
+constexpr uintptr_t kRequestPausedUpdate = 0x140131420;  // (entity): MsgEntityRequestPausedUpdate to it and its children
+constexpr uintptr_t kEntityFlags = 0x98;
+
+bool g_logCandidates = false;
+
+// Every frame while candlog is on: a change of the local player's claim candidates is logged (the log lines carry the time,
+// to be set beside what the HUD showed).
+void logCandidateChanges() {
+    static int32_t lastCount = -1;
+    static uintptr_t lastFirst = 0;
+    int32_t count = 0;
+    uintptr_t first = 0;
+    if (!g_logCandidates || !game::localUseCandidates(count, first)) return;
+    if (count == lastCount && first == lastFirst) return;
+    lastCount = count;
+    lastFirst = first;
+    logger::write("test_commands: use candidates: %d, first %p", count, reinterpret_cast<void*>(first));
+}
+
+void tryParking(const std::string& mode) {
+    const uintptr_t body = remote_player::entity();
+    if (!body) {
+        logger::write("test_commands: no remote body");
+        return;
+    }
+    if (mode.rfind("hide", 0) == 0) ds2::setEntityVisible(body, false);
+    else if (mode.rfind("show", 0) == 0) ds2::setEntityVisible(body, true);
+    else if (mode.rfind("pause", 0) == 0) reinterpret_cast<void (*)(uintptr_t)>(ds2::at(kRequestPausedUpdate))(body);
+    logger::write("test_commands: park '%s', the body's entity flags %llx", mode.c_str(),
+                  static_cast<unsigned long long>(ds2::field<uint64_t>(body, kEntityFlags)));
+}
+
+void setNpcPartnerSwitch(const std::string& text) { sneaking_focus::setSkipWakeBlock(text.find("wake") != std::string::npos); }
 void logQwords(const char* what, uintptr_t address, size_t bytes) {
     for (size_t offset = 0; offset < bytes; offset += 4 * sizeof(uint64_t)) {
         uint64_t q[4] = {};
@@ -352,6 +431,7 @@ void watchAddress(const std::string& text) {
 }
 
 void tick() {
+    logCandidateChanges();
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last < kPollMs) return;
@@ -360,6 +440,8 @@ void tick() {
     if (const std::string text = takeCommand(L"area.txt"); !text.empty()) changeArea(text);
     if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
     if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
+    if (const std::string text = takeCommand(L"crater.txt"); !text.empty()) craterCommand(text);
+    if (const std::string text = takeCommand(L"locker.txt"); !text.empty()) lockerCommand(text);
     if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
     if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
     if (const std::string text = takeCommand(L"env.txt"); !text.empty()) worldEnv(text);
@@ -371,9 +453,15 @@ void tick() {
     if (const std::string text = takeCommand(L"attach.txt"); !text.empty()) remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, 10));
     if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
     if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
+    if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
+    if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_update::setSkipMask(static_cast<uint32_t>(strtoul(text.c_str(), nullptr, 16)));
+    if (const std::string text = takeCommand(L"candlog.txt"); !text.empty()) g_logCandidates = text.rfind("off", 0) != 0;
+    if (const std::string text = takeCommand(L"dropnotify.txt"); !text.empty()) remote_update::setDropMissionNotify(text.rfind("off", 0) != 0);
+    if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
     if (const std::string text = takeCommand(L"mission.txt"); !text.empty()) logMission(text);
     if (const std::string text = takeCommand(L"success.txt"); !text.empty()) requestSuccess(text);
     if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
+    if (const std::string text = takeCommand(L"npcpartner.txt"); !text.empty()) setNpcPartnerSwitch(text);
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.
@@ -383,7 +471,7 @@ void logStackReturns(uintptr_t stack, uintptr_t base) {
     for (size_t i = 0; i < kStackWordsScanned && found < kReturnsLogged; ++i) {
         uintptr_t value = 0;
         if (!decima::safeRead(stack + i * sizeof(uintptr_t), value)) break;
-        if (value < base || value - base > kImageSpan) continue;
+        if (!ds2::inGameImage(value)) continue;
         char text[32];
         snprintf(text, sizeof(text), " %llx", static_cast<unsigned long long>(value - base + ds2::kImageBase));
         line += text;
@@ -392,11 +480,31 @@ void logStackReturns(uintptr_t stack, uintptr_t base) {
     logger::write("test_commands:   stack returns:%s", line.c_str());
 }
 
+// Where the likely component registers point: the object, its vtable (file va, `disasm.py vtname` gives the class), its
+// owner entity (+0x48) and the remote body's entity.
+void logRegisters(const CONTEXT& context, uintptr_t base) {
+    const struct { const char* name; DWORD64 value; } registers[] = {{"rcx", context.Rcx}, {"rdx", context.Rdx}, {"rbx", context.Rbx},
+                                                                       {"rsi", context.Rsi}, {"rdi", context.Rdi}, {"r8", context.R8}};
+    for (const auto& reg : registers) {
+        uintptr_t vtable = 0, owner = 0;
+        decima::safeRead(reg.value, vtable);
+        decima::safeRead(reg.value + kComponentOwner, owner);
+        uintptr_t linked = 0, linkedVtable = 0;
+        decima::safeRead(reg.value + kComponentLink, linked);
+        decima::safeRead(linked, linkedVtable);
+        logger::write("test_commands:   %s=%p vtable=%p owner=%p, +0x98 -> %p (vtable %p); Sam's entity %p, remote entity %p", reg.name,
+                      reinterpret_cast<void*>(reg.value), reinterpret_cast<void*>(vtable - base + ds2::kImageBase),
+                      reinterpret_cast<void*>(owner), reinterpret_cast<void*>(linked),
+                      reinterpret_cast<void*>(linkedVtable - base + ds2::kImageBase), reinterpret_cast<void*>(remote_player::samEntity()),
+                      reinterpret_cast<void*>(remote_player::entity()));
+    }
+}
+
 LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
     static size_t logged = 0;
     const uintptr_t at = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
     const uintptr_t base = ds2::at(ds2::kImageBase);
-    if (at < base || at - base > kImageSpan || logged >= kMaxFaultsLogged) return EXCEPTION_CONTINUE_SEARCH;
+    if (!ds2::inGameImage(at) || logged >= kMaxFaultsLogged) return EXCEPTION_CONTINUE_SEARCH;
     for (const DWORD code : kFaultCodes) {
         if (info->ExceptionRecord->ExceptionCode != code) continue;
         ++logged;
@@ -404,6 +512,7 @@ LONG CALLBACK faultLogger(EXCEPTION_POINTERS* info) {
         logger::write("test_commands: fault %08lx in the game at file va %p, address %p", code,
                       reinterpret_cast<void*>(at - base + ds2::kImageBase), reinterpret_cast<void*>(target));
         logStackReturns(info->ContextRecord->Rsp, base);
+        logRegisters(*info->ContextRecord, base);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
