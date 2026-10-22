@@ -5,8 +5,10 @@ using System.Text.Json.Serialization;
 namespace CoopLauncher;
 
 /// <summary>A file the game folder gets: Src in the package, Dst in the game folder. With Folder set both name a folder; the profile
-/// load replaces it by one entry per file (see <see cref="ModFiles.Expand"/>), each with the folder's Dst in FolderDst.</summary>
-public sealed record AdapterFile(string Src, string Dst, bool Folder = false, string? FolderDst = null);
+/// load replaces it by one entry per file (see <see cref="ModFiles.Expand"/>), each with the folder's Dst in FolderDst. With Generate
+/// set (<c>"delta"</c>) Src is a script recipe (<see cref="ScriptDelta"/>) and Dst a folder: the profile load replaces it by one entry
+/// per script of the recipe, each with the script's name in Member, and the install builds the script from the player's own files.</summary>
+public sealed record AdapterFile(string Src, string Dst, bool Folder = false, string? FolderDst = null, string? Generate = null, string? Member = null);
 
 /// <summary>Save sync settings. Fixed files come from the Steam cloud folder (SteamRemoteFiles). A game that keeps its
 /// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host

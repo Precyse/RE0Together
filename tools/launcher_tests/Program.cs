@@ -82,8 +82,10 @@ public static class Program
     private static void RunModInstallSuites()
     {
         ModFilesTests.Run();
+        ScriptDeltaTests.Run();
         ModInstallerTests.Run();
         ModFolderTests.Run();
+        ModGeneratedTests.Run();
         ModProgressTests.Run();
     }
 

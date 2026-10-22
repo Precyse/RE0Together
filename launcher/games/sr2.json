@@ -2,7 +2,7 @@
   "maxPlayers": 4, "port": 27962, "sessionKind": "rendezvous", "supportedBuilds": [1076239],
   "requires": [ { "file": "DFEngine.dll", "name": "Juiced" } ],
   "adapterFiles": [ { "src": "adapters/sr2/dinput8.dll", "dst": "dinput8.dll" },
-                    { "src": "adapters/sr2/scripts", "dst": "coop/scripts", "folder": true } ],
+                    { "src": "adapters/sr2/scripts.delta.json", "dst": "coop/scripts", "generate": "delta" } ],
   "adapterIni": "coop/sr2_adapter.ini",
   "adapterLog": "coop/sr2_adapter.log",
   "joinFile": "coop/sr2_join.txt",
