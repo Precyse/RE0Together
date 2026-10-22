@@ -78,6 +78,9 @@ std::atomic<bool> g_adoptExisting{false};
 std::atomic<bool> g_releaseToHost{false};
 std::mutex g_animationMutex;  // guards g_animation: the pose evaluation reads it on other threads
 std::unordered_map<uintptr_t, remote_animation::VariableValues> g_animation;  // puppet entity -> the host's variables
+// Whether g_animation holds anything, written under the mutex: every animated entity's pose evaluation asks `animate`, and
+// most of the time (always on a host) no puppet is animated, so the evaluations skip the mutex.
+std::atomic<bool> g_anyAnimated{false};
 std::mutex g_mutex;  // guards the queues and the tamed table (spawn workers and the net thread fill them)
 std::vector<enemy_wire::EnemySpawn> g_spawns;
 std::vector<enemy_wire::EnemyState> g_states;
@@ -147,6 +150,7 @@ void bind(const enemy_wire::EnemySpawn& spawn, uintptr_t entity) {
 void forgetAnimation(uintptr_t entity) {
     std::lock_guard lock(g_animationMutex);
     g_animation.erase(entity);
+    g_anyAnimated = !g_animation.empty();
 }
 
 void handleGone(const enemy_wire::EnemyGone& gone) {
@@ -179,6 +183,7 @@ void handleAnimation(const enemy_wire::EnemyAnim& anim) {
     std::lock_guard lock(g_animationMutex);
     remote_animation::VariableValues& values = g_animation[it->second.entity];
     for (const remote_animation::Change& change : anim.changes) values.set(change);
+    g_anyAnimated = true;
 }
 
 void applyHealth(Puppet& puppet) {
@@ -326,6 +331,7 @@ namespace enemy_puppet {
 void installEarly() { sim_tick::add(&tick, "enemy puppets", sim_tick::Gate::Gameplay); }
 
 bool animate(uintptr_t manager, uintptr_t owner) {
+    if (!g_anyAnimated.load(std::memory_order_relaxed)) return false;
     std::lock_guard lock(g_animationMutex);
     const auto it = g_animation.find(owner);
     if (it == g_animation.end()) return false;
