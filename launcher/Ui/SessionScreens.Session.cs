@@ -27,7 +27,7 @@ internal static partial class SessionScreens
             hosting, s.LobbyId != 0 ? s.LobbyId.ToString(CultureInfo.InvariantCulture) : string.Empty,
             hosting ? HostingSteps(s, mod, nowMs) : [], hosting && StartEnabled(s, local!), state,
             hosting ? [] : HostOptions(s, g), hosting ? [] : events.TakeLast(RecentEvents).ToList(),
-            state?.Kind == LobbyStateKind.GameClosed, hosting ? $"PLAYERS {s.Players.Count}/{seats.Count}" : string.Empty,
+            state?.Kind == LobbyStateKind.GameClosed, hosting ? $"{s.Players.Count}/{seats.Count}" : string.Empty,
             seats, hosting && seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
     }
 

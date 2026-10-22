@@ -148,7 +148,7 @@ public static class SessionScreensTests
         Check.That(model.Steps[0].Mark == StepMark.Done && model.Steps[1].Mark == StepMark.Done && model.Steps[2].Mark == StepMark.Active && model.Steps[3].Mark == StepMark.Pending,
             "hosting: the lobby and the mod are done, waiting is active");
         Check.That(model.Steps[2].Trailing == "0:42", "hosting: the waiting timer counts from the lobby opening");
-        Check.That(model.Counter == "PLAYERS 1/2" && model.Layout == CardLayout.Wide, "hosting: two seats are wide cards under a PLAYERS count");
+        Check.That(model.Counter == "1/2" && model.Layout == CardLayout.Wide, "hosting: two seats are wide cards under a PLAYERS count");
         Check.That(model.StartEnabled, "hosting: alone and ready, START GAME can be used");
 
         var opening = Host(Re0Status(SessionStep.None, HostSlot(SessionStep.None, local: true)) with { State = AppState.Connecting, LobbyId = 0 });
@@ -167,7 +167,7 @@ public static class SessionScreensTests
 
         var four = Host(Sr2Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true), GuestSlot(SessionStep.Ready, id: 3), GuestSlot(SessionStep.Ready, id: 4),
             GuestSlot(SessionStep.Ready, id: 5)), Sr2);
-        Check.That(four.Counter == "PLAYERS 4/4" && four.Layout == CardLayout.Tall && four.StartEnabled, "hosting: four seats are tall cards");
+        Check.That(four.Counter == "4/4" && four.Layout == CardLayout.Tall && four.StartEnabled, "hosting: four seats are tall cards");
         Check.That(Host(Re0Status(SessionStep.InGame, HostSlot(SessionStep.InGame, local: true))).Hosting == false, "hosting: once the host is in game it is the lobby");
     }
 

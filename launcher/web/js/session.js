@@ -105,7 +105,7 @@ export function create(ctx) {
   const notice = createNotice(ctx);
   const counter = h('span', { class: 'session-count' });
   const cards = createCards(ctx, 'wide');
-  const right = h('div', { class: 'session-right' }, hosting ? h('div', { class: 'caption session-players' }, LABELS.players, counter) : null, cards.el);
+  const right = h('div', { class: 'session-right' }, hosting ? h('div', { class: 'caption session-players' }, h('span', { text: LABELS.players }), counter) : null, cards.el);
   const left = h('div', { class: 'session-left' }, logo, code.el, body.el, notice.el);
   const el = h('section', { class: `session session-${ctx.screen}` }, backdrop, h('div', { class: 'session-grid' }, left, right));
   let shown = false;

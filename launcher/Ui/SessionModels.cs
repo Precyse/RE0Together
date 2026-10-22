@@ -16,8 +16,8 @@ internal enum LobbyStateKind { InGame, Reconnecting, WaitingForHost, GameClosed 
 internal sealed record LobbyState(LobbyStateKind Kind, string Words, string Timer);
 
 /// <summary>What the hosting and lobby screen shows. Hosting is the screen before the game starts (the step list and START
-/// GAME), else the lobby (the state line, the host's options and the last events). Counter is the PLAYERS caption of the
-/// hosting screen. Seats are the cards, Layout the layout they use.</summary>
+/// GAME), else the lobby (the state line, the host's options and the last events). Counter is the n/max seat count the
+/// hosting screen shows after its PLAYERS caption. Seats are the cards, Layout the layout they use.</summary>
 internal sealed record SessionModel(
     bool Hosting, string Code, IReadOnlyList<StepRow> Steps, bool StartEnabled, LobbyState? State,
     IReadOnlyList<(string Label, string Value)> Options, IReadOnlyList<string> Events, bool Relaunch, string Counter,

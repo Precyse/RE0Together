@@ -76,7 +76,7 @@ public static class UiSnapshotTests
         Check.That(string.Join("/", session.Steps.Select(step => step.Text)) == "Lobby open/Mod 412/Waiting for players/In game", "H1: the hosting steps");
         Check.That(string.Join("", session.Steps.Select(step => step.Mark switch { StepMark.Done => 'D', StepMark.Active => 'A', _ => 'P' })) == "DDAP", "H1: lobby open and mod are done, waiting is active");
         Check.That(session.Steps[2].Trailing == "0:12", "H1: waiting for players counts from the lobby's opening");
-        Check.That(!session.StartEnabled && session.Counter == "PLAYERS 1/2" && session.Layout == CardLayout.Wide, "H1: start waits, two seats on the wide layout");
+        Check.That(!session.StartEnabled && session.Counter == "1/2" && session.Layout == CardLayout.Wide, "H1: start waits, two seats on the wide layout");
         Check.That(session.Seats.Length == 2 && session.Seats[0].Key == "0" && session.Seats[1].Key == "1", "H1: cards are keyed by seat");
         var host = session.Seats[0];
         Check.That(host.Local && host.Corner == "Host" && host.Occupant == "2" && host.Name == "Precyse" && host.Avatar.Initial == "P" && host.Avatar.Src == null && host.State == "idle",
