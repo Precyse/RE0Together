@@ -9,5 +9,7 @@ if not defined SR2_LUA_SOURCE goto done
 if not defined SR2_LUA_FIXES (echo SR2_LUA_FIXES is not set: the folder with Juiced TU3 Mission Fixes & exit /b 1)
 python ..\..\tools\sr2\lua_overrides.py "%SR2_LUA_SOURCE%" "%SR2_LUA_FIXES%" build\coop\scripts
 if errorlevel 1 exit /b 1
+python ..\..\tools\sr2\lua_delta.py "%SR2_LUA_SOURCE%" "%SR2_LUA_FIXES%" build\coop\scripts scripts.delta.json
+if errorlevel 1 exit /b 1
 :done
 echo BUILD OK

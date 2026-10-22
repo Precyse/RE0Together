@@ -1,0 +1,158 @@
+r"""Writes adapters/sr2/scripts.delta.json: the recipe the launcher uses to build the Saints Row 2 co-op scripts on the player's PC.
+
+usage: python tools/sr2/lua_delta.py <dir with the original .lua files> <dir with Juiced's TU3 Mission Fixes> <dir with the generated scripts> <out json>
+
+The generated scripts (lua_overrides.py's output) are 97% the game's own text, which the repo must not hold. The delta keeps only what is
+ours: per script, which of the player's files it starts from (an entry of patch.vpp_pc, or a Juiced file), that file's SHA-256 and size,
+the script's SHA-256 and size, and ops over the source bytes as they are (latin-1, line endings kept): ["c", offset, length] copies source
+bytes, ["i", text] inserts text. Lines are compared first, then characters inside a replaced block, so an insert carries our edit and not
+the game's whole line. The launcher applies the ops to the player's own files and refuses a source or an output whose hash differs.
+"""
+import difflib
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from lua_overrides import FIXED_FILES  # noqa: E402
+
+FORMAT = 1
+PACK_NAME = "patch.vpp_pc"
+FIXES_FOLDER = "Mods/JUICED - TU3 Mission Fixes"
+# A shorter run of unchanged text costs more as an op than as part of the insert beside it.
+MIN_COPY = 12
+# Character-level comparison of a replaced block costs about the product of the sizes; a bigger block is inserted whole.
+CHAR_DIFF_LIMIT = 4_000_000
+LINE = re.compile(r"[^\n]*\n|[^\n]+")
+
+
+def sha256(text):
+    return hashlib.sha256(text.encode("latin-1")).hexdigest()
+
+
+def source_label(name):
+    return f"{FIXES_FOLDER}/{name}" if name in FIXED_FILES else f"{PACK_NAME}:{name}"
+
+
+class Ops:
+    """The op list under construction: adjacent copies and adjacent inserts merge."""
+
+    def __init__(self):
+        self.ops = []
+
+    def copy(self, offset, length):
+        if length <= 0:
+            return
+        if self.ops and self.ops[-1][0] == "c" and self.ops[-1][1] + self.ops[-1][2] == offset:
+            self.ops[-1][2] += length
+        else:
+            self.ops.append(["c", offset, length])
+
+    def insert(self, text):
+        if not text:
+            return
+        if self.ops and self.ops[-1][0] == "i":
+            self.ops[-1][1] += text
+        else:
+            self.ops.append(["i", text])
+
+
+def add_block(ops, offset, old, new):
+    """Ops turning `old` (which starts at `offset` in the source) into `new`, with copies of at least MIN_COPY characters."""
+    if len(old) * len(new) > CHAR_DIFF_LIMIT:
+        ops.insert(new)
+        return
+    for tag, a1, a2, b1, b2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag == "equal" and a2 - a1 >= MIN_COPY:
+            ops.copy(offset + a1, a2 - a1)
+        else:
+            ops.insert(new[b1:b2])
+
+
+def make_ops(source, target):
+    old_lines, new_lines = LINE.findall(source), LINE.findall(target)
+    starts = [0]
+    for line in old_lines:
+        starts.append(starts[-1] + len(line))
+    ops = Ops()
+    for tag, a1, a2, b1, b2 in difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False).get_opcodes():
+        if tag == "equal":
+            ops.copy(starts[a1], starts[a2] - starts[a1])
+        elif tag != "delete":
+            add_block(ops, starts[a1], "".join(old_lines[a1:a2]), "".join(new_lines[b1:b2]))
+    return ops.ops
+
+
+def apply_ops(source, ops):
+    """The text the ops build from `source`; raises ValueError when an op reaches outside it."""
+    parts = []
+    for op in ops:
+        if op[0] == "c":
+            if op[1] < 0 or op[1] + op[2] > len(source):
+                raise ValueError(f"copy {op[1]}+{op[2]} is outside the {len(source)} source bytes")
+            parts.append(source[op[1]:op[1] + op[2]])
+        else:
+            parts.append(op[1])
+    return "".join(parts)
+
+
+def rebuild(record, source):
+    """The script a record describes, built from `source`; ValueError when the source or the result is not the pinned one."""
+    if len(source) != record["sourceSize"] or sha256(source) != record["sourceSha256"]:
+        raise ValueError(f"{record['name']}: the source differs from the pinned {record['source']}")
+    target = apply_ops(source, record["ops"])
+    if len(target) != record["size"] or sha256(target) != record["sha256"]:
+        raise ValueError(f"{record['name']}: the ops do not rebuild the pinned script")
+    return target
+
+
+def read_latin1(path):
+    return path.read_bytes().decode("latin-1")
+
+
+def file_record(name, source, target):
+    return {"name": name, "source": source_label(name), "sourceSha256": sha256(source), "sourceSize": len(source),
+            "sha256": sha256(target), "size": len(target), "ops": make_ops(source, target)}
+
+
+def build(sources, fixes, generated):
+    """The delta as a dict, one record per script in the generated dir, sorted by name; it applies back to the generated bytes."""
+    records = []
+    for path in sorted(generated.glob("*.lua"), key=lambda p: p.name):
+        name = path.name
+        source = read_latin1((fixes if name in FIXED_FILES else sources) / name)
+        record = file_record(name, source, read_latin1(path))
+        rebuild(record, source)
+        records.append(record)
+    return {"format": FORMAT, "files": records}
+
+
+def to_json(delta):
+    """One script per line, so a change to one script is one changed line of the file."""
+    lines = [json.dumps(record, separators=(",", ":")) for record in delta["files"]]
+    return '{"format":%d,"files":[\n%s\n]}\n' % (delta["format"], ",\n".join(lines))
+
+
+def insert_bytes(delta):
+    return sum(len(op[1]) for record in delta["files"] for op in record["ops"] if op[0] == "i")
+
+
+def main(argv):
+    if len(argv) != 5:
+        print(__doc__)
+        return 2
+    try:
+        delta = build(Path(argv[1]), Path(argv[2]), Path(argv[3]))
+    except (ValueError, FileNotFoundError) as error:
+        print(f"lua_delta: {error}")
+        return 1
+    text = to_json(delta)
+    Path(argv[4]).write_text(text, encoding="ascii", newline="\n")
+    print(f"lua_delta: {len(delta['files'])} scripts, {len(text.encode('ascii'))} bytes written to {argv[4]}, {insert_bytes(delta)} bytes of inserted text")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
