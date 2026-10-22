@@ -1,19 +1,28 @@
 namespace CoopLauncher.Gui;
 
+/// <summary>What the Settings "Check for updates" button shows: nothing special, a check the player asked for is running, or it found
+/// nothing newer (shown for a moment).</summary>
+internal enum UpdateCheck { Idle, Checking, UpToDate }
+
 /// <summary>The window's one update path: the release is read in the background, a newer build is offered (Update to N),
 /// downloaded and installed in the background without starting it (Downloading), and then waits for the player's restart
 /// (Restart); an update that leaves the launcher as it is (mods only) needs no restart. With "Check for updates at start" on the
 /// download starts by itself, but only while no session is open (the package is replaced on disk); with it off it starts on the
-/// click. A failed install returns to the offer. <see cref="Settled"/> says when the package on disk will not change by itself.
+/// click. A failed install returns to the offer. The player can also ask for a check (<see cref="CheckNow"/>); it follows the same path. <see cref="Settled"/> says when the package on disk will not change by itself.
 /// Must be used from the UI thread.</summary>
 internal sealed class UpdateFlow
 {
     private enum Phase { None, Offered, Downloading, Ready }
 
+    private const int UpToDateShownMs = 1500;
+
     private readonly TaskScheduler _ui = TaskScheduler.FromCurrentSynchronizationContext();
     private Phase _phase = Phase.None;
     private bool _free = true;
     private bool _autoPending;
+    private bool _reading;
+    private bool _asked;
+    private bool _upToDate;
     private int _percent;
 
     /// <summary>The offer, the download or the staged build changed: the button needs redrawing.</summary>
@@ -31,6 +40,9 @@ internal sealed class UpdateFlow
 
     /// <summary>A download is under way (the package is being replaced).</summary>
     public bool Busy => _phase == Phase.Downloading;
+
+    /// <summary>The state of a check the player asked for, for the Settings button.</summary>
+    public UpdateCheck CheckState => _asked ? UpdateCheck.Checking : _upToDate ? UpdateCheck.UpToDate : UpdateCheck.Idle;
 
     /// <summary>The top bar button's label, or null while there is nothing to offer.</summary>
     public string? Label => _phase switch
@@ -58,13 +70,45 @@ internal sealed class UpdateFlow
 
     /// <summary>Reads the release in the background and offers a newer build. <paramref name="automatic"/> starts the download
     /// as soon as it is offered.</summary>
-    public void Check(bool automatic)
+    public void Check(bool automatic) => Read(automatic, asked: false);
+
+    /// <summary>The player asked for a check (Settings): the same as <see cref="Check"/>, with the button showing it runs and, when
+    /// nothing newer exists, for a moment that it is up to date. Ignored while a check or a download is under way.</summary>
+    public void CheckNow(bool automatic)
+    {
+        if (!_reading && _phase != Phase.Downloading) Read(automatic, asked: true);
+    }
+
+    private void Read(bool automatic, bool asked)
     {
         _autoPending = automatic;
-        Task.Run(() => ReleaseFeed.Read()).ContinueWith(task =>
+        _reading = true;
+        _asked = asked;
+        _upToDate = false;
+        if (asked) Changed?.Invoke();
+        Task.Run(() => ReleaseFeed.Read(force: asked)).ContinueWith(task =>
         {
-            if (task.Result?.Build is { } build && build > BuildCheck.LocalBuild()) Offer(build);
-            else Settled?.Invoke();
+            _reading = false;
+            var wasAsked = _asked;
+            _asked = false;
+            var release = task.Result;
+            if (release?.Build is { } build && build > BuildCheck.LocalBuild()) Offer(build);
+            else
+            {
+                if (wasAsked && release != null) ShowUpToDate();
+                Settled?.Invoke();
+            }
+        }, _ui);
+    }
+
+    private void ShowUpToDate()
+    {
+        _upToDate = true;
+        Changed?.Invoke();
+        Task.Delay(UpToDateShownMs).ContinueWith(_ =>
+        {
+            _upToDate = false;
+            Changed?.Invoke();
         }, _ui);
     }
 
@@ -84,6 +128,7 @@ internal sealed class UpdateFlow
 
     internal void Offer(int build)
     {
+        if (_phase == Phase.Downloading) return;
         NewerBuild = build;
         _phase = Updater.Staged ? Phase.Ready : Phase.Offered;
         Changed?.Invoke();

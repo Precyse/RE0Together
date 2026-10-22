@@ -2,9 +2,12 @@ import { h, setText, keyed } from './dom.js';
 import { createDropdown } from './dropdown.js';
 import { createToggle } from './toggle.js';
 import { createModRun } from './mod-run.js';
+import { createSpinner } from './spinner.js';
 
 const LAUNCHER_TITLE = 'Launcher';
 const UPDATES_LABEL = 'Check for updates at start';
+const CHECK_LABEL = 'Check for updates';
+const UP_TO_DATE_LABEL = 'Up to date';
 const VISIBILITY_LABEL = 'Lobby visibility';
 const VISIBILITY_ITEMS = [{ value: 'friends', label: 'Friends' }, { value: 'everyone', label: 'Everyone' }];
 const ELLIPSIS = '…';
@@ -46,10 +49,13 @@ const tool = (label, onClick) => h('button', { class: 'btn btn-ghost settings-to
 export function create(ctx) {
   const { send } = ctx;
   const updates = createToggle({ label: UPDATES_LABEL, onChange: (on) => send('settings.updates', { on }) });
+  const checkText = h('span');
+  const checkSpinner = createSpinner('small');
+  const check = h('button', { class: 'btn btn-ghost settings-check', type: 'button', 'aria-label': CHECK_LABEL, on: { click: () => send('update.check') } }, checkText, checkSpinner);
   const visibility = createDropdown({ label: VISIBILITY_LABEL, onSelect: (value) => send('settings.visibility', { value }) });
   const logs = tool('Logs folder', () => send('settings.logs'));
   const report = tool('Create report', () => send('report.create'));
-  const launcher = section(LAUNCHER_TITLE, h('div', { class: 'settings-grid' }, ...labelled(UPDATES_LABEL, updates.el), ...labelled(VISIBILITY_LABEL, visibility.el), ...labelled('', logs, report)));
+  const launcher = section(LAUNCHER_TITLE, h('div', { class: 'settings-grid' }, ...labelled(UPDATES_LABEL, updates.el, check), ...labelled(VISIBILITY_LABEL, visibility.el), ...labelled('', logs, report)));
   const games = h('div', { class: 'settings-games' });
   const el = h('section', { class: 'settings' }, h('div', { class: 'settings-scroll' }, launcher, games));
   const resize = new ResizeObserver(() => {
@@ -105,6 +111,11 @@ export function create(ctx) {
       const { settings } = state;
       if (!settings) return;
       updates.set(settings.checkForUpdates);
+      const checking = settings.updateCheck === 'checking';
+      check.disabled = checking;
+      checkText.hidden = checking;
+      checkSpinner.hidden = !checking;
+      setText(checkText, settings.updateCheck === 'upToDate' ? UP_TO_DATE_LABEL : CHECK_LABEL);
       visibility.set({ items: VISIBILITY_ITEMS, value: settings.visibility, disabled: settings.visibilityLocked });
       keyed(games, settings.games, (game) => game.id, createGame, updateGame);
     },

@@ -10,8 +10,8 @@ internal sealed record GameEntry(GameProfile Profile, GameStatus Status, ArtDto 
 internal enum PopupKind { None, Options, Lobby, Update }
 
 /// <summary>The update button as the top bar shows it: its label (null while there is nothing to offer), whether it can be
-/// clicked, the newer build on offer (0 when none) and whether a build is staged.</summary>
-internal sealed record UpdateView(string? Label, bool Enabled, int NewerBuild, bool Staged);
+/// clicked, the newer build on offer (0 when none), whether a build is staged and how a check the player asked for stands.</summary>
+internal sealed record UpdateView(string? Label, bool Enabled, int NewerBuild, bool Staged, UpdateCheck Check = UpdateCheck.Idle);
 
 /// <summary>Everything a snapshot is made from: the controller's state and the world around it, so that the mapping is a pure
 /// function that tests feed with fake statuses.</summary>
@@ -172,6 +172,6 @@ internal static partial class UiSnapshot
             SettingsModel.ResetEnabled(game.Profile, idle), SettingsModel.UninstallEnabled(game.Status, idle, i.Update.Staged),
             game.Status.SettingsMod, game.Status.SettingsGame, OptionRows(i, game.Profile, settingsOptions: true, hostValues: null), SettingsModel.ArchiveShown(game.Profile),
             i.ModRunOf(game.Profile.Id))).ToArray();
-        return new SettingsDto(AppSettings.Current.CheckForUpdates, AppSettings.Current.LobbyVisibility, !i.Free, games);
+        return new SettingsDto(AppSettings.Current.CheckForUpdates, i.Update.Check, AppSettings.Current.LobbyVisibility, !i.Free, games);
     }
 }

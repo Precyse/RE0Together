@@ -49,6 +49,7 @@ internal static class Cmd
     public const string GameArchive = "game.archive";
     public const string UpdateClick = "update.click";
     public const string UpdateRestart = "update.restart";
+    public const string UpdateCheck = "update.check";
 }
 
 /// <summary>How a field of a command is read: text, a lobby id as digits, a flag, a whole number in a range, a direction (-1 or 1), or
@@ -136,6 +137,7 @@ internal static class UiCommands
         [Cmd.GameArchive] = [GameId],
         [Cmd.UpdateClick] = [],
         [Cmd.UpdateRestart] = [],
+        [Cmd.UpdateCheck] = [],
     };
 
     /// <summary>Every command type, as <c>bridge.js</c> must list them.</summary>

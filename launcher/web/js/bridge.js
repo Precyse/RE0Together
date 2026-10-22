@@ -43,6 +43,7 @@ export const COMMANDS = [
   'game.archive',
   'update.click',
   'update.restart',
+  'update.check',
 ];
 
 let transport = null;

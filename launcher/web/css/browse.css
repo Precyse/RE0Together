@@ -179,6 +179,7 @@
 .settings-row { display: flex; align-items: center; gap: var(--gap-row); }
 .settings-buttons { display: flex; gap: var(--gap); flex: none; margin-left: auto; }
 .settings-tool { width: var(--tool-w); flex: none; padding: 0; }
+.settings-check { width: var(--check-w); flex: none; padding: 0; }
 .settings-path { flex: 1; min-width: 0; font-size: var(--fs-small); color: var(--text); white-space: nowrap; overflow: hidden; }
 .settings-line { display: flex; align-items: center; gap: var(--section-pad-x); font-size: var(--fs-small); }
 .settings-game { color: var(--muted); }

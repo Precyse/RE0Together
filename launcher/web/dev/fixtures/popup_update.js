@@ -69,6 +69,7 @@ export default {
   "select": null,
   "settings": {
    "checkForUpdates": true,
+   "updateCheck": "idle",
    "visibility": "friends",
    "visibilityLocked": false,
    "games": [

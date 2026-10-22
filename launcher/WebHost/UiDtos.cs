@@ -101,7 +101,7 @@ internal sealed record SettingsGameDto(
     string Id, string Name, string Folder, bool BrowseEnabled, bool ResetEnabled, bool UninstallEnabled, string ModLine, string GameLine, OptionRowDto[] Options, bool Archive,
     ModRunDto? ModRun);
 
-internal sealed record SettingsDto(bool CheckForUpdates, LobbyVisibility Visibility, bool VisibilityLocked, SettingsGameDto[] Games);
+internal sealed record SettingsDto(bool CheckForUpdates, UpdateCheck UpdateCheck, LobbyVisibility Visibility, bool VisibilityLocked, SettingsGameDto[] Games);
 
 /// <summary>The main page's state (everything but <c>type</c> and <c>seq</c>, which the surface adds). Only the DTO of the screen
 /// on show is set, plus <see cref="Popup"/> (an <see cref="OptionsPopupDto"/>, a <see cref="LobbyPopupDto"/> or an <see cref="UpdatePopupDto"/>).</summary>

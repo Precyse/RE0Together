@@ -200,6 +200,10 @@ public static class UiSnapshotTests
         Check.That(!home.HostEnabled && !home.JoinEnabled && !home.CodeEnabled, "mod run: Host and Join wait while it runs");
 
         var settings = UiSnapshot.MainPage(copying with { Screen = ScreenKind.Settings, View = ScreenKind.Settings }, null).Settings!;
+        Check.That(settings.UpdateCheck == UpdateCheck.Idle, "settings: the update check button is idle");
+        foreach (var check in new[] { UpdateCheck.Checking, UpdateCheck.UpToDate })
+            Check.That(UiSnapshot.MainPage((copying with { Screen = ScreenKind.Settings, View = ScreenKind.Settings }) with { Update = new UpdateView(null, false, 0, false, check) }, null).Settings!.UpdateCheck == check,
+                $"settings: the update check button shows {check}");
         var game = settings.Games.Single(g => g.Id == "re0");
         Check.That(game.ModRun?.Step.Trailing == "40%" && !game.BrowseEnabled && !game.ResetEnabled && !game.UninstallEnabled && settings.Games.Single(g => g.Id == "sr2").ModRun == null,
             "mod run: the game's settings row shows it and its buttons wait");
