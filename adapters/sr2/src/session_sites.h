@@ -52,5 +52,12 @@ inline constexpr Site kAdmission[] = {
     {"N1c", Kind::HookEntry, 0x8CB490, "81 EC 94 04 00 00", Thunk::AdmissionPump, ""},
 };
 
+// The session tick hides a remote that stopped sending and autosaves a guest (ST1); a peer without a measured receive rate does
+// not report one (PS2).
+inline constexpr Site kStall[] = {
+    {"ST1", Kind::HookEntry, 0x8105B0, "81 EC 20 05 00 00 A1 50", Thunk::SessionTick, ""},
+    {"PS2", Kind::HookEntry, 0x80AB90, "81 EC 24 05 00 00 A1 50", Thunk::RateReportWithMeasurement, ""},
+};
+
 }  // namespace session_sites
 

@@ -93,15 +93,27 @@ int main() {
 
     // The inbox.
     Inbox<int> inbox;
-    check(inbox.empty() && !inbox.pop(), "an empty inbox has nothing");
+    uint64_t stale = 0;
+    check(inbox.empty() && !inbox.pop(0, stale), "an empty inbox has nothing");
     bool droppedWhileFilling = false;
-    for (size_t i = 0; i < kInboxCapacity; ++i) droppedWhileFilling = inbox.push(static_cast<int>(i)) || droppedWhileFilling;
+    for (size_t i = 0; i < kInboxCapacity; ++i) droppedWhileFilling = inbox.push(static_cast<int>(i), 0) || droppedWhileFilling;
     check(!droppedWhileFilling, "256 datagrams fit");
-    check(inbox.push(-1), "the 257th drops the oldest");
-    check(*inbox.pop() == 1, "so the first datagram is gone and the second is next");
+    check(inbox.push(-1, 0), "the 257th drops the oldest");
+    check(*inbox.pop(0, stale) == 1, "so the first datagram is gone and the second is next");
     size_t left = 1;
-    while (inbox.pop()) ++left;
-    check(left == kInboxCapacity, "256 datagrams are kept");
+    while (inbox.pop(0, stale)) ++left;
+    check(left == kInboxCapacity && stale == 0, "256 datagrams are kept");
+
+    // A game thread stall (P3 at 00:42:29): the net thread waits while the frame is old, then what waited too long is dropped.
+    check(!holdsInbox(false, 0, 90000), "nothing is held before the first frame");
+    check(!holdsInbox(false, 10000, 10000 + kHoldAfterFrameMs - 1), "a frame under 500 ms ago lets the net thread read");
+    check(holdsInbox(false, 10000, 10000 + kHoldAfterFrameMs), "500 ms without a frame holds the net thread");
+    check(!holdsInbox(true, 10000, 60000), "the game thread itself always reads");
+    inbox.push(1, 10000);
+    inbox.push(2, 40000 - kStaleDatagramMs);
+    inbox.push(3, 39900);
+    check(*inbox.pop(40000, stale) == 3 && stale == 2, "on resume the datagrams that waited 1 s or more are dropped and counted");
+    check(inbox.empty(), "and the fresh one was read");
 
     // Counters.
     Counters counters;
@@ -110,7 +122,7 @@ int main() {
     ++counters.large;
     const CounterValues values = counters.values();
     check(values.sent == 1 && values.received == 2 && values.large == 1 && values.noPeer == 0, "the counters count");
-    check(describe(values) == "sent 1 received 2 dropped no_peer 0 not_virtual 0 wrong_dst 0 inbox_full 0 oversize 0, large 1",
+    check(describe(values) == "sent 1 received 2 dropped no_peer 0 not_virtual 0 wrong_dst 0 inbox_full 0 oversize 0, large 1, stale 0",
           "the log line names every counter");
     check(values == counters.values() && !(values == CounterValues{}), "values compare");
     check(describeSlots(counters).empty(), "no peer line before any peer traffic");

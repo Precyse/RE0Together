@@ -121,6 +121,8 @@ enum class Thunk : uint16_t {
     CutsceneReadyConsumed,
     TracePlayerPlayback,
     TraceCoopBuffers,
+    SessionTick,
+    RateReportWithMeasurement,
     // Milestone 11 (player_sites.h).
     NetClockMessage,
     NetClockTick,

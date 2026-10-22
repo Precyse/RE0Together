@@ -11,12 +11,14 @@
 #include "net_clock.h"
 #include "partner_thunks.h"
 #include "pause_mask.h"
+#include "peer_stall.h"
 #include "player_trace.h"
 #include "player_visuals.h"
 #include "remote_frustum.h"
 #include "population.h"
 #include "script_trace.h"
 #include "sender_scope.h"
+#include "session_tick.h"
 #include "spawn_budget.h"
 #include "traffic_trace.h"
 #include "vehicle_trace.h"
@@ -24,7 +26,7 @@
 namespace multiplayer_thunks {
 
 partner_thunks::Binding bindingOf(partner_sites::Thunk thunk) {
-    for (const auto bind : {&sender_scope::bind, &population::bind, &creation_queue::bind, &join_admission::bind, &leave_path::bind, &pause_mask::bind, &member_left::bind, &cutscene_sync::bind, &player_trace::bind, &net_clock::bind, &spawn_budget::bind, &vehicle_trace::bind, &traffic_trace::bind, &player_visuals::bind, &anim_trace::bind, &partner_thunks::bindCalls, &remote_frustum::bind, &mission_players::bind, &script_trace::bind, &mission_flow::bind}
+    for (const auto bind : {&sender_scope::bind, &population::bind, &creation_queue::bind, &join_admission::bind, &peer_stall::bind, &session_tick::bind, &leave_path::bind, &pause_mask::bind, &member_left::bind, &cutscene_sync::bind, &player_trace::bind, &net_clock::bind, &spawn_budget::bind, &vehicle_trace::bind, &traffic_trace::bind, &player_visuals::bind, &anim_trace::bind, &partner_thunks::bindCalls, &remote_frustum::bind, &mission_players::bind, &script_trace::bind, &mission_flow::bind}
 
 
 

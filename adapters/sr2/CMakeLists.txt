@@ -130,6 +130,9 @@ add_library(sr2_adapter SHARED
     src/join_admission.cpp
     src/pause_mask.cpp
     src/member_left.cpp
+    src/peer_stall.cpp
+    src/session_tick.cpp
+    src/coop_autosave.cpp
     src/cutscene_sync.cpp
     src/script_trace.cpp
     src/net_clock.cpp
@@ -167,7 +170,7 @@ set_source_files_properties(
     src/partner_thunks_calls.cpp src/partner_thunks_session.cpp src/partner_thunks_gameplay.cpp src/player_cap.cpp
     src/join_net_trace.cpp src/player_name.cpp src/force_join.cpp src/force_join_guest.cpp src/force_join_lan.cpp src/tunnel.cpp src/home_network.cpp src/game_port.cpp src/local_port_relay.cpp src/lan_address.cpp src/guest_welcome.cpp src/version_gate.cpp src/look_reset.cpp src/spawn_budget.cpp src/vehicle_trace.cpp src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/leave_path.cpp
     src/vehicle_seating.cpp
-    src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/activity_declines.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
+    src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/peer_stall.cpp src/session_tick.cpp src/coop_autosave.cpp src/activity_declines.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp
     src/session_kick.cpp src/hud_remotes.cpp src/waypoint_scope.cpp
     src/revive_state.cpp src/revive_thunks.cpp src/notoriety_thunks.cpp src/revive_patches.cpp
     src/mission_flow_prompts.cpp src/mission_flow_rewards.cpp
@@ -212,6 +215,8 @@ add_unit_test(hooks_batch_test ${SHARED_DIR}/hooks.cpp)
 target_link_libraries(hooks_batch_test PRIVATE minhook)
 add_unit_test(pool_size_test)
 add_unit_test(watchdog_rules_test)
+add_unit_test(peer_stall_rules_test)
+add_unit_test(coop_autosave_rules_test)
 add_unit_test(replication_sites_test)
 add_unit_test(partner_rules_test)
 add_unit_test(partner_sites_test)
@@ -310,7 +315,7 @@ add_unit_test(creation_queue_rules_test)
 add_unit_test(mission_flow_rules_test)
 add_unit_test(mission_flow_sites_test)
 add_unit_test(multiplayer_sites_test)
-add_unit_test(multiplayer_bindings_test src/activity_participants.cpp src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/activity_declines.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
+add_unit_test(multiplayer_bindings_test src/activity_participants.cpp src/multiplayer_thunks.cpp src/mission_players.cpp src/remote_frustum.cpp src/partner_thunks_calls.cpp src/partner_identity.cpp src/sender_scope.cpp src/population.cpp src/creation_queue.cpp src/join_admission.cpp src/pause_mask.cpp src/member_left.cpp src/peer_stall.cpp src/session_tick.cpp src/coop_autosave.cpp src/activity_declines.cpp src/cutscene_sync.cpp src/script_trace.cpp src/net_clock.cpp src/player_trace.cpp src/remote_frustum.cpp src/mission_players.cpp src/activity_state.cpp src/leave_path.cpp ${SHARED_DIR}/hooks.cpp src/partner_scope.cpp src/remote_players.cpp
     src/member_slots.cpp src/replication_switch.cpp src/code_patch.cpp src/memory.cpp src/guest_call.cpp src/spawn_budget.cpp src/vehicle_trace.cpp
     src/traffic_list.cpp src/traffic_trace.cpp src/vehicle_pool.cpp src/player_visuals.cpp src/anim_trace.cpp
     src/anim_stream_state.cpp src/anim_stream.cpp src/anim_stream_requests.cpp src/anim_stream_triggers.cpp src/site_installer.cpp

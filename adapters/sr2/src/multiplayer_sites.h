@@ -28,6 +28,7 @@ inline constexpr Phase kPhases[] = {
 
 
     {"join admission", session_sites::kAdmission, false},
+    {"stalled peers", session_sites::kStall, false},
     {"player traces", trace_sites::kPlayers, true},
     {"net clock", player_sites::kNetClock, false},
     {"bundle sender trace", player_sites::kBundleSender, true},

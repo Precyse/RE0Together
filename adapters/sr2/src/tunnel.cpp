@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "code_patch.h"
+#include "game_frame.h"
 #include "lan_address.h"
 #include "log.h"
 #include "memory.h"
@@ -138,7 +139,8 @@ void onFrame(const GameFrame& frame) {
             ++g_counters.noPeer;
             return;
         }
-        droppedOldest = g_inbox.push({result.source, std::vector<uint8_t>(decoded->datagram.begin(), decoded->datagram.end())});
+        droppedOldest = g_inbox.push({result.source, std::vector<uint8_t>(decoded->datagram.begin(), decoded->datagram.end())},
+                                     GetTickCount64());
     }
     if (droppedOldest) ++g_counters.inboxFull;
     ++g_counters.received;
@@ -201,13 +203,17 @@ DWORD waitMilliseconds(const timeval* timeout) {
     return static_cast<DWORD>(timeout->tv_sec) * kMsPerSecond + (static_cast<DWORD>(timeout->tv_usec) + kMicrosPerMs - 1) / kMicrosPerMs;
 }
 
+// While the game thread is stopped its net thread reads nothing: the datagrams wait here, where the newest are kept.
+bool held() { return holdsInbox(GetCurrentThreadId() == game_frame::threadId(), game_frame::lastFrameMs(), GetTickCount64()); }
+
 bool inboxHasDatagram() {
+    if (held()) return false;
     std::lock_guard lock(g_mutex);
     return !g_inbox.empty();
 }
 
-// S2, S5: "is the game socket readable" is "is the inbox not empty". The read set is left as given when it is, so the
-// __WSAFDIsSet that follows says yes.
+// S2, S5: "is the game socket readable" is "is the inbox not empty" (and not held). The read set is left as given when it is,
+// so the __WSAFDIsSet that follows says yes.
 int WSAAPI selectReadable(int nfds, fd_set* readSet, fd_set* writeSet, fd_set* errorSet, const timeval* timeout) {
     if (!isGameSocketOnly(readSet, writeSet, errorSet)) return select(nfds, readSet, writeSet, errorSet, timeout);
     const DWORD waitMs = waitMilliseconds(timeout);
@@ -227,10 +233,12 @@ int WSAAPI selectReadable(int nfds, fd_set* readSet, fd_set* writeSet, fd_set* e
 int WSAAPI receiveFromTunnel(SOCKET s, char* buffer, int length, int flags, sockaddr* from, int* fromLength) {
     if (s != gameSocket()) return recvfrom(s, buffer, length, flags, from, fromLength);
     std::optional<Datagram> datagram;
-    {
+    uint64_t stale = 0;
+    if (!held()) {
         std::lock_guard lock(g_mutex);
-        datagram = g_inbox.pop();
+        datagram = g_inbox.pop(GetTickCount64(), stale);
     }
+    g_counters.stale += stale;
     if (!datagram) {
         WSASetLastError(WSAEWOULDBLOCK);
         return SOCKET_ERROR;

@@ -28,6 +28,19 @@ constexpr size_t kDestinationBytes = 4;
 constexpr size_t kMaxFramePayload = kDestinationBytes + kMaxDatagram;
 constexpr size_t kLargeDatagram = 1150;  // Steam fragments unreliable messages above about 1200 bytes
 constexpr size_t kInboxCapacity = 256;
+// A game thread stall (docs/SR2_NOTES.md, "Stalled peers and rejoins"): the game's net thread (0x814320) goes on reading while
+// the game thread is stopped and keeps the first 96 datagrams of the stall (its queue 0x252A5EC drops the newest), which the
+// game thread then applies seconds late. So the inbox is held from every thread but the game's after kHoldAfterFrameMs
+// without a frame, and a datagram that waited kStaleDatagramMs is dropped: reliable data is resent every 500 ms (0x7FA570),
+// state is sent again every packet, and a stale clock message (0x14) would step the net clock by the stall.
+constexpr uint64_t kHoldAfterFrameMs = 500;
+constexpr uint64_t kStaleDatagramMs = 1000;
+
+// True when a read on this thread must wait: not the game thread, and the game thread has run frames but none for
+// kHoldAfterFrameMs (before the first frame nothing is held).
+constexpr bool holdsInbox(bool gameThread, uint64_t lastFrameMs, uint64_t nowMs) {
+    return !gameThread && lastFrameMs != 0 && nowMs - lastFrameMs >= kHoldAfterFrameMs;
+}
 constexpr size_t kCountedSlots = 4;      // the session's player slots 0..3, counted per peer with trace=1
 
 // A SteamID64 as a virtual address: 10.a.b.c from the account id (its low 32 bits).
@@ -144,27 +157,36 @@ inline InboundResult acceptInbound(uint32_t destination, uint32_t own, uint8_t s
     return {Inbound::NoPeer, 0};
 }
 
-// Datagrams that have arrived and wait for the game. When full, the oldest is dropped.
+// Datagrams that have arrived and wait for the game, with their arrival time. When full, the oldest is dropped; a datagram
+// that waited kStaleDatagramMs is dropped when it would be read.
 template <class T>
 class Inbox {
 public:
     // True when the oldest datagram was dropped to make room.
-    bool push(T item) {
+    bool push(T item, uint64_t nowMs) {
         const bool full = items_.size() >= kInboxCapacity;
         if (full) items_.pop_front();
-        items_.push_back(std::move(item));
+        items_.push_back({std::move(item), nowMs});
         return full;
     }
-    std::optional<T> pop() {
-        if (items_.empty()) return std::nullopt;
-        T item = std::move(items_.front());
-        items_.pop_front();
-        return item;
+    // The oldest datagram that is not stale; `stale` counts the ones dropped on the way.
+    std::optional<T> pop(uint64_t nowMs, uint64_t& stale) {
+        while (!items_.empty()) {
+            Waiting waiting = std::move(items_.front());
+            items_.pop_front();
+            if (nowMs - waiting.arrivedMs < kStaleDatagramMs) return std::move(waiting.item);
+            ++stale;
+        }
+        return std::nullopt;
     }
     bool empty() const { return items_.empty(); }
 
 private:
-    std::deque<T> items_;
+    struct Waiting {
+        T item;
+        uint64_t arrivedMs;
+    };
+    std::deque<Waiting> items_;
 };
 
 struct CounterValues {
@@ -176,6 +198,7 @@ struct CounterValues {
     uint64_t inboxFull = 0;
     uint64_t oversize = 0;
     uint64_t large = 0;
+    uint64_t stale = 0;
 
     bool operator==(const CounterValues&) const = default;
 };
@@ -184,7 +207,7 @@ struct CounterValues {
 // `receivedFrom` the accepted datagrams by the sender's slot.
 class Counters {
 public:
-    std::atomic<uint64_t> sent{0}, received{0}, noPeer{0}, notVirtual{0}, wrongDestination{0}, inboxFull{0}, oversize{0}, large{0};
+    std::atomic<uint64_t> sent{0}, received{0}, noPeer{0}, notVirtual{0}, wrongDestination{0}, inboxFull{0}, oversize{0}, large{0}, stale{0};
     std::atomic<uint64_t> sentTo[kCountedSlots]{}, receivedFrom[kCountedSlots]{};
 
     void countSentTo(uint8_t slot) {
@@ -195,16 +218,16 @@ public:
     }
 
     CounterValues values() const {
-        return {sent, received, noPeer, notVirtual, wrongDestination, inboxFull, oversize, large};
+        return {sent, received, noPeer, notVirtual, wrongDestination, inboxFull, oversize, large, stale};
     }
 };
 
 inline std::string describe(const CounterValues& values) {
-    char text[192];
+    char text[224];
     snprintf(text, sizeof(text),
-             "sent %llu received %llu dropped no_peer %llu not_virtual %llu wrong_dst %llu inbox_full %llu oversize %llu, large %llu",
+             "sent %llu received %llu dropped no_peer %llu not_virtual %llu wrong_dst %llu inbox_full %llu oversize %llu, large %llu, stale %llu",
              values.sent, values.received, values.noPeer, values.notVirtual, values.wrongDestination, values.inboxFull,
-             values.oversize, values.large);
+             values.oversize, values.large, values.stale);
     return text;
 }
 

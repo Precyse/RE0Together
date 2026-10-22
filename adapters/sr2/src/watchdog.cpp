@@ -4,12 +4,12 @@
 
 #include <dbghelp.h>
 
-#include <atomic>
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include "code_patch.h"
+#include "game_frame.h"
 #include "hooks.h"
 #include "log.h"
 #include "memory.h"
@@ -33,8 +33,6 @@ using ExitProcessFn = void(WINAPI*)(UINT);
 
 void* g_frameOriginal = nullptr;
 void* g_exitOriginal = nullptr;
-std::atomic<uint64_t> g_lastFrame{0};
-std::atomic<DWORD> g_gameThreadId{0};
 HANDLE g_gameThread = nullptr;  // opened by the watch thread once the first frame names the game thread
 
 // What the game thread was doing, read while it is suspended: nothing here allocates or takes a lock.
@@ -44,10 +42,7 @@ struct Snapshot {
     uint32_t stack[kStackDwords] = {};
 };
 
-void __cdecl onFrame(GuestFrame*) {
-    if (g_gameThreadId.load(std::memory_order_relaxed) == 0) g_gameThreadId = GetCurrentThreadId();
-    g_lastFrame.store(GetTickCount64(), std::memory_order_relaxed);
-}
+void __cdecl onFrame(GuestFrame*) { game_frame::stamp(GetTickCount64(), GetCurrentThreadId()); }
 
 TRACE_ENTRY_STUB(frameStub, onFrame, g_frameOriginal)
 
@@ -132,7 +127,7 @@ void writeNote(const std::wstring& path, uint64_t stalledMs, const Snapshot& sna
     FILE* file = _wfopen(path.c_str(), L"w");
     if (!file) return;
     std::fprintf(file, "reason: the game frame 0x%X did not run for %llu ms\ngame thread: %lu\nregisters: %s\nstack top: %s\ndump: %s\n",
-                 static_cast<unsigned>(kGameFrame), static_cast<unsigned long long>(stalledMs), g_gameThreadId.load(),
+                 static_cast<unsigned>(kGameFrame), static_cast<unsigned long long>(stalledMs), static_cast<unsigned long>(game_frame::threadId()),
                  describe(snapshot).c_str(), stackText(snapshot).c_str(), dumped ? "written" : "failed");
     std::fclose(file);
 }
@@ -156,9 +151,9 @@ DWORD WINAPI watchThread(LPVOID) {
     watchdog_rules::Monitor monitor;
     for (;;) {
         Sleep(kPollMs);
-        if (!g_gameThread && g_gameThreadId != 0) g_gameThread = OpenThread(kThreadAccess, FALSE, g_gameThreadId);
+        if (!g_gameThread && game_frame::threadId() != 0) g_gameThread = OpenThread(kThreadAccess, FALSE, game_frame::threadId());
         const uint64_t now = GetTickCount64();
-        const uint64_t lastFrame = g_lastFrame.load(std::memory_order_relaxed);
+        const uint64_t lastFrame = game_frame::lastFrameMs();
         switch (monitor.step(now, lastFrame)) {
             case watchdog_rules::Event::Stalled: reportStall(now - lastFrame); break;
             case watchdog_rules::Event::Resumed:

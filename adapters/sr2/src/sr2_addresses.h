@@ -85,6 +85,20 @@ constexpr uintptr_t kMemberNextOffset = 0x22CC;
 constexpr uintptr_t kMemberLocalFlagOffset = 0;  // byte: 0 for a remote member, set for this machine's own (0x8CB260 and 0x80F9B0 test it)
 constexpr uintptr_t kMemberStateOffset = 0x3C;
 constexpr uintptr_t kMemberSlotOffset = 0x1B0;  // byte: the session slot the 8-peer deltacomp arrays are indexed by
+constexpr uintptr_t kMemberLastReceiveOffset = 0x2240;  // the frame clock at the member's last datagram (0x7FB100, every receive)
+// The frame clock in ms (0x252A3CC): advanced by each frame's time, capped, so a stopped game's clock barely moves; 0x7FA9E0
+// times a member out after 60 s of it without a datagram.
+constexpr uintptr_t kFrameClock = 0x252A3CC;
+constexpr uintptr_t kReceivedRate = 0x815120;  // cdecl, no arguments: bytes a second received in the last 10 s, 0 without a sample
+// Saves (docs/SR2_NOTES.md, "Stalled peers and rejoins"): the autosave request, its preconditions and the save list.
+constexpr uintptr_t kAutosaveRequest = 0x696600;  // cdecl, no arguments: the game's autosave (or its device full dialog)
+constexpr uintptr_t kMissionTypeNow = 0x6A74E0;   // cdecl, no arguments: the running mission's type, 4 in an activity, -1 in free roam
+constexpr uintptr_t kSaveInFlight = 0x2527BD2;    // byte: a save is being written (0x6951B0 sets it, 0x695280 clears it)
+constexpr uintptr_t kAutosaveAfterFade = 0x2527BDB;  // byte: an autosave waits for the fade to end (0x696120)
+constexpr uintptr_t kSavesSuppressed = 0x2527BE6;    // byte: 0x696600 does nothing while it is set
+constexpr uintptr_t kSaveCount = 0x2527BEC;          // int: saves listed by 0x691C50
+constexpr uintptr_t kAutosaveListed = 0x1438660;     // byte: the save list holds an autosave (entry 0x140FFC0)
+constexpr uintptr_t kNoSaveDevice = 0x2527BF5;       // byte
 
 // Players (milestone 4). A human is a player or npc object; the player humans form the list at kPlayerListHead.
 constexpr uintptr_t kCoopFlag = 0x2528B49;  // byte: a co-op session is running
