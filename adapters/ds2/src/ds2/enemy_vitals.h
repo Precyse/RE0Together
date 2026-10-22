@@ -4,6 +4,9 @@
 
 namespace enemy_vitals {
 
+// Start-up: looks up the damage component classes, so a puppet's health write never scans the image on the simulation thread.
+void installEarly();
+
 // Health as 0-254 of the maximum (enemy_wire::kHealthUnknown when the entity cannot say). The entity must exist.
 uint8_t readHealth(uintptr_t entity);
 

@@ -42,6 +42,10 @@ uintptr_t lifeBlock(uintptr_t entity) {
 
 namespace enemy_vitals {
 
+void installEarly() {
+    for (const char* name : kDamageComponents) msvc_rtti::vtableOf(name);
+}
+
 uint8_t readHealth(uintptr_t entity) {
     const float maximum = slotValue(entity, kGetMaxHealthSlot);
     if (maximum <= 0) return enemy_wire::kHealthUnknown;

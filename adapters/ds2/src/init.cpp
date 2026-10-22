@@ -35,6 +35,7 @@
 #include "ds2/enemy_puppet.h"
 #include "ds2/damage_veto.h"
 #include "ds2/enemy_spawn.h"
+#include "ds2/enemy_vitals.h"
 #include "ds2/local_weapon.h"
 #include "ds2/remote_weapon.h"
 #include "ds2/sim_tick.h"
@@ -104,6 +105,7 @@ DWORD WINAPI initThread(LPVOID) {
     craters::installEarly();
     if (config.diagnostics) bt_diag::installEarly();
     if (config.enemySync) {
+        enemy_vitals::installEarly();
         enemy_spawn::installEarly();
         enemy_host::installEarly(config.diagnostics);
         camp_alert::installEarly();

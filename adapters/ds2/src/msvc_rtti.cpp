@@ -3,7 +3,9 @@
 #include <windows.h>
 
 #include <cstring>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 namespace {
 
@@ -42,11 +44,7 @@ uintptr_t find(Range range, const void* needle, size_t size, size_t step, uintpt
     return 0;
 }
 
-}  // namespace
-
-namespace msvc_rtti {
-
-uintptr_t vtableOf(const char* className) {
+uintptr_t scanForVtable(const char* className) {
     const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     const Range data = sectionOf(base, ".data"), rdata = sectionOf(base, ".rdata");
     const std::string decorated = std::string(".?AV") + className + "@@";
@@ -62,6 +60,21 @@ uintptr_t vtableOf(const char* className) {
         if (slot) return slot + sizeof(uintptr_t);
     }
     return 0;
+}
+
+std::mutex g_mutex;  // guards g_found; held across a scan, so two threads never scan for the same name
+std::unordered_map<std::string, uintptr_t> g_found;  // class name -> vtable; a name not found is looked for again next time
+
+}  // namespace
+
+namespace msvc_rtti {
+
+uintptr_t vtableOf(const char* className) {
+    std::lock_guard lock(g_mutex);
+    if (const auto known = g_found.find(className); known != g_found.end()) return known->second;
+    const uintptr_t vtable = scanForVtable(className);
+    if (vtable) g_found.emplace(className, vtable);
+    return vtable;
 }
 
 }  // namespace msvc_rtti

@@ -112,6 +112,9 @@ void installEarly() {
                    reinterpret_cast<void**>(&g_initTable));
     hooks::install("art part toggle", ds2::at(kArtPartToggle), reinterpret_cast<void*>(&partToggleDetour),
                    reinterpret_cast<void**>(&g_partToggle));
+    // Looked up now, on the start-up thread: silenceRemote runs on the simulation thread at every spawn.
+    for (const char* name : kSilencedComponents) msvc_rtti::vtableOf(name);
+    for (const Removal& removal : kSingletonRemovals) msvc_rtti::vtableOf(removal.component);
 }
 
 void silenceRemote() {
