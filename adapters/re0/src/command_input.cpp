@@ -5,6 +5,7 @@
 #include "character_owner.h"
 #include "command_log.h"
 #include "debug_stats.h"
+#include "event_sync.h"
 #include "game.h"
 #include "game_state.h"
 #include "key_config.h"
@@ -90,7 +91,10 @@ void onNetTick() {
     const bool trace = pressedEdge(traceKey || pad_commands::pressed().trace, g_traceWasDown);
     if (trace && accept("party", traceKey ? "keyboard" : "controller", owned)) party_mode::onLocalToggleKey();
     const bool resyncKey = pressedEdge(keyDown(kResyncKey), g_resyncWasDown);
-    if (resyncKey && accept("resync", "keyboard", owned)) resync::request("resync key");
+    if (resyncKey && accept("resync", "keyboard", owned)) {
+        resync::request("resync key");
+        event_sync::releaseHeldPause();
+    }
 }
 
 }  // namespace command_input

@@ -53,6 +53,10 @@ bool leadsAny();
 // Game thread: this machine follows a room script thread the peer leads that is busy (same meaning).
 bool followsAny();
 
+// Any thread (the resync key): at the next script update, in plain gameplay with no busy thread and none at a cutscene
+// op, clears the cutscene pause bits left set (game::kCutscenePauseBits), so the trigger scan runs again.
+void releaseHeldPause();
+
 // Hooks the trigger start, the opcode dispatch and the script update.
 bool enable(NetClient& net);
 

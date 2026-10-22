@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <deque>
@@ -48,6 +49,7 @@ using OperandSizeFunction = int(__cdecl*)(const char* signature);
 
 constexpr size_t kMaxQueuedSteps = 4096;  // a follower this far behind is released to run on its own
 constexpr uint8_t kNoSlot = 0xff;
+constexpr uint32_t kNoPc = 0xffffffff;
 // Some triggers fire every frame while they hold (a thread that only sets a flag): their lines are logged this rarely.
 constexpr auto kRepeatLogInterval = std::chrono::seconds(5);
 constexpr uint32_t kSerialMineBit = 1u << 16;  // queue ids: serials this machine allocated
@@ -72,6 +74,8 @@ struct Slot {
     Character subject = Character::Unknown;  // the character the script treats as the player
     bool partnerFollows = true;           // no TraceOff in this thread yet
     event_rule::Activity activity;        // when the thread last was at an op that does something (leadsAny / followsAny)
+    uint32_t runningFrom = kNoPc;         // Follows: the op that began here and has not finished yet
+    Clock::time_point runningSince;
     uint32_t ran = 0, skipped = 0, waitsSkipped = 0, branches = 0, forced = 0, jumps = 0;
     int64_t maxLagMs = 0;
 };
@@ -472,6 +476,7 @@ void popStep(uint32_t id) {
 // Ends the op where the leader's ended and returns the leader's result.
 int takeLeadersStep(uintptr_t thread, Slot& slot, const QueuedStep& queued) {
     moveTo(thread, queued.step.to);
+    slot.runningFrom = kNoPc;
     slot.maxLagMs = std::max(slot.maxLagMs, msSince(queued.received));
     popStep(queueId(slot));
     if (queued.step.result == event_rule::kResultEnd) endFollow(slot, "ended");
@@ -512,9 +517,14 @@ int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
         return takeLeadersStep(thread, slot, queued);
     }
     if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, false);
+    if (slot.runningFrom != queued.step.from) {
+        slot.runningFrom = queued.step.from;
+        slot.runningSince = Clock::now();
+    }
     const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, true));
     const uint32_t after = pcOf(thread);
-    switch (event_rule::afterRun(event_rule::finished(queued.step.from, after, result), msSince(queued.received))) {
+    const int64_t stalledMs = std::min(msSince(queued.received), msSince(slot.runningSince));
+    switch (event_rule::afterRun(event_rule::finished(queued.step.from, after, result), stalledMs, opcode)) {
         case event_rule::AfterRun::KeepRunning:
             return event_rule::kResultYield;
         case event_rule::AfterRun::Force:
@@ -716,12 +726,38 @@ bool anyState() {
     return !g_pendingStarts.empty() || !g_steps.empty();
 }
 
+std::atomic<bool> g_releasePause{false};  // the resync key asked for releaseHeldPause
+
+bool anyThreadAtCutscene(uintptr_t script) {
+    for (size_t i = 0; i < game::kScriptThreadCount; ++i) {
+        const uintptr_t thread = slotAddress(script, i);
+        if (threadField<uint8_t>(thread, game::kThreadActiveOffset) && event_rule::holdsPause(opcodeAt(thread))) return true;
+    }
+    return false;
+}
+
+// A cutscene op cut before its last call (event_rule::holdsPause) leaves the event pause set and no trigger fires again.
+void releaseHeldPauseNow(uintptr_t script) {
+    if (!g_releasePause.exchange(false)) return;
+    if (!game_state::playing() || event_sync::leadsAny() || event_sync::followsAny() || anyThreadAtCutscene(script)) {
+        logger::write("event_sync: resync key: a script or screen is running, the event pause stays");
+        return;
+    }
+    const uintptr_t info = game::readPointer(game::kGameInfoGlobal);
+    uint32_t flags = 0;
+    if (!info || !game::readMemory(info + game::kGameInfoModeFlagsOffset, flags)) return;
+    const uint32_t held = flags & game::kCutscenePauseBits;
+    if (held) game::writeMemory(info + game::kGameInfoModeFlagsOffset, flags & ~held);
+    logger::write("event_sync: resync key: event pause bits 0x%x %s", held, held ? "cleared" : "were not set");
+}
+
 void __fastcall updateDetour(void* self, void* edx) {
     const auto script = reinterpret_cast<uintptr_t>(self);
     if (net_pad::active()) {
         checkSlots(script);
         watchPeer(script);
         applyStarts(script);
+        releaseHeldPauseNow(script);
     } else if (anyState()) {
         releaseAll();
     }
@@ -779,6 +815,8 @@ bool anyBusy(Role role) {
 }  // namespace
 
 bool leadsAny() { return anyBusy(Role::Leads); }
+
+void releaseHeldPause() { g_releasePause = true; }
 
 bool followsAny() { return anyBusy(Role::Follows); }
 

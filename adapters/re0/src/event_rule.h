@@ -15,7 +15,8 @@ constexpr uint8_t kResultNext = 1;
 constexpr uint8_t kResultEnd = 2;
 constexpr uint8_t kResultKilled = 3;  // wire only: the leader's thread vanished without ending (room reset)
 
-constexpr int64_t kStallMs = 3000;          // a followed op still running this long after the leader finished it ends
+constexpr int64_t kStallMs = 3000;          // a followed op still running this long after the leader finished it, and
+                                            // after it began here, ends
 constexpr int64_t kPendingStartMs = 10000;  // a start for a room this machine is still loading waits this long
 constexpr uint32_t kBusyHoldMs = 2000;       // a thread stays busy this long after an op that does something (the waits between are short)
 
@@ -113,6 +114,7 @@ constexpr uint16_t kSub = 115, kSubReadyGet = 116, kSubReadyGetParam = 117, kSub
 constexpr uint16_t kSubGetResult = 120, kSubGetItem = 121, kSubCall = 122, kSubItem = 124;
 constexpr uint16_t kCharChange = 126, kCharChangeNc = 127, kCharChange2 = 128, kTraceOff = 132, kTraceOn = 133;
 constexpr uint16_t kFadeInWait = 140, kFadeOutWait = 142, kEventProcWait = 147, kPlayerEquip = 157;
+constexpr uint16_t kPlayMovie = 183, kDmyDemoStart = 187;
 constexpr uint16_t kItemPut = 191, kDoorNoFadeOut = 205, kSubDelete = 206, kMesBlend = 213, kEventExec = 221;
 constexpr uint16_t kMesEnd = 249, kWaitCancel = 250, kSubItemRet2 = 272, kMemoryWeapon = 281, kCompWeapon = 282;
 constexpr uint16_t kDoorCancel = 299, kMesDialog = 302, kUseKey = 304;
@@ -325,10 +327,19 @@ constexpr Follow beforeOp(bool leaderFinished, OpRole role) {
 
 enum class AfterRun : uint8_t { TakeLeadersBranch, KeepRunning, Force };
 
-// After running a followed op here: finished here, or still running `sinceLeaderMs` after the leader finished it.
-constexpr AfterRun afterRun(bool finishedHere, int64_t sinceLeaderMs) {
+// Cutscene ops hold the game's event pause (sGameInfo +0x50: 1 CharPause, 2 PlayerPause, 8 the trigger scan's pause,
+// 0x800) from their first call and clear it in their last: Demo_Start 0x571890, PlayMovie 0x56e180, DmyDemoStart
+// 0x56eb20. Ended early they leave it set, and with bit 8 no trigger fires again (no door, no examine; sh0e lift,
+// 2026-10-22). They are never cut: their own end or the shared skip (demo_skip) ends them.
+constexpr bool holdsPause(uint16_t opcode) {
+    return opcode == op::kDemoStart || opcode == op::kPlayMovie || opcode == op::kDmyDemoStart;
+}
+
+// After running a followed op here: finished here, or still running `stalledMs` after both the leader finished it and
+// it began here (a follower that fell behind in one long op does not cut the next ones the moment they start).
+constexpr AfterRun afterRun(bool finishedHere, int64_t stalledMs, uint16_t opcode) {
     if (finishedHere) return AfterRun::TakeLeadersBranch;
-    return sinceLeaderMs >= kStallMs ? AfterRun::Force : AfterRun::KeepRunning;
+    return stalledMs >= kStallMs && !holdsPause(opcode) ? AfterRun::Force : AfterRun::KeepRunning;
 }
 
 // Who leads a thread whose subject is `subject`: this machine when it owns that character. Without a peer following

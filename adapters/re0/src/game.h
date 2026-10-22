@@ -486,6 +486,9 @@ constexpr uintptr_t kPartnerThinkPadFunction = 0x4f4be0;     // getPad(1)
 // set), rebuilds the matrices and the collision shapes. The bit is global, so the puppet holds it for one move only.
 constexpr uintptr_t kGameInfoModeFlagsOffset = 0x50;  // u32
 constexpr uint32_t kPlayerPauseBit = 0x2;
+constexpr uint32_t kTriggerPauseBit = 0x8;  // EventTrigPause 0x56cae0: the trigger scan (0x608ad0) does not run
+constexpr uint32_t kDemoPauseBit = 0x800;   // set and cleared with the other three by the cutscene ops (Demo_Start)
+constexpr uint32_t kCutscenePauseBits = kCharPauseBit | kPlayerPauseBit | kTriggerPauseBit | kDemoPauseBit;
 // Every motion request of a character ends in cAnimControl::set, a member of the character at kAnimControlOffset:
 // thiscall (layer < 8, motionNo, flags, f32 interp, f32 start), ret 0x14, no return value (0x4144d0).
 constexpr uintptr_t kAnimControlOffset = 0xff8;

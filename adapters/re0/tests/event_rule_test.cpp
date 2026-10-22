@@ -94,9 +94,16 @@ void testFollow() {
     check(rule::finished(0x31c, 0x31e, rule::kResultYield), "moved and yielded (frame)");
     check(rule::finished(0x31c, 0x31c, rule::kResultEnd), "exit");
     check(!rule::finished(0x31c, 0x31c, rule::kResultYield), "still waiting");
-    check(rule::afterRun(true, 0) == rule::AfterRun::TakeLeadersBranch, "finished here: the leader's branch");
-    check(rule::afterRun(false, rule::kStallMs - 1) == rule::AfterRun::KeepRunning, "still running: keep at it");
-    check(rule::afterRun(false, rule::kStallMs) == rule::AfterRun::Force, "stalled: end it where the leader did");
+    constexpr uint16_t kCamChangeNs = 137;
+    check(rule::afterRun(true, 0, kCamChangeNs) == rule::AfterRun::TakeLeadersBranch, "finished here: the leader's branch");
+    check(rule::afterRun(false, rule::kStallMs - 1, kCamChangeNs) == rule::AfterRun::KeepRunning, "still running: keep at it");
+    check(rule::afterRun(false, rule::kStallMs, kCamChangeNs) == rule::AfterRun::Force, "stalled: end it where the leader did");
+    for (const uint16_t cutscene : {rule::op::kDemoStart, rule::op::kPlayMovie, rule::op::kDmyDemoStart}) {
+        check(rule::holdsPause(cutscene), "cutscene ops hold the event pause");
+        check(rule::afterRun(false, rule::kStallMs * 10, cutscene) == rule::AfterRun::KeepRunning,
+              "a cutscene op is never cut (it would leave the trigger scan paused)");
+    }
+    check(!rule::holdsPause(kCamChangeNs), "a camera change is not a cutscene op");
 }
 
 void testLead() {
