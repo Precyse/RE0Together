@@ -106,7 +106,7 @@ int main() {
     const std::vector<Site> sites = allSites();
     check(phaseSize("sender scope") == 2, "sender scope: 2 sites (SS1, SS2)");
     check(phaseSize("looks") == 2, "looks: 2 sites (LK1, LK2)");
-    check(phaseSize("player traces") == 3, "player traces: 3 sites (TF1, TF2, TL2), written with trace=1 only");
+    check(phaseSize("player traces") == 2, "player traces: 2 sites (TF2, TL2), written with trace=1 only");
     check(phaseSize("pause flag") == 2, "pause flag: 2 sites (N4a, N4b)");
     check(phaseSize("census trace") == 6, "census trace: 6 sites (NC1, NC2, VT1, TT1, TT2, VT2), written with trace=1 only");
     const Site* trafficAdd = siteNamed(sites, "TT1");

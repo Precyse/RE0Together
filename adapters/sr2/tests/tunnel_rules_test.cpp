@@ -113,5 +113,13 @@ int main() {
     check(describe(values) == "sent 1 received 2 dropped no_peer 0 not_virtual 0 wrong_dst 0 inbox_full 0 oversize 0, large 1",
           "the log line names every counter");
     check(values == counters.values() && !(values == CounterValues{}), "values compare");
+    check(describeSlots(counters).empty(), "no peer line before any peer traffic");
+    counters.countSentTo(1);
+    counters.countSentTo(1);
+    counters.countReceivedFrom(2);
+    counters.countSentTo(kSlotAll);
+    counters.countReceivedFrom(static_cast<uint8_t>(kCountedSlots));
+    check(describeSlots(counters) == "slot 1 sent 2 received 0, slot 2 sent 0 received 1",
+          "per peer: datagrams to and from each slot, a broadcast and an out of range slot not counted");
     return g_failures == 0 ? 0 : 1;
 }

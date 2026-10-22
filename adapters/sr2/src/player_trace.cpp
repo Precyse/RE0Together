@@ -1,7 +1,5 @@
 #include "player_trace.h"
 
-#include <windows.h>
-
 #include <mutex>
 #include <unordered_map>
 
@@ -20,57 +18,19 @@ namespace {
 using partner_sites::Thunk;
 
 constexpr uintptr_t kHumanWeaponOffset = 0x10CC;     // the weapon instance in hand
-constexpr uintptr_t kWeaponInfoOffset = 0xC4;        // the weapon's table entry
-constexpr uintptr_t kWeaponInfoIdOffset = 0xEE;      // word
 constexpr uintptr_t kWeaponFiredOffset = 0xC;        // byte, bit 0: the shot has been spawned
 constexpr uintptr_t kWeaponNextShotOffset = 0x24;    // dword: the earliest time of the next shot
-constexpr uintptr_t kRecordLocalBitsOffset = 0x67C;  // byte in a net record, tested by the owned check
-constexpr uintptr_t kOwnedCheck = 0x806720;          // EAX = human, AL out
 
-void* g_shotOriginal = nullptr;
 void* g_playbackOriginal = nullptr;
 void* g_buffersOriginal = nullptr;
 void* g_bundleOriginal = nullptr;
 std::mutex g_bundleMutex;
 rate_limit::OncePerKey g_bundleReported;
-std::unordered_map<uintptr_t, uint64_t> g_lastShotMs;
-std::unordered_map<uintptr_t, uint32_t> g_lastNextShot;
 std::unordered_map<uintptr_t, uint64_t> g_lastWeaponState;
 
 uint8_t slotOfRecordOf(uintptr_t human) {
     const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
     return record ? readByte(record) : partner_rules::kNoSlot;
-}
-
-uint8_t localSlot() {
-    const uintptr_t local = remote_players::localMember();
-    return local ? readByte(local + sr2::kMemberSlotOffset) : partner_rules::kNoSlot;
-}
-
-uint64_t nowMs() { return GetTickCount64(); }
-
-// TF1: cdecl(human) at 0x9C1B90, which runs for every human every frame. A shot is a change of the weapon's next shot time
-// (each shot re-arms it); a fire rate above the weapon's is a gap between shots below its refire.
-void __cdecl traceShot(GuestFrame* frame) {
-    const uintptr_t human = frame->args[0];
-    const uintptr_t weapon = readDword(human + kHumanWeaponOffset);
-    if (!weapon) return;
-    const uint32_t nextShot = readDword(weapon + kWeaponNextShotOffset);
-    uint32_t& seenNextShot = g_lastNextShot[human];
-    if (nextShot == seenNextShot) return;
-    seenNextShot = nextShot;
-    const uintptr_t record = readDword(human + sr2::kObjectNetRecordOffset);
-    const uintptr_t info = readDword(weapon + kWeaponInfoOffset);
-    const uint64_t now = nowMs();
-    uint64_t& last = g_lastShotMs[human];
-    const uint64_t since = last ? now - last : 0;
-    last = now;
-    const uint32_t ownedHere = guest_call::call(kOwnedCheck, {.eax = static_cast<uint32_t>(human)}) & 0xFF;
-    logger::write("trace: shot: human 0x%X local player %u npc %u owner slot %u (local slot %u) owned-check %u record bits 0x%02X weapon id %u, %llu ms since its last shot",
-                  static_cast<unsigned>(human), human == remote_players::localHuman() ? 1 : 0,
-                  partner_rules::isPlayerPoolMember(human) ? 0 : 1, slotOfRecordOf(human), localSlot(), ownedHere,
-                  record ? readByte(record + kRecordLocalBitsOffset) : 0, info ? readWord(info + kWeaponInfoIdOffset) : 0,
-                  static_cast<unsigned long long>(since));
 }
 
 // TF2: the player bundle's update for the handle at [esp+4]. A remote player's weapon is logged when its fired bit or its next
@@ -116,7 +76,6 @@ void __cdecl traceBundleSender(GuestFrame* frame) {
     logger::write("trace: bundle: handle 0x%X owner slot %u updated by slot %u", handle, owner, senderSlot);
 }
 
-TRACE_ENTRY_STUB(shotStub, traceShot, g_shotOriginal)
 TRACE_ENTRY_STUB(playbackStub, tracePlayback, g_playbackOriginal)
 TRACE_ENTRY_STUB(buffersStub, traceBuffers, g_buffersOriginal)
 TRACE_ENTRY_STUB(bundleStub, traceBundleSender, g_bundleOriginal)
@@ -127,7 +86,6 @@ namespace player_trace {
 
 partner_thunks::Binding bind(Thunk thunk) {
     switch (thunk) {
-        case Thunk::TraceShot: return {reinterpret_cast<void*>(&shotStub), &g_shotOriginal};
         case Thunk::TracePlayerPlayback: return {reinterpret_cast<void*>(&playbackStub), &g_playbackOriginal};
         case Thunk::TraceCoopBuffers: return {reinterpret_cast<void*>(&buffersStub), &g_buffersOriginal};
         case Thunk::TraceBundleSender: return {reinterpret_cast<void*>(&bundleStub), &g_bundleOriginal};

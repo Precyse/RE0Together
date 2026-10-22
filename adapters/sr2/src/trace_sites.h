@@ -12,7 +12,6 @@ using partner_sites::Site;
 using partner_sites::Thunk;
 
 inline constexpr Site kPlayers[] = {
-    {"TF1", Kind::HookEntry, 0x9C1B90, "55 8B EC 83 E4 F8 81 EC", Thunk::TraceShot, ""},
     {"TF2", Kind::PointerSwap, 0xE2B444, "D0 33 86 00", Thunk::TracePlayerPlayback, ""},
     {"TL2", Kind::HookEntry, 0x9E9EB0, "51 A1 38 C4 E8 00", Thunk::TraceCoopBuffers, ""},
 };

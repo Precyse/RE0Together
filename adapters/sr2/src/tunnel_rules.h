@@ -28,6 +28,7 @@ constexpr size_t kDestinationBytes = 4;
 constexpr size_t kMaxFramePayload = kDestinationBytes + kMaxDatagram;
 constexpr size_t kLargeDatagram = 1150;  // Steam fragments unreliable messages above about 1200 bytes
 constexpr size_t kInboxCapacity = 256;
+constexpr size_t kCountedSlots = 4;      // the session's player slots 0..3, counted per peer with trace=1
 
 // A SteamID64 as a virtual address: 10.a.b.c from the account id (its low 32 bits).
 constexpr uint32_t virtualAddress(uint64_t steamId) {
@@ -179,10 +180,19 @@ struct CounterValues {
     bool operator==(const CounterValues&) const = default;
 };
 
-// The counters, bumped from several threads.
+// The counters, bumped from several threads. `sentTo` counts the datagrams addressed to one peer (a broadcast is not a peer's),
+// `receivedFrom` the accepted datagrams by the sender's slot.
 class Counters {
 public:
     std::atomic<uint64_t> sent{0}, received{0}, noPeer{0}, notVirtual{0}, wrongDestination{0}, inboxFull{0}, oversize{0}, large{0};
+    std::atomic<uint64_t> sentTo[kCountedSlots]{}, receivedFrom[kCountedSlots]{};
+
+    void countSentTo(uint8_t slot) {
+        if (slot < kCountedSlots) ++sentTo[slot];
+    }
+    void countReceivedFrom(uint8_t slot) {
+        if (slot < kCountedSlots) ++receivedFrom[slot];
+    }
 
     CounterValues values() const {
         return {sent, received, noPeer, notVirtual, wrongDestination, inboxFull, oversize, large};
@@ -195,6 +205,21 @@ inline std::string describe(const CounterValues& values) {
              "sent %llu received %llu dropped no_peer %llu not_virtual %llu wrong_dst %llu inbox_full %llu oversize %llu, large %llu",
              values.sent, values.received, values.noPeer, values.notVirtual, values.wrongDestination, values.inboxFull,
              values.oversize, values.large);
+    return text;
+}
+
+// "slot 1 sent S received R, slot 2 ..." for every slot that has traffic.
+inline std::string describeSlots(const Counters& counters) {
+    std::string text;
+    for (size_t slot = 0; slot < kCountedSlots; ++slot) {
+        const uint64_t sent = counters.sentTo[slot];
+        const uint64_t received = counters.receivedFrom[slot];
+        if (sent == 0 && received == 0) continue;
+        char part[64];
+        snprintf(part, sizeof(part), "%sslot %zu sent %llu received %llu", text.empty() ? "" : ", ", slot, static_cast<unsigned long long>(sent),
+                 static_cast<unsigned long long>(received));
+        text += part;
+    }
     return text;
 }
 

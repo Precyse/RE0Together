@@ -119,7 +119,6 @@ enum class Thunk : uint16_t {
     CutsceneAllRemotes,
     CutsceneSetsReset,
     CutsceneReadyConsumed,
-    TraceShot,
     TracePlayerPlayback,
     TraceCoopBuffers,
     // Milestone 11 (player_sites.h).

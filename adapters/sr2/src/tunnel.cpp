@@ -109,6 +109,7 @@ void reportCounters() {
     if (now == g_reported || !g_reportLimit.allow(GetTickCount64(), triggers)) return;
     g_reported = now;
     logger::write("tunnel: %s", describe(now).c_str());
+    if (g_trace) logger::write("trace: tunnel per peer: %s", describeSlots(g_counters).c_str());
 }
 
 void onTick() {
@@ -141,6 +142,7 @@ void onFrame(const GameFrame& frame) {
     }
     if (droppedOldest) ++g_counters.inboxFull;
     ++g_counters.received;
+    g_counters.countReceivedFrom(frame.slot);
     if (decoded->datagram.size() > kLargeDatagram) ++g_counters.large;
     SetEvent(g_arrived);
 }
@@ -179,6 +181,7 @@ void forward(const char* buffer, int length, const sockaddr* to, int toLength) {
         return;
     }
     ++g_counters.sent;
+    if (routing.route == Route::Peer) g_counters.countSentTo(routing.slot);
     if (datagram.size() > kLargeDatagram) ++g_counters.large;
 }
 
