@@ -1,5 +1,7 @@
 Co-op
 
+First install: unzip https://github.com/Precyse/RE0Together/releases/download/next/Coop.zip anywhere (for example %LocalAppData%\CoopLauncher) and start launcher\app\coop-launcher.exe. From then on it updates itself and the installed mods.
+
 Start launcher\app\coop-launcher.exe. One package holds the launcher and the mod for every game.
 
 Each game in the list shows its mod: Not installed, Mod N, Mod update M or Mod modified.
@@ -12,7 +14,7 @@ If the game closes or crashes during a session, Relaunch starts it again and it 
 Host: pick the game, click Host, then send the lobby code (the clipboard icon copies it).
 Join: paste the lobby code into Lobby code and click Join. Friends who are hosting appear under the Host row with their own Join.
 Both players need the same build; the launcher refuses a mismatch.
-The Update to N button (top bar) installs a newer package; when it reads Restart, click it, then Update the game's mod.
+The Update to N button (top bar) installs a newer release and downloads only what changed. When it reads Restart, click it. Installed mods follow the package by themselves while their game is closed.
 The Settings button (top bar) sets each game's folder (when Steam does not find it), uninstalls a game's mod, turns the update check at start on or off, opens the logs folder and creates a report zip (launcher log and each game's coop logs) to send when something goes wrong.
 Only one launcher window runs at a time; starting it again brings the open one forward. If Steam is not running the launcher reads Steam not running and keeps retrying.
 If the host's game or launcher crashes and the host starts again, the guest's launcher follows into the host's new lobby by itself. Closing the launcher during a session asks first; the game keeps running.

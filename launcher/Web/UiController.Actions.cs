@@ -235,7 +235,26 @@ internal sealed partial class UiController
     private void ShowModProgress(string gameId, ModRunKind kind, ModProgress progress)
     {
         _modRuns[gameId] = new ModRunView(kind, progress);
+        _update.SetFree(Free && !ModRunning);
         Changed?.Invoke();
+    }
+
+    /// <summary>Brings every installed mod that reads Update up to the package while its game is closed (<see cref="ModAutoUpdate"/>), off
+    /// the UI thread. Each game shows as an ordinary install; a failure stays with its reason and Retry. Called when the package on disk
+    /// has settled: at start, and after an update that needs no restart.</summary>
+    private void AutoUpdateMods()
+    {
+        if (ModRunning || !Free || _update.Busy) return;
+        var sinks = Profiles.ToDictionary(game => game.Id, game => (IProgress<ModProgress>)new ThrottledProgress(
+            new Progress<ModProgress>(report => ShowModProgress(game.Id, ModRunKind.Install, report)), () => Environment.TickCount64));
+        Task.Run(() => ModAutoUpdate.Run(Profiles, GameFolders.Find, game => sinks[game.Id])).ContinueWith(_ => FinishAutoUpdate(), _ui);
+    }
+
+    private void FinishAutoUpdate()
+    {
+        foreach (var gameId in _modRuns.Where(run => run.Value.Progress.Step == ModStep.Done).Select(run => run.Key).ToList())
+            Task.Delay(DoneShownMs).ContinueWith(_ => ClearDone(gameId), _ui);
+        RefreshMods();
     }
 
     /// <summary>The mod action ended: a success shows Done for a moment, a failure stays with its reason and Retry (also when the

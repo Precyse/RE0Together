@@ -56,7 +56,7 @@ public static class ReportBundle
     {
         foreach (var log in entries.Files(AppData.LogsDir, LogPattern)) entries.Add(log, Path.GetFileName(log));
         entries.Add(AppData.SettingsFile, SettingsEntryName);
-        entries.Add(Path.Combine(AppContext.BaseDirectory, BuildCheck.VersionFile), BuildCheck.VersionFile);
+        entries.Add(InstalledRelease.PathFor(AppContext.BaseDirectory), InstalledRelease.FileName);
     }
 
     /// <summary>Adds the game's files and returns its lines for report.txt.</summary>

@@ -54,6 +54,9 @@ public static class Program
         FramingTests.Run();
         InstanceGuardTests.Run();
         UpdaterTests.Run();
+        ReleaseManifestTests.Run();
+        ComponentUpdateTests.Run();
+        ModAutoUpdateTests.Run();
         RunModInstallSuites();
         SaveSenderTests.Run();
         SaveReceiverTests.Run();

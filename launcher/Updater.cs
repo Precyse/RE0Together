@@ -1,45 +1,44 @@
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace CoopLauncher;
 
 /// <summary>
-/// Installs a newer build from the rolling GitHub release `latest` (read through ReleaseFeed). A command-line run relaunches at
-/// start-up; the window stages in the background and relaunches when the player asks (<see cref="RestartRequested"/>). The
-/// package is replaced whole: launcher, every game profile and every adapter. A replace that fails, or is cut short, puts every
-/// original back. Only runs from a packaged layout (root\launcher\app\coop-launcher.exe) and only ever writes below that root.
-/// Any failure means "no update".
+/// Installs a newer release of the channel (the manifest read through ReleaseFeed) into the packaged layout. Only the components
+/// with a file that differs from the manifest are downloaded (<see cref="ComponentUpdate"/>), and their changed files are
+/// replaced in one transaction; a mods-only update therefore costs the adapter, not the launcher, and needs no restart. A command-line
+/// run relaunches at start-up when the launcher changed; the window stages in the background and relaunches when the player asks
+/// (<see cref="RestartRequested"/>). A replace that fails, or is cut short, puts every original back, and the build in
+/// installed.json is written last. Only runs from a packaged layout (root\launcher\app\coop-launcher.exe) and only ever writes below
+/// that root. Any failure means "no update".
 /// </summary>
 public static class Updater
 {
-    private const string AppDirName = "app";
-    private const string LauncherDirName = "launcher";
     private const string OldSuffix = ".old";
     private const string PendingMarkerName = "update.pending";
     private const string WorkDirPrefix = "coop-launcher-update-";
-    private const string ExtractedDirName = "files";
     private const int DownloadTimeoutSeconds = 300;
-    private const int DownloadChunkBytes = 81920;
     private const string LockNamePrefix = @"Local\CoopLauncherUpdate-";
     private const int LockNameHashChars = 16;
 
-    /// <summary>True after a newer package was installed in this process: the files on disk are newer than the running copy.</summary>
+    /// <summary>True after an update that changes the running launcher was installed in this process: the files on disk are newer
+    /// than the running copy. A mods-only update leaves it false, since it applies at once.</summary>
     public static bool Staged { get; private set; }
 
     /// <summary>Set by the window when the player asks for the restart; Program relaunches the staged build once the window is closed.</summary>
     public static bool RestartRequested { get; set; }
 
-    /// <summary>Start-up of a command-line run: true when a newer build was installed and started; the caller must exit. Safe
-    /// because no Steam session exists yet in this process.</summary>
-    public static bool TryInstall(string[] args) => Stage() && TryRelaunch(args);
+    /// <summary>Start-up of a command-line run: true when an update that changes the launcher was installed and started; the caller
+    /// must exit. Safe because no Steam session exists yet in this process.</summary>
+    public static bool TryInstall(string[] args) => Stage() && Staged && TryRelaunch(args);
 
     /// <summary>Starts the staged build after the window closed (no arguments, the predecessor handoff).</summary>
     public static void RelaunchStaged() => TryRelaunch([]);
 
-    /// <summary>Downloads and installs a newer build without starting it. True when one was installed; the running copy
-    /// keeps going until the user reopens the launcher. The download and the install are reported to <paramref name="progress"/>.</summary>
+    /// <summary>Downloads and installs a newer release without starting it. True when one was installed; when it changes the
+    /// launcher (<see cref="Staged"/>) the running copy keeps going until the user reopens it. The download and the install are
+    /// reported to <paramref name="progress"/>.</summary>
     public static bool Stage(IProgress<ModProgress>? progress = null)
     {
         var report = new ProgressReporter(progress);
@@ -57,19 +56,18 @@ public static class Updater
         try
         {
             Recover(root);
-            if (ReleaseFeed.Read(force: true) is not { Build: { } build, ZipUrl: { } zipUrl })
+            if (ReleaseFeed.Read(force: true) is not { } release)
             {
                 Log.Info("No release to update from");
                 return false;
             }
-            if (build <= BuildCheck.LocalBuild())
+            if (release.Build <= BuildCheck.LocalBuild())
             {
                 Log.Info($"Up to date (build {BuildCheck.LocalBuild()})");
                 return false;
             }
-            Log.Info($"Installing build {build}");
-            InstallFrom(zipUrl, root, build, report);
-            Staged = true;
+            Log.Info($"Installing build {release.Build}");
+            Staged |= Apply(release.Manifest, release.Assets, root, report);
             report.Finish();
             return true;
         }
@@ -149,54 +147,46 @@ public static class Updater
     {
         var appDir = new DirectoryInfo(AppContext.BaseDirectory);
         var launcherDir = appDir.Parent;
-        return appDir.Name == AppDirName && launcherDir?.Name == LauncherDirName ? launcherDir.Parent?.FullName : null;
+        return appDir.Name == InstalledRelease.AppDirName && launcherDir?.Name == InstalledRelease.LauncherDirName ? launcherDir.Parent?.FullName : null;
     }
 
-    private static void InstallFrom(string zipUrl, string root, int build, ProgressReporter report)
+    /// <summary>Brings the package at <paramref name="root"/> to the manifest: fetches what differs, replaces it in one transaction
+    /// and records the build. True when the launcher itself changed (it must be restarted). A manifest that matches the files
+    /// already only records the build.</summary>
+    public static bool Apply(ReleaseManifest manifest, IAssetSource source, string root, ProgressReporter report)
     {
-        var workDir = Path.Combine(Path.GetTempPath(), WorkDirPrefix + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(workDir);
-        try
+        var plan = ComponentUpdate.Plan(manifest, root);
+        if (!plan.IsEmpty)
         {
-            var zipPath = Path.Combine(workDir, ReleaseFeed.AssetName);
-            Download(zipUrl, zipPath, report);
-            report.Begin(ModStep.Installing, 1, 1);
-            var extracted = Path.Combine(workDir, ExtractedDirName);
-            ZipFile.ExtractToDirectory(zipPath, extracted);
-            Install(extracted, root, build);
+            var workDir = Path.Combine(Path.GetTempPath(), WorkDirPrefix + Guid.NewGuid().ToString("N"));
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(DownloadTimeoutSeconds));
+                var staged = ComponentUpdate.Stage(plan, source, workDir, report, timeout.Token);
+                report.Begin(ModStep.Installing, 1, 1);
+                Install(staged, plan, root, manifest.Build);
+            }
+            finally
+            {
+                Quietly(() => Directory.Delete(workDir, recursive: true));
+            }
         }
-        finally
-        {
-            Quietly(() => Directory.Delete(workDir, recursive: true));
-        }
+        new InstalledRelease(manifest.Build, manifest.Channel, manifest.Commit).Write(Path.Combine(root, InstalledRelease.LauncherDirName, InstalledRelease.FileName));
+        return plan.RestartNeeded;
     }
 
-    private static void Download(string url, string destination, ProgressReporter report)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(DownloadTimeoutSeconds));
-        using var response = ReleaseFeed.Get(url, timeout.Token);
-        using var body = response.Content.ReadAsStream(timeout.Token);
-        using var file = File.Create(destination);
-        report.Begin(ModStep.Downloading, response.Content.Headers.ContentLength ?? 0, 1);
-        var chunk = new byte[DownloadChunkBytes];
-        for (var read = body.Read(chunk); read > 0; read = body.Read(chunk))
-        {
-            file.Write(chunk, 0, read);
-            report.AddBytes(read);
-        }
-    }
-
-    /// <summary>Replaces the package and checks the version it brought. The pending marker (the target build) stays until the
-    /// package is confirmed; a start that finds it knows the replace was cut short (<see cref="Recover"/>).</summary>
-    private static void Install(string extracted, string root, int build)
+    /// <summary>Replaces the changed files and checks them against the manifest. The pending marker (the target build) stays until
+    /// the files are confirmed; a start that finds it knows the replace was cut short (<see cref="Recover"/>).</summary>
+    private static void Install(string staged, UpdatePlan plan, string root, int build)
     {
         var marker = Path.Combine(root, PendingMarkerName);
         File.WriteAllText(marker, build.ToString());
-        Replace(extracted, root);
-        if (BuildCheck.LocalBuild() < build)
+        Replace(staged, root);
+        var wrong = plan.Files.FirstOrDefault(entry => !ComponentUpdate.Matches(entry.File, Path.Combine(root, entry.File.Path)));
+        if (wrong.File != null)
         {
             RestoreBackups(root);
-            throw new InvalidDataException($"package did not update {BuildCheck.VersionFile}");
+            throw new InvalidDataException($"{wrong.File.Path} is not as the manifest has it after the copy");
         }
         File.Delete(marker);
     }

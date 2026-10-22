@@ -56,6 +56,7 @@ internal sealed partial class UiController : IDisposable
         {
             if (!_applying) Apply(_app.Status);
         };
+        _update.Settled += AutoUpdateMods;
         _update.RestartRequested += () =>
         {
             Updater.RestartRequested = true;
@@ -210,7 +211,7 @@ internal sealed partial class UiController : IDisposable
                 _target = null;
                 _screen = ScreenFor(status);
             }
-            _update.SetFree(free);
+            _update.SetFree(free && !ModRunning);
             if (_sessionOpen && free) RefreshMods();
             _sessionOpen = !free;
             ApplyOverlays(status, free);

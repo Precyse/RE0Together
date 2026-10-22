@@ -2,9 +2,10 @@ namespace CoopLauncher.Gui;
 
 /// <summary>The window's one update path: the release is read in the background, a newer build is offered (Update to N),
 /// downloaded and installed in the background without starting it (Downloading), and then waits for the player's restart
-/// (Restart). With "Check for updates at start" on the download starts by itself, but only while no session is open (the
-/// package is replaced on disk); with it off it starts on the click. A failed install returns to the offer. Must be used from
-/// the UI thread.</summary>
+/// (Restart); an update that leaves the launcher as it is (mods only) needs no restart. With "Check for updates at start" on the
+/// download starts by itself, but only while no session is open (the package is replaced on disk); with it off it starts on the
+/// click. A failed install returns to the offer. <see cref="Settled"/> says when the package on disk will not change by itself.
+/// Must be used from the UI thread.</summary>
 internal sealed class UpdateFlow
 {
     private enum Phase { None, Offered, Downloading, Ready }
@@ -21,8 +22,15 @@ internal sealed class UpdateFlow
     /// <summary>The player clicked Restart: close the window so the staged build starts.</summary>
     public event Action? RestartRequested;
 
+    /// <summary>The package on disk will not change until the player asks: the check found nothing newer (or failed), a newer build
+    /// waits for the click, or an installed update needs no restart. The mods can be brought up to the package now.</summary>
+    public event Action? Settled;
+
     /// <summary>The newer build on offer, 0 while none is known.</summary>
     public int NewerBuild { get; private set; }
+
+    /// <summary>A download is under way (the package is being replaced).</summary>
+    public bool Busy => _phase == Phase.Downloading;
 
     /// <summary>The top bar button's label, or null while there is nothing to offer.</summary>
     public string? Label => _phase switch
@@ -53,6 +61,7 @@ internal sealed class UpdateFlow
         Task.Run(() => ReleaseFeed.Read()).ContinueWith(task =>
         {
             if (task.Result?.Build is { } build && build > BuildCheck.LocalBuild()) Offer(build);
+            else Settled?.Invoke();
         }, _ui);
     }
 
@@ -70,6 +79,7 @@ internal sealed class UpdateFlow
         _phase = Updater.Staged ? Phase.Ready : Phase.Offered;
         Changed?.Invoke();
         StartAutomaticDownload();
+        if (_phase != Phase.Downloading) Settled?.Invoke();
     }
 
     private void StartAutomaticDownload()
@@ -91,9 +101,11 @@ internal sealed class UpdateFlow
         Task.Run(() => Updater.Stage(progress)).ContinueWith(task =>
         {
             _percent = 0;
-            _phase = task.Result ? Phase.Ready : Phase.Offered;
+            _phase = !task.Result ? Phase.Offered : Updater.Staged ? Phase.Ready : Phase.None;
             if (_phase == Phase.Ready) Log.Event($"Build {NewerBuild} ready");
+            if (_phase == Phase.None) NewerBuild = 0;
             Changed?.Invoke();
+            if (_phase == Phase.None) Settled?.Invoke();
         }, _ui);
     }
 }
