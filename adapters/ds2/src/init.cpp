@@ -114,7 +114,6 @@ DWORD WINAPI initThread(LPVOID) {
         combat_hook::installEarly(config.diagnostics);
         combat_hook::setGodMode(config.godMode && config.testCommands);
         if (config.diagnostics) damage_diag::installEarly();
-        health_watch::installEarly();
     }
     weapon_sync::setEnabled(config.weaponSync);
     if (config.weaponSync) {
@@ -132,7 +131,10 @@ DWORD WINAPI initThread(LPVOID) {
     if (config.ordersDiagnostics) orders_diag::installEarly();
     world_pause::installEarly();
     loading_screen::installEarly();
-    if (config.testCommands) test_commands::installEarly();
+    if (config.testCommands) {
+        test_commands::installEarly();
+        health_watch::installEarly();  // armed only by the watchhealth.txt and watch.txt commands
+    }
     if (config.cutsceneLog) cutscene_log::enable();
     if (config.cutsceneLog || config.cutsceneSync) cutscene::installEarly(config.cutsceneSync, config.testCommands ? config.cutsceneShareMinFrames : 0);
     partner_cargo::installEarly(config.diagnostics);

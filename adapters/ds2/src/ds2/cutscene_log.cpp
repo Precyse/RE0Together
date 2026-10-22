@@ -8,6 +8,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 
 #include "ds2/game_state.h"
 #include "ds2/sim_tick.h"
@@ -40,6 +43,21 @@ void hex(const uint8_t* bytes, char* out) {
     for (size_t i = 0; i < sequence_info::kUuidSize; ++i) std::snprintf(out + i * 2, 3, "%02x", bytes[i]);
 }
 
+// The engine calls a pending start again every update, for every pending Sequence in turn: each Sequence's start is logged
+// when its decision changes, not on every call (a live log held 275 000 such lines in 3 minutes).
+constexpr size_t kMaxRemembered = 512;
+std::mutex g_decisionsMutex;
+std::unordered_map<uintptr_t, std::string> g_decisions;  // Sequence -> the decision logged last
+
+bool decisionChanged(uintptr_t sequence, const char* decision) {
+    std::lock_guard lock(g_decisionsMutex);
+    if (g_decisions.size() >= kMaxRemembered) g_decisions.clear();
+    std::string& last = g_decisions[sequence];
+    if (last == decision) return false;
+    last = decision;
+    return true;
+}
+
 }  // namespace
 
 namespace cutscene_log {
@@ -50,12 +68,12 @@ void enable() {
 }
 
 void onStart(uintptr_t sequence, const sequence_info::Info& info, const char* decision) {
-    if (!g_enabled) return;
+    if (!g_enabled || !decisionChanged(sequence, decision)) return;
     char resource[sequence_info::kUuidSize * 2 + 1], entity[sizeof(resource)], network[sizeof(resource)];
     hex(info.resource, resource);
     hex(info.entity, entity);
     hex(info.network, network);
-    logger::writeUnlessRepeated("cutscene_log: Sequence start %p %s frame %d stop %d category %u state %u resource %s entity %s network %s",
+    logger::write("cutscene_log: Sequence start %p %s frame %d stop %d category %u state %u resource %s entity %s network %s",
                   reinterpret_cast<void*>(sequence), decision, sequence_info::frame(sequence), info.stopFrame, info.category, info.gameState,
                   resource, entity, network);
 }

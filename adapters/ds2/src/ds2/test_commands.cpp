@@ -27,17 +27,20 @@
 //   networks.txt   any        logs every loaded SequenceNetwork (UUID, main Sequence end frame, playing)
 //   crater.txt     "list", "add [uuid]" or "remove uuid"  the voidout craters: log them, AddCrater at the local player (radius 30 m, a random UUID unless one is given; logged), RemoveCrater by UUID (32 hex digits)
 //   locker.txt     "list" or "add KEY TYPE"  the shared lockers: log every owner with a locker slot (probe P-L1), create a piece of that kind (decimal) in the shared locker with that identifier (hex), as the host's move would (probe P-L3)
+//   watch.txt      "address"  hardware write watch on that address (hex), like watchhealth.txt
 // A vectored exception handler also logs the address of every access violation inside the game's image, which names the
 // code behind a crash the adapter's own guards swallow.
 #include "ds2/test_commands.h"
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "decima/safe_read.h"
 #include "ds2/camp_alert.h"
@@ -91,11 +94,18 @@ constexpr uintptr_t kComponentOwner = 0x48;  // a component's entity
 constexpr uintptr_t kComponentLink = 0x98;   // the component its owner's update reads (what the BB pod caches)
 constexpr int kReturnsLogged = 10;
 constexpr ULONGLONG kPollMs = 500;
+constexpr int kDecimalBase = 10;
+constexpr int kHexBase = 16;
 constexpr DWORD kFaultCodes[] = {EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ILLEGAL_INSTRUCTION, EXCEPTION_STACK_OVERFLOW};
+
+const std::wstring& coopFolder() {
+    static const std::wstring folder = coopDirectory();
+    return folder;
+}
 
 // The text of a command file, deleted on the way; empty when there is none.
 std::string takeCommand(const wchar_t* name) {
-    const std::wstring path = coopDirectory() + L"\\" + name;
+    const std::wstring path = coopFolder() + L"\\" + name;
     FILE* file = _wfopen(path.c_str(), L"r");
     if (!file) return {};
     char text[128] = {};
@@ -430,38 +440,66 @@ void watchAddress(const std::string& text) {
     if (sscanf(text.c_str(), "%llx", &address) == 1) health_watch::arm(static_cast<uintptr_t>(address));
 }
 
+// The command files, in the order they run when several wait at once.
+struct Command {
+    const wchar_t* file;
+    void (*run)(const std::string& text);
+};
+const Command kCommands[] = {
+    {L"tp.txt", teleport},
+    {L"area.txt", changeArea},
+    {L"addweapon.txt", addWeapon},
+    {L"bt.txt", setBtRegion},
+    {L"crater.txt", craterCommand},
+    {L"locker.txt", lockerCommand},
+    {L"watchhealth.txt", watchHealth},
+    {L"travel.txt", fastTravel},
+    {L"env.txt", worldEnv},
+    {L"sequence.txt", startSequenceNetwork},
+    {L"cutscene.txt", playSequenceEntity},
+    {L"networks.txt", [](const std::string&) { logNetworks(); }},
+    {L"missions.txt", [](const std::string&) { story::logMissions(); }},
+    {L"loose.txt", logLoose},
+    {L"attach.txt", [](const std::string& text) { remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, kDecimalBase)); }},
+    {L"alert.txt", [](const std::string&) { camp_alert::alertAllCamps(); }},
+    {L"body.txt", [](const std::string&) { logBodyPieces(); }},
+    {L"equpdate.txt", [](const std::string& text) { player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0); }},
+    {L"playerupdate.txt", [](const std::string& text) { remote_update::setSkipMask(static_cast<uint32_t>(strtoul(text.c_str(), nullptr, kHexBase))); }},
+    {L"candlog.txt", [](const std::string& text) { g_logCandidates = text.rfind("off", 0) != 0; }},
+    {L"dropnotify.txt", [](const std::string& text) { remote_update::setDropMissionNotify(text.rfind("off", 0) != 0); }},
+    {L"park.txt", tryParking},
+    {L"mission.txt", logMission},
+    {L"success.txt", requestSuccess},
+    {L"watch.txt", watchAddress},
+    {L"npcpartner.txt", setNpcPartnerSwitch},
+};
+
+// The .txt files waiting in the coop folder: one directory listing per poll (an open attempt per command cost the
+// simulation thread about 1.4 ms per poll in a live log, 26 us a frame on average).
+std::vector<std::wstring> waitingFiles() {
+    std::vector<std::wstring> names;
+    WIN32_FIND_DATAW found;
+    const HANDLE search = FindFirstFileExW((coopFolder() + L"\\*.txt").c_str(), FindExInfoBasic, &found, FindExSearchNameMatch, nullptr, 0);
+    if (search == INVALID_HANDLE_VALUE) return names;
+    do {
+        names.emplace_back(found.cFileName);
+    } while (FindNextFileW(search, &found));
+    FindClose(search);
+    return names;
+}
+
 void tick() {
     logCandidateChanges();
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last < kPollMs) return;
     last = now;
-    if (const std::string text = takeCommand(L"tp.txt"); !text.empty()) teleport(text);
-    if (const std::string text = takeCommand(L"area.txt"); !text.empty()) changeArea(text);
-    if (const std::string text = takeCommand(L"addweapon.txt"); !text.empty()) addWeapon(text);
-    if (const std::string text = takeCommand(L"bt.txt"); !text.empty()) setBtRegion(text);
-    if (const std::string text = takeCommand(L"crater.txt"); !text.empty()) craterCommand(text);
-    if (const std::string text = takeCommand(L"locker.txt"); !text.empty()) lockerCommand(text);
-    if (const std::string text = takeCommand(L"watchhealth.txt"); !text.empty()) watchHealth(text);
-    if (const std::string text = takeCommand(L"travel.txt"); !text.empty()) fastTravel(text);
-    if (const std::string text = takeCommand(L"env.txt"); !text.empty()) worldEnv(text);
-    if (const std::string text = takeCommand(L"sequence.txt"); !text.empty()) startSequenceNetwork(text);
-    if (const std::string text = takeCommand(L"cutscene.txt"); !text.empty()) playSequenceEntity(text);
-    if (const std::string text = takeCommand(L"networks.txt"); !text.empty()) logNetworks();
-    if (const std::string text = takeCommand(L"missions.txt"); !text.empty()) story::logMissions();
-    if (const std::string text = takeCommand(L"loose.txt"); !text.empty()) logLoose(text);
-    if (const std::string text = takeCommand(L"attach.txt"); !text.empty()) remote_weapon::reattach(std::strtoul(text.c_str(), nullptr, 10));
-    if (const std::string text = takeCommand(L"alert.txt"); !text.empty()) camp_alert::alertAllCamps();
-    if (const std::string text = takeCommand(L"body.txt"); !text.empty()) logBodyPieces();
-    if (const std::string text = takeCommand(L"equpdate.txt"); !text.empty()) player_system_guard::setEquipmentUpdateSkipped(text.rfind("off", 0) != 0);
-    if (const std::string text = takeCommand(L"playerupdate.txt"); !text.empty()) remote_update::setSkipMask(static_cast<uint32_t>(strtoul(text.c_str(), nullptr, 16)));
-    if (const std::string text = takeCommand(L"candlog.txt"); !text.empty()) g_logCandidates = text.rfind("off", 0) != 0;
-    if (const std::string text = takeCommand(L"dropnotify.txt"); !text.empty()) remote_update::setDropMissionNotify(text.rfind("off", 0) != 0);
-    if (const std::string text = takeCommand(L"park.txt"); !text.empty()) tryParking(text);
-    if (const std::string text = takeCommand(L"mission.txt"); !text.empty()) logMission(text);
-    if (const std::string text = takeCommand(L"success.txt"); !text.empty()) requestSuccess(text);
-    if (const std::string text = takeCommand(L"watch.txt"); !text.empty()) watchAddress(text);
-    if (const std::string text = takeCommand(L"npcpartner.txt"); !text.empty()) setNpcPartnerSwitch(text);
+    const std::vector<std::wstring> waiting = waitingFiles();
+    for (const Command& command : kCommands) {
+        const bool present = std::any_of(waiting.begin(), waiting.end(), [&](const std::wstring& name) { return _wcsicmp(name.c_str(), command.file) == 0; });
+        if (!present) continue;
+        if (const std::string text = takeCommand(command.file); !text.empty()) command.run(text);
+    }
 }
 
 // The values on the stack that point into the game's image: the likely return addresses, nearest first.
