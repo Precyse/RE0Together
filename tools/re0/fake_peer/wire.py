@@ -366,7 +366,8 @@ def peer_up_payload(slot, steam_id, name):
 
 
 def parse_welcome(payload):
-    local_slot, host_slot, max_players, epoch = WELCOME_FORMAT.unpack(payload)
+    # The launcher appends the local SteamID (15 bytes in all); the fake reads only the first 7.
+    local_slot, host_slot, max_players, epoch = WELCOME_FORMAT.unpack_from(payload)
     return {"local_slot": local_slot, "host_slot": host_slot, "max_players": max_players, "epoch": epoch}
 
 
