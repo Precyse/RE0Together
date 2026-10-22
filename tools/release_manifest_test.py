@@ -119,6 +119,7 @@ def test_layout_errors(work):
         except rm.PackageError:
             pass
 
+    refused({**FILES, "adapters/sr2/scripts/a.lua": b"x"}, "generated SR2 scripts")
     refused({**FILES, "adapters/sr2/loose/extra.bin": b"x", "stray.txt": b"x"}, "a file in no component")
     refused({key: value for key, value in FILES.items() if not key.startswith("adapters/re0")}, "a profile without adapter files")
     refused({key: value for key, value in FILES.items() if not key.startswith("launcher/app")}, "no launcher exe")

@@ -32,6 +32,7 @@ FULL_ASSET = "Coop.zip"
 MANIFEST_FILE = "manifest.json"
 README_FILE = "README.txt"
 INSTALLED_FILE = "launcher/installed.json"
+GENERATED_SCRIPTS_PREFIX = "adapters/sr2/scripts/"
 LEGACY_VERSION_FILE = "launcher/app/version.txt"
 UPDATE_FILE = "launcher/app/update.json"
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
@@ -79,6 +80,9 @@ def components(package):
 
 
 def check_covered(package, parts):
+    shipped = [path for paths in parts.values() for path in paths if path.startswith(GENERATED_SCRIPTS_PREFIX)]
+    if shipped:
+        raise PackageError(f"{GENERATED_SCRIPTS_PREFIX} is generated on the player's PC and never packaged (the delta is): {shipped[0]}")
     covered = {path for paths in parts.values() for path in paths} | {README_FILE, INSTALLED_FILE}
     stray = sorted(path.relative_to(package).as_posix() for path in package.rglob("*") if path.is_file()
                    and path.relative_to(package).as_posix() not in covered)
