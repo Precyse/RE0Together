@@ -304,11 +304,15 @@ void tick(NetClient& net, const SessionSnapshot& session) {
     g_host = host;
     g_hostSlot = session.hostSlot;
     const auto now = Clock::now();
-    refreshLocal(now);
     retryPendingAdds(net, now);
     forgetDepartedPartner(session);
     if (!session.linked) return;
-    report(net, now);
+    // Nobody reads the local list without a partner: no copy of the baggage pool while playing alone or while the host
+    // waits alone. A joining partner is answered from the first tick it is listed (the refresh is due by then).
+    if (!session.peers.empty()) {
+        refreshLocal(now);
+        report(net, now);
+    }
     runRequests(net, host);
 }
 
