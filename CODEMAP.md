@@ -14,17 +14,17 @@ Spec: `docs/CONTRACT.md`. This file is the index: which file holds the table of 
 
 | file | owns |
 |---|---|
-| .github/workflows/release.yml | on push to main: build the RE0 and SR2 adapters (x86, with their unit tests), publish launcher (self-contained), assemble the package (`launcher\app`, `launcher\games\re0.json`, `adapters\re0\dinput8.dll`, `adapters\sr2\dinput8.dll`, `README.txt`, `version.txt` = run number, `update.json` = this repo), zip `RE0-Coop.zip`, replace the release tagged `latest` (title `Build <run number>`) |
+| .github/workflows/release.yml | on push to `main` (channel `latest`) or `next` (channel `next`, prerelease): `publish_check.py`, `release_manifest_test.py`, build the RE0 and SR2 adapters (x86) and the DS2 adapter (x64) with their unit tests, the launcher end-to-end tests, assemble the package (`launcher\app`, `launcher\games\*.json`, `adapters\re0\dinput8.dll`, `adapters\sr2\dinput8.dll` + `scripts.delta.json` (fails when missing), `adapters\ds2\version.dll`, `README.txt`), run `tools/release_manifest.py` (writes `update.json` {repo, channel} and `installed.json`, zips `Coop.zip`, `launcher.zip`, `mod-<id>.zip`, `manifest.json`; on `latest` also `RE0-Coop.zip` for launchers released before the manifest), replace the release tagged with the channel (title `Build <run number>`), manifest uploaded last |
 | launcher/package/README.txt | player README shipped in the package |
-| launcher/update.json | `{ "repo": "Precyse/RE0Together" }` copied next to the exe; a missing file or the `OWNER/REPO` placeholder disables updating (the workflow writes the real repo into the package) |
+| launcher/update.json | `{ "repo": "Precyse/RE0Together", "channel": "next" }` copied next to the exe; a missing file or the `OWNER/REPO` placeholder disables updating (the release build writes the real repo and channel into the package) |
 
 ## Where to look for
 
 - The web window (WebView2 host, bridge, snapshots, commands, images, security settings): `launcher/WebHost/` (table in docs/codemap/launcher.md); the page: `launcher/web/` with `launcher/web/SPEC.md`; a screen's data: `WebHost/UiSnapshot*.cs`; what a page command does: `WebHost/UiController.Actions.cs`; the tests are `tools/launcher_tests/UiCommandsTests.cs`, `UiSnapshotTests.cs`, `UiContractTests.cs` (only these: `LAUNCHER_TESTS_ONLY=web`)
-- Launcher window: the window itself is `launcher/WebHost/WebShell.cs` (a WinForms form that only holds the WebView2 control; no other WinForms UI exists); what the window says for a status: `Ui/SessionCards.cs`, `Ui/Screens.cs`, `Ui/SessionScreens*.cs`; the lobby rows: `Ui/LobbyRowModels.cs`, `Ui/LobbyPopupModel.cs`; options and settings: `Ui/OptionsModel.cs`, `Ui/SettingsModel.cs`; the update button: `Ui/UpdateFlow.cs`; settings (file `%AppData%\CoopLauncher\settings.json`): `AppSettings.cs`; session logic stays in `App.cs`; preview builds of `launcher-*` branches: `.github/workflows/launcher-preview.yml` (prerelease `launcher-preview`)
+- Launcher window: the window itself is `launcher/WebHost/WebShell.cs` (a WinForms form that only holds the WebView2 control; no other WinForms UI exists); what the window says for a status: `Ui/SessionCards.cs`, `Ui/Screens.cs`, `Ui/SessionScreens*.cs`; the lobby rows: `Ui/LobbyRowModels.cs`, `Ui/LobbyPopupModel.cs`; options and settings: `Ui/OptionsModel.cs`, `Ui/SettingsModel.cs`; the update button: `Ui/UpdateFlow.cs`; settings (file `%AppData%\CoopLauncher\settings.json`): `AppSettings.cs`; session logic stays in `App.cs`
 - Motion (durations, curves, recipes ported from the broadcast tool): `launcher/web/css/motion.css` and `launcher/web/js/motion.js`; Windows' reduced-motion setting: `launcher/WebHost/ReducedMotion.cs`
 - RE0 outfit art / character select: `launcher/OutfitArt.cs`, `launcher/MtFramework.cs`, the select's data `launcher/Ui/SelectModel.cs`, the page `launcher/web/js/select.js` (the profile data: `outfitArt`, `character` and `art` in `launcher/games/re0.json`)
-- Auto-update or release packaging: `Updater.cs`, `.github/workflows/release.yml`
+- Auto-update or release packaging: `Updater.cs`, `ComponentUpdate.cs`, `ReleaseFeed.cs`, `ReleaseManifest.cs`, `InstalledRelease.cs`, `ModAutoUpdate.cs`, `tools/release_manifest.py`, `.github/workflows/release.yml`
 - Wire format or control messages: `Framing.cs`, `ControlMessages.cs`
 - Slot / epoch rules: `Session.cs`, `SlotAssigner.cs`
 - Session start, refusals, held-session rejoin, host left / re-host, the status and step the loop publishes, the options written to the adapter ini on launch: `App.cs` (`StartSession`, `Refuse`, `AdapterOptions`), `App.Reconnect.cs`, `App.Status.cs`; the start checks: `StartChecks.cs`; a rendezvous game's join: `NativeJoin.cs`
@@ -39,7 +39,7 @@ Spec: `docs/CONTRACT.md`. This file is the index: which file holds the table of 
 - Save sync: `SaveSyncCoordinator.cs` (launcher), `save_redirect.cpp` (adapter)
 - Which launcher process may be closed, one window per session: `SingleInstance.cs`, `InstanceGuard.cs` (never start the window from a test: it closes other launchers)
 - Data folder of tests: environment variable `COOP_LAUNCHER_DATA` (`AppData.cs`)
-- Mod install, backups, repair, uninstall, folder entries and their manifest: `ModInstaller.cs`, `ModFiles.cs`; update staging and rollback: `Updater.cs`; report zip: `ReportBundle.cs`
+- Mod install, backups, repair, uninstall, folder entries and their manifest: `ModInstaller.cs`, `ModFiles.cs`; update staging and rollback: `Updater.cs`, `ComponentUpdate.cs`; mods following the package: `ModAutoUpdate.cs`; report zip: `ReportBundle.cs`
 - Guest logs on the host: `LogForwarder.cs`, written to `<game>\coop\peer_<steamid>_<stamp>.log` (newest 10 per peer)
 - Adapter network behaviour: `adapters/re0/src/net_client.cpp`
 - Control rule (who drives a character): `control_rule.h` (pure) applied in `character_owner::controlOf`; party commands: `command_input.cpp`, `party_mode.cpp`, `camera_parity.cpp` (trace a press or decision in `adapter.log`, lines starting `command:`); pickup crash guard: `pickup_guard.cpp`
