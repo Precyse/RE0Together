@@ -7,10 +7,12 @@
 // base family's variant +0x6ab0 = rand % 3 on a first spawn). The create runs with the random state set from the record
 // (spawn_seed.h) and the game's own state is put back right after, so both machines create the same enemy and the rest
 // of the game's randomness is untouched. Always on in co-op: a room created before the partner joined matches too.
-// A created enemy also clears its pool slot's waiting decision and follow state (enemy_decision, enemy_state), so a
-// script spawn that reuses a freed slot never inherits the previous enemy's.
-// It also remembers which spawn record each pool enemy was created from: the identity both machines share, which the
-// enemy observers bind a stream entry to the local enemy by.
+// A created enemy takes its sEnemy pool slot only in its class's start (vtable slot 32, pool insert 0x416c40), a frame
+// or more after the create returned; a game tick binds it then. Bound, it clears its pool slot's waiting decision and
+// follow state (enemy_decision, enemy_state), so a script spawn that reuses a freed slot never inherits the previous
+// enemy's, and the slot remembers which spawn record its enemy was created from: the identity both machines share, which
+// the enemy observers bind a stream entry to the local enemy by (until 2026-10-22 the binding ran at the create, found
+// no slot, and no machine ever streamed an enemy).
 namespace enemy_spawn {
 
 // The spawn an enemy was created from.
@@ -29,9 +31,9 @@ std::optional<Origin> originOf(int slot, uintptr_t enemy);
 // State mode, game thread: creates the enemy of spawn record `record` (spawn id `spawnId`) that the simulator has in pool
 // slot `streamSlot` and this machine lacks, the way the room load does: the seeded create, the room origin added to its
 // position, assigned to the loaded room's record. The engine's own checks apply (a record whose kill flag is set creates
-// nothing). Returns the pool slot the enemy took (the engine picks it, normally `streamSlot`), or enemy_registry::kNoSlot
-// when nothing was created: no create has been seen in this room yet (the spawn table is learned from the room load's),
-// the record is not that spawn here, or an enemy of the record already stands.
-int createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId);
+// nothing). True when the enemy was created (it takes a pool slot on its start); false when nothing was created: no
+// create has been seen in this room yet (the spawn table is learned from the room load's), the record is not that spawn
+// here, or an enemy of the record already stands or is about to.
+bool createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId);
 
 }  // namespace enemy_spawn

@@ -1,12 +1,15 @@
 #include "enemy_spawn.h"
 
+#include <algorithm>
 #include <array>
+#include <vector>
 
 #include "debug_stats.h"
 #include "enemy_decision.h"
 #include "enemy_registry.h"
 #include "enemy_state.h"
 #include "game.h"
+#include "game_tick.h"
 #include "hooks.h"
 #include "log.h"
 #include "scene.h"
@@ -26,6 +29,17 @@ struct Created {
     enemy_spawn::Origin origin;
 };
 std::array<std::optional<Created>, game::kEnemyPoolSlots> g_created{};  // state mode, game thread only
+
+// A created enemy is not in sEnemy's pool when the create returns: its class's start (vtable slot 32, e.g. 0x420ab0,
+// which calls the pool insert 0x416c40) puts it there on a later frame. Until then it waits here, and each game tick
+// binds the ones that took a slot.
+struct Pending {
+    uintptr_t enemy;
+    std::optional<enemy_spawn::Origin> origin;  // state mode
+    uint32_t ticks = 0;
+};
+constexpr uint32_t kMaxPendingTicks = 600;  // a created enemy that never takes a slot (refused by its start) is dropped
+std::vector<Pending> g_pending;             // game thread only
 
 // The random state this record's creation starts from on every machine, or false when the record is unreadable.
 bool seedFor(void* self, uint32_t index, spawn_seed::State& out) {
@@ -53,34 +67,51 @@ void* createSeeded(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b
     return enemy;
 }
 
-// A new enemy in a pool slot (a room load, or a script spawn reusing a freed slot) starts with nothing left over from
-// the slot's previous enemy: no waiting decision, and it is aligned with the owner's on the next snapshot.
-void forgetPreviousOccupant(void* enemy) {
-    const int slot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy));
-    if (slot == enemy_registry::kNoSlot) {
-        logger::write("enemy_spawn: created enemy %p is not in the pool yet", enemy);
-        return;
-    }
-    enemy_decision::forgetSlot(static_cast<uint8_t>(slot));
-    enemy_state::forgetSlot(static_cast<uint8_t>(slot));
-}
-
-// State mode: remembers the spawn record the enemy in its pool slot was created from.
-void noteOrigin(void* self, uint32_t index, void* enemy) {
-    const int slot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy));
-    if (slot == enemy_registry::kNoSlot) return;
-    std::optional<Created>& created = g_created[static_cast<size_t>(slot)];
-    created.reset();
+// The spawn record a create was made from, or nothing when the record is unreadable.
+std::optional<enemy_spawn::Origin> originFor(void* self, uint32_t index) {
     const uint32_t record = index & kIndexMask;
     uint32_t spawnId = 0;
     if (record >= game::kSpawnRecordCount ||
         !game::readMemory(reinterpret_cast<uintptr_t>(self) + game::kSpawnTableOffset + record * game::kSpawnRecordSize +
                               game::kSpawnRecordIdOffset,
                           spawnId)) {
-        return;
+        return std::nullopt;
     }
-    created = Created{reinterpret_cast<uintptr_t>(enemy),
-                      {static_cast<uint16_t>(record), static_cast<uint16_t>(spawnId & kSpawnIdMask)}};
+    return enemy_spawn::Origin{static_cast<uint16_t>(record), static_cast<uint16_t>(spawnId & kSpawnIdMask)};
+}
+
+// The enemy took pool slot `slot`. A new enemy in a slot (a room load, or a script spawn reusing a freed slot) starts
+// with nothing left over from the slot's previous enemy: no waiting decision, and it is aligned with the owner's on the
+// next snapshot. State mode: the slot remembers the spawn record its enemy was created from.
+void bind(int slot, const Pending& pending) {
+    enemy_decision::forgetSlot(static_cast<uint8_t>(slot));
+    enemy_state::forgetSlot(static_cast<uint8_t>(slot));
+    std::optional<Created>& created = g_created[static_cast<size_t>(slot)];
+    created.reset();
+    if (pending.origin) created = Created{pending.enemy, *pending.origin};
+}
+
+// Binds a pending enemy that has taken a pool slot; true when it is done waiting (bound, or waited too long).
+bool settle(Pending& pending) {
+    const int slot = enemy_registry::slotOf(pending.enemy);
+    if (slot != enemy_registry::kNoSlot) {
+        bind(slot, pending);
+        return true;
+    }
+    if (++pending.ticks < kMaxPendingTicks) return false;
+    logger::write("enemy_spawn: created enemy %p never took a pool slot", reinterpret_cast<void*>(pending.enemy));
+    return true;
+}
+
+void settlePending() { std::erase_if(g_pending, settle); }
+
+// A create returned this enemy (new, or the one already standing for the record): bound now when it has a slot, else
+// on a later tick.
+void remember(void* enemy, std::optional<enemy_spawn::Origin> origin) {
+    const auto address = reinterpret_cast<uintptr_t>(enemy);
+    std::erase_if(g_pending, [address](const Pending& pending) { return pending.enemy == address; });
+    Pending pending{address, origin};
+    if (!settle(pending)) g_pending.push_back(pending);
 }
 
 // state mode, game thread: the spawn table (the create's ECX) and room record of the newest create. A create on demand
@@ -94,11 +125,9 @@ Context g_context;
 // A create plus the bookkeeping every created enemy gets.
 void* createTracked(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b) {
     void* const enemy = createSeeded(self, edx, a, index, b);
-    if (enemy) forgetPreviousOccupant(enemy);
-    if (enemy && state_mode::on()) {
-        noteOrigin(self, index, enemy);
-        g_context = {self, a};
-    }
+    if (!enemy) return enemy;
+    remember(enemy, state_mode::on() ? originFor(self, index) : std::nullopt);
+    if (state_mode::on()) g_context = {self, a};
     return enemy;
 }
 
@@ -137,9 +166,9 @@ void* createGuarded(const Context& context, uint32_t index) {
     }
 }
 
-// True when an enemy of the pool was created from the record (the create would hand that one back, and placing it
-// again would add the room origin twice). A note counts only while its enemy still stands in its slot: records are
-// numbered across rooms, and the note of an enemy that left is never cleared.
+// True when an enemy of the pool was created from the record, or one is about to take its slot (the create would hand
+// that one back, and placing it again would add the room origin twice). A note counts only while its enemy still
+// stands in its slot: records are numbered across rooms, and the note of an enemy that left is never cleared.
 bool alreadyCreated(uint16_t record) {
     for (size_t slot = 0; slot < g_created.size(); ++slot) {
         const std::optional<Created>& created = g_created[slot];
@@ -147,7 +176,8 @@ bool alreadyCreated(uint16_t record) {
             return true;
         }
     }
-    return false;
+    return std::any_of(g_pending.begin(), g_pending.end(),
+                       [record](const Pending& pending) { return pending.origin && pending.origin->record == record; });
 }
 
 // The spawn id the record carries (low word), or false when the record is unreadable.
@@ -165,6 +195,7 @@ bool spawnIdOf(const Context& context, uint16_t record, uint16_t& out) {
 namespace enemy_spawn {
 
 bool install() {
+    game_tick::addCallback("enemy_spawn", settlePending);
     return hooks::install("enemy create", game::kEnemyCreateFunction, reinterpret_cast<void*>(createDetour),
                           reinterpret_cast<void**>(&g_originalCreate));
 }
@@ -176,31 +207,25 @@ std::optional<Origin> originOf(int slot, uintptr_t enemy) {
     return created->origin;
 }
 
-int createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId) {
+bool createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId) {
     const uintptr_t loaded = scene::loadedRecord();
     if (!loaded || g_context.record != loaded || !g_context.table) {
         logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (no create seen in this room yet)", streamSlot);
-        return enemy_registry::kNoSlot;
+        return false;
     }
     uint16_t localSpawnId = 0;
     if (record >= game::kSpawnRecordCount || !spawnIdOf(g_context, record, localSpawnId) || localSpawnId != spawnId) {
         logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (record %u is not spawn %u here)", streamSlot, record, spawnId);
-        return enemy_registry::kNoSlot;
+        return false;
     }
-    if (alreadyCreated(record)) return enemy_registry::kNoSlot;
-    void* const enemy = createGuarded(g_context, record);
-    const int slot = enemy_registry::slotOf(reinterpret_cast<uintptr_t>(enemy));
-    if (!enemy || slot == enemy_registry::kNoSlot) {
+    if (alreadyCreated(record)) return false;
+    if (!createGuarded(g_context, record)) {
         logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (record %u refused)", streamSlot, record);
-        return enemy_registry::kNoSlot;
+        return false;
     }
     debug_stats::count(debug_stats::Counter::EnemyCreatedOnDemand);
-    if (slot == streamSlot) {
-        logger::write("enemy_spawn: slot %u created on demand (record %u)", streamSlot, record);
-    } else {
-        logger::write("enemy_spawn: slot %u created on demand in pool slot %d (record %u)", streamSlot, slot, record);
-    }
-    return slot;
+    logger::write("enemy_spawn: slot %u created on demand (record %u), it takes a pool slot on its start", streamSlot, record);
+    return true;
 }
 
 }  // namespace enemy_spawn
