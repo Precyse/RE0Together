@@ -58,6 +58,8 @@ internal sealed record CheckedDto(bool Ok, string Text);
 
 internal sealed record OptionsPopupDto(string Kind, string GameName, ArtDto Art, bool ReadOnly, OptionRowDto[] Rows);
 
+internal sealed record UpdatePopupDto(string Kind, string Build);
+
 internal sealed record LobbyPopupDto(
     string Kind, string Key, ArtDto Art, string Caption, RosterEntryDto[] Roster, int OpenSeats, string Ping, CheckedDto Mod, CheckedDto Game,
     string Network, string Playing, LobbyBtnDto Action);
@@ -102,7 +104,7 @@ internal sealed record SettingsGameDto(
 internal sealed record SettingsDto(bool CheckForUpdates, LobbyVisibility Visibility, bool VisibilityLocked, SettingsGameDto[] Games);
 
 /// <summary>The main page's state (everything but <c>type</c> and <c>seq</c>, which the surface adds). Only the DTO of the screen
-/// on show is set, plus <see cref="Popup"/> (an <see cref="OptionsPopupDto"/> or a <see cref="LobbyPopupDto"/>).</summary>
+/// on show is set, plus <see cref="Popup"/> (an <see cref="OptionsPopupDto"/>, a <see cref="LobbyPopupDto"/> or an <see cref="UpdatePopupDto"/>).</summary>
 internal sealed record MainState(
     ScreenKind Screen, TransitionDto Transition, TopDto Top, RailGameDto[] Games, ArtDto Art, FooterDto Footer, object? Popup,
     HomeDto? Home, LobbiesDto? Lobbies, JoiningDto? Joining, SessionDto? Session, SelectDto? Select, SettingsDto? Settings);

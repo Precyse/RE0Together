@@ -179,6 +179,9 @@ public static class UiSnapshotTests
         Check.That(notice != null && notice.Words == "Mod not installed" && notice.Action == "Install" && notice.Report, "home: a refusal is a notice with its fix and Report");
         var options = UiSnapshot.MainPage(Input(AppStatus.Idle, popup: PopupKind.Options), null);
         Check.That(options.Popup is OptionsPopupDto { Kind: "options", ReadOnly: false } && options.Home!.OptionsOpen, "home: the options popup opens on the selected game");
+        Check.That(UiSnapshot.MainPage(Input(AppStatus.Idle, popup: PopupKind.Update, newer: 413), null).Popup is UpdatePopupDto { Kind: "update", Build: "Build 413" },
+            "home: the update popup shows over any screen with the staged build");
+        Check.That(UiSnapshot.MainPage(Input(AppStatus.Idle, popup: PopupKind.Update), null).Popup is UpdatePopupDto { Build: "" }, "home: the update popup without a build number has none");
         var native = AppStatus.Idle;
         var sr2Input = Input(native) with { SelectedId = "sr2" };
         var popup = (OptionsPopupDto)UiSnapshot.MainPage(sr2Input with { Popup = PopupKind.Options }, null).Popup!;

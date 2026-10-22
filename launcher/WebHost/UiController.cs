@@ -32,6 +32,7 @@ internal sealed partial class UiController : IDisposable
     private ScreenKind? _lastPosted;
     private PopupKind _popup;
     private ulong _popupLobbyId;
+    private int _promptedBuild;
     private LobbyFilter _filter;
     private string? _lobbyGameId;
     private int? _selectFocus;
@@ -230,7 +231,8 @@ internal sealed partial class UiController : IDisposable
     }
 
     /// <summary>What follows from the status and the screen: the lobby search runs while the Lobbies tab shows, a popup of another
-    /// screen closes, the mini window follows the session.</summary>
+    /// screen closes, a staged update asks once for its restart (when no popup is open and no session stops it), the mini window
+    /// follows the session.</summary>
     private void ApplyOverlays(AppStatus status, bool free)
     {
         var lobbiesShown = _screen == ScreenKind.Lobbies;
@@ -239,12 +241,24 @@ internal sealed partial class UiController : IDisposable
             _watchingLobbies = lobbiesShown;
             _app.WatchLobbies(lobbiesShown);
         }
-        if (_popup != PopupKind.None && PopupScreen != _screen) _popup = PopupKind.None;
+        if (_popup != PopupKind.None && PopupScreen is { } popupScreen && popupScreen != _screen) _popup = PopupKind.None;
+        if (_popup == PopupKind.Update && !_update.RestartOffered) _popup = PopupKind.None;
+        if (_popup == PopupKind.None && _update.RestartOffered && _promptedBuild != _update.NewerBuild)
+        {
+            _popup = PopupKind.Update;
+            _promptedBuild = _update.NewerBuild;
+        }
         if (_miniOpen && (free || status.Invite != null)) _miniOpen = false;
     }
 
-    /// <summary>The screen the open popup belongs to: the options on the home screen, the lobby on the Lobbies tab.</summary>
-    private ScreenKind PopupScreen => _popup == PopupKind.Options ? ScreenKind.Home : ScreenKind.Lobbies;
+    /// <summary>The screen the open popup belongs to: the options on the home screen, the lobby on the Lobbies tab; the update
+    /// question shows over any.</summary>
+    private ScreenKind? PopupScreen => _popup switch
+    {
+        PopupKind.Options => ScreenKind.Home,
+        PopupKind.Lobby => ScreenKind.Lobbies,
+        _ => null,
+    };
 
     // ---------------------------------------------------------------- mod states
 

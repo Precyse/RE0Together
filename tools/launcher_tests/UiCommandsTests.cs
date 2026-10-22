@@ -50,6 +50,7 @@ public static class UiCommandsTests
         [Cmd.GameUninstall] = """{"type":"game.uninstall","gameId":"ds2"}""",
         [Cmd.GameArchive] = """{"type":"game.archive","gameId":"ds2"}""",
         [Cmd.UpdateClick] = """{"type":"update.click"}""",
+        [Cmd.UpdateRestart] = """{"type":"update.restart"}""",
     };
 
     private static readonly (string Json, string Why)[] Invalid =

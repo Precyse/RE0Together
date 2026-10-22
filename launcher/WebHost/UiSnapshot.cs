@@ -5,8 +5,9 @@ namespace CoopLauncher.Web;
 /// <summary>One game of the rail: its profile, what its mod state says and the art routes it has (null where a picture is missing).</summary>
 internal sealed record GameEntry(GameProfile Profile, GameStatus Status, ArtDto Art);
 
-/// <summary>Which popup is open: none, the options of the selected game, or the lobby popup of one listed lobby.</summary>
-internal enum PopupKind { None, Options, Lobby }
+/// <summary>Which popup is open: none, the options of the selected game, the lobby popup of one listed lobby, or the restart
+/// question of a staged update (over any screen).</summary>
+internal enum PopupKind { None, Options, Lobby, Update }
 
 /// <summary>The update button as the top bar shows it: its label (null while there is nothing to offer), whether it can be
 /// clicked, the newer build on offer (0 when none) and whether a build is staged.</summary>
@@ -90,6 +91,7 @@ internal static partial class UiSnapshot
     {
         PopupKind.Options when i.Selected is { } selected => OptionsPopup(i, selected),
         PopupKind.Lobby when i.Screen == ScreenKind.Lobbies => LobbyPopup(i),
+        PopupKind.Update => new UpdatePopupDto("update", i.Update.NewerBuild > 0 ? $"Build {i.Update.NewerBuild}" : string.Empty),
         _ => null,
     };
 

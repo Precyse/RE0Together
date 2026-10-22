@@ -44,6 +44,9 @@ internal sealed class UpdateFlow
     /// <summary>The button can be clicked: an offer or a staged build, and no session open.</summary>
     public bool Enabled => _free && _phase is Phase.Offered or Phase.Ready;
 
+    /// <summary>A staged build waits for the player's restart and nothing stops it (no session is open).</summary>
+    public bool RestartOffered => _free && _phase == Phase.Ready;
+
     /// <summary>Whether no session is open. The automatic download waits for it.</summary>
     public void SetFree(bool free)
     {
@@ -70,7 +73,13 @@ internal sealed class UpdateFlow
     {
         if (!_free) return;
         if (_phase == Phase.Offered) Download();
-        else if (_phase == Phase.Ready) RestartRequested?.Invoke();
+        else Restart();
+    }
+
+    /// <summary>Restarts into the staged build, when one waits and nothing stops it.</summary>
+    public void Restart()
+    {
+        if (RestartOffered) RestartRequested?.Invoke();
     }
 
     internal void Offer(int build)

@@ -48,6 +48,7 @@ internal static class Cmd
     public const string GameUninstall = "game.uninstall";
     public const string GameArchive = "game.archive";
     public const string UpdateClick = "update.click";
+    public const string UpdateRestart = "update.restart";
 }
 
 /// <summary>How a field of a command is read: text, a lobby id as digits, a flag, a whole number in a range, a direction (-1 or 1), or
@@ -134,6 +135,7 @@ internal static class UiCommands
         [Cmd.GameUninstall] = [GameId],
         [Cmd.GameArchive] = [GameId],
         [Cmd.UpdateClick] = [],
+        [Cmd.UpdateRestart] = [],
     };
 
     /// <summary>Every command type, as <c>bridge.js</c> must list them.</summary>

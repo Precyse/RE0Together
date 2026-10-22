@@ -114,6 +114,9 @@ internal sealed partial class UiController
                 return null;
             case Cmd.GameBrowse or Cmd.GameResetFolder or Cmd.GameUninstall or Cmd.GameArchive when _screen == ScreenKind.Settings:
                 return RunGameCommand(command);
+            case Cmd.UpdateRestart when _popup == PopupKind.Update && _update.RestartOffered:
+                _update.Restart();
+                return null;
             case Cmd.UpdateClick when _update.Enabled:
                 _update.Click();
                 return null;

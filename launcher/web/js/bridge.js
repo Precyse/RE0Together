@@ -42,6 +42,7 @@ export const COMMANDS = [
   'game.uninstall',
   'game.archive',
   'update.click',
+  'update.restart',
 ];
 
 let transport = null;
