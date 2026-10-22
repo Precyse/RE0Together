@@ -19,6 +19,7 @@ public sealed partial class App
     private ILobby? _optionsPublishedTo;
     private AppSettings? _optionsPublishedFrom;
     private string _publishedOptions = string.Empty;
+    private string? _optionsPublishedSwap;
     private ILobby? _lobbyDataPublishedTo;
     private readonly Dictionary<LobbyKey, string> _publishedLobbyData = new();
     private long _hostStartedUnix;
@@ -35,6 +36,7 @@ public sealed partial class App
         PublishOptions();
         TrackTimes(progress.Step);
         var status = CurrentStatus(progress);
+        ServeSwaps(status);
         PublishLobbyData(status);
         if (status == Status) return;
         Status = status;
@@ -67,17 +69,20 @@ public sealed partial class App
         lobby.SetMemberData(MemberKey.Step, text);
     }
 
-    /// <summary>Tells the lobby this player's own option values (the outfits it chose) when the lobby or the text changed; the
-    /// text is worked out again only when the settings were replaced (never every tick).</summary>
+    /// <summary>Tells the lobby this player's own option values (the outfits it chose, and a pending swap request) when the lobby or
+    /// the text changed; the text is worked out again only when the settings were replaced or the request changed (never every tick).</summary>
     private void PublishOptions()
     {
         if (_lobby is not { IsReady: true } lobby || _profile == null) return;
         var settings = AppSettings.Current;
-        if (ReferenceEquals(lobby, _optionsPublishedTo) && ReferenceEquals(settings, _optionsPublishedFrom)) return;
-        var text = GameOptions.Encode(GameOptions.OwnValues(_profile, _gameDir));
+        if (ReferenceEquals(lobby, _optionsPublishedTo) && ReferenceEquals(settings, _optionsPublishedFrom) && _swapWanted == _optionsPublishedSwap) return;
+        var own = GameOptions.OwnValues(_profile, _gameDir);
+        if (_swapWanted != null) own[GameOptions.SwapRequestKey] = _swapWanted;
+        var text = GameOptions.Encode(own);
         var sameTarget = ReferenceEquals(lobby, _optionsPublishedTo);
         _optionsPublishedTo = lobby;
         _optionsPublishedFrom = settings;
+        _optionsPublishedSwap = _swapWanted;
         if (sameTarget && text == _publishedOptions) return;
         _publishedOptions = text;
         lobby.SetMemberData(MemberKey.Options, text);
@@ -88,6 +93,7 @@ public sealed partial class App
     private void PublishLobbyData(AppStatus status)
     {
         if (_lobby is not { IsReady: true } lobby || _hostId != _transport!.LocalId) return;
+        PublishHostCharacter(lobby);
         if (_hostStartedUnix == 0 && status.Step == SessionStep.InGame) _hostStartedUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         PublishLobbyValue(lobby, LobbyKey.Roster, RosterCodec.Encode(status.Players.Select(player => new RosterEntry(player.Name, player.Step))));
         if (_hostStartedUnix != 0) PublishLobbyValue(lobby, LobbyKey.Started, _hostStartedUnix.ToString());

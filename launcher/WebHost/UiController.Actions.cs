@@ -361,7 +361,8 @@ internal sealed partial class UiController
         if (GameOf(_app.Status)?.Profile is not { HasCharacterSelect: true } game) return Refused;
         var model = SelectModels.Build(game, GameFolders.Find(game), _app.Status, Free);
         if (model.Centre != StageCentre.Swap) return Refused;
-        OptionsModel.Save(game.Id, GameOptions.CharacterKey, model.SwapCharacter);
+        if (Free || _app.Status.LocalHosts) OptionsModel.Save(game.Id, GameOptions.CharacterKey, model.SwapCharacter);
+        else _app.RequestSeatSwap(model.SwapCharacter);
         Apply(_app.Status);
         return null;
     }

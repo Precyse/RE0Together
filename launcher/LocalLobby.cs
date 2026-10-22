@@ -27,7 +27,7 @@ public sealed class LocalLobby : ILobby
 
     public ulong Id => 0;
 
-    public IReadOnlyDictionary<string, string> HostOptions { get; }
+    public IReadOnlyDictionary<string, string> HostOptions { get; private set; }
 
     public ulong OwnerId => _isHost ? _transport.LocalId : _transport.PeerId;
 
@@ -54,7 +54,9 @@ public sealed class LocalLobby : ILobby
 
     public void SetLobbyData(LobbyKey key, string value)
     {
-        if (_isHost) _lobbyData[key] = value;
+        if (!_isHost) return;
+        if (key == LobbyKey.HostOptions) HostOptions = GameOptions.Decode(value);
+        else _lobbyData[key] = value;
     }
 
     public LobbyListing Listing => LobbyListing.Decode(LobbyText, Id, OwnerId, Members.Count, Seats, ping: null);

@@ -136,12 +136,19 @@ public sealed class SteamLobby : ILobby
     public void SetLobbyData(LobbyKey key, string value)
     {
         if (!_lobby.IsValid() || SteamMatchmaking.GetLobbyOwner(_lobby) != SteamUser.GetSteamID()) return;
-        SteamMatchmaking.SetLobbyData(_lobby, key == LobbyKey.Roster ? LobbyKeys.Roster : LobbyKeys.Started, value);
+        SteamMatchmaking.SetLobbyData(_lobby, LobbyDataKey(key), value);
         _listingDirty = true;
     }
 
     public string MemberData(LobbyMember member, MemberKey key) =>
         _lobby.IsValid() ? Text(SteamMatchmaking.GetLobbyMemberData(_lobby, new CSteamID(member.Id), MemberDataKey(key))) : string.Empty;
+
+    private static string LobbyDataKey(LobbyKey key) => key switch
+    {
+        LobbyKey.Roster => LobbyKeys.Roster,
+        LobbyKey.HostOptions => LobbyKeys.HostOptions,
+        _ => LobbyKeys.Started,
+    };
 
     private static string MemberDataKey(MemberKey key) => key switch
     {

@@ -44,7 +44,7 @@ public static class SelectModelTests
         var model = SelectModels.Build(Profile(), null, Session(SessionStep.Lobby, Slot("Precyse", host: true, local: true), Slot("Amy", host: false, local: false)), free: false);
         Check.That(model.Left.Kind == HalfKind.Own && model.Right.Kind == HalfKind.ReadOnly, "the host is the left half and the guest's half is read-only");
         Check.That(model.Right.Role == "Amy" && model.Right.DotCount == 0 && !model.Right.HasArrows && model.Right.Opacity < 1f, "the guest's half has the guest's name, no arrows and no dots");
-        Check.That(model.Centre == StageCentre.Lock && model.Left.CanCycle, "a lobby shows the lock and your outfit still cycles");
+        Check.That(model.Centre == StageCentre.Swap && model.SwapCharacter == "billy" && model.Left.CanCycle, "a lobby shows the swap to the other character and your outfit still cycles");
         var open = SelectModels.Build(Profile(), null, Session(SessionStep.Lobby, Slot("Precyse", host: true, local: true)), free: false);
         Check.That(open.Right.Role == "Open", "a host without a guest shows an open half");
     }
@@ -57,6 +57,7 @@ public static class SelectModelTests
         Check.That(model.Left.Role == "Precyse Host" && model.Left.Figure.Character == "rebecca" && model.Right.Figure.Character == "billy", "the host's character and name read from the seats");
         Check.That(model.Left.Figure.Value == "85" && model.Left.Label == "Nurse", "the host's published outfit shows");
         Check.That(model.OwnHalf == 1 && Math.Abs(model.Left.Opacity - 0.8) < Tolerance, "your half is the right one and the host's figure is at 80 %");
+        Check.That(model.Centre == StageCentre.Swap && model.SwapCharacter == "rebecca", "a guest can swap too: the swap asks for the host's character");
         var unknown = SelectModels.Build(Profile(), null, Session(SessionStep.Lobby, Slot("Precyse", host: true, local: false), Slot("Amy", host: false, local: true)), free: false);
         Check.That(unknown.Left.Label.Length == 0 && unknown.Left.Figure.Value == null, "an outfit that was not published shows no label and the silhouette");
     }
@@ -71,6 +72,9 @@ public static class SelectModelTests
         {
             var model = SelectModels.Build(Profile(), null, Session(step, Slot("Precyse", host: true, local: true), Slot("Amy", host: false, local: false)), free: false);
             Check.That(model.Left.Locked == locked && model.Left.CanCycle == !locked, $"your outfit is {(locked ? "locked" : "open")} at {step}");
+            Check.That(model.Centre == (locked ? StageCentre.Lock : StageCentre.Swap), $"the centre is {(locked ? "the lock" : "the swap")} at {step}");
+            var guest = SelectModels.Build(Profile(), null, Session(step, Slot("Precyse", host: true, local: false), Slot("Amy", host: false, local: true)), free: false);
+            Check.That(guest.Centre == model.Centre, $"a guest's centre follows the same rule at {step}");
         }
     }
 

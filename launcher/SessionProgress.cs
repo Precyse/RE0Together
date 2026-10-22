@@ -13,6 +13,9 @@ public sealed record StepInputs(
 
 public static class SessionProgress
 {
+    /// <summary>The characters and outfits can be changed until the game starts: from then on they are fixed.</summary>
+    public static bool SelectionLocked(SessionStep step) => step is SessionStep.StartingGame or SessionStep.InGame or SessionStep.GameClosed;
+
     /// <summary>The first rule that applies, in this order. A session without the bridge (a rendezvous game's own transport)
     /// is in game as soon as it started: the game's own status line tells the rest.</summary>
     public static SessionStep Step(StepInputs inputs)

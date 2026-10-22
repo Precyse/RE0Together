@@ -93,7 +93,7 @@ export default {
     "canCycle": true,
     "opacity": 1
    },
-   "centre": "lock",
+   "centre": "swap",
    "focusHalf": 1
   },
   "settings": null

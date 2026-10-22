@@ -30,6 +30,12 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
     /// <summary>Lobby members, host first.</summary>
     public IReadOnlyList<PlayerSlot> Players { get; init; } = Array.Empty<PlayerSlot>();
 
+    /// <summary>The local player's seat in the seat order (host first), -1 when it is in no lobby.</summary>
+    public int LocalSeat => Players.ToList().FindIndex(player => player.IsLocal);
+
+    /// <summary>The local player is the host of the lobby, or is in none (it would host).</summary>
+    public bool LocalHosts => Players.FirstOrDefault(player => player.IsLocal)?.IsHost ?? true;
+
     /// <summary>The game of the open lobby, null when there is none.</summary>
     public string? GameId { get; init; }
 

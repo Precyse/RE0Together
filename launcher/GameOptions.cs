@@ -10,6 +10,10 @@ public static class GameOptions
 
     public const string CharacterKey = "character";
 
+    /// <summary>The entry of a guest's published options that asks the host to trade characters: it holds the character the
+    /// guest wants to play, and is there only until the seats show it.</summary>
+    public const string SwapRequestKey = "swap";
+
     private const char PairSeparator = ';';
     private const char KeyValueSeparator = '=';
 
@@ -29,6 +33,14 @@ public static class GameOptions
     /// <summary>The value of the character option with this label ("Rebecca" is "rebecca"), or null.</summary>
     public static string? CharacterValue(GameProfile profile, string label) =>
         profile.Options?.FirstOrDefault(option => option.Key == CharacterKey)?.Values.FirstOrDefault(v => v.Label == label)?.Value;
+
+    /// <summary>The character (a value of the character option) of a seat in the seat order, or null when there is no such seat.</summary>
+    public static string? CharacterAtSeat(GameProfile profile, IReadOnlyList<string> seatCharacters, int seat) =>
+        seat >= 0 && seat < seatCharacters.Count ? CharacterValue(profile, seatCharacters[seat]) : null;
+
+    /// <summary>The value of the character option that is not this one (a game with a character select has two), or null.</summary>
+    public static string? OtherCharacter(GameProfile profile, string character) =>
+        profile.Options?.FirstOrDefault(option => option.Key == CharacterKey)?.Values.FirstOrDefault(v => v.Value != character)?.Value;
 
     /// <summary>The host options' current values, which the lobby carries to the guests.</summary>
     public static Dictionary<string, string> HostValues(GameProfile profile, string? gameDir)

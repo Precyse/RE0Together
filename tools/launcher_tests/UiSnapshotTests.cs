@@ -151,7 +151,7 @@ public static class UiSnapshotTests
         var state = UiSnapshot.MainPage(input, ScreenKind.Lobby);
         Check.That(state.Screen == ScreenKind.Select && state.Top.Mode == TopMode.View && state.Transition == new TransitionDto(TransitionKind.PanelIn, 0), "S3: the select view opens over the lobby");
         var select = state.Select!;
-        Check.That(select.Centre == StageCentre.Lock && select.FocusHalf == 1, "S3: the lock sits between the halves and the guest's half has the focus");
+        Check.That(select.Centre == StageCentre.Swap && select.FocusHalf == 1, "S3: the swap sits between the halves and the guest's half has the focus");
         Check.That(select.Left.Kind == "readonly" && select.Left.Role == "Precyse Host" && !select.Left.CanCycle && select.Left.Dots == 0 && Math.Abs(select.Left.Opacity - 0.8) < 1e-6,
             "S3: the host's half is read-only");
         Check.That(select.Right.Kind == "own" && select.Right.Role == "You" && select.Right.Locked == false && select.Right.Opacity == 1.0 && select.Right.Name == "BILLY",
@@ -159,7 +159,7 @@ public static class UiSnapshotTests
         Check.That(select.Left.Figure.Src!.StartsWith(WebHosts.ImageOrigin + "figure/re0/") && select.Right.Figure.Initial == "B", "S3: figures are routes with their initial");
         var started = Re0Status(AppState.PeerConnected, SessionStep.StartingGame, Host(step: SessionStep.Ready), Guest(SessionStep.StartingGame, local: true));
         var locked = UiSnapshot.MainPage(Input(started) with { View = ScreenKind.Select, Screen = ScreenKind.Select }, null).Select!;
-        Check.That(locked.Right.Locked && !locked.Right.CanCycle, "S3: the guest's outfit is locked once its game starts");
+        Check.That(locked.Right.Locked && !locked.Right.CanCycle && locked.Centre == StageCentre.Lock, "S3: the guest's outfit and the swap are locked once its game starts");
         Check.That(UiSnapshot.MainPage(input with { SelectFocus = 0 }, null).Select!.FocusHalf == 0, "S3: the controller's focus wins");
     }
 

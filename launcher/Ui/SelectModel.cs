@@ -8,7 +8,7 @@ internal sealed record OutfitTile(string Value, string Label, Figure Figure);
 /// ReadOnly somebody else's outfit in a session (no arrows, no dots).</summary>
 internal enum HalfKind { Own, Partner, ReadOnly }
 
-/// <summary>What sits between the halves: the swap button (before a session) or the lock (while one is open).</summary>
+/// <summary>What sits between the halves: the swap button (until the game starts) or the lock (from then on).</summary>
 internal enum StageCentre { Swap, Lock }
 
 /// <summary>What one half of the stage shows: the character's figure in an outfit, its name, the role line, the outfit's label,
@@ -33,7 +33,7 @@ internal sealed record StageHalf(
 }
 
 /// <summary>What the character select shows for one status: the two halves, what sits between them, and the character the swap
-/// button picks. Characters are the values of the profile's character option and outfit keys the keys of its outfit options.</summary>
+/// button picks (in a session the host's own choice decides, and a guest's swap asks the host for it). Characters are the values of the profile's character option and outfit keys the keys of its outfit options.</summary>
 internal sealed record SelectModel(StageHalf Left, StageHalf Right, StageCentre Centre, string SwapCharacter)
 {
     public const int Halves = 2;
@@ -48,8 +48,8 @@ internal sealed record SelectModel(StageHalf Left, StageHalf Right, StageCentre 
 /// <para>Before a session you are the left half, as if you were about to host, with your own character choice; the right half is
 /// the other character, which your swap button trades with. Everyone picks their own outfit, one per character. In a session the
 /// characters follow the seats (host first): the host is the left half and a guest the right one, the other half shows what that
-/// player published (nothing while it is unknown) and is read-only, the swap button gives way to the lock, and your outfit is
-/// locked from the moment your game starts.</para></summary>
+/// player published (nothing while it is unknown) and is read-only. The swap button stays until the game starts, when it gives
+/// way to the lock and your outfit locks too.</para></summary>
 internal static class SelectModels
 {
     private const string YouRole = "You";
@@ -62,17 +62,19 @@ internal static class SelectModels
         var characters = game.Options!.First(option => option.Key == GameOptions.CharacterKey);
         var values = GameOptions.Current(game, gameDir);
         var mine = free ? values[GameOptions.CharacterKey] : LobbyCharacter(game, status) ?? values[GameOptions.CharacterKey];
-        var other = characters.Values.First(value => value.Value != mine).Value;
-        var own = Choosable(game, gameDir, characters, mine, values, YouRole, HalfKind.Own, Locked(status, free));
+        var other = GameOptions.OtherCharacter(game, mine)!;
+        var locked = !free && SessionProgress.SelectionLocked(status.Step);
+        var centre = locked ? StageCentre.Lock : StageCentre.Swap;
+        var own = Choosable(game, gameDir, characters, mine, values, YouRole, HalfKind.Own, locked);
         if (free)
-            return new SelectModel(own, Choosable(game, gameDir, characters, other, values, PartnerRole, HalfKind.Partner, locked: false), StageCentre.Swap, other);
+            return new SelectModel(own, Choosable(game, gameDir, characters, other, values, PartnerRole, HalfKind.Partner, locked: false), centre, other);
 
-        var hosting = status.Players.FirstOrDefault(player => player.IsLocal)?.IsHost ?? true;
+        var hosting = status.LocalHosts;
         var slot = hosting ? status.Players.FirstOrDefault(player => !player.IsLocal) : status.Players.FirstOrDefault(player => player.IsHost);
         var role = hosting ? slot?.Name ?? OpenRole : slot == null ? HostRole : $"{slot.Name} {HostRole}";
         var published = slot == null ? null : GameOptions.Decode(slot.Options).GetValueOrDefault(OutfitKey(game, other));
         var theirs = ReadOnly(game, characters, other, published, role);
-        return hosting ? new SelectModel(own, theirs, StageCentre.Lock, other) : new SelectModel(theirs, own, StageCentre.Lock, other);
+        return hosting ? new SelectModel(own, theirs, centre, other) : new SelectModel(theirs, own, centre, other);
     }
 
     /// <summary>The outfit after (direction 1) or before (-1) the one the half shows, wrapping round.</summary>
@@ -82,16 +84,11 @@ internal static class SelectModels
         return half.Outfits[((half.Index + direction) % count + count) % count];
     }
 
-    /// <summary>Your outfit can be changed until your game starts.</summary>
-    private static bool Locked(AppStatus status, bool free) =>
-        !free && status.Step is SessionStep.StartingGame or SessionStep.InGame or SessionStep.GameClosed;
-
     /// <summary>The character of the seat the local player is in (seats follow the players, host first), or null when the
     /// status has no such seat.</summary>
     private static string? LobbyCharacter(GameProfile game, AppStatus status)
     {
-        var seat = status.Players.ToList().FindIndex(player => player.IsLocal);
-        return seat >= 0 && seat < status.SeatCharacters.Count ? GameOptions.CharacterValue(game, status.SeatCharacters[seat]) : null;
+        return GameOptions.CharacterAtSeat(game, status.SeatCharacters, status.LocalSeat);
     }
 
     private static string OutfitKey(GameProfile game, string character) => GameOptions.OutfitOf(game, character)?.Key ?? string.Empty;

@@ -16,7 +16,7 @@ public static class Check
 
 public static class Program
 {
-    /// <summary>Setting this variable to <c>web</c> runs only the web window's suites (UiCommands, UiSnapshot, UiContract); to
+    /// <summary>Setting this variable to <c>web</c> runs only the web window's suites (SelectModel, UiCommands, UiSnapshot, UiContract); to
     /// <c>mod</c> only the mod install suites.</summary>
     private const string OnlyVariable = "LAUNCHER_TESTS_ONLY";
     private const string WebSuites = "web";
@@ -100,6 +100,7 @@ public static class Program
 
     private static int RunWebSuites()
     {
+        SelectModelTests.Run();
         UiCommandsTests.Run();
         UiSnapshotTests.Run();
         UiContractTests.Run();
