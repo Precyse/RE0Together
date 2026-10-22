@@ -79,7 +79,8 @@ export default {
      "modLine": "Mod 412 installed",
      "gameLine": "Game build 17178773",
      "options": [],
-     "archive": false
+     "archive": false,
+     "modRun": null
     },
     {
      "id": "re0",
@@ -91,7 +92,8 @@ export default {
      "modLine": "Mod 412 installed",
      "gameLine": "Game build 5217290",
      "options": [],
-     "archive": true
+     "archive": true,
+     "modRun": null
     },
     {
      "id": "sr2",
@@ -120,7 +122,8 @@ export default {
        "locked": false
       }
      ],
-     "archive": false
+     "archive": false,
+     "modRun": null
     }
    ]
   }

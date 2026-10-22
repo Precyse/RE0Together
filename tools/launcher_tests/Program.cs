@@ -85,6 +85,7 @@ public static class Program
         ModFilesTests.Run();
         ModInstallerTests.Run();
         ModFolderTests.Run();
+        ModProgressTests.Run();
     }
 
     private static int RunModSuites()

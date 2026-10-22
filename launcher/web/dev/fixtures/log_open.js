@@ -70,7 +70,8 @@ export default {
    "hasCharacters": true,
    "optionsOpen": false,
    "notice": null,
-   "friends": []
+   "friends": [],
+   "modRun": null
   },
   "lobbies": null,
   "joining": null,

@@ -21,6 +21,7 @@ public static class Updater
     private const string WorkDirPrefix = "coop-launcher-update-";
     private const string ExtractedDirName = "files";
     private const int DownloadTimeoutSeconds = 300;
+    private const int DownloadChunkBytes = 81920;
     private const string LockNamePrefix = @"Local\CoopLauncherUpdate-";
     private const int LockNameHashChars = 16;
 
@@ -38,9 +39,10 @@ public static class Updater
     public static void RelaunchStaged() => TryRelaunch([]);
 
     /// <summary>Downloads and installs a newer build without starting it. True when one was installed; the running copy
-    /// keeps going until the user reopens the launcher.</summary>
-    public static bool Stage()
+    /// keeps going until the user reopens the launcher. The download and the install are reported to <paramref name="progress"/>.</summary>
+    public static bool Stage(IProgress<ModProgress>? progress = null)
     {
+        var report = new ProgressReporter(progress);
         if (FindPackageRoot() is not { } root)
         {
             Log.Info("Updates install only from the packaged launcher");
@@ -66,13 +68,15 @@ public static class Updater
                 return false;
             }
             Log.Info($"Installing build {build}");
-            InstallFrom(zipUrl, root, build);
+            InstallFrom(zipUrl, root, build, report);
             Staged = true;
+            report.Finish();
             return true;
         }
         catch (Exception e)
         {
             Log.Info($"Update skipped: {e.Message}");
+            report.Fail(e.Message);
             return false;
         }
     }
@@ -148,14 +152,15 @@ public static class Updater
         return appDir.Name == AppDirName && launcherDir?.Name == LauncherDirName ? launcherDir.Parent?.FullName : null;
     }
 
-    private static void InstallFrom(string zipUrl, string root, int build)
+    private static void InstallFrom(string zipUrl, string root, int build, ProgressReporter report)
     {
         var workDir = Path.Combine(Path.GetTempPath(), WorkDirPrefix + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDir);
         try
         {
             var zipPath = Path.Combine(workDir, ReleaseFeed.AssetName);
-            Download(zipUrl, zipPath);
+            Download(zipUrl, zipPath, report);
+            report.Begin(ModStep.Installing, 1, 1);
             var extracted = Path.Combine(workDir, ExtractedDirName);
             ZipFile.ExtractToDirectory(zipPath, extracted);
             Install(extracted, root, build);
@@ -166,13 +171,19 @@ public static class Updater
         }
     }
 
-    private static void Download(string url, string destination)
+    private static void Download(string url, string destination, ProgressReporter report)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(DownloadTimeoutSeconds));
         using var response = ReleaseFeed.Get(url, timeout.Token);
         using var body = response.Content.ReadAsStream(timeout.Token);
         using var file = File.Create(destination);
-        body.CopyTo(file);
+        report.Begin(ModStep.Downloading, response.Content.Headers.ContentLength ?? 0, 1);
+        var chunk = new byte[DownloadChunkBytes];
+        for (var read = body.Read(chunk); read > 0; read = body.Read(chunk))
+        {
+            file.Write(chunk, 0, read);
+            report.AddBytes(read);
+        }
     }
 
     /// <summary>Replaces the package and checks the version it brought. The pending marker (the target build) stays until the

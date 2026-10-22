@@ -176,3 +176,7 @@
 .settings-path { flex: 1; min-width: 0; font-size: var(--fs-small); color: var(--text); white-space: nowrap; overflow: hidden; }
 .settings-line { display: flex; align-items: center; gap: var(--section-pad-x); font-size: var(--fs-small); }
 .settings-game { color: var(--muted); }
+.mod-run { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; width: var(--mod-run-w); }
+.mod-run-hero { padding: var(--gap) 12px; background: var(--over-art-fill); border: 1px solid var(--line); }
+.mod-run-retry { align-self: flex-end; height: 24px; padding: 0 12px; font-size: var(--fs-small); }
+.mod-run[data-failed] .step-text { white-space: normal; overflow: visible; }

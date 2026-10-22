@@ -18,8 +18,13 @@ internal sealed record SnapshotInput(
     AppStatus Status, IReadOnlyList<GameEntry> Games, string? SelectedId, ScreenKind Screen, ScreenKind? View, Tab Tab,
     PopupKind Popup, ulong PopupLobbyId, LobbyFilter Filter, string? LobbyGameId, JoinTarget? Target, GameCondition Condition,
     UpdateView Update, IReadOnlyList<string> Events, string BuildLabel, int LocalBuild, int? SelectFocus, long NowMs, long UnixNow,
-    Func<GameProfile, string?> FolderOf, Func<ulong, int?> AvatarRevision)
+    Func<GameProfile, string?> FolderOf, Func<ulong, int?> AvatarRevision, IReadOnlyDictionary<string, ModRunView>? ModRuns = null)
 {
+    /// <summary>A mod action is under way: sessions and other mod actions wait for it.</summary>
+    public bool ModRunning => ModRuns?.Values.Any(run => run.Running) == true;
+
+    public ModRunDto? ModRunOf(string gameId) => ModRuns?.GetValueOrDefault(gameId) is { } run ? ModRunViews.Dto(run) : null;
+
     public bool Free => Status.State is AppState.Idle or AppState.Offline;
 
     public IEnumerable<GameProfile> Profiles => Games.Select(game => game.Profile);
@@ -129,12 +134,14 @@ internal static partial class UiSnapshot
     private static HomeDto? Home(SnapshotInput i)
     {
         if (i.Selected is not { } selected) return null;
-        var view = SessionCards.Home(i.Status, selected.Profile, selected.Status, i.Update.Staged, i.Update.NewerBuild, i.Profiles);
+        var view = ModRunViews.WhileRunning(
+            SessionCards.Home(i.Status, selected.Profile, selected.Status, i.Update.Staged, i.Update.NewerBuild, i.Profiles), i.ModRunning);
         return new HomeDto(
             view.Native ? "LAUNCH" : "HOST", view.Native, view.HostEnabled, view.JoinEnabled, view.CodeEnabled,
             view.Mod is { } mod ? new BtnDto(mod.Label, view.ModEnabled) : null, OptionsModel.Has(selected.Profile), selected.Profile.HasCharacterSelect,
             i.Popup == PopupKind.Options, view.Notice == null ? null : Notice(view.Notice),
-            view.Friends.Select(friend => new FriendDto(UiJson.Id(friend.LobbyId), Avatar(i, friend.AvatarId, friend.Name), friend.Name, friend.Game, friend.Count, friend.Selected)).ToArray());
+            view.Friends.Select(friend => new FriendDto(UiJson.Id(friend.LobbyId), Avatar(i, friend.AvatarId, friend.Name), friend.Name, friend.Game, friend.Count, friend.Selected)).ToArray(),
+            i.ModRunOf(selected.Profile.Id));
     }
 
     internal static NoticeDto Notice(Notice notice) => new(notice.Key, notice.Words, notice.Action, notice.Report);
@@ -157,10 +164,12 @@ internal static partial class UiSnapshot
 
     private static SettingsDto Settings(SnapshotInput i)
     {
+        var idle = i.Free && !i.ModRunning;
         var games = i.Games.Select(game => new SettingsGameDto(
-            game.Profile.Id, game.Profile.Name, i.FolderOf(game.Profile) ?? string.Empty, SettingsModel.BrowseEnabled(i.Free),
-            SettingsModel.ResetEnabled(game.Profile, i.Free), SettingsModel.UninstallEnabled(game.Status, i.Free, i.Update.Staged),
-            game.Status.SettingsMod, game.Status.SettingsGame, OptionRows(i, game.Profile, settingsOptions: true, hostValues: null), SettingsModel.ArchiveShown(game.Profile))).ToArray();
+            game.Profile.Id, game.Profile.Name, i.FolderOf(game.Profile) ?? string.Empty, SettingsModel.BrowseEnabled(idle),
+            SettingsModel.ResetEnabled(game.Profile, idle), SettingsModel.UninstallEnabled(game.Status, idle, i.Update.Staged),
+            game.Status.SettingsMod, game.Status.SettingsGame, OptionRows(i, game.Profile, settingsOptions: true, hostValues: null), SettingsModel.ArchiveShown(game.Profile),
+            i.ModRunOf(game.Profile.Id))).ToArray();
         return new SettingsDto(AppSettings.Current.CheckForUpdates, AppSettings.Current.LobbyVisibility, !i.Free, games);
     }
 }

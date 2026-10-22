@@ -1,6 +1,7 @@
 import { h, setText, keyed } from './dom.js';
 import { createDropdown } from './dropdown.js';
 import { createToggle } from './toggle.js';
+import { createModRun } from './mod-run.js';
 
 const LAUNCHER_TITLE = 'Launcher';
 const UPDATES_LABEL = 'Check for updates at start';
@@ -64,15 +65,16 @@ export function create(ctx) {
     const archive = tool('Archive', () => send('game.archive', { gameId: game.id }));
     const modLine = h('span', { class: 'settings-mod' });
     const gameLine = h('span', { class: 'settings-game' });
+    const modRun = createModRun(ctx, 'line');
     const options = h('div', { class: 'settings-grid' });
     const buttons = h('div', { class: 'settings-buttons' }, browse, reset, uninstall, archive);
-    const root = section('', h('div', { class: 'settings-row' }, path, buttons), h('div', { class: 'settings-line' }, modLine, gameLine), options);
-    root.parts = { path, browse, reset, uninstall, modLine, gameLine, options, archive };
+    const root = section('', h('div', { class: 'settings-row' }, path, buttons), h('div', { class: 'settings-line' }, modLine, modRun.el, gameLine), options);
+    root.parts = { path, browse, reset, uninstall, modLine, modRun, gameLine, options, archive };
     return root;
   }
 
   function updateGame(root, game) {
-    const { path, browse, reset, uninstall, modLine, gameLine, options, archive } = root.parts;
+    const { path, browse, reset, uninstall, modLine, modRun, gameLine, options, archive } = root.parts;
     setText(root.caption, game.name);
     path.dataset.full = game.folder;
     fitPath(path, game.folder);
@@ -81,6 +83,8 @@ export function create(ctx) {
     uninstall.disabled = !game.uninstallEnabled;
     archive.hidden = !game.archive;
     setText(modLine, game.modLine);
+    modLine.hidden = Boolean(game.modRun);
+    modRun.update(game.modRun, game.id);
     setText(gameLine, game.gameLine);
     options.hidden = game.options.length === 0;
     keyed(options, game.options, (option) => option.key, (option) => {

@@ -32,6 +32,7 @@ public static class UiSnapshotTests
             MiniAlert();
             GuestSelect();
             Home();
+            ModRuns();
             Lobbies();
             WireFormat();
         }
@@ -182,6 +183,37 @@ public static class UiSnapshotTests
         var sr2Input = Input(native) with { SelectedId = "sr2" };
         var popup = (OptionsPopupDto)UiSnapshot.MainPage(sr2Input with { Popup = PopupKind.Options }, null).Popup!;
         Check.That(popup.GameName == Sr2.Name && popup.Rows.Any(row => row.Key == "transport" && row.Values.Length >= 2 && row.Value == row.Values[0].Value), "home: the option rows carry their values and the shown one");
+    }
+
+    private static IReadOnlyDictionary<string, ModRunView> Run(ModRunKind kind, ModProgress progress) =>
+        new Dictionary<string, ModRunView> { ["re0"] = new(kind, progress) };
+
+    /// <summary>A mod action on show: the step row on the home hero and the game's settings row, the locks while it runs, Done and Failed.</summary>
+    private static void ModRuns()
+    {
+        var copying = Input(AppStatus.Idle) with { ModRuns = Run(ModRunKind.Install, new ModProgress(ModStep.Copying, 40, 12, 50)) };
+        var home = UiSnapshot.MainPage(copying, null).Home!;
+        Check.That(home.ModRun is { Failed: false, Retry: null, Step: { Text: "Copying 12/50", Mark: StepMark.Active, Trailing: "40%", Bar: 0.4 } }, "mod run: the step, file i of n, the percent and its bar");
+        Check.That(!home.HostEnabled && !home.JoinEnabled && !home.CodeEnabled, "mod run: Host and Join wait while it runs");
+
+        var settings = UiSnapshot.MainPage(copying with { Screen = ScreenKind.Settings, View = ScreenKind.Settings }, null).Settings!;
+        var game = settings.Games.Single(g => g.Id == "re0");
+        Check.That(game.ModRun?.Step.Trailing == "40%" && !game.BrowseEnabled && !game.ResetEnabled && !game.UninstallEnabled && settings.Games.Single(g => g.Id == "sr2").ModRun == null,
+            "mod run: the game's settings row shows it and its buttons wait");
+
+        var done = Input(AppStatus.Idle) with { ModRuns = Run(ModRunKind.Install, new ModProgress(ModStep.Done, 100, 50, 50)) };
+        var doneHome = UiSnapshot.MainPage(done, null).Home!;
+        Check.That(doneHome.ModRun is { Step: { Text: "Done", Mark: StepMark.Done, Trailing: "100%", Bar: 1.0 } } && doneHome.HostEnabled, "mod run: Done shows the check and frees Host");
+
+        var failed = Input(AppStatus.Idle) with { ModRuns = Run(ModRunKind.Install, new ModProgress(ModStep.Failed, 37, 3, 50, "The file is in use")) };
+        var failedHome = UiSnapshot.MainPage(failed, null).Home!;
+        Check.That(failedHome.ModRun is { Failed: true, Retry: { Label: "Retry", Enabled: true }, Step: { Text: "The file is in use", Mark: StepMark.Failed, Trailing: "" } } && failedHome.HostEnabled,
+            "mod run: Failed shows the reason in red with Retry");
+
+        var wire = UiJson.Write(UiSnapshot.MainPage(copying, null));
+        Check.That(wire.Contains("\"modRun\":{\"step\":{\"text\":\"Copying 12/50\",\"mark\":\"active\""), "mod run: the wire format names modRun and the step mark in camelCase");
+        Check.That(ModRunViews.Text(new ModProgress(ModStep.Checking, 0, 0, 50)) == "Checking files" && ModRunViews.Text(new ModProgress(ModStep.RemovingOld, 91, 1, 1)) == "Removing old files",
+            "mod run: the count is left out at the start of a step and for one file");
     }
 
     private static void Lobbies()

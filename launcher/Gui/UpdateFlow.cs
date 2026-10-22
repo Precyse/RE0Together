@@ -13,6 +13,7 @@ internal sealed class UpdateFlow
     private Phase _phase = Phase.None;
     private bool _free = true;
     private bool _autoPending;
+    private int _percent;
 
     /// <summary>The offer, the download or the staged build changed: the button needs redrawing.</summary>
     public event Action? Changed;
@@ -27,7 +28,7 @@ internal sealed class UpdateFlow
     public string? Label => _phase switch
     {
         Phase.Offered => $"Update to {NewerBuild}",
-        Phase.Downloading => "Downloading",
+        Phase.Downloading => _percent > 0 ? $"Downloading {_percent}%" : "Downloading",
         Phase.Ready => "Restart",
         _ => null,
     };
@@ -81,8 +82,15 @@ internal sealed class UpdateFlow
         _autoPending = false;
         _phase = Phase.Downloading;
         Changed?.Invoke();
-        Task.Run(Updater.Stage).ContinueWith(task =>
+        _percent = 0;
+        var progress = new ThrottledProgress(new Progress<ModProgress>(report =>
         {
+            _percent = report.Percent;
+            Changed?.Invoke();
+        }), () => Environment.TickCount64);
+        Task.Run(() => Updater.Stage(progress)).ContinueWith(task =>
+        {
+            _percent = 0;
             _phase = task.Result ? Phase.Ready : Phase.Offered;
             if (_phase == Phase.Ready) Log.Event($"Build {NewerBuild} ready");
             Changed?.Invoke();

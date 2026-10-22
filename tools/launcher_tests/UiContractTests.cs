@@ -183,6 +183,10 @@ public static class UiContractTests
         AddInput(Input(session("sr2", AppState.PeerConnected, SessionStep.InGame, host(), guest(SessionStep.InGame, local: true))));
         AddInput(Input(session("re0", AppState.PeerConnected, SessionStep.Ready, host(step: SessionStep.Ready), guest(SessionStep.Ready, local: true)), view: ScreenKind.Select));
         AddInput(Input(AppStatus.Idle, view: ScreenKind.Settings));
+        var failedRun = new Dictionary<string, ModRunView> { ["re0"] = new(ModRunKind.Install, new ModProgress(ModStep.Failed, 37, 3, 50, "The file is in use")) };
+        var copyingRun = new Dictionary<string, ModRunView> { ["re0"] = new(ModRunKind.Install, new ModProgress(ModStep.Copying, 40, 12, 50)) };
+        AddInput(Input(AppStatus.Idle) with { ModRuns = failedRun });
+        AddInput(Input(AppStatus.Idle, view: ScreenKind.Settings) with { ModRuns = copyingRun });
 
         var shapes = byScreen.ToDictionary(pair => pair.Key, pair => Merge(pair.Value)!);
         var miniStatus = session("re0", AppState.PeerConnected, SessionStep.InGame, host(local: true), guest(SessionStep.InGame, held: true));

@@ -20,6 +20,7 @@ internal sealed partial class UiController : IDisposable
     private readonly GameWatch _watch = new();
     private readonly UpdateFlow _update = new();
     private readonly List<string> _events = new();
+    private readonly Dictionary<string, ModRunView> _modRuns = new();
     private readonly string _buildLabel = BuildLabel();
     private List<GameEntry> _games = new();
 
@@ -150,7 +151,7 @@ internal sealed partial class UiController : IDisposable
         return new SnapshotInput(
             _app.Status, _games, _selectedId, _screen, _view, _tab, _popup, _popupLobbyId, _filter, _lobbyGameId, _target, _watch.Condition,
             update, _events, _buildLabel, BuildCheck.LocalBuild(), _selectFocus, Environment.TickCount64, DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            GameFolders.Find, Avatars.Revision);
+            GameFolders.Find, Avatars.Revision, _modRuns);
     }
 
     private static string BuildLabel()
@@ -293,10 +294,16 @@ internal sealed partial class UiController : IDisposable
         var refusal = _app.Status.Refusal;
         var blocked = refusal?.GameId is { } id && !ModOf(id).CanHost;
         foreach (var (game, status, art) in statuses)
+        {
             _games = _games.Select(entry => entry.Profile.Id == game.Id ? entry with { Status = status, Art = art } : entry).ToList();
+            if (_modRuns.GetValueOrDefault(game.Id) is { Failed: true } failed && failed.Kind == ModRunKind.Install == status.ModInstalled) _modRuns.Remove(game.Id);
+        }
         if (blocked && refusal!.GameId is { } gameId && SessionCards.Resolved(refusal, ModOf(gameId))) _app.ClearRefusal();
         Apply(_app.Status);
     }
+
+    /// <summary>A mod action is under way (it runs off the UI thread; sessions and other mod actions wait for it).</summary>
+    private bool ModRunning => _modRuns.Values.Any(run => run.Running);
 
     private GameStatus ModOf(string gameId) => _games.FirstOrDefault(game => game.Profile.Id == gameId)?.Status ?? GameStatus.Unknown;
 

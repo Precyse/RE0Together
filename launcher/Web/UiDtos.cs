@@ -26,6 +26,9 @@ internal sealed record ImgDto(string? Src, string Initial);
 
 internal sealed record BtnDto(string Label, bool Enabled);
 
+/// <summary>A mod action on show: the step row (text, percent and bar, check or cross) and, once it failed, the Retry button.</summary>
+internal sealed record ModRunDto(StepDto Step, bool Failed, BtnDto? Retry);
+
 internal sealed record ArtDto(string? Hero, string? Logo, string? Capsule);
 
 internal sealed record TransitionDto(TransitionKind Kind, int Direction);
@@ -63,7 +66,7 @@ internal sealed record FriendDto(string Key, ImgDto Avatar, string Name, string 
 
 internal sealed record HomeDto(
     string HostLabel, bool Native, bool HostEnabled, bool JoinEnabled, bool CodeEnabled, BtnDto? Mod, bool HasOptions, bool HasCharacters,
-    bool OptionsOpen, NoticeDto? Notice, FriendDto[] Friends);
+    bool OptionsOpen, NoticeDto? Notice, FriendDto[] Friends, ModRunDto? ModRun);
 
 internal sealed record LobbyRowDto(
     string Key, string? Capsule, string GameName, LobbyHostDto Host, string Players, LobbyModDto Mod, string Ping, LobbyBtnDto Action);
@@ -93,7 +96,8 @@ internal sealed record HalfDto(ImgDto Figure, string Name, string Role, string L
 internal sealed record SelectDto(HalfDto Left, HalfDto Right, StageCentre Centre, int FocusHalf);
 
 internal sealed record SettingsGameDto(
-    string Id, string Name, string Folder, bool BrowseEnabled, bool ResetEnabled, bool UninstallEnabled, string ModLine, string GameLine, OptionRowDto[] Options, bool Archive);
+    string Id, string Name, string Folder, bool BrowseEnabled, bool ResetEnabled, bool UninstallEnabled, string ModLine, string GameLine, OptionRowDto[] Options, bool Archive,
+    ModRunDto? ModRun);
 
 internal sealed record SettingsDto(bool CheckForUpdates, LobbyVisibility Visibility, bool VisibilityLocked, SettingsGameDto[] Games);
 

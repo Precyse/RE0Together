@@ -75,7 +75,8 @@ export default {
     "action": "Start Steam",
     "report": false
    },
-   "friends": []
+   "friends": [],
+   "modRun": null
   },
   "lobbies": null,
   "joining": null,

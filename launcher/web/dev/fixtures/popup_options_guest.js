@@ -97,7 +97,8 @@ export default {
    "hasCharacters": true,
    "optionsOpen": true,
    "notice": null,
-   "friends": []
+   "friends": [],
+   "modRun": null
   },
   "lobbies": null,
   "joining": null,

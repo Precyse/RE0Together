@@ -26,6 +26,7 @@ public static class UiCommandsTests
         [Cmd.PopupClose] = """{"type":"popup.close"}""",
         [Cmd.OptionSet] = """{"type":"option.set","gameId":"sr2","key":"transport","value":"steam"}""",
         [Cmd.ModInstall] = """{"type":"mod.install","gameId":"re0"}""",
+        [Cmd.ModRetry] = """{"type":"mod.retry","gameId":"re0"}""",
         [Cmd.NoticeFix] = """{"type":"notice.fix"}""",
         [Cmd.ReportCreate] = """{"type":"report.create"}""",
         [Cmd.SessionCancel] = """{"type":"session.cancel"}""",

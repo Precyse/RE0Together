@@ -93,7 +93,8 @@ export default {
      "count": "3/4",
      "primary": false
     }
-   ]
+   ],
+   "modRun": null
   },
   "lobbies": null,
   "joining": null,

@@ -77,13 +77,16 @@ public static class ModInstaller
     }
 
     /// <summary>Copies the package's adapter files into the game folder (also how an update or a repair re-copies them) and removes
-    /// the files an earlier install put there that the package no longer has. All files are staged beside their targets first; a
-    /// failure while moving them into place puts every file back.</summary>
-    public static bool Install(GameProfile profile, string gameDir)
+    /// the files an earlier install put there that the package no longer has. Steps: check the files, back up the player's files in
+    /// the way, copy, verify every copy against the package, remove the dropped files; each is reported to
+    /// <paramref name="progress"/>. A failure while moving files into place or verifying them puts every file back.</summary>
+    public static bool Install(GameProfile profile, string gameDir, IProgress<ModProgress>? progress = null)
     {
+        var report = new ProgressReporter(progress);
         if (GameLauncher.IsRunning(profile))
         {
             Log.Info($"Close {profile.Name} before installing its mod");
+            report.Fail($"Close {profile.Name} first");
             return false;
         }
         var files = Files(profile, gameDir);
@@ -91,59 +94,108 @@ public static class ModInstaller
         if (missing != null)
         {
             Log.Info($"Mod files missing from the package: {missing}");
+            report.Fail("Mod files missing from the package");
             return false;
         }
-        var steps = new List<IStep>();
+        var placements = new List<Placement>();
+        var removals = new List<Removal>();
         var manifests = Manifests(files, gameDir);
         try
         {
-            steps.AddRange(files.Select(Plan).OfType<Placement>());
-            steps.AddRange(manifests.SelectMany(manifest => manifest.Dropped()).Select(file => new Removal(file)));
-            foreach (var step in steps) step.Stage();
-            foreach (var step in steps) step.Place();
+            report.Begin(ModStep.Checking, files.Sum(f => Weight(f.Src)), files.Count);
+            foreach (var file in files)
+            {
+                if (Plan(file) is { } placement) placements.Add(placement);
+                report.Advance(Weight(file.Src));
+            }
+            removals.AddRange(manifests.SelectMany(manifest => manifest.Dropped()).Select(file => new Removal(file)));
+            var backups = placements.Where(placement => placement.BackupWeight > 0).ToList();
+            report.Begin(ModStep.BackingUp, backups.Sum(placement => placement.BackupWeight), backups.Count);
+            foreach (var placement in backups)
+            {
+                placement.Backup();
+                report.Advance(placement.BackupWeight);
+            }
+            report.Begin(ModStep.Copying, placements.Sum(placement => placement.Weight), placements.Count);
+            foreach (var placement in placements)
+            {
+                placement.Stage();
+                report.Advance(placement.Weight);
+            }
+            foreach (var placement in placements) placement.Place();
+            report.Begin(ModStep.Verifying, placements.Sum(placement => placement.Weight), placements.Count);
+            foreach (var placement in placements)
+            {
+                placement.Verify();
+                report.Advance(placement.Weight);
+            }
+            report.Begin(ModStep.RemovingOld, removals.Count, removals.Count);
+            foreach (var removal in removals)
+            {
+                removal.Place();
+                report.Advance(1);
+            }
             WriteBuild(files[0]);
             foreach (var manifest in manifests) manifest.Write();
-            foreach (var step in steps) step.Commit();
+            foreach (var placement in placements) placement.Commit();
+            foreach (var removal in removals) removal.Commit();
             Log.Info($"Installed the {profile.Name} mod");
+            report.Finish();
             return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            foreach (var step in Enumerable.Reverse(steps)) step.Undo();
+            foreach (var removal in Enumerable.Reverse(removals)) removal.Undo();
+            foreach (var placement in Enumerable.Reverse(placements)) placement.Undo();
             foreach (var manifest in manifests) manifest.Restore();
             Log.Info($"Could not install the {profile.Name} mod: {e.Message}");
+            report.Fail(e.Message);
             return false;
         }
     }
 
     /// <summary>Removes the adapter files the launcher installed (also the ones a package dropped), puts back any original it
     /// backed up, and deletes the game's coop folder (adapter ini, logs, session) except its archive of saved sessions and a folder
-    /// that still holds the player's own files; the session's saves are archived first.</summary>
-    public static bool Uninstall(GameProfile profile, string gameDir)
+    /// that still holds the player's own files; the session's saves are archived first. Reported to <paramref name="progress"/>.</summary>
+    public static bool Uninstall(GameProfile profile, string gameDir, IProgress<ModProgress>? progress = null)
     {
+        var report = new ProgressReporter(progress);
         if (GameLauncher.IsRunning(profile))
         {
             Log.Info($"Close {profile.Name} before removing its mod");
+            report.Fail($"Close {profile.Name} first");
             return false;
         }
         try
         {
             var files = Files(profile, gameDir);
             var manifests = Manifests(files, gameDir);
-            foreach (var file in files.Concat(manifests.SelectMany(manifest => manifest.Dropped()))) Remove(file);
+            var owned = files.Concat(manifests.SelectMany(manifest => manifest.Dropped())).ToList();
+            report.Begin(ModStep.Removing, owned.Sum(file => Weight(file.Dst)), owned.Count);
+            foreach (var file in owned)
+            {
+                var weight = Weight(file.Dst);
+                Remove(file);
+                report.Advance(weight);
+            }
             File.Delete(files[0].Build);
             foreach (var manifest in manifests) File.Delete(manifest.FilePath);
             RemoveCoopFolder(profile, gameDir, files);
             foreach (var file in files.Where(f => f.Entry.FolderDst != null)) PruneEmptyFolders(file, gameDir);
             Log.Info($"Removed the {profile.Name} mod");
+            report.Finish();
             return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             Log.Info($"Could not remove the {profile.Name} mod: {e.Message}");
+            report.Fail(e.Message);
             return false;
         }
     }
+
+    /// <summary>A file's share of a step's total: its size in bytes, at least 1 so an empty or missing file still counts.</summary>
+    private static long Weight(string path) => File.Exists(path) ? Math.Max(1, new FileInfo(path).Length) : 1;
 
     private static List<ModFile> Files(GameProfile profile, string gameDir) =>
         profile.AdapterFiles.Select(entry => ToModFile(entry, gameDir, Path.Combine(RepoPaths.RepoRoot, entry.Src))).ToList();
@@ -260,24 +312,29 @@ public static class ModInstaller
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
-    /// <summary>One step of an install. Files are staged first, then every step is placed, then committed; <see cref="Undo"/> puts
-    /// back what a failed install changed.</summary>
-    private interface IStep
-    {
-        void Stage();
-        void Place();
-        void Commit();
-        void Undo();
-    }
-
-    /// <summary>One file of an install: staged beside its target, then moved into place with its marker, the old copy kept
-    /// aside until the whole install has succeeded so <see cref="Undo"/> can put everything back.</summary>
-    private sealed class Placement(ModFile file, string packageHash, string? backupPath) : IStep
+    /// <summary>One file of an install: backed up if the player's, staged beside its target, moved into place with its marker and
+    /// verified, the old copy kept aside until the whole install has succeeded so <see cref="Undo"/> can put everything back.</summary>
+    private sealed class Placement(ModFile file, string packageHash, string? backupPath)
     {
         private string? _previousMarker;
         private bool _backedUp;
         private bool _movedAside;
         private bool _placed;
+
+        /// <summary>The package copy's weight in the steps that handle it.</summary>
+        public long Weight { get; } = ModInstaller.Weight(file.Src);
+
+        /// <summary>The weight of the player's file that is backed up first, 0 when there is none.</summary>
+        public long BackupWeight { get; } = backupPath == null ? 0 : ModInstaller.Weight(file.Dst);
+
+        public void Backup()
+        {
+            if (backupPath == null) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
+            File.Copy(file.Dst, backupPath);
+            _backedUp = true;
+            Log.Info($"Backed up existing {file.Dst} to {backupPath}");
+        }
 
         public void Stage()
         {
@@ -290,12 +347,6 @@ public static class ModInstaller
 
         public void Place()
         {
-            if (backupPath != null)
-            {
-                File.Copy(file.Dst, backupPath);
-                _backedUp = true;
-                Log.Info($"Backed up existing {file.Dst} to {backupPath}");
-            }
             if (File.Exists(file.Dst))
             {
                 File.Move(file.Dst, file.Previous, overwrite: true);
@@ -304,6 +355,12 @@ public static class ModInstaller
             _placed = true;
             File.Move(file.Temp, file.Dst);
             File.Move(file.Marker + ".tmp", file.Marker, overwrite: true);
+        }
+
+        /// <summary>The copy in the game folder must be the package copy; a difference fails the install.</summary>
+        public void Verify()
+        {
+            if (Hash(file.Dst) != packageHash) throw new IOException($"{file.Dst} does not match the package copy");
         }
 
         public void Commit()
@@ -330,14 +387,10 @@ public static class ModInstaller
 
     /// <summary>A file an earlier install put there that the package dropped: moved aside (our own file only, the original backup
     /// takes its place), deleted with its marker once the whole install has succeeded.</summary>
-    private sealed class Removal(ModFile file) : IStep
+    private sealed class Removal(ModFile file)
     {
         private bool _movedAside;
         private bool _restoredBackup;
-
-        public void Stage()
-        {
-        }
 
         public void Place()
         {

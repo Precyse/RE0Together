@@ -24,6 +24,7 @@ internal static class Cmd
     public const string PopupClose = "popup.close";
     public const string OptionSet = "option.set";
     public const string ModInstall = "mod.install";
+    public const string ModRetry = "mod.retry";
     public const string NoticeFix = "notice.fix";
     public const string ReportCreate = "report.create";
     public const string SessionCancel = "session.cancel";
@@ -109,6 +110,7 @@ internal static class UiCommands
         [Cmd.PopupClose] = [],
         [Cmd.OptionSet] = [GameId, new("key", FieldKind.Text, Min: 1), new("value", FieldKind.Text, Min: 1)],
         [Cmd.ModInstall] = [GameId],
+        [Cmd.ModRetry] = [GameId],
         [Cmd.NoticeFix] = [],
         [Cmd.ReportCreate] = [],
         [Cmd.SessionCancel] = [],

@@ -18,6 +18,7 @@ export const COMMANDS = [
   'popup.close',
   'option.set',
   'mod.install',
+  'mod.retry',
   'notice.fix',
   'report.create',
   'session.cancel',

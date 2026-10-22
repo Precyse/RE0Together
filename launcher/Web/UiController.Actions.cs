@@ -8,6 +8,7 @@ internal sealed partial class UiController
 {
     private const string Refused = "not allowed now";
     private const string UnknownTarget = "names nothing on show";
+    private const int DoneShownMs = 1500;
 
     /// <summary>Runs a command from the page; one that is ignored is noted in the drop log.</summary>
     public void Run(UiCommand command, DropLog drops)
@@ -34,11 +35,11 @@ internal sealed partial class UiController
             case Cmd.JoinCode when CurrentHome()?.JoinEnabled == true:
                 JoinTypedCode(command.Text("code"));
                 return null;
-            case Cmd.JoinFriend when status.State == AppState.Idle:
+            case Cmd.JoinFriend when status.State == AppState.Idle && !ModRunning:
                 return status.FriendLobbies.Any(friend => friend.LobbyId == command.LobbyId()) ? Do(() => JoinFriend(command.LobbyId())) : UnknownTarget;
             case Cmd.LobbyOpen when _screen == ScreenKind.Lobbies && _popup == PopupKind.None:
                 return RowFor(command) == null ? UnknownTarget : Do(() => OpenLobbyPopup(command.LobbyId()));
-            case Cmd.LobbyAction when _screen == ScreenKind.Lobbies:
+            case Cmd.LobbyAction when _screen == ScreenKind.Lobbies && !ModRunning:
                 return RowFor(command) is { } row && LobbyRowModels.ButtonOf(row.Action).Enabled ? Do(() => RunLobbyAction(row)) : UnknownTarget;
             case Cmd.LobbiesFilter when _screen == ScreenKind.Lobbies:
                 _filter = command.Text("filter") == "friends" ? LobbyFilter.Friends : LobbyFilter.All;
@@ -56,7 +57,10 @@ internal sealed partial class UiController
                 return SetOption(command);
             case Cmd.ModInstall:
                 return GameFor(command) is { } mod && _screen == ScreenKind.Home && mod.Profile.Id == _selectedId && CurrentHome()?.ModEnabled == true
-                    ? Do(() => InstallMod(mod.Profile)) : UnknownTarget;
+                    ? Do(() => StartMod(mod.Profile, ModRunKind.Install)) : UnknownTarget;
+            case Cmd.ModRetry when !ModRunning:
+                return GameFor(command) is { } retry && _modRuns.GetValueOrDefault(retry.Profile.Id) is { Failed: true } failed
+                    ? Do(() => StartMod(retry.Profile, failed.Kind)) : UnknownTarget;
             case Cmd.NoticeFix when NoticeFixAllowed():
                 RunNoticeFix();
                 return null;
@@ -129,7 +133,7 @@ internal sealed partial class UiController
     private LobbyRowModel? RowFor(UiCommand command) => Input().LobbyRows().FirstOrDefault(row => row.Listing.LobbyId == command.LobbyId());
 
     private HomeView? CurrentHome() => _screen == ScreenKind.Home && SelectedGame is { } game
-        ? SessionCards.Home(_app.Status, game.Profile, game.Status, Updater.Staged, _update.NewerBuild, Profiles)
+        ? ModRunViews.WhileRunning(SessionCards.Home(_app.Status, game.Profile, game.Status, Updater.Staged, _update.NewerBuild, Profiles), ModRunning)
         : null;
 
     private SessionModel? CurrentSession() => _screen is ScreenKind.Hosting or ScreenKind.Lobby && GameOf(_app.Status) is { } game
@@ -217,20 +221,46 @@ internal sealed partial class UiController
         if (GameOf(_app.Status)?.Profile is { } game) GameLauncher.Launch(game, GameFolders.Find(game));
     }
 
-    /// <summary>Installs, updates or repairs a game's mod; true when it was installed.</summary>
-    private bool InstallMod(GameProfile game)
+    /// <summary>Installs, updates, repairs or uninstalls a game's mod off the UI thread. Its steps reach the page as they happen (at
+    /// most every 50 ms); <paramref name="afterInstalled"/> runs when an install succeeded.</summary>
+    private void StartMod(GameProfile game, ModRunKind kind, Action? afterInstalled = null)
     {
-        if (GameFolders.Find(game) is not { } gameDir) return false;
-        var installed = ModInstaller.Install(game, gameDir);
-        RefreshMods();
-        return installed;
+        if (ModRunning || GameFolders.Find(game) is not { } gameDir) return;
+        ShowModProgress(game.Id, kind, new ModProgress(ModStep.Checking, 0, 0, 0));
+        var progress = new ThrottledProgress(new Progress<ModProgress>(report => ShowModProgress(game.Id, kind, report)), () => Environment.TickCount64);
+        Task.Run(() => kind == ModRunKind.Install ? ModInstaller.Install(game, gameDir, progress) : ModInstaller.Uninstall(game, gameDir, progress))
+            .ContinueWith(task => FinishMod(game.Id, kind, task, afterInstalled), _ui);
     }
 
-    private void UninstallMod(GameProfile game)
+    private void ShowModProgress(string gameId, ModRunKind kind, ModProgress progress)
     {
-        if (GameFolders.Find(game) is not { } gameDir) return;
-        ModInstaller.Uninstall(game, gameDir);
+        _modRuns[gameId] = new ModRunView(kind, progress);
+        Changed?.Invoke();
+    }
+
+    /// <summary>The mod action ended: a success shows Done for a moment, a failure stays with its reason and Retry (also when the
+    /// action itself broke), and the mod states are read again.</summary>
+    private void FinishMod(string gameId, ModRunKind kind, Task<bool> task, Action? afterInstalled)
+    {
+        if (task.IsFaulted)
+        {
+            var reason = task.Exception!.GetBaseException().Message;
+            Log.Info($"Mod action failed: {reason}");
+            ShowModProgress(gameId, kind, new ModProgress(ModStep.Failed, _modRuns[gameId].Progress.Percent, 0, 0, reason));
+        }
+        else if (task.Result)
+        {
+            if (kind == ModRunKind.Install) afterInstalled?.Invoke();
+            Task.Delay(DoneShownMs).ContinueWith(_ => ClearDone(gameId), _ui);
+        }
         RefreshMods();
+    }
+
+    private void ClearDone(string gameId)
+    {
+        if (_modRuns.GetValueOrDefault(gameId) is not { Progress.Step: ModStep.Done }) return;
+        _modRuns.Remove(gameId);
+        Changed?.Invoke();
     }
 
     /// <summary>The fix button of a notice or of the joining screen, for the refusal or the invite on show.</summary>
@@ -241,7 +271,7 @@ internal sealed partial class UiController
         switch (SessionCards.FixFor(status, _update.NewerBuild))
         {
             case NoticeFix.InstallMod or NoticeFix.UpdateMod when game != null:
-                if (InstallMod(game)) _app.ClearRefusal();
+                StartMod(game, ModRunKind.Install, _app.ClearRefusal);
                 break;
             case NoticeFix.UpdateLauncher:
                 _update.Click();
@@ -351,7 +381,7 @@ internal sealed partial class UiController
                 Join(new JoinTarget(model.Listing.LobbyId, model.Listing.HostName, model.Listing.HostId));
                 break;
             case LobbyAction.UpdateMod:
-                InstallMod(model.Game);
+                StartMod(model.Game, ModRunKind.Install);
                 break;
             case LobbyAction.UpdateLauncher:
                 _update.Click();
@@ -402,7 +432,7 @@ internal sealed partial class UiController
     private string? RunGameCommand(UiCommand command)
     {
         if (GameFor(command) is not { } game) return UnknownTarget;
-        var free = Free;
+        var free = Free && !ModRunning;
         switch (command.Type)
         {
             case Cmd.GameBrowse when SettingsModel.BrowseEnabled(free):
@@ -413,7 +443,7 @@ internal sealed partial class UiController
                 RefreshMods();
                 return null;
             case Cmd.GameUninstall when SettingsModel.UninstallEnabled(game.Status, free, Updater.Staged):
-                UninstallMod(game.Profile);
+                StartMod(game.Profile, ModRunKind.Uninstall);
                 return null;
             case Cmd.GameArchive when SettingsModel.ArchiveShown(game.Profile):
                 LauncherActions.OpenArchive(game.Profile);

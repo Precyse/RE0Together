@@ -75,7 +75,8 @@ export default {
     "action": "UPDATE TO 413",
     "report": true
    },
-   "friends": []
+   "friends": [],
+   "modRun": null
   },
   "lobbies": null,
   "joining": null,
