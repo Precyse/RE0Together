@@ -17,10 +17,11 @@ public static class Check
 public static class Program
 {
     /// <summary>Setting this variable to <c>web</c> runs only the web window's suites (SelectModel, UiCommands, UiSnapshot, UiContract); to
-    /// <c>mod</c> only the mod install suites.</summary>
+    /// <c>mod</c> only the mod install suites; to <c>files</c> only the file transfer, log and crash file suites.</summary>
     private const string OnlyVariable = "LAUNCHER_TESTS_ONLY";
     private const string WebSuites = "web";
     private const string ModSuites = "mod";
+    private const string FileSuites = "files";
 
     [STAThread]
     public static int Main()
@@ -28,6 +29,7 @@ public static class Program
         var only = Environment.GetEnvironmentVariable(OnlyVariable);
         if (only == WebSuites) return RunWebSuites();
         if (only == ModSuites) return RunModSuites();
+        if (only == FileSuites) return RunFileSuites();
         ContentHashTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
@@ -61,6 +63,7 @@ public static class Program
         SavePathsTests.Run();
         AdapterSettingsTests.Run();
         LogForwarderTests.Run();
+        CrashFilesTests.Run();
         AppSettingsTests.Run();
         SteamLibraryTests.Run();
         ReportBundleTests.Run();
@@ -96,6 +99,18 @@ public static class Program
         ContentHashTests.Run();
         RunModInstallSuites();
         if (Check.Failures == 0) Console.WriteLine("launcher_tests (mod): all checks passed");
+        return Check.Failures == 0 ? 0 : 1;
+    }
+
+    private static int RunFileSuites()
+    {
+        SaveSenderTests.Run();
+        SaveReceiverTests.Run();
+        LogForwarderTests.Run();
+        CrashFilesTests.Run();
+        ReportBundleTests.Run();
+        GameProfileTests.Run();
+        if (Check.Failures == 0) Console.WriteLine("launcher_tests (files): all checks passed");
         return Check.Failures == 0 ? 0 : 1;
     }
 

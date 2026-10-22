@@ -6,4 +6,6 @@
                 "hostSaveDir": "{documents}/DEATH STRANDING 2 - ON THE BEACH/{steamid64}",
                 "guestSaveDir": "coop/session/Documents/DEATH STRANDING 2 - ON THE BEACH/{steamid64}",
                 "filePattern": "*.dat" },
-  "adapterLog": "coop/adapter.log" }
+  "adapterLog": "coop/adapter.log",
+  "crashFiles": ["coop/crash-*.dmp", "coop/dumps/*.dmp", "coop/dumps/*.txt",
+                 "coop/session/Documents/DEATH STRANDING 2 - ON THE BEACH/*.mdmp"] }

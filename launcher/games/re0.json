@@ -4,6 +4,7 @@
   "adapterIni": "coop/adapter.ini",
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session" },
   "adapterLog": "coop/adapter.log",
+  "crashFiles": ["coop/crash-*.dmp", "coop/dumps/*.dmp", "coop/dumps/*.txt"],
   "freshTypes": ["0x0140", "0x0160", "0x0173"],
   "outfitArt": { "arc": "nativePC/arc/ui/cos_{value}.arc", "texture": "cos_{value}_ID_HQ" },
   "options": [

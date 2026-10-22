@@ -60,8 +60,10 @@ public sealed record GameProfile(
     List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
     SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
-    List<string>? FreshTypes = null, ArtSource? OutfitArt = null)
+    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null)
 {
+    // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").
+
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly ConcurrentDictionary<string, GameProfile> Loaded = new();
     private static readonly Lazy<IReadOnlyList<string>> Ids = new(ReadIds);

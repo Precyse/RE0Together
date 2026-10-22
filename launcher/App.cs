@@ -30,6 +30,7 @@ public sealed partial class App
     private Session? _session;
     private SaveSyncCoordinator? _saveSync;
     private LogForwarder? _logForwarder;
+    private CrashSender? _crashSender;
     private NativeJoin? _nativeJoin;
     private bool _sessionStarted;
     private GameProfile? _profile;
@@ -255,6 +256,7 @@ public sealed partial class App
             _session?.Pump();
             _saveSync?.Pump();
             _logForwarder?.Pump();
+            _crashSender?.Pump();
             _nativeJoin?.Pump();
             if (_launchPending && !TryLaunch())
             {
@@ -388,8 +390,12 @@ public sealed partial class App
         {
             Log.Info($"Log forwarding is off: {e.Message}");
         }
+        _crashSender = CrashSender.Create(_profile!, _gameDir, _session, _transport!, _logForwarder);
+        CrashReceiver.Attach(_gameDir, _session, _transport!, MemberName);
         return true;
     }
+
+    private string MemberName(ulong id) => _lobby?.Members.FirstOrDefault(member => member.Id == id)?.Name ?? id.ToString();
 
     private static bool IsServiceFailure(Exception e) =>
         e is InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException;
@@ -502,12 +508,13 @@ public sealed partial class App
         _lobby = null;
     }
 
-    /// <summary>Drops the session and its services (bridge, save sync, log forwarder) but not the lobby.</summary>
+    /// <summary>Drops the session and its services (bridge, save sync, log and crash forwarding) but not the lobby.</summary>
     private void DropSession()
     {
         _follow = null;
         _buildCheck = null;
         _logForwarder = null;
+        _crashSender = null;
         _nativeJoin?.Dispose();
         _nativeJoin = null;
         _saveSync?.Dispose();

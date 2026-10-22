@@ -5,6 +5,7 @@
                     { "src": "adapters/sr2/scripts.delta.json", "dst": "coop/scripts", "generate": "delta" } ],
   "adapterIni": "coop/sr2_adapter.ini",
   "adapterLog": "coop/sr2_adapter.log",
+  "crashFiles": ["Juiced/CrashDumps/*.log", "Juiced/CrashDumps/*.dmp", "coop/dumps/*.dmp", "coop/dumps/*.txt"],
   "joinFile": "coop/sr2_join.txt",
   "statusFile": "coop/sr2_status.txt",
   "bridgeWhen": { "key": "transport", "value": "steam" },

@@ -22,7 +22,6 @@ public static class Msg
     public const ushort FileAck = 0x0043;
     public const ushort FileManifest = 0x0044;
     public const ushort LogAppend = 0x0050;
-    public const ushort CrashDump = 0x0051;
     public const ushort SaveChanged = 0x0060;
     public const ushort FirstGameType = 0x0100;
 

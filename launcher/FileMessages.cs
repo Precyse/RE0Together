@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace CoopLauncher;
@@ -56,6 +57,12 @@ public static class FileMessages
         BinaryPrimitives.WriteUInt32LittleEndian(p, id);
         p[IdSize] = ok ? (byte)1 : (byte)0;
         return Framing.Reliable(Msg.FileAck, p);
+    }
+
+    public static bool HashMatches(string path, byte[] expected)
+    {
+        using var stream = File.OpenRead(path);
+        return SHA256.HashData(stream).AsSpan().SequenceEqual(expected);
     }
 
     /// <summary>FILE_MANIFEST: u8 count, then per file u8 length + ascii name.</summary>

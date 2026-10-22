@@ -68,7 +68,7 @@ What a real two-player session hits that the single-player game assumes away. Ea
 | One player dies | done | `player_damage.cpp` | PLAYER_DIED replays the death, both get game over |
 | Game over, continue | done, unverified live | `auto_join.cpp`, `session_rule.h` | the guest's Enter at the Dead phase works with auto_join off |
 | Desync recovery | done, unverified live | `resync.cpp`, `door_travel.cpp` | `coop\resync_now.txt` and an automatic retry after 10 s |
-| Game crash on one side | partial | `crash_dump.cpp`, `LogForwarder.cs` | dump reaches the host; no relaunch path (see Session flow) |
+| Game crash on one side | partial | `crash_dump.cpp`, `LogForwarder.cs` | dump and the whole log reach the host (`CrashSender.cs`); no relaunch path (see Session flow) |
 
 ### Setup QoL
 | candidate | status | owner file | note |

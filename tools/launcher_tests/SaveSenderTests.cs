@@ -145,11 +145,11 @@ public static class SaveSenderTests
         sender.SendTo(Peer);
         sender.Pump();
         Check.That(FileMessages.TryParseBegin(transport.Of(Msg.FileBegin).Single().Payload, out var begin), "the file starts a transfer");
-        now += SaveSender.RetryAfterMs / 2;
+        now += FileStreamer.RetryAfterMs / 2;
         sender.OnAck(Peer, FileMessages.Ack(begin.Id, ok: false));
         sender.Pump();
         Check.That(transport.Of(Msg.FileBegin).Count() == 1, "a rejected file is not resent at once (a short lock would burn every attempt)");
-        now += SaveSender.RetryAfterMs;
+        now += FileStreamer.RetryAfterMs;
         sender.Pump();
         sender.Pump();
         Check.That(transport.Of(Msg.FileBegin).Count() == 2, "a rejected file is resent after the retry delay");

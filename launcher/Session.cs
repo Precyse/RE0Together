@@ -84,7 +84,7 @@ public sealed class Session : IDisposable
     /// <summary>A peer's build number (BUILD_INFO), with the sender's transport id.</summary>
     public event Action<ulong, Frame>? BuildInfoReceived;
 
-    /// <summary>A guest's diagnostics (LOG_APPEND, CRASH_DUMP), with the sender's transport id. Never relayed to the adapter.</summary>
+    /// <summary>A guest's diagnostics (LOG_APPEND), with the sender's transport id. Never relayed to the adapter.</summary>
     public event Action<ulong, Frame>? DiagnosticsFrameReceived;
 
     /// <summary>True for another member of the slot map, also while it is held.</summary>
@@ -341,7 +341,7 @@ public sealed class Session : IDisposable
             BuildInfoReceived?.Invoke(senderId, frame);
             return;
         }
-        if (frame.Type is Msg.LogAppend or Msg.CrashDump)
+        if (frame.Type == Msg.LogAppend)
         {
             DiagnosticsFrameReceived?.Invoke(senderId, frame);
             return;

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace CoopLauncher;
 
 /// <summary>Guest side of save sync: writes incoming files to a temp file, verifies sha256, moves them into the session dir and ACKs.
@@ -142,7 +140,7 @@ public sealed class SaveReceiver
         if (!_incoming.TryGetValue(id, out var incoming)) return;
         incoming.Stream.Dispose();
         var begin = incoming.Begin;
-        var ok = new FileInfo(incoming.TempPath).Length == begin.Size && HashMatches(incoming.TempPath, begin.Hash);
+        var ok = new FileInfo(incoming.TempPath).Length == begin.Size && FileMessages.HashMatches(incoming.TempPath, begin.Hash);
         if (ok)
         {
             File.Move(incoming.TempPath, Path.Combine(incoming.FinalDir, begin.Name), overwrite: true);
@@ -177,11 +175,5 @@ public sealed class SaveReceiver
         {
             Log.Info($"Save sync: could not delete {incoming.TempPath} ({e.Message})");
         }
-    }
-
-    private static bool HashMatches(string path, byte[] expected)
-    {
-        using var stream = File.OpenRead(path);
-        return SHA256.HashData(stream).AsSpan().SequenceEqual(expected);
     }
 }

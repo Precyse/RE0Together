@@ -26,6 +26,10 @@ public static class ReportBundleTests
         File.WriteAllText(Path.Combine(coop, "peer_76561198000000001_20260101-120000.log"), "peer");
         File.WriteAllText(Path.Combine(coop, "crash-1.dmp"), "dump");
         File.WriteAllText(Path.Combine(coop, "peer_2_locked.log"), "locked");
+        Directory.CreateDirectory(Path.Combine(coop, "dumps"));
+        File.WriteAllText(Path.Combine(coop, "dumps", "own.dmp"), "own dump");
+        Directory.CreateDirectory(Path.Combine(coop, "peer_crash", "2_20260101-120000"));
+        File.WriteAllText(Path.Combine(coop, "peer_crash", "2_20260101-120000", "coop_a.log"), "guest crash log");
         var big = new byte[ReportBundle.MaxLogEntryBytes + 100];
         for (var i = 0; i < big.Length; i++) big[i] = (byte)(i % 251);
         File.WriteAllBytes(Path.Combine(coop, "adapter.log"), big);
@@ -48,6 +52,8 @@ public static class ReportBundleTests
             "the report holds every launcher log, the settings and the manifest");
         Check.That(new[] { "adapter.ini", "status.txt", "crash-1.dmp", "peer_76561198000000001_20260101-120000.log", "adapter.log" }.All(name => names.Contains($"{GameId}/{name}")),
             "the report holds the game's adapter files, its status file, peer logs and dumps");
+        Check.That(names.Contains($"{GameId}/dumps/own.dmp") && names.Contains($"{GameId}/peer_crash/2_20260101-120000/coop_a.log"),
+            "the report holds coop/dumps and the guests' crash folders");
         Check.That(!names.Any(name => name.EndsWith("join.txt")), "the join file is never in the report");
         Check.That(zip.Entries.All(entry => !Read(entry).Contains(JoinPassword)), "the session password is nowhere in the report");
 

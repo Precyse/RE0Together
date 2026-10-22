@@ -6,7 +6,8 @@ namespace CoopLauncher;
 
 /// <summary>One zip to send when something goes wrong: report.txt (launcher build, OS, each game's folder, build and mod state, what
 /// was left out and why), the launcher's settings and every log it kept, and from each game's coop folder the adapter log and ini, the
-/// game's status file, the logs and crash dumps of the other player's machine, and this machine's crash dumps. Never the join file
+/// game's status file, the logs and crash dumps of the other player's machine, the crash files its guests sent (<c>coop\peer_crash</c>),
+/// and this machine's crash dumps (<c>coop\dumps</c> and <c>crash-*.dmp</c>). Never the join file
 /// (it holds the session password). One file that cannot be read is listed in report.txt and skipped; each log is cut to its last
 /// <see cref="MaxLogEntryBytes"/>, every other file (a crash dump cannot be read without its start) goes whole.</summary>
 public static class ReportBundle
@@ -19,6 +20,7 @@ public static class ReportBundle
     private const string LogExtension = ".log";
     private const string LogPattern = "*" + LogExtension;
     private static readonly string[] GameFilePatterns = { "*adapter.log", "*adapter.ini", "peer_*", "crash-*.dmp" };
+    private static readonly string[] CoopSubfolders = { "dumps", CrashRules.PeerFolder };
 
     /// <summary>Writes the zip next to the launcher log and returns its path; null when it could not be written.</summary>
     public static string? Create(IEnumerable<GameProfile> games)
@@ -75,6 +77,9 @@ public static class ReportBundle
             foreach (var pattern in GameFilePatterns)
                 foreach (var file in entries.Files(coopDir, pattern).Where(file => !IsJoinFile(game, file)))
                     entries.Add(file, $"{game.Id}/{Path.GetFileName(file)}");
+            foreach (var folder in CoopSubfolders)
+                foreach (var file in entries.Files(Path.Combine(coopDir, folder), "*", SearchOption.AllDirectories))
+                    entries.Add(file, $"{game.Id}/{folder}/{Path.GetRelativePath(Path.Combine(coopDir, folder), file).Replace('\\', '/')}");
         }
         if (game.StatusFile != null) entries.Add(Path.Combine(gameDir, game.StatusFile), $"{game.Id}/{Path.GetFileName(game.StatusFile)}");
         return lines;
@@ -92,13 +97,13 @@ public static class ReportBundle
         private readonly List<string> _truncated = [];
         private readonly List<string> _skipped = [];
 
-        /// <summary>The files of a folder that match the pattern (none for a missing folder); a folder that cannot be listed is recorded as skipped.</summary>
-        public IEnumerable<string> Files(string directory, string pattern)
+        /// <summary>The files of a folder that match the pattern, with the folders under it if asked (none for a missing folder); a folder that cannot be listed is recorded as skipped.</summary>
+        public IEnumerable<string> Files(string directory, string pattern, SearchOption depth = SearchOption.TopDirectoryOnly)
         {
             if (!Directory.Exists(directory)) return [];
             try
             {
-                return Directory.GetFiles(directory, pattern);
+                return Directory.GetFiles(directory, pattern, depth);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
