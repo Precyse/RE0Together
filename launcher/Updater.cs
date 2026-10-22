@@ -5,12 +5,13 @@ using System.Text;
 namespace CoopLauncher;
 
 /// <summary>
-/// Installs a newer release of the channel (the manifest read through ReleaseFeed) into the packaged layout. Only the components
+/// Installs a newer release of the channel (the manifest read through ReleaseFeed) into the packaged layout. Each component has its own
+/// version, and a release is newer when one of them differs from installed.json. Only the components
 /// with a file that differs from the manifest are downloaded (<see cref="ComponentUpdate"/>), and their changed files are
 /// replaced in one transaction; a mods-only update therefore costs the adapter, not the launcher, and needs no restart. A command-line
 /// run relaunches at start-up when the launcher changed; the window stages in the background and relaunches when the player asks
-/// (<see cref="RestartRequested"/>). A replace that fails, or is cut short, puts every original back, and the build in
-/// installed.json is written last. Only runs from a packaged layout (root\launcher\app\coop-launcher.exe) and only ever writes below
+/// (<see cref="RestartRequested"/>). A replace that fails, or is cut short, puts every original back, and the versions in
+/// installed.json are written last. Only runs from a packaged layout (root\launcher\app\coop-launcher.exe) and only ever writes below
 /// that root. Any failure means "no update".
 /// </summary>
 public static class Updater
@@ -61,12 +62,11 @@ public static class Updater
                 Log.Info("No release to update from");
                 return false;
             }
-            if (release.Build <= BuildCheck.LocalBuild())
+            if (!release.UpdateAvailable)
             {
-                Log.Info($"Up to date (build {BuildCheck.LocalBuild()})");
+                Log.Info($"Up to date (launcher v{BuildCheck.LocalBuild()})");
                 return false;
             }
-            Log.Info($"Installing build {release.Build}");
             Staged |= Apply(release.Manifest, release.Assets, root, report);
             report.Finish();
             return true;
@@ -151,11 +151,13 @@ public static class Updater
     }
 
     /// <summary>Brings the package at <paramref name="root"/> to the manifest: fetches what differs, replaces it in one transaction
-    /// and records the build. True when the launcher itself changed (it must be restarted). A manifest that matches the files
-    /// already only records the build.</summary>
+    /// and records the component versions, with a log line for each one that changed. True when the launcher itself changed (it must
+    /// be restarted). A manifest that matches the files already only records the versions.</summary>
     public static bool Apply(ReleaseManifest manifest, IAssetSource source, string root, ProgressReporter report)
     {
         var plan = ComponentUpdate.Plan(manifest, root);
+        var installedPath = Path.Combine(root, InstalledRelease.LauncherDirName, InstalledRelease.FileName);
+        var before = InstalledRelease.Read(installedPath);
         if (!plan.IsEmpty)
         {
             var workDir = Path.Combine(Path.GetTempPath(), WorkDirPrefix + Guid.NewGuid().ToString("N"));
@@ -171,7 +173,10 @@ public static class Updater
                 Quietly(() => Directory.Delete(workDir, recursive: true));
             }
         }
-        new InstalledRelease(manifest.Build, manifest.Channel, manifest.Commit).Write(Path.Combine(root, InstalledRelease.LauncherDirName, InstalledRelease.FileName));
+        foreach (var component in manifest.Components.Where(component => before.VersionOf(component.Id) != component.Version))
+            Log.Info(VersionLines.Updated(VersionLines.SubjectOf(component.Id), component.Version, before.VersionOf(component.Id)));
+        new InstalledRelease(manifest.Build, manifest.Channel, manifest.Commit, manifest.Components.ToDictionary(component => component.Id, component => component.Version))
+            .Write(installedPath);
         return plan.RestartNeeded;
     }
 

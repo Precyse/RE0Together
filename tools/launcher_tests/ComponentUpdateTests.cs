@@ -16,7 +16,8 @@ public static class ComponentUpdateTests
         ModsOnlyUpdateDownloadsOneComponentAndNeedsNoRestart();
         LauncherChangeNeedsARestart();
         ProfileChangeNeedsARestart();
-        MatchingFilesOnlyRecordTheBuild();
+        MatchingFilesOnlyRecordTheVersions();
+        UpdateLogsEachChangedComponent();
         HashMismatchOfTheZipReplacesNothing();
         HashMismatchOfAFileInsideReplacesNothing();
         InterruptedReplaceIsRolledBack();
@@ -69,7 +70,9 @@ public static class ComponentUpdateTests
         Check.That(source.Requested.SequenceEqual(["re0.zip"]), "only the changed component's zip was downloaded");
         Check.That(fixture.ReadRoot(ReleaseFixture.Re0Dll) == "v2 re0", "the adapter is replaced");
         Check.That(fixture.ReadRoot(ReleaseFixture.LauncherExe) == V1Exe, "the launcher is untouched");
-        Check.That(fixture.InstalledBuild() == second.Build, "installed.json holds the new build");
+        Check.That(fixture.IsAt(second), "installed.json holds the new versions");
+        Check.That(fixture.Installed().VersionOf("re0") == 2 && fixture.Installed().VersionOf("ds2") == 1 && fixture.Installed().VersionOf("launcher") == 1,
+            "only the component that changed went up a version");
     }
 
     private static void LauncherChangeNeedsARestart()
@@ -81,7 +84,7 @@ public static class ComponentUpdateTests
 
         Check.That(Applies(fixture, second, out var restart, source) && restart, "a changed launcher applies and needs the restart");
         Check.That(source.Requested.SequenceEqual(["launcher.zip"]), "only the launcher zip was downloaded");
-        Check.That(fixture.ReadRoot(ReleaseFixture.LauncherExe) == "v2 exe" && fixture.InstalledBuild() == second.Build, "the exe and the build are new");
+        Check.That(fixture.ReadRoot(ReleaseFixture.LauncherExe) == "v2 exe" && fixture.IsAt(second), "the exe and the versions are new");
     }
 
     private static void ProfileChangeNeedsARestart()
@@ -91,14 +94,32 @@ public static class ComponentUpdateTests
         Check.That(Applies(fixture, fixture.Publish(), out var restart) && restart, "a changed game profile is read at start, so it needs the restart");
     }
 
-    private static void MatchingFilesOnlyRecordTheBuild()
+    private static void MatchingFilesOnlyRecordTheVersions()
     {
         using var fixture = Installed(out _);
         var second = fixture.Publish();
         var source = fixture.Source;
         Check.That(Applies(fixture, second, out var restart, source) && !restart, "a release with the same files applies");
         Check.That(source.Requested.Count == 0, "nothing was downloaded");
-        Check.That(fixture.InstalledBuild() == second.Build, "the build is recorded");
+        Check.That(fixture.IsAt(second), "the versions are recorded");
+    }
+
+    private static void UpdateLogsEachChangedComponent()
+    {
+        using var fixture = Installed(out _);
+        fixture.Set(ReleaseFixture.LauncherExe, "v2 exe");
+        fixture.Set(ReleaseFixture.Re0Dll, "v2 re0");
+        var second = fixture.Publish();
+        var lines = LogCapture.During(() => Applies(fixture, second, out _));
+        Check.That(lines.Any(line => line.EndsWith("Launcher updated to v2 (was v1)")), "the launcher line names both versions");
+        Check.That(lines.Any(line => line.EndsWith("Resident Evil 0 HD mod package updated to v2 (was v1)")), "so does the line of the mod that changed");
+        Check.That(lines.Count(line => line.Contains(" updated ")) == 2, "a component that did not change says nothing");
+
+        File.WriteAllText(Path.Combine(fixture.Root, "launcher", InstalledRelease.FileName), "{ \"build\": 120 }");
+        var migrated = LogCapture.During(() => Applies(fixture, second, out _));
+        Check.That(migrated.Any(line => line.EndsWith("Launcher updated to v2")) && migrated.All(line => !line.Contains("(was")),
+            "an installed.json from before versions names the new versions without a 'was'");
+        Check.That(fixture.IsAt(second), "and is rewritten with them");
     }
 
     private static void HashMismatchOfTheZipReplacesNothing()
@@ -112,7 +133,7 @@ public static class ComponentUpdateTests
         Check.That(!Applies(fixture, second, out _), "a zip that does not match the manifest is refused");
         Check.That(fixture.ReadRoot(ReleaseFixture.Re0Dll) == V1Re0 && fixture.ReadRoot(ReleaseFixture.LauncherExe) == V1Exe,
             "no file of any component was replaced, though the launcher zip was fine");
-        Check.That(fixture.InstalledBuild() == first.Build && NoLeftovers(fixture.Root), "installed.json is unchanged and no .old or marker stays");
+        Check.That(fixture.IsAt(first) && NoLeftovers(fixture.Root), "installed.json is unchanged and no .old or marker stays");
     }
 
     private static void HashMismatchOfAFileInsideReplacesNothing()
@@ -124,7 +145,7 @@ public static class ComponentUpdateTests
         var forged = second with { Components = second.Components.Select(c => c.Id == "re0" ? c with { Files = wrongHash } : c).ToList() };
 
         Check.That(!Applies(fixture, forged, out _), "a file that does not match its manifest hash is refused");
-        Check.That(fixture.ReadRoot(ReleaseFixture.Re0Dll) == V1Re0 && fixture.InstalledBuild() == first.Build, "the installed file and build are as before");
+        Check.That(fixture.ReadRoot(ReleaseFixture.Re0Dll) == V1Re0 && fixture.IsAt(first), "the installed file and versions are as before");
 
         var extra = new ManifestFile("adapters/re0/absent.dll", new string('1', 64), 3);
         var missing = second with { Components = second.Components.Select(c => c.Id == "re0" ? c with { Files = [.. c.Files, extra] } : c).ToList() };
@@ -145,7 +166,7 @@ public static class ComponentUpdateTests
 
         Check.That(!applied, "a replace that cannot move a file fails");
         Check.That(fixture.ReadRoot(ReleaseFixture.Re0Dll) == V1Re0 && fixture.ReadRoot(ReleaseFixture.Ds2Dll) == V1Ds2, "every original is back, the ones already moved too");
-        Check.That(fixture.InstalledBuild() == first.Build, "installed.json still names the old build");
+        Check.That(fixture.IsAt(first), "installed.json still names the old versions");
         Updater.Recover(fixture.Root);
         Check.That(NoLeftovers(fixture.Root), "recover leaves no marker and no .old files");
         Check.That(Applies(fixture, second, out _) && fixture.ReadRoot(ReleaseFixture.Ds2Dll) == "v2 ds2", "the update goes through once the file is free");
@@ -160,7 +181,7 @@ public static class ComponentUpdateTests
         var source = fixture.Source;
 
         Check.That(Applies(fixture, second, out _, source) && source.Requested.Count == 0, "files that already match are not fetched again, whatever installed.json says");
-        Check.That(fixture.InstalledBuild() == second.Build, "and the build is recorded");
+        Check.That(fixture.IsAt(second), "and the versions are recorded");
     }
 
     private static bool NoLeftovers(string root) =>

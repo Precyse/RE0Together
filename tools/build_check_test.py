@@ -1,8 +1,8 @@
 """Mismatched builds refuse to play: a guest on another launcher build or another game build (Steam buildid, read from
 the appmanifest beside the game folder) than the host stops before the game starts, with a message naming both builds;
 matching builds carry on. So does a guest whose installed mod files (dinput8.dll in the game folder) are not the host's:
-"Mod files differ", or "Mod not installed" when it has none. Uses copies of the launcher with different installed.json builds and
-fake Steam libraries.
+"Mod files differ", or "Mod not installed" when it has none. Uses copies of the launcher with different launcher versions in
+installed.json and fake Steam libraries.
 Usage: python tools/build_check_test.py   (after building the launcher into launcher/bin/Check)"""
 import json
 import os
@@ -24,11 +24,11 @@ COOP_ENABLED = "coop=1 in"  # the launcher logs "Set ..., coop=1 in <adapter.ini
 OUTCOMES = ("mismatch", "Mod files differ", "Mod not installed", COOP_ENABLED)  # how a guest's log shows the check is done
 
 
-def copy_with_build(name, build):
+def copy_with_build(name, launcher_version):
     target = ROOT / "launcher" / "bin" / name
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(BUILD_DIR, target)
-    (target / "installed.json").write_text(json.dumps({"build": build}))
+    (target / "installed.json").write_text(json.dumps({"build": 1, "components": {"launcher": launcher_version}}))
     return target / "coop-launcher.exe"
 
 

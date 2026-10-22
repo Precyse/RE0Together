@@ -30,7 +30,11 @@ public static class ReleaseFeed
     /// <summary>The newest release of the channel: its manifest and where its assets are.</summary>
     public sealed record Release(ReleaseManifest Manifest, IAssetSource Assets)
     {
-        public int Build => Manifest.Build;
+        /// <summary>The launcher version this release carries: what <see cref="BuildCheck.LocalBuild"/> reads on a package at it.</summary>
+        public int Build => Manifest.Component(InstalledRelease.LauncherId)?.Version ?? BuildInfo.DevBuild;
+
+        /// <summary>Some component of this release (the launcher or a mod) is not at this version in the installed package.</summary>
+        public bool UpdateAvailable => !InstalledRelease.ReadLocal().Matches(Manifest);
     }
 
     /// <summary>The release, from the cache once read; `force` reads GitHub again. Null when it never could be read.</summary>

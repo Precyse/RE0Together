@@ -10,13 +10,14 @@ public sealed record ManifestFile(string Path, string Sha256, long Size);
 public sealed record ManifestAsset(string Asset, string Sha256, long Size);
 
 /// <summary>A part of the package that updates on its own: the launcher, or one game's mod (its profile and adapter files). Its
-/// zip is <see cref="Asset"/>; <see cref="Files"/> are the files the zip carries, each with its hash.</summary>
-public sealed record ManifestComponent(string Id, string Asset, string Sha256, long Size, List<ManifestFile> Files);
+/// zip is <see cref="Asset"/>; <see cref="Files"/> are the files the zip carries, each with its hash. <see cref="Version"/> counts up
+/// only in a release where this component changed (its fingerprint is in the manifest too, for the release build, not read here).</summary>
+public sealed record ManifestComponent(string Id, int Version, string Asset, string Sha256, long Size, List<ManifestFile> Files);
 
 /// <summary>
-/// The release's manifest.json, published beside the zips: the build number, the channel, the commit, the full package
-/// (<see cref="Full"/>, for first installs) and every component with its files' hashes. Parsing refuses anything that could
-/// write outside the package root or that has no usable hash.
+/// The release's manifest.json, published beside the zips: the build number (the release, not a version a player sees), the channel,
+/// the commit, the full package (<see cref="Full"/>, for first installs) and every component with its version and its files' hashes.
+/// Parsing refuses anything that could write outside the package root or that has no usable hash or version.
 /// </summary>
 public sealed record ReleaseManifest(int Build, string Channel, string Commit, ManifestAsset Full, List<ManifestComponent> Components)
 {
@@ -50,7 +51,7 @@ public sealed record ReleaseManifest(int Build, string Channel, string Commit, M
         Require(Components.Count > 0 && Components.Select(c => c.Id).Distinct().Count() == Components.Count, "components");
         foreach (var component in Components)
         {
-            Require(!string.IsNullOrWhiteSpace(component.Id) && component.Files is { Count: > 0 }, $"component {component.Id}");
+            Require(!string.IsNullOrWhiteSpace(component.Id) && component.Version > 0 && component.Files is { Count: > 0 }, $"component {component.Id}");
             CheckAsset(component.Asset, component.Sha256, component.Size);
             foreach (var file in component.Files)
             {
