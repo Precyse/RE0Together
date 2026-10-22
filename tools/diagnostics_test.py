@@ -1,5 +1,6 @@
 """Guest diagnostics reach the host on local transport: new adapter.log lines arrive in coop\\peer_<id>.log and a
-crash dump written during the session arrives byte-identical as coop\\peer_<id>_<name>.dmp.
+crash dump written during the session arrives byte-identical in coop\\peer_crash\\<id>_<stamp>\\
+(CrashSender -> FileStreamer -> CrashReceiver).
 Usage: python tools/diagnostics_test.py   (COOP_LAUNCHER overrides the exe, as in save_sync_test.py)"""
 import os
 import signal
@@ -12,6 +13,7 @@ from save_sync_test import EXIT_TIMEOUT_S, TRANSFER_TIMEOUT_S, launcher, sha, wa
 PORTS = (27983, 27984)
 BRIDGE_PORTS = (27992, 27993)
 DUMP_NAME = "crash-20260930-120000.dmp"
+CRASH_FLAT_NAME = "coop_" + DUMP_NAME  # the guest-side path coop/<name> with the separator replaced
 DUMP_BYTES = 300_000
 LOG_LINE = "diagnostics test line\n"
 SETTLE_S = 3
@@ -46,7 +48,7 @@ def main():
             failures.append("log line never reached the host")
         elif "old line" in peer_file(".log").read_text():
             failures.append("lines from before the session were sent")
-        received = lambda: peer_file("_" + DUMP_NAME)
+        received = lambda: next((host_game / "coop" / "peer_crash").glob(f"*/{CRASH_FLAT_NAME}"), None)
         if not wait_for(lambda: received() and received().stat().st_size == DUMP_BYTES, TRANSFER_TIMEOUT_S):
             failures.append("crash dump never arrived complete")
         elif sha(received()) != sha(dump):

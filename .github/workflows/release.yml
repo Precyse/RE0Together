@@ -123,13 +123,27 @@ jobs:
           [string[]]$flags = if ($tag -eq 'latest') { @() } else { @('--prerelease') }
           $assets = Get-ChildItem release -File | Where-Object { $_.Name -ne 'manifest.json' } | ForEach-Object { $_.FullName }
 
+          # The release is updated in place, never deleted: a failed create after a delete once left the channel with no release at all.
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release delete $tag --cleanup-tag --yes
-            if ($LASTEXITCODE -ne 0) { throw "could not delete the old $tag release" }
+            gh release upload $tag @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw "could not upload the assets to the $tag release" }
+            $produced = Get-ChildItem release -File | ForEach-Object { $_.Name }
+            $published = gh release view $tag --json assets --jq '.assets[].name'
+            if ($LASTEXITCODE -ne 0) { throw "could not list the assets of the $tag release" }
+            foreach ($name in $published | Where-Object { $produced -notcontains $_ }) {
+              gh release delete-asset $tag $name --yes
+              if ($LASTEXITCODE -ne 0) { throw "could not delete the stale asset $name" }
+            }
+            gh release edit $tag --title "Build $env:GITHUB_RUN_NUMBER" --notes $notes --prerelease=$(if ($tag -eq 'latest') { 'false' } else { 'true' })
+            if ($LASTEXITCODE -ne 0) { throw "could not update the $tag release" }
+          } else {
+            gh release create $tag @assets --target $env:GITHUB_SHA --title "Build $env:GITHUB_RUN_NUMBER" --notes $notes @flags
+            if ($LASTEXITCODE -ne 0) { throw "could not create the $tag release" }
           }
-          gh release create $tag @assets --target $env:GITHUB_SHA --title "Build $env:GITHUB_RUN_NUMBER" --notes $notes @flags
-          if ($LASTEXITCODE -ne 0) { throw "could not create the $tag release" }
           # The manifest goes last, so a launcher that sees it finds every asset it names.
-          gh release upload $tag release/manifest.json
+          gh release upload $tag release/manifest.json --clobber
           if ($LASTEXITCODE -ne 0) { throw "could not upload the manifest" }
+          # The tag follows the build. The assets are already published, so a tag that cannot be moved is a warning, not a failure.
+          git push --force origin "$($env:GITHUB_SHA):refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { Write-Host "::warning::could not move the $tag tag to $env:GITHUB_SHA; the release assets are published" }
