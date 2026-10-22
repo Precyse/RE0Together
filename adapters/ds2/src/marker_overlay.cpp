@@ -168,12 +168,12 @@ void draw(float width, float height) {
     if (const auto self = game::localPlayer()) drawFarNotices(list, width, noticeTop, self->position);
     const auto camera = game::camera();
     if (!camera) return;
-    const auto partner = cargo_transfer::partner();
+    const auto partner = cargo_transfer::partnerLoad();
     for (const player_sync::RemotePlayer& peer : player_sync::remotePlayers()) {
         const auto at = peer_pose::shown(peer.slot);
         if (!at) continue;
         if (partner && partner->slot == peer.slot && !remote_body::ownerKey()) {  // the body carries the real rack once it exists
-            load_overlay::draw(list, *camera, *at, peer.yaw, static_cast<int>(partner->cargo.size()), width, height);
+            load_overlay::draw(list, *camera, *at, peer.yaw, static_cast<int>(partner->pieces), width, height);
         }
         drawMarker(list, *camera, *at, peer.name, peer.status, width, height);
     }

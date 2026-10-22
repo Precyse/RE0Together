@@ -88,6 +88,12 @@ struct Partner {
     std::vector<game::Cargo> cargo;
 };
 
+// The partner's slot and how many pieces its last list held: what the overlay needs every frame, without copying the list.
+struct PartnerLoad {
+    uint8_t slot = 0;
+    size_t pieces = 0;
+};
+
 // Net thread: asks `slot` to create `piece` (kind and order link) on its own player. False when the send failed.
 bool sendPiece(NetClient& net, uint8_t slot, const game::Cargo& piece);
 
@@ -102,9 +108,10 @@ bool handOver(NetClient& net, uint8_t slot, const game::Cargo& piece);
 void onFrame(NetClient& net, const GameFrame& frame);
 void tick(NetClient& net, const SessionSnapshot& session);
 
-// Render thread (cargo_menu).
+// Render thread (cargo_menu, marker_overlay).
 std::vector<game::Cargo> localCargo();
 std::optional<Partner> partner();  // the partner and what it reported carrying (the menu's right column)
+std::optional<PartnerLoad> partnerLoad();  // every frame: is there a partner list, and how long it is
 void give(const game::Cargo& piece);  // the local player's piece to the partner (a guest asks the host)
 void take(const game::Cargo& piece);  // the partner's piece to the local player (a guest asks the host)
 

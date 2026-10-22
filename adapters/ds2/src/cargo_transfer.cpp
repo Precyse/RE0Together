@@ -322,6 +322,12 @@ std::optional<Partner> partner() {
     return g_partner;
 }
 
+std::optional<PartnerLoad> partnerLoad() {
+    std::lock_guard lock(g_mutex);
+    if (!g_partner) return std::nullopt;
+    return PartnerLoad{g_partner->slot, g_partner->cargo.size()};
+}
+
 void give(const game::Cargo& piece) {
     std::lock_guard lock(g_mutex);
     g_requests.push_back({Action::Give, piece});

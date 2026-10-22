@@ -62,19 +62,27 @@ std::string partnerName(uint8_t slot) {
     return "Player " + std::to_string(slot);
 }
 
-void handleKeys(const std::array<std::vector<game::Cargo>, kColumns>& lists) {
+struct Keys {
+    bool toggle, up, down, side, move;
+};
+
+// Every key is polled each frame, open or not, so each press is seen once.
+Keys readKeys() {
     const bool front = gameInFront();
-    const auto hit = [front](int key) { return pressed(key) && front; };  // every key polled each frame
+    const auto hit = [front](int key) { return pressed(key) && front; };
     const bool toggle = hit(kToggleKey), up = hit(VK_UP), down = hit(VK_DOWN), move = hit(VK_RETURN);
     const bool side = hit(VK_LEFT) | hit(VK_RIGHT);
-    if (toggle) g_open = !g_open.load();
-    if (!g_open) return;
-    if (side) g_column = 1 - g_column;
+    return {toggle, up, down, side, move};
+}
+
+// The open menu: moves the selection and asks for the chosen move.
+void handleKeys(const Keys& keys, const std::array<std::vector<game::Cargo>, kColumns>& lists) {
+    if (keys.side) g_column = 1 - g_column;
     const int rows = static_cast<int>(lists[g_column].size());
-    if (up) --g_row;
-    if (down) ++g_row;
+    if (keys.up) --g_row;
+    if (keys.down) ++g_row;
     g_row = std::clamp(g_row, 0, std::max(rows - 1, 0));
-    if (!move || rows == 0) return;
+    if (!keys.move || rows == 0) return;
     const game::Cargo& piece = lists[g_column][g_row];
     if (g_column == kMine) {
         cargo_transfer::give(piece);
@@ -112,14 +120,17 @@ void drawArrow(ImDrawList* list, float centreX, float y, bool toRight) {
 namespace cargo_menu {
 
 void draw(float, float height) {
-    const auto partner = cargo_transfer::partner();
-    if (!partner) {
+    if (!cargo_transfer::partnerLoad()) {
         g_open = false;
         return;
     }
-    const std::array<std::vector<game::Cargo>, kColumns> lists = {cargo_transfer::localCargo(), partner->cargo};
-    handleKeys(lists);
+    const Keys keys = readKeys();
+    if (keys.toggle) g_open = !g_open.load();
     if (!g_open) return;
+    const auto partner = cargo_transfer::partner();  // the lists are copied only while the menu is open
+    if (!partner) return;
+    const std::array<std::vector<game::Cargo>, kColumns> lists = {cargo_transfer::localCargo(), partner->cargo};
+    handleKeys(keys, lists);
 
     ImDrawList* list = ImGui::GetBackgroundDrawList();
     const float top = height * kTopFraction;
