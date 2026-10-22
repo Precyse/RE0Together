@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 MAX_BYTES = 1_000_000
-# Binaries we ship on purpose.
-ALLOWED_BINARIES = {"launcher/native/steam_api64.dll"}
+# Binaries we ship on purpose; golden_frames.bin is the fake peer's own wire-frame test fixture, not game data.
+ALLOWED_BINARIES = {"launcher/native/steam_api64.dll", "tools/re0/fake_peer/tests/golden_frames.bin"}
 ALLOWED_PREFIXES = ("adapters/re0/third_party/",)
 # Game-derived formats and captures: RE0 archives, memory/code dumps, crash dumps, logs, saves.
 BLOCKED_SUFFIXES = {".arc", ".pak", ".dmp", ".bin", ".log", ".sav", ".exe", ".tex", ".mod", ".lmt"}
