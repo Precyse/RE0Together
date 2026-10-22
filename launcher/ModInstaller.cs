@@ -31,9 +31,9 @@ public static class ModInstaller
     public static ModStatus Status(GameProfile profile, string? gameDir)
     {
         if (gameDir == null) return new ModStatus(ModState.NotInstalled, 0);
-        var files = Files(profile, gameDir);
         try
         {
+            var files = Files(profile, gameDir);
             var manifests = Manifests(files, gameDir);
             var dropped = manifests.SelectMany(manifest => manifest.Dropped()).Any(file => File.Exists(file.Dst));
             var state = ModFiles.Decide(files.Select(file => Facts(file, manifests)).ToList(), dropped);
@@ -102,11 +102,11 @@ public static class ModInstaller
         var manifests = Manifests(files, gameDir);
         try
         {
-            report.Begin(ModStep.Checking, files.Sum(f => Weight(f.Src)), files.Count);
+            report.Begin(ModStep.Checking, files.Sum(PackageWeight), files.Count);
             foreach (var file in files)
             {
                 if (Plan(file) is { } placement) placements.Add(placement);
-                report.Advance(Weight(file.Src));
+                report.Advance(PackageWeight(file));
             }
             removals.AddRange(manifests.SelectMany(manifest => manifest.Dropped()).Select(file => new Removal(file)));
             var backups = placements.Where(placement => placement.BackupWeight > 0).ToList();
@@ -197,11 +197,28 @@ public static class ModInstaller
     /// <summary>A file's share of a step's total: its size in bytes, at least 1 so an empty or missing file still counts.</summary>
     private static long Weight(string path) => File.Exists(path) ? Math.Max(1, new FileInfo(path).Length) : 1;
 
-    private static List<ModFile> Files(GameProfile profile, string gameDir) =>
-        profile.AdapterFiles.Select(entry => ToModFile(entry, gameDir, Path.Combine(RepoPaths.RepoRoot, entry.Src))).ToList();
+    private static long PackageWeight(ModFile file) => file.Generated is { } generated ? Math.Max(1, generated.Size) : Weight(file.Src);
 
-    private static ModFile ToModFile(AdapterFile entry, string gameDir, string src) =>
-        new(entry, src, Path.GetFullPath(Path.Combine(gameDir, entry.Dst)), Path.GetFullPath(ModFiles.SidePath(gameDir, entry)));
+    private static bool PackageExists(ModFile file) => File.Exists(file.Src);
+
+    /// <summary>The SHA-256 of the package copy: read from the file, or for a generated file the one its recipe pins.</summary>
+    private static string PackageHash(ModFile file) => file.Generated?.Sha256 ?? Hash(file.Src);
+
+    /// <summary>The files of the mod. A generated file's recipe is read here, once per recipe.</summary>
+    private static List<ModFile> Files(GameProfile profile, string gameDir)
+    {
+        var recipes = new Dictionary<string, ScriptDelta>();
+        return profile.AdapterFiles.Select(entry =>
+        {
+            var src = Path.Combine(RepoPaths.RepoRoot, entry.Src);
+            if (entry.Member == null) return ToModFile(entry, gameDir, src);
+            if (!recipes.TryGetValue(src, out var recipe)) recipes[src] = recipe = ScriptDelta.Load(src);
+            return ToModFile(entry, gameDir, src, new GeneratedCopy(recipe, entry.Member, gameDir));
+        }).ToList();
+    }
+
+    private static ModFile ToModFile(AdapterFile entry, string gameDir, string src, GeneratedCopy? generated = null) =>
+        new(entry, src, Path.GetFullPath(Path.Combine(gameDir, entry.Dst)), Path.GetFullPath(ModFiles.SidePath(gameDir, entry)), generated);
 
     /// <summary>One manifest per folder entry of the profile.</summary>
     private static List<FolderManifest> Manifests(List<ModFile> files, string gameDir) =>
@@ -214,14 +231,15 @@ public static class ModInstaller
         if (!File.Exists(file.Dst) || !File.Exists(file.Marker))
             return new FileFacts(false, false, false, Added: manifests.Any(manifest => manifest.IsNew(file)));
         var installed = Hash(file.Dst);
-        return new FileFacts(true, installed != ReadMarker(file), File.Exists(file.Src) && Hash(file.Src) != installed);
+        return new FileFacts(true, installed != ReadMarker(file), PackageExists(file) && PackageHash(file) != installed);
     }
 
     /// <summary>What installing this file needs, or null when it is already the package copy with its marker. A file in the way
-    /// that is not ours is backed up first.</summary>
+    /// that is not ours is backed up first. A generated file is built here, so a player's file that is not the supported one refuses
+    /// the install before anything is written.</summary>
     private static Placement? Plan(ModFile file)
     {
-        var packageHash = Hash(file.Src);
+        var packageHash = PackageHash(file);
         if (!File.Exists(file.Dst)) return new Placement(file, packageHash, backupPath: null);
         var installedHash = Hash(file.Dst);
         var markerHash = ReadMarker(file);
@@ -252,7 +270,7 @@ public static class ModInstaller
     private static bool IsOurs(ModFile file)
     {
         var installedHash = Hash(file.Dst);
-        return installedHash == ReadMarker(file) || (File.Exists(file.Src) && installedHash == Hash(file.Src));
+        return installedHash == ReadMarker(file) || (PackageExists(file) && installedHash == PackageHash(file));
     }
 
     /// <summary>Deletes the coop folder's content except the archive and any folder that holds a mod file's place (what is left
@@ -316,13 +334,14 @@ public static class ModInstaller
     /// verified, the old copy kept aside until the whole install has succeeded so <see cref="Undo"/> can put everything back.</summary>
     private sealed class Placement(ModFile file, string packageHash, string? backupPath)
     {
+        private readonly byte[]? _generated = file.Generated?.Build();
         private string? _previousMarker;
         private bool _backedUp;
         private bool _movedAside;
         private bool _placed;
 
         /// <summary>The package copy's weight in the steps that handle it.</summary>
-        public long Weight { get; } = ModInstaller.Weight(file.Src);
+        public long Weight { get; } = PackageWeight(file);
 
         /// <summary>The weight of the player's file that is backed up first, 0 when there is none.</summary>
         public long BackupWeight { get; } = backupPath == null ? 0 : ModInstaller.Weight(file.Dst);
@@ -341,7 +360,8 @@ public static class ModInstaller
             Directory.CreateDirectory(Path.GetDirectoryName(file.Dst)!);
             Directory.CreateDirectory(Path.GetDirectoryName(file.Side)!);
             _previousMarker = ReadMarker(file);
-            File.Copy(file.Src, file.Temp, overwrite: true);
+            if (_generated != null) File.WriteAllBytes(file.Temp, _generated);
+            else File.Copy(file.Src, file.Temp, overwrite: true);
             File.WriteAllText(file.Marker + ".tmp", packageHash);
         }
 

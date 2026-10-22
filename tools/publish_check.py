@@ -14,6 +14,9 @@ MAX_BYTES = 1_000_000
 # Binaries we ship on purpose; golden_frames.bin is the fake peer's own wire-frame test fixture, not game data.
 ALLOWED_BINARIES = {"launcher/native/steam_api64.dll", "tools/re0/fake_peer/tests/golden_frames.bin"}
 ALLOWED_PREFIXES = ("adapters/re0/third_party/",)
+# The generated Saints Row 2 scripts are the game's own Lua: the repo holds only our library (tools/sr2/lua/) and the delta that builds them.
+GENERATED_SCRIPTS_PREFIX = "adapters/sr2/scripts/"
+OWN_LUA_PREFIX = "tools/sr2/lua/"
 # Game-derived formats and captures: RE0 archives, memory/code dumps, crash dumps, logs, saves.
 BLOCKED_SUFFIXES = {".arc", ".pak", ".dmp", ".bin", ".log", ".sav", ".exe", ".tex", ".mod", ".lmt"}
 SECRET_PATTERNS = {
@@ -41,11 +44,20 @@ def allowed_binary(path):
     return path in ALLOWED_BINARIES or path.startswith(ALLOWED_PREFIXES)
 
 
+def path_problems(path):
+    """What the name alone gives away: the generated game scripts, or Lua that is not our own library."""
+    if path.startswith(GENERATED_SCRIPTS_PREFIX):
+        return ["generated game scripts (the launcher builds them on the player's PC)"]
+    if path.lower().endswith(".lua") and not path.startswith(OWN_LUA_PREFIX):
+        return ["Lua outside tools/sr2/lua/ (game scripts are never published)"]
+    return []
+
+
 def problems_in(path):
+    found = path_problems(path)
     file = Path(path)
     if not file.is_file():
-        return []
-    found = []
+        return found
     if file.suffix.lower() in BLOCKED_SUFFIXES and not allowed_binary(path):
         found.append(f"{file.suffix} files are game data, dumps or logs")
     data = file.read_bytes()

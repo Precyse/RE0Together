@@ -8,7 +8,7 @@ public readonly record struct FileFacts(bool Present, bool Modified, bool Stale,
 /// <summary>One file of a mod on disk. Bookkeeping (marker, backups, staging, the build record) sits at <see cref="Side"/>: the
 /// file itself for a single adapter file, a mirror under the folder's <c>.cfmod</c> for a file of a folder entry, so a folder the
 /// game scans (SR2 hashes every file of <c>coop\scripts</c>) holds nothing but the mod's own files.</summary>
-internal readonly record struct ModFile(AdapterFile Entry, string Src, string Dst, string Side)
+internal readonly record struct ModFile(AdapterFile Entry, string Src, string Dst, string Side, GeneratedCopy? Generated = null)
 {
     public string Marker => Side + ".cfown";
     public string Backup => Side + BackupSuffix;
@@ -19,6 +19,18 @@ internal readonly record struct ModFile(AdapterFile Entry, string Src, string Ds
     public const string BackupSuffix = ".cfbak";
 }
 
+/// <summary>The package copy of a generated file: it exists only as a recipe, so its pinned hash and size come from the recipe and its
+/// bytes are built from the player's own files in the game folder.</summary>
+internal sealed record GeneratedCopy(ScriptDelta Delta, string Name, string GameDir)
+{
+    private DeltaScript Script => Delta.Find(Name)!;
+
+    public string Sha256 => Script.Sha256;
+    public long Size => Script.Size;
+
+    public byte[] Build() => Delta.Build(Name, GameDir);
+}
+
 /// <summary>The pure rules of a mod's file list: folder entries expanded to one entry per file, where bookkeeping goes, the
 /// manifest of the files a folder holds, and the status of a whole mod from its files.</summary>
 public static class ModFiles
@@ -26,13 +38,25 @@ public static class ModFiles
     private const char Separator = '/';
     private const string BookkeepingFolder = ".cfmod";
     private const string ManifestName = ".cfmanifest";
+    private const string DeltaGenerator = "delta";
 
     /// <summary>The entries with every folder entry replaced by its files, recursively, in ordinal order of their path inside the
-    /// folder (the order is the same on every machine, the mod hash depends on it). A folder entry is resolved against
-    /// <paramref name="root"/>; one that is missing or empty stays as a single entry that names the folder, so installing
-    /// reports the package as incomplete.</summary>
+    /// folder (the order is the same on every machine, the mod hash depends on it), and every generated entry replaced by one entry
+    /// per script of its recipe. An entry is resolved against <paramref name="root"/>; one that is missing or empty stays as a single
+    /// entry that names the folder, so installing reports the package as incomplete.</summary>
     public static List<AdapterFile> Expand(IEnumerable<AdapterFile> entries, string root) =>
-        entries.SelectMany(entry => entry.Folder ? ExpandFolder(entry, root) : [entry]).ToList();
+        entries.SelectMany(entry => entry.Folder ? ExpandFolder(entry, root) : entry.Generate != null ? ExpandGenerated(entry, root) : [entry]).ToList();
+
+    private static IEnumerable<AdapterFile> ExpandGenerated(AdapterFile recipe, string root)
+    {
+        if (recipe.Generate != DeltaGenerator) throw new InvalidDataException($"Unknown generator '{recipe.Generate}' for {recipe.Dst}");
+        var path = Path.Combine(root, recipe.Src);
+        if (!File.Exists(path)) return [recipe with { Generate = null }];
+        var src = Normalized(recipe.Src);
+        var dst = Normalized(recipe.Dst);
+        return ScriptDelta.Load(path).Scripts.Select(script =>
+            new AdapterFile(src, dst + Separator + script.Name, FolderDst: dst, Generate: DeltaGenerator, Member: script.Name));
+    }
 
     private static IEnumerable<AdapterFile> ExpandFolder(AdapterFile folder, string root)
     {
