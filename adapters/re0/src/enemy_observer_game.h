@@ -23,6 +23,10 @@ void place(uintptr_t enemy, const float (&pos)[3], const float (&quat)[4], int32
 // words once the simulator's enemy has left its setup state, the hit attributes and +0x6a0c.
 void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown);
 
+// Puts back only what a hit test reads (HP and +0x6a0c) after the enemy's move changed it; position, record and motion
+// are left to the stream.
+void reassert(uintptr_t enemy, const enemy_observer_rule::Sample& shown);
+
 // The CharPause bit (sGameInfo +0x50 bit 0) as found before one enemy's unit move.
 struct CharPause {
     uintptr_t address = 0;  // 0 while the bit is not held by us

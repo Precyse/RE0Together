@@ -15,6 +15,7 @@
 #include "enemy_registry.h"
 #include "enemy_target.h"
 #include "enemy_decision.h"
+#include "enemy_drift.h"
 #include "game_tick.h"
 #include "log.h"
 #include "net_pad.h"
@@ -189,6 +190,9 @@ bool takesRequest(const HitPayload& hit) {
 void applyHit(const Hit& event) {
     const HitPayload& hit = event.payload;
     if (!validAttacker(event)) return;
+    if (event.type == enemy_protocol::kMsgHitApplied && hit.attackerCharacterId == static_cast<uint8_t>(character_owner::localCharacter())) {
+        enemy_drift::hitAnswered();
+    }
     if (hit.room != scene::current()) {
         logger::write("enemy_net: hit dropped (slot %u in room 0x%x, loaded 0x%x)", hit.slot, hit.room,
                       scene::current());
@@ -272,16 +276,22 @@ bool routeOwnHit(uintptr_t enemy, Character shooter, uintptr_t attackerObject, c
     const enemy_observer_rule::Simulator simulator = enemy_observer::simulatorOf(encoded ? hit.slot : UINT8_MAX);
     switch (enemy_observer_rule::routeOfOwnHit(simulator)) {
         case enemy_observer_rule::Route::Apply:
+            enemy_drift::hitRouted(true);
             applyAsOwner(enemy, static_cast<uint8_t>(shooter), attackerObject, point, info);
             return true;
         case enemy_observer_rule::Route::Send:
             // The simulator names the enemy by its pool slot, which may differ from this machine's.
             hit.slot = enemy_observer::streamSlotOf(hit.slot).value_or(hit.slot);
-            if (!sendHitRequest(simulator.slot, hit)) return false;
+            if (!sendHitRequest(simulator.slot, hit)) {
+                enemy_drift::hitRefused();
+                return false;
+            }
+            enemy_drift::hitRouted(false);
             logger::write("enemy_net: hit for slot %u sent to slot %d", hit.slot, simulator.slot);
             return true;
         case enemy_observer_rule::Route::Local: break;
     }
+    enemy_drift::hitRefused();
     return false;
 }
 

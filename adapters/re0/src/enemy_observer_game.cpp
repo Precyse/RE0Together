@@ -26,6 +26,16 @@ void writeHitAttributes(uintptr_t enemy, uint16_t attributes) {
     if (next != word) game::writeMemory(enemy + game::kPlayerHitAttributesOffset, next);
 }
 
+void setHpWhenDifferent(uintptr_t enemy, int32_t hp) {
+    int32_t current = 0;
+    if (game::readMemory(enemy + game::kEnemyHpOffset, current) && current != hp) player_damage::setHp(enemy, hp);
+}
+
+void writeShownFlags(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
+    const bool alive = (shown.flags & enemy_observer_wire::kFlagAlive) != 0 && shown.hp > 0;
+    game::writeMemory(enemy + game::kEnemyFlags6a0cOffset, enemy_observer_rule::shownFlags6a0c(shown.flags6a0c, alive));
+}
+
 }  // namespace
 
 namespace enemy_observer_game {
@@ -55,16 +65,19 @@ bool recordState(uintptr_t enemy, int32_t& state) { return game::readMemory(enem
 
 void place(uintptr_t enemy, const float (&pos)[3], const float (&quat)[4], int32_t hp) {
     game::writeTransform(enemy, pos, quat);
-    int32_t current = 0;
-    if (game::readMemory(enemy + game::kEnemyHpOffset, current) && current != hp) player_damage::setHp(enemy, hp);
+    setHpWhenDifferent(enemy, hp);
 }
 
 void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
     place(enemy, shown.pos, shown.quat, shown.hp);
     if (enemy_observer_rule::recordApplies(shown.record)) game::writeMemory(enemy + game::kEnemyActionOffset, shown.record);
     writeHitAttributes(enemy, shown.hitAttr);
-    const bool alive = (shown.flags & enemy_observer_wire::kFlagAlive) != 0 && shown.hp > 0;
-    game::writeMemory(enemy + game::kEnemyFlags6a0cOffset, enemy_observer_rule::shownFlags6a0c(shown.flags6a0c, alive));
+    writeShownFlags(enemy, shown);
+}
+
+void reassert(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
+    setHpWhenDifferent(enemy, shown.hp);
+    writeShownFlags(enemy, shown);
 }
 
 bool holdCharPause(CharPause& held) {

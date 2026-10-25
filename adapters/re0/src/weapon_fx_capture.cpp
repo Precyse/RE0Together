@@ -8,6 +8,7 @@
 
 #include "character_owner.h"
 #include "debug_stats.h"
+#include "enemy_drift.h"
 #include "game.h"
 #include "game_tick.h"
 #include "hit_fx.h"
@@ -127,7 +128,9 @@ void recordSound(Primitive primitive, uintptr_t caller, uintptr_t chara, uint32_
 void recordFlash(uintptr_t caller, uintptr_t player, uint32_t index, float scale) {
     if (!owned(player)) return;
     const uint8_t site = admit(Primitive::MuzzleFlash, caller);
-    if (site == weapon_fx_sites::kNoSite || !std::in_range<uint8_t>(index)) return;
+    if (site == weapon_fx_sites::kNoSite) return;
+    enemy_drift::shotFired();
+    if (!std::in_range<uint8_t>(index)) return;
     Entry entry;
     entry.op = Op::Flash;
     entry.site = site;

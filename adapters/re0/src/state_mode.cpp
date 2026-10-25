@@ -11,6 +11,7 @@
 #include "debug_stats.h"
 #include "demo_skip.h"
 #include "door_follow.h"
+#include "enemy_drift.h"
 #include "enemy_lease.h"
 #include "enemy_observer.h"
 #include "flag_sequencer.h"
@@ -69,6 +70,7 @@ constexpr Module kModules[] = {
     {"hit fx", hit_fx::enable, false},
     {"enemy lease", enemy_lease::enable, false},
     {"enemy observer", enemy_observer::enable, false},
+    {"enemy drift", enemy_drift::enable, false},
     {"item ledger", item_ledger::enable, false},
     {"room move", room_move::enable, false},
     {"door follow", door_follow::enable, false},

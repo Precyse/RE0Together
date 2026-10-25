@@ -12,6 +12,7 @@
 #include "door_leave_rule.h"
 #include "door_travel.h"
 #include "enemy_decision.h"
+#include "enemy_drift.h"
 #include "enemy_follow_rule.h"
 #include "enemy_lease.h"
 #include "enemy_observer_capture.h"
@@ -110,6 +111,7 @@ struct Slot {
     rule::ConstructionGate gate;
     bool released = false;         // the simulator removed the unit: its own code takes it out
     uintptr_t frozenEnemy = 0;     // freeze() holds this enemy under the CharPause scope whoever simulates it
+    std::optional<rule::Sample> written;  // what drive wrote into the enemy before this frame's unit move (enemy_drift compares after it)
     bool announced = false;
     bool terminalLogged = false;
     int streamSlot = kNoIndex;     // the simulator's pool slot of the enemy it shows this one from (hits name it)
@@ -544,6 +546,7 @@ bool drive(size_t index, uintptr_t enemy, Slot& slot) {
         logger::write("enemy_observer: slot %zu terminal", index);
     }
     enemy_observer_game::write(enemy, shown.sample);
+    slot.written = shown.sample;
     g_due.clear();
     slot.motions.takeDue(slot.targetMs, g_due);
     for (const rule::MotionItem& item : g_due) replayMotion(index, enemy, slot, item);
@@ -587,18 +590,21 @@ void moveSimulatedOrOther(void* unit, void* edx) {
 }
 
 // Slot 8 of every unit. A pass-through for players and for every enemy that is not observed or frozen; an observed
-// enemy gets the stream's state and then runs its move with the CharPause bit held, restored as found; a frozen one runs
-// its move with the bit held and nothing written.
+// enemy gets the stream's state and then runs its move with the CharPause bit held, restored as found, and is compared
+// with what was written once the move is over (the write comes first, the check last); a frozen one runs its move with
+// the bit held and nothing written.
 void __fastcall unitMoveDetour(void* unit, void* edx) {
     const uintptr_t enemy = reinterpret_cast<uintptr_t>(unit);
     const int index = scopedSlot(enemy);
     if (index == kNoIndex) return moveSimulatedOrOther(unit, edx);
     Slot& slot = g_slots[static_cast<size_t>(index)];
+    slot.written.reset();
     if (slot.frozenEnemy != enemy && !drive(static_cast<size_t>(index), enemy, slot)) return g_originalUnitMove(unit, edx);
     enemy_observer_game::CharPause held;
     enemy_observer_game::holdCharPause(held);
     g_originalUnitMove(unit, edx);
     enemy_observer_game::releaseCharPause(held);
+    if (slot.written) enemy_drift::afterMove(static_cast<size_t>(index), enemy, slot.local.classIndex, *slot.written);
 }
 
 // ---- Game thread: once a frame -----------------------------------------------------------------------------------

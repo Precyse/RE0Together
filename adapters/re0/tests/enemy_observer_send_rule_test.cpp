@@ -36,6 +36,9 @@ void testDeathIsSentOnceReliablyThenAsCorpse() {
     rule::SendPlanner planner;
     check(nextRound(planner, true, true) == Action::Pose, "alive");
     check(nextRound(planner, true, false) == Action::Terminal, "the death is one reliable terminal entry");
+    uint32_t dying = 0;
+    for (uint32_t i = 0; i < rule::kDyingRounds; ++i) dying += nextRound(planner, true, false) == Action::Corpse ? 1 : 0;
+    check(dying == rule::kDyingRounds, "a dying enemy is posed every round while it falls");
     uint32_t corpses = 0;
     uint32_t terminals = 0;
     for (uint32_t i = 0; i < 2 * rule::kCorpseEveryRounds; ++i) {
@@ -44,7 +47,7 @@ void testDeathIsSentOnceReliablyThenAsCorpse() {
         terminals += action == Action::Terminal ? 1 : 0;
     }
     check(terminals == 0, "no second terminal entry");
-    check(corpses == 2, "a corpse is posed once a second");
+    check(corpses == 2, "a settled corpse is posed once a second");
 }
 
 void testCorpsesAreStaggeredBySlot() {
@@ -53,6 +56,11 @@ void testCorpsesAreStaggeredBySlot() {
     uint32_t firstRoundOfSlot1 = 0;
     planner.next(0, true, false, kEnemy);  // both die in the same round
     planner.next(1, true, false, kEnemy);
+    for (uint32_t i = 0; i < rule::kDyingRounds; ++i) {
+        planner.startRound();
+        planner.next(0, true, false, kEnemy);
+        planner.next(1, true, false, kEnemy);
+    }
     for (uint32_t i = 1; i <= rule::kCorpseEveryRounds && (!firstRoundOfSlot0 || !firstRoundOfSlot1); ++i) {
         planner.startRound();
         if (!firstRoundOfSlot0 && planner.next(0, true, false, kEnemy) == Action::Corpse) firstRoundOfSlot0 = i;
