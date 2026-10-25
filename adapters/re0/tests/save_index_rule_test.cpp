@@ -34,6 +34,7 @@ void testSummary() {
     const Summary summary = summarize(head(4, 5, 0, 2, 137649.0f));
     check(summary.used && !summary.cleared && !summary.wesker, "a used slot");
     check(label(7, summary) == "Slot 8 / Hard / 0:38:14 / Area 4", "the launcher's label");
+    check(compactLabel(7, summary) == "Slot 8 / Hard / 0:38:14", "the Co-op page's label leaves out the area");
     check(startMode(summary) == kStartContinue, "Continue starts it in mode 1");
     const Summary cleared = summarize(head(kClearedArea, 1, 1, 1, 60.0f * 3725));
     check(label(0, cleared) == "Slot 1 / Normal / 1:02:05 / Cleared / Wesker", "a cleared Wesker save");

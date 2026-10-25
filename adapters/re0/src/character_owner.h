@@ -47,6 +47,9 @@ Character plannedLocalCharacter();
 // again from it. Any thread; only before the game starts (the page lives on the title).
 void setHostCharacter(Character character);
 
+// True once the launcher's WELCOME arrived on the current link.
+bool linked();
+
 // True on the linked session's host.
 bool isHost();
 

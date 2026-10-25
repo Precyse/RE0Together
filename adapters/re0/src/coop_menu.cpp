@@ -45,6 +45,13 @@ constexpr native_menu_rule::MenuDef kOptionsMenu{coop_menu_rule::kOptionsMenuId,
                                                  coop_menu_rule::kOptionsRowCount,
                                                  coop_menu_rule::kMenuId};
 
+// Opened from the pause menu in play; cancel and Back close it.
+constexpr native_menu_rule::MenuDef kInGameMenu{coop_menu_rule::kInGameMenuId,
+                                                "",
+                                                {{{"world_pause", RowKind::Choice, "coop.world_pause"},
+                                                  {"back", RowKind::Action, "coop.close"}}},
+                                                coop_menu_rule::kOptionsRowCount};
+
 constexpr int kNoPick = save_load_rule::kUnknownSlot;
 
 struct Context {
@@ -136,7 +143,7 @@ int pickedSlot(const Context& c) {
 std::string slotLabel(int slot) {
     if (!save_load_rule::isPlayerSlot(slot)) return coop_menu_rule::kNone;
     const auto summary = save_blocks::summary(slot);
-    return summary ? save_index_rule::label(slot, *summary) : coop_menu_rule::kNone;
+    return summary ? save_index_rule::compactLabel(slot, *summary) : coop_menu_rule::kNone;
 }
 
 // The outfit value a player's character wears: this player's own choice, or the launcher's label of the other's matched
@@ -194,6 +201,14 @@ native_menu_rule::PageView optionsView() {
     publishScene(c);
     return coop_menu_rule::optionsView(c.isHost, optionLabel(c, option_values::kWorldPauseKey));
 }
+
+native_menu_rule::PageView inGameView() {
+    const Context c = context();
+    publishScene(c);
+    return coop_menu_rule::inGameView(c.isHost, optionLabel(c, option_values::kWorldPauseKey));
+}
+
+Reply onClose(const Event&) { return Reply::Close; }
 
 // The value after the current one in a list the launcher offers, sent back to the launcher as the player's choice; the
 // launcher's next LOBBY_STATE brings it to every screen and lobby::apply makes it act.
@@ -274,6 +289,8 @@ namespace coop_menu {
 void enable() {
     native_menu::registerMenu(kMenu, view);
     native_menu::registerMenu(kOptionsMenu, optionsView);
+    native_menu::registerMenu(kInGameMenu, inGameView);
+    native_menu::registerAction("coop.close", onClose);
     native_menu::registerAction("coop.character", onCharacter);
     native_menu::registerAction("coop.outfit", onOutfit);
     native_menu::registerAction("coop.world_pause", onWorldPause);

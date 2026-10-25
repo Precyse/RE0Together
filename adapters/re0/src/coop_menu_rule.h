@@ -19,6 +19,7 @@ using native_menu_rule::RowView;
 
 constexpr std::string_view kMenuId = "coop";
 constexpr std::string_view kOptionsMenuId = "coop.options";
+constexpr std::string_view kInGameMenuId = "coop.ingame";  // the page the pause menu opens: only what can change in play
 constexpr const char kHeader[] = "Co-op";
 constexpr const char kOptionsHeader[] = "Options";
 
@@ -94,6 +95,13 @@ inline PageView optionsView(bool isHost, const std::string& worldPause) {
     page.header = kOptionsHeader;
     page.rows[kWorldPause] = {"Pause in Menus", worldPause, true, !isHost};
     page.rows[kBack] = {"Back", "", true, false};
+    return page;
+}
+
+// The page the pause menu opens in play: the Options rows under the Co-op header; Back closes it.
+inline PageView inGameView(bool isHost, const std::string& worldPause) {
+    PageView page = optionsView(isHost, worldPause);
+    page.header = kHeader;
     return page;
 }
 

@@ -73,6 +73,13 @@ void testGuestRows() {
     check(view(in).rows[kOutfit].locked, "no outfit list, no outfit change");
 }
 
+void testInGamePage() {
+    const PageView page = inGameView(true, "On");
+    check(std::string(page.header) == kHeader, "the in-game page is headed Co-op");
+    check(page.rows[kWorldPause].value == "On" && !page.rows[kWorldPause].locked, "the host changes Pause in Menus in play");
+    check(inGameView(false, "Off").rows[kWorldPause].locked, "a guest only reads it");
+}
+
 void testOptionsPage() {
     const PageView host = optionsView(true, "On");
     check(host.header == "Options", "the Options page's header");
@@ -114,6 +121,7 @@ int main() {
     testHostRows();
     testGuestRows();
     testOptionsPage();
+    testInGamePage();
     testReady();
     testStepIndex();
     if (g_failures == 0) std::printf("PASS\n");

@@ -13,9 +13,9 @@ namespace native_page {
 // false when a site does not match this build (the page then never opens).
 bool enable();
 
-// Game thread, from the title: the Options screen the title is about to open shows menu `menuId`. False when the page
-// is unavailable or the menu unknown (the title must not open the Options screen for it).
-bool openFromTitle(std::string_view menuId);
+// Game thread: the next Options screen that opens (the title's, or the one the pause menu's Co-op row opens in play)
+// shows menu `menuId`. False when the page is unavailable or the menu unknown (the caller must not open the screen).
+bool openNext(std::string_view menuId);
 
 // Game thread: the page closes itself on its next input frame (one that is still opening, as soon as it is open), as a
 // confirm that closes would, without a sound.

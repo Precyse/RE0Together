@@ -43,9 +43,22 @@ void testAfterLoad() {
 
 }  // namespace
 
+void testLauncherPick() {
+    using title_load_rule::LauncherPick;
+    using title_load_rule::launcherPick;
+    check(launcherPick(false, true, true, std::nullopt, std::nullopt) == LauncherPick::Skip, "no pick, nothing to start");
+    check(launcherPick(true, false, true, std::nullopt, std::nullopt) == LauncherPick::Wait, "the link not up yet: wait");
+    check(launcherPick(true, true, false, std::nullopt, 7u) == LauncherPick::Skip, "a guest follows the host's start");
+    check(launcherPick(true, true, true, std::nullopt, 7u) == LauncherPick::Start, "the host starts an unchecked pick");
+    check(launcherPick(true, true, true, 7u, 7u) == LauncherPick::Start, "the host starts the slot it picked");
+    check(launcherPick(true, true, true, 7u, 8u) == LauncherPick::Skip, "a slot changed since the pick is not started");
+    check(launcherPick(true, true, true, 7u, std::nullopt) == LauncherPick::Skip, "an unreadable slot is not started");
+}
+
 int main() {
     testTakesTitle();
     testAfterLoad();
+    testLauncherPick();
     if (g_failures == 0) std::printf("PASS\n");
     return g_failures == 0 ? 0 : 1;
 }

@@ -640,6 +640,46 @@ constexpr uintptr_t kSetStopReasonFunction = 0x652ce0;
 constexpr std::array<uint8_t, 7> kSetStopReasonBytes = {0x56, 0x8B, 0xF1, 0x80, 0x7E, 0x1C, 0x00};
 constexpr uint32_t kStopReasonPause = 6;
 
+// The pause menu (docs/RE0_NOTES.md "Pause menu: the Co-op row"): sGamePause [0xdcbea8] owns uGUIPause (vtable
+// 0xcdfe68, read from .rdata). uGUIPause::v8 (slot 8) runs +0x260: 1 open (0x5ccb40: cursor 0, labels, arrow at 400),
+// 2 -> 3, 3 input (0x5ccc60: two rows, cursor +0x268), 4 quit dialog, 5 close, 6 closed. v55 (slot 55) caches the
+// layout's instances: +0x278 i_exit, +0x27c i_reset, +0x280 i_arrow, +0x284 iMes_message (help line).
+constexpr uintptr_t kGamePauseGlobal = 0xdcbea8;            // sGamePause*
+constexpr uintptr_t kGamePauseStateOffset = 0x24;           // u32: 0 closed, 1 open, 2 closing
+constexpr uintptr_t kGamePauseResumeFunction = 0x6016f0;    // thiscall(sGamePause, u8 1) ret 4: Back's resume
+constexpr uintptr_t kPauseGuiVtable = 0xcdfe68;
+constexpr size_t kGuiMoveSlot = 8;
+constexpr size_t kGuiLoadedSlot = 55;
+constexpr uintptr_t kPauseGuiMoveFunction = 0x5cc820;       // uGUIPause::v8, the vtable's slot 8
+constexpr uintptr_t kPauseGuiLoadedFunction = 0x5cc8f0;     // uGUIPause::v55, the vtable's slot 55
+constexpr uintptr_t kGameGuiMoveFunction = 0x5efb50;        // uGameGUI::v8, which uGUIPause::v8 runs first
+constexpr uintptr_t kPauseStateOffset = 0x260;
+constexpr uintptr_t kPauseSubStateOffset = 0x264;
+constexpr uint32_t kPauseStateInput = 3;
+constexpr uint32_t kPauseStateQuitDialog = 4;
+constexpr uint32_t kPauseStateClose = 5;
+constexpr uintptr_t kPauseExitOffset = 0x278;
+constexpr uintptr_t kPauseResetOffset = 0x27c;
+constexpr uintptr_t kPauseArrowOffset = 0x280;
+constexpr uintptr_t kPauseHelpOffset = 0x284;
+constexpr uintptr_t kPauseExitTouchOffset = 0x290;
+constexpr uintptr_t kPauseResetTouchOffset = 0x294;
+constexpr uint32_t kKeyboardEscapeBit = 0x40000;            // keyboard +0x160: the pause's own cancel key
+constexpr uint32_t kPadPauseCancelBit = 8;                  // OR'd into the pad's cancel mask by the pause's input
+// GUI instance tree (decomp 0x8836c0, 0x8758d0, 0x875030, 0x5ef240)
+constexpr uintptr_t kCloneInstanceFunction = 0x8836c0;      // thiscall(uGUI, src) ret 4 -> the copy (new id, children copied)
+constexpr uintptr_t kAddChildFunction = 0x8758d0;           // thiscall(parent, child) ret 4
+constexpr uintptr_t kInstanceMarkFunction = 0x875030;       // thiscall(inst, u8 on) ret 4: the engine calls it with 1 on each clone
+constexpr uintptr_t kInstanceParentOffset = 0x68;
+constexpr uintptr_t kInstanceObjectsOffset = 0xe8;          // the objects array: [1] the label, [2] the touch polygon
+constexpr size_t kRowLabelObject = 1;
+constexpr size_t kRowTouchObject = 2;
+// The in-game Options screen: sSubMenu +0x68 (uOptionManager, created at game start), opened by 0x5cc350 the way the
+// status screen's Options tab does, closed flag taken by 0x5cb320.
+constexpr uintptr_t kSubMenuOptionsOffset = 0x68;
+constexpr uintptr_t kOptionOpenFunction = 0x5cc350;         // fastcall(manager)
+constexpr uintptr_t kOptionTakeClosedFunction = 0x5cb320;   // thiscall(manager) -> bool, once after a close
+
 // state mode: phase 4 (puppet body fidelity; docs/RE0_NOTES.md "State mode: puppet body")
 // A character holds 7 sub-unit slots of 0x20 bytes from +0x67d8; slot 3 is the held weapon. A slot starts with the
 // unit pointer and embeds its cAnimControl 4 bytes in (0x521a80 adds 4 before it calls cAnimControl::set).

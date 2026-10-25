@@ -52,7 +52,7 @@ void beforeMove(uintptr_t title) {
     if (state == title_coop_rule::kStateMainMenuOpen) prepareMenu(title);
     g_lastState = state;
     if (state == title_coop_rule::kStateStoreChosen) {
-        const bool page = native_page::openFromTitle(coop_menu_rule::kMenuId);
+        const bool page = native_page::openNext(coop_menu_rule::kMenuId);
         if (!page) logger::write("title_coop: the Co-op page is unavailable, the main menu stays");
         setState(title, title_coop_rule::afterCoopChoice(page));
     }

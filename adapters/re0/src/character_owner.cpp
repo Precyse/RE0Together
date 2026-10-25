@@ -105,6 +105,8 @@ uintptr_t find(Character character) {
     return 0;
 }
 
+bool linked() { return g_linked; }
+
 bool isHost() { return g_linked && g_localSlot == g_hostSlot; }
 
 uint8_t localSlot() { return g_localSlot; }

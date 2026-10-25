@@ -14,9 +14,9 @@ constexpr float kPictureHeight = 470.0f;
 constexpr float kPictureTop = 150.0f;
 constexpr float kHostLeft = 40.0f;
 constexpr float kGuestRightMargin = 44.0f;
-constexpr float kCaptionTop = 520.0f;
-constexpr float kCaptionLeft = 270.0f;    // the host's captions start here
-constexpr float kCaptionRight = 1010.0f;  // the guest's captions end here
+constexpr float kCaptionTop = 468.0f;   // inside the frame's window, under the rows
+constexpr float kCaptionLeft = 294.0f;    // the host's captions start here, under the row labels
+constexpr float kCaptionRight = 990.0f;   // the guest's captions end here, under the values
 constexpr uint32_t kNameRgb = 0xE6DCC0;
 constexpr uint32_t kDimRgb = 0x7D7764;
 

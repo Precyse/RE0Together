@@ -50,6 +50,19 @@ constexpr Verdict afterLoad(const Order& order, int32_t result, std::optional<ui
     return waitedMs < kFileWaitMs ? Verdict::Retry : Verdict::Fail;
 }
 
+// The launcher's save pick on this title, once per game run: a guest never starts one (it follows the host's start),
+// a host whose link is not up yet waits, and a slot whose bytes are no longer the ones the launcher hashed is skipped.
+enum class LauncherPick : uint8_t { Wait, Start, Skip };
+
+constexpr LauncherPick launcherPick(bool pickActive, bool linked, bool host, std::optional<uint32_t> pickHash,
+                                    std::optional<uint32_t> slotHash) {
+    if (!pickActive) return LauncherPick::Skip;
+    if (!linked) return LauncherPick::Wait;
+    if (!host) return LauncherPick::Skip;
+    if (pickHash && (!slotHash || *slotHash != *pickHash)) return LauncherPick::Skip;
+    return LauncherPick::Start;
+}
+
 // The save manager refused the request (another one runs): try again next frame until kRequestRefusedMs passed.
 constexpr bool requestGivesUp(uint64_t refusedMs) { return refusedMs >= kRequestRefusedMs; }
 

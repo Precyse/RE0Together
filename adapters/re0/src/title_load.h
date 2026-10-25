@@ -2,6 +2,7 @@
 #include <cstdint>
 
 #include "coop_menu_rule.h"
+#include "save_load_rule.h"
 
 // The session load from the title (docs/RE0_NOTES.md "Forced save load"): the host's Start on the Co-op page loads the
 // picked slot and starts it the way the title's Load Game -> Continue does, then tells the guests (SESSION_LOAD); a
@@ -12,6 +13,10 @@ namespace title_load {
 
 // Host: load and start `slot` once the Co-op page has closed.
 void startHost(int32_t slot);
+
+// The save the launcher picked (adapter.ini load_slot / load_hash): the host starts it by itself the first time its main
+// menu is ready, the guests follow as they follow a Start. Call once at start-up.
+void setLauncherPick(const save_load_rule::Order& pick);
 
 // From the title's move, before and after the game's own step; `state` is uGUITitle +0x27c.
 void titleBefore(uintptr_t title, uint32_t state);

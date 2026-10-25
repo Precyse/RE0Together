@@ -8,6 +8,7 @@
 
 #include "crash_dump.h"
 #include "game.h"
+#include "gui_input.h"
 #include "hooks.h"
 #include "log.h"
 #include "native_menu.h"
@@ -22,14 +23,8 @@ using native_menu_rule::PageView;
 using native_menu_rule::Reply;
 
 using FastcallFunction = void(__fastcall*)(void* self, void* edx);
-using CdeclBits = uint32_t(__cdecl*)();
-using CdeclBool = bool(__cdecl*)();
-using CdeclPosition = float*(__cdecl*)(float* out);
-using CdeclSound = void(__cdecl*)(int32_t id);
 
 constexpr size_t kTextBuffer = native_menu_rule::kMaxTextBytes + 1;
-constexpr size_t kPositionFloats = 4;
-constexpr uint32_t kHitTestPrecise = 1;
 
 FastcallFunction g_originalRouter = nullptr;
 FastcallFunction g_originalInput = nullptr;
@@ -69,7 +64,6 @@ void setSequence(uintptr_t instance, int32_t sequence) {
     if (instance) game::callThiscall<void>(game::kInstanceSetSequenceFunction, asPointer(instance), sequence);
 }
 
-void playSound(int32_t id) { reinterpret_cast<CdeclSound>(game::kPlayUiSoundFunction)(id); }
 
 // The row's objects get its text and visibility; only what changed is written (a setString lays the glyphs out again).
 void writeRow(size_t row, const native_menu_rule::RowView& view, bool force) {
@@ -123,24 +117,17 @@ bool loaded() {
 // What the vanilla decide / cancel does (0x5c6be9): the sound, nothing to apply, fade out, state 4; states 4 and 5
 // then close the page and the router hook sees it closed.
 void startClose(int32_t sound) {
-    if (sound) playSound(sound);
+    if (sound) gui_input::playSound(sound);
     game::writeMemory(g_page + game::kPcSetupDecidedOffset, uint16_t{0});
     const uintptr_t fade = game::fadeObject();
     if (fade) game::callThiscall<void>(game::kFadeStartFunction, asPointer(fade), game::kMenuFadeSeconds);
     game::writeMemory(g_page + game::kPcSetupStateOffset, game::kPcSetupStateClosing);
 }
 
-bool hitTest(uintptr_t instance, uintptr_t object, float* position) {
-    return instance && object &&
-           game::callThiscall<bool>(game::kGuiHitTestFunction, asPointer(g_page), instance, object, position, kHitTestPrecise);
+bool hitTest(uintptr_t instance, uintptr_t object, float (&position)[gui_input::kPositionFloats]) {
+    return gui_input::hitTest(g_page, instance, object, position);
 }
 
-uint32_t padMask(uintptr_t offset) {
-    const uintptr_t pad = game::readPointer(game::kGamePadGlobal);
-    uint32_t mask = 0;
-    if (pad) game::readMemory(pad + offset, mask);
-    return mask;
-}
 
 bool subMenuClosing() {
     const uintptr_t subMenu = game::readPointer(game::kSubMenuGlobal);
@@ -150,22 +137,21 @@ bool subMenuClosing() {
 
 // The page's input read as 0x5c6540 reads it: trigger and repeat bits with the key guide's clicks, then the mouse.
 native_menu_rule::Input readInput(const PageView& view) {
-    uint32_t trigger = reinterpret_cast<CdeclBits>(game::kMenuTriggerFunction)();
-    uint32_t repeat = reinterpret_cast<CdeclBits>(game::kMenuRepeatFunction)();
+    uint32_t trigger = gui_input::trigger();
+    uint32_t repeat = gui_input::repeat();
     const uintptr_t manager = field(g_page, game::kPcSetupManagerOffset);
     if (manager) game::callThiscall<void>(game::kOptionMouseInputFunction, asPointer(manager), &trigger, &repeat);
     native_menu_rule::Input input;
-    const bool cancelDown = subMenuClosing() || (trigger & padMask(game::kPadCancelMaskOffset)) != 0;
+    const bool cancelDown = subMenuClosing() || (trigger & gui_input::padMask(game::kPadCancelMaskOffset)) != 0;
     input.cancel = cancelDown && !g_cancelWasDown;  // the sub menu's close request may stay up for frames: one cancel per press
     g_cancelWasDown = cancelDown;
-    input.decide = (trigger & padMask(game::kPadDecideMaskOffset)) != 0;
+    input.decide = (trigger & gui_input::padMask(game::kPadDecideMaskOffset)) != 0;
     input.up = (repeat & game::kRepeatUp) != 0;
     input.down = (repeat & game::kRepeatDown) != 0;
     input.left = (repeat & game::kRepeatLeft) != 0;
     input.right = (repeat & game::kRepeatRight) != 0;
-    if (!reinterpret_cast<CdeclBool>(game::kMouseClickedFunction)()) return input;
-    float position[kPositionFloats] = {};
-    reinterpret_cast<CdeclPosition>(game::kMousePositionFunction)(position);
+    float position[gui_input::kPositionFloats] = {};
+    if (!gui_input::mouseClicked(position)) return input;
     if (native_menu_rule::arrowsShown(*g_menu, view, g_cursor)) {
         if (hitTest(field(g_page, game::kPcSetupArrowLeftOffset), field(g_page, game::kPcSetupArrowLeftTouchOffset), position)) {
             input.clickedArrow = -1;
@@ -204,7 +190,7 @@ void switchMenu(const MenuDef& next) {
 void handle(const Event& event, const PageView& view) {
     if (event.kind == EventKind::Select) {
         if (event.row == g_cursor) return;
-        playSound(game::kSoundMove);
+        gui_input::playSound(game::kSoundMove);
         g_cursor = event.row;
         placeCursor(view);
         return;
@@ -212,7 +198,7 @@ void handle(const Event& event, const PageView& view) {
     const std::string_view target = native_menu_rule::navigation(*g_menu, view, event);
     if (!target.empty()) {
         const MenuDef* next = native_menu::find(target);
-        playSound(next && event.kind != EventKind::Cancel ? game::kSoundDecide : game::kSoundCancel);
+        gui_input::playSound(next && event.kind != EventKind::Cancel ? game::kSoundDecide : game::kSoundCancel);
         if (next) switchMenu(*next);
         return;
     }
@@ -222,7 +208,7 @@ void handle(const Event& event, const PageView& view) {
         return;
     }
     if (reply == Reply::Reject) {
-        playSound(game::kSoundCancel);
+        gui_input::playSound(game::kSoundCancel);
         return;
     }
     if (reply == Reply::Close) {
@@ -230,11 +216,11 @@ void handle(const Event& event, const PageView& view) {
         return;
     }
     if (event.kind == EventKind::Change) {
-        playSound(game::kSoundMove);
+        gui_input::playSound(game::kSoundMove);
         setSequence(field(g_page, event.step < 0 ? game::kPcSetupArrowLeftOffset : game::kPcSetupArrowRightOffset),
                     game::kSequenceHighlight);
     } else {
-        playSound(game::kSoundDecide);
+        gui_input::playSound(game::kSoundDecide);
     }
     show(native_menu::view(*g_menu), false);
 }
@@ -392,7 +378,7 @@ bool enable() {
                           reinterpret_cast<void**>(&g_originalRefresh));
 }
 
-bool openFromTitle(std::string_view menuId) {
+bool openNext(std::string_view menuId) {
     if (g_faulted || !g_originalRouter || g_menu) return false;
     g_pendingMenu = native_menu::find(menuId);
     return g_pendingMenu != nullptr;

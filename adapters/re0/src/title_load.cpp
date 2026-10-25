@@ -4,6 +4,7 @@
 #include <chrono>
 #include <optional>
 
+#include "character_owner.h"
 #include "debug_overlay.h"
 #include "game.h"
 #include "lobby.h"
@@ -32,6 +33,8 @@ int g_tries = 0;
 Clock::time_point g_firstRequest;
 Clock::time_point g_stageSince;
 std::atomic<bool> g_follows{false};
+save_load_rule::Order g_launcherPick;  // set once before the game runs
+bool g_launcherPickDone = false;       // started or skipped: a later main menu (game over, quit) is the player's
 std::atomic<bool> g_busy{false};  // g_order is set (read by the net thread's auto_join)
 
 void setOrder(const Order& order) {
@@ -160,6 +163,29 @@ bool menuSettled() {
            game::callThiscall<bool>(game::kGuiSequenceFinishedFunction, reinterpret_cast<void*>(g_title), kWholeSequence);
 }
 
+// Host: the launcher's pick becomes this title's order the first time the main menu is ready for it.
+void takeLauncherPick() {
+    if (g_launcherPickDone || g_order) return;
+    const std::optional<uint32_t> slotHash = g_launcherPick.active() ? save_blocks::hash(g_launcherPick.slot) : std::nullopt;
+    switch (title_load_rule::launcherPick(g_launcherPick.active(), character_owner::linked(), character_owner::isHost(), g_launcherPick.hash,
+                                          slotHash)) {
+        case title_load_rule::LauncherPick::Wait: return;
+        case title_load_rule::LauncherPick::Skip:
+            g_launcherPickDone = true;
+            if (g_launcherPick.active() && character_owner::isHost()) {
+                logger::write("title_load: the launcher's slot %d changed since it was picked (hash %08x, picked %08x), not started",
+                              g_launcherPick.slot, slotHash.value_or(0), g_launcherPick.hash.value_or(0));
+                debug_overlay::toast("The session's save did not load.", kFailedToastSeconds, toast_queue::Style::Panel);
+            }
+            return;
+        case title_load_rule::LauncherPick::Start:
+            g_launcherPickDone = true;
+            setOrder(Order{g_launcherPick.slot, true, std::nullopt});
+            logger::write("title_load: the launcher's pick, slot %d, starts", g_launcherPick.slot);
+            return;
+    }
+}
+
 // Guest: the host's newest start becomes this title's order; an open Co-op page closes for it.
 void followHost() {
     if (g_order) return;
@@ -176,6 +202,8 @@ void followHost() {
 
 namespace title_load {
 
+void setLauncherPick(const save_load_rule::Order& pick) { g_launcherPick = pick; }
+
 void startHost(int32_t slot) {
     setOrder(Order{slot, true, std::nullopt});
     logger::write("title_load: host start of slot %d", slot);
@@ -188,6 +216,9 @@ void titleBefore(uintptr_t title, uint32_t state) {
         enter(Stage::Idle);
     }
     if (!g_order || !g_order->host) followHost();
+    if (!g_order && g_stage == Stage::Idle && state == title_load_rule::kStateMainMenuInput && !native_page::active() && menuSettled()) {
+        takeLauncherPick();
+    }
     if (!g_order || g_stage == Stage::Started) return;
     if (native_page::active()) native_page::requestClose();
     if (g_stage == Stage::Idle) {

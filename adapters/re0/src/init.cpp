@@ -45,6 +45,7 @@
 #include "pad_commands.h"
 #include "partner_think.h"
 #include "party_mode.h"
+#include "pause_coop.h"
 #include "pickup_guard.h"
 #include "player_damage.h"
 #include "pose_capture.h"
@@ -52,6 +53,7 @@
 #include "protocol.h"
 #include "puppet.h"
 #include "host_exit.h"
+#include "title_load.h"
 #include "rescue.h"
 #include "resync.h"
 #include "save_redirect.h"
@@ -99,6 +101,7 @@ void enableCoop(const Config& config) {
     event_place::enable(g_net);
     if (!event_sync::enable(g_net)) logger::write("adapter: event sync unavailable");
     if (!session_slot::enable(config.loadOrder)) logger::write("adapter: session slot unavailable");
+    title_load::setLauncherPick(config.loadOrder);
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
     command_input::enable();
@@ -122,7 +125,10 @@ void enableCoop(const Config& config) {
     coop_menu::enable();
     if (!config.overlay) logger::write("adapter: overlay off, no Co-op entry on the title");
     else if (!native_page::enable()) logger::write("adapter: native Co-op page unavailable, no Co-op entry on the title");
-    else if (!title_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
+    else {
+        if (!title_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
+        if (!pause_coop::enable()) logger::write("adapter: no Co-op row in the pause menu");
+    }
     if (state_mode::on()) state_mode::enableAll(g_net);
 }
 

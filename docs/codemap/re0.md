@@ -207,6 +207,8 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/ui_textures.cpp, src/ui_textures.h | `coop\ui\*.png` as managed-pool D3D9 textures through WIC, made on the render thread on first use, released with ImGui | `ui_textures::get`, `release` |
 | src/ui_art_files.h | the names of the files in `coop\fonts` and `coop\ui` (the launcher's `UiArt.cs` writes the same names) | `ui_art_files::kFontFolder`, `kArtFolder` |
 | adapters/re0/fonts/ | Cinzel Medium and Bold, Cormorant Garamond Medium Italic (static instances of the Google Fonts variable fonts) and their OFL texts; installed to `coop\fonts` by the profile's folder entry |  |
+| src/pause_coop.cpp, src/pause_coop_rule.h | the pause menu's Co-op row: a cloned Quit Game row, three-row input through uGUIPause's vtable, opens the in-game Co-op page with the world held | `pause_coop::enable`, `pause_coop_rule::step`, `rowY` |
+| src/gui_input.cpp | menu input and sounds as the game's screens read them (trigger, repeat, pad masks, mouse click and hit test, UI sound), shared by native_page and pause_coop | `gui_input::trigger`, `repeat`, `padMask`, `mouseClicked`, `hitTest`, `playSound` |
 | src/log.cpp, src/paths.cpp | `coop/adapter.log`, game/coop dirs | `logger::write`, `writeUnlessRepeated`, `coopDirectory` |
 | tests/proxy_test.cpp | x86 exe: fake 64-slot interface, checks thunk forwarding, overrides, caching |  |
 | tests/enemy_hit_wire_test.cpp | HIT payload layout (80 bytes, offset at 4, HP before and after, random state, class, reaction flag and record last), the point relative to the enemy and rebuilt around the receiver's |  |
@@ -289,5 +291,6 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/toast_rule_test.cpp | x86 exe: fade in, hold, fade out, a life shorter than both |  |
 | tests/gfd_rule_test.cpp | x86 exe: the font layout on a synthetic buffer (header, path, glyph fields, order) and every refusal |  |
 | tests/coop_scene_rule_test.cpp | x86 exe: the saved outfit's default picture, role lines, silhouette pulse, staleness |  |
+| tests/pause_coop_rule_test.cpp | x86 exe: the three rows' layout, wrap, clicks, decide on each row, cancel |  |
 | tests/net_test.cpp | x86 exe driving `NetClient` against a launcher, checks PLAYER_STATE and PAD_FRAME round trips | `--port --seconds --expect-peer` |
 

@@ -52,14 +52,20 @@ inline Summary summarize(std::span<const uint8_t> head) {
     return summary;
 }
 
-// The launcher's label of slot `index` (numbered from 1).
-inline std::string label(int index, const Summary& summary) {
+// Slot `index` (numbered from 1), its difficulty and play time: the label of the Co-op page, whose value box between the
+// arrows has room for these three only.
+inline std::string compactLabel(int index, const Summary& summary) {
     std::string text = "Slot " + std::to_string(index + 1);
     if (summary.difficulty < kDifficulties) text += std::string(" / ") + kDifficultyNames[summary.difficulty];
     char time[24];
     std::snprintf(time, sizeof(time), " / %u:%02u:%02u", summary.playSeconds / kSecondsPerHour,
                   summary.playSeconds / kSecondsPerMinute % kSecondsPerMinute, summary.playSeconds % kSecondsPerMinute);
-    text += time;
+    return text + time;
+}
+
+// The launcher's label of slot `index`: the compact label, then the area (or Cleared) and Wesker.
+inline std::string label(int index, const Summary& summary) {
+    std::string text = compactLabel(index, summary);
     text += summary.cleared ? std::string(" / Cleared") : " / Area " + std::to_string(summary.area);
     if (summary.wesker) text += " / Wesker";
     return text;
