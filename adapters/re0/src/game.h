@@ -516,10 +516,39 @@ constexpr std::array<uintptr_t, 6> kBossRoomVtables = {kBossVtables[0], kBossVta
 // CharPause bit, script op 160; tested at 0x526c7d) is set it runs only slot 31 (motion), the root-motion cancel and
 // slots 18 and 19 (joints, hit shapes) and skips slot 41, the class's update (jump at 0x526d4e).
 constexpr uintptr_t kUnitMoveFunction = 0x526b30;
-// The zombie family's update (slot 41 of uEnemy10/11/12/14/15/16/17/19/1a/50/51/5a/5b/6a/6b) rebuilds the hit capsule
-// every frame from the joints (0x418710, thiscall, no arguments: collision spheres 0 and 1, hit point 0); the observer
-// skips slot 41, so it calls the rebuild itself after the move.
-constexpr uintptr_t kEnemyBaseHitShapeFunction = 0x418710;
+// Each class's update (slot 41) rebuilds its hit shapes every frame from the joints with a builder that only reads the
+// enemy's state and sets hit points and collision spheres (setHitPoint 0x5293a0, setCollisionSphere). The observer skips
+// slot 41, so it runs the builder itself after the move (docs/RE0_NOTES.md "Observed enemies keep their hit shapes").
+// Thiscall, no stack argument, except uEnemy35's, which takes the enemy again (0x46d7df). Not listed: uEnemy2b (only
+// attack points per frame), uEnemy34 (its builder 0x45cbb0 takes an AI field, +0x6ae8, and writes AI state), and the
+// classes that set their shapes once at start (39, 3bRebecca, 44, 45, 46, uEnemyBase).
+struct HitShapeBuilder {
+    uintptr_t update;   // the class's slot 41
+    uintptr_t builder;
+    bool takesSelf;
+};
+constexpr std::array<HitShapeBuilder, 13> kHitShapeBuilders = {{
+    {kEnemyBaseUpdateFunction, 0x418710, false},  // the zombie family (uEnemy10 to 1a, 50, 51, 5a, 5b, 6a, 6b)
+    {0x4d7a90, 0x4d21a0, false},                  // uEnemy2a
+    {0x443610, 0x440790, false},                  // uEnemy2c
+    {0x44d740, 0x44c1b0, false},                  // uEnemy2f
+    {0x453b70, 0x451710, false},                  // uEnemy30
+    {0x45b600, 0x457900, false},                  // uEnemy31
+    {0x46cff0, 0x46bc00, true},                   // uEnemy35
+    {0x4757a0, 0x470720, false},                  // uEnemy37, 38
+    {0x487ce0, 0x483290, false},                  // uEnemy3a, 3e
+    {0x491780, 0x48fa60, false},                  // uEnemy3c
+    {0x49f780, 0x498e00, false},                  // uLeechBase, uEnemy40, 41, 42
+    {0x4b0c40, 0x4a4060, false},                  // uEnemy43
+    {0x4c21e0, 0x4c0650, false},                  // uEnemy47
+}};
+
+constexpr const HitShapeBuilder* hitShapeBuilderFor(uintptr_t update) {
+    for (const HitShapeBuilder& entry : kHitShapeBuilders) {
+        if (entry.update == update) return &entry;
+    }
+    return nullptr;
+}
 constexpr uint32_t kCharPauseBit = 0x1;
 constexpr uintptr_t kEnemyFlags6a0cOffset = 0x6a0c;  // u32, read by the player's aim filter and weapon hit path 0x52f520
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC

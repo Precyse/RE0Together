@@ -93,6 +93,19 @@ void testUnknownVtableIsNeverReplicated() {
 
 }  // namespace
 
+void testHitShapeBuilders() {
+    const game::HitShapeBuilder* const zombie = game::hitShapeBuilderFor(game::kEnemyBaseUpdateFunction);
+    check(zombie && zombie->builder == 0x418710 && !zombie->takesSelf, "the zombie family rebuilds its capsule with 0x418710");
+    const game::HitShapeBuilder* const enemy35 = game::hitShapeBuilderFor(0x46cff0);
+    check(enemy35 && enemy35->takesSelf, "uEnemy35's builder takes the enemy again");
+    check(game::hitShapeBuilderFor(0x4392a0) == nullptr, "uEnemy2b has no per-frame body shape builder");
+    for (size_t i = 0; i < game::kHitShapeBuilders.size(); ++i) {
+        for (size_t j = i + 1; j < game::kHitShapeBuilders.size(); ++j) {
+            check(game::kHitShapeBuilders[i].update != game::kHitShapeBuilders[j].update, "one builder per update");
+        }
+    }
+}
+
 int main() {
     testEveryClassIsClassified();
     testLegacyAndNativeSetsAreExact();
@@ -100,6 +113,7 @@ int main() {
     testWireIndexIsTheGameOrder();
     testOnlyRebeccaLacksASetAction();
     testUnknownVtableIsNeverReplicated();
+    testHitShapeBuilders();
     if (g_failures == 0) std::printf("enemy_policy_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

@@ -86,9 +86,15 @@ void reassert(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
 
 void refreshHitShapes(uintptr_t enemy) {
     const uintptr_t vtable = game::readPointer(enemy);
-    if (!vtable || game::readPointer(vtable + game::kEnemyUpdateSlot * sizeof(uint32_t)) != game::kEnemyBaseUpdateFunction) return;
+    const game::HitShapeBuilder* const entry =
+        vtable ? game::hitShapeBuilderFor(game::readPointer(vtable + game::kEnemyUpdateSlot * sizeof(uint32_t))) : nullptr;
+    if (!entry) return;
     __try {
-        game::callThiscall<void>(game::kEnemyBaseHitShapeFunction, reinterpret_cast<void*>(enemy));
+        if (entry->takesSelf) {
+            game::callThiscall<void>(entry->builder, reinterpret_cast<void*>(enemy), enemy);
+        } else {
+            game::callThiscall<void>(entry->builder, reinterpret_cast<void*>(enemy));
+        }
     } __except (crash_dump::reportCaught(GetExceptionInformation(), "enemy_observer: hit shapes")) {
     }
 }

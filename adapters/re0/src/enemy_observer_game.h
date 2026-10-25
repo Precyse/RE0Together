@@ -24,7 +24,7 @@ void place(uintptr_t enemy, const float (&pos)[3], const float (&quat)[4], int32
 void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown);
 
 // Rebuilds the enemy's hit shapes from its joints the way its own update would (the observer skips that update), for
-// the classes whose rebuild is known (game::kEnemyBaseHitShapeFunction); others are left as they are.
+// the classes with a known builder (game::kHitShapeBuilders); others are left as they are.
 void refreshHitShapes(uintptr_t enemy);
 
 // Puts back only what a hit test reads (HP and +0x6a0c) after the enemy's move changed it; position, record and motion
