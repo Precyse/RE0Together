@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "net_client.h"
+#include "partner_status.h"
 
 // Shared status registry for the debug overlay. Modules write from any thread; the overlay only reads.
 namespace debug_stats {
@@ -160,9 +161,9 @@ void noteCallbackRearmed(const char* name);
 // printf-style; also the text shown by the overlay.
 void setError(const char* format, ...);
 
-// The partner status line the overlay always shows (empty: nothing to show).
-void setPartnerLine(const std::string& line);
-std::string partnerLine();
+// The partner tag the overlay always shows (an empty name: nothing to show).
+void setPartnerTag(const partner_status::Tag& tag);
+partner_status::Tag partnerTag();
 
 // The loaded room's enemy authority as the overlay shows it, "here e3" / "peer e3" / "none e3" (empty: not tracked).
 void setRoomAuthorityLine(const std::string& line);

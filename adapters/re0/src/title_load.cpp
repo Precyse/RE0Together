@@ -64,7 +64,7 @@ void setTitleState(uint32_t state) { game::writeMemory(g_title + game::kTitleSta
 
 void fail(const char* why) {
     logger::write("title_load: slot %d not started (%s), the main menu is back", g_order->slot, why);
-    debug_overlay::toast("The session's save did not load", kFailedToastSeconds);
+    debug_overlay::toast("The session's save did not load.", kFailedToastSeconds, toast_queue::Style::Panel);
     clearOrder();
     enter(Stage::Idle);
     setTitleState(title_load_rule::kStateMainMenuOpen);

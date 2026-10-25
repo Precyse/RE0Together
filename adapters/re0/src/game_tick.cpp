@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "crash_dump.h"
-#include "debug_overlay.h"
 #include "debug_stats.h"
 #include "game.h"
 #include "hooks.h"
@@ -17,7 +16,6 @@
 
 namespace {
 
-constexpr float kStoppedToastSeconds = 5.0f;
 constexpr size_t kTextLength = 96;
 
 struct Registered {
@@ -91,9 +89,6 @@ void stop(const char* name, bool& disabled) {
     debug_stats::noteCallbackDisabled(name);
     debug_stats::setError("callback %s raised an exception", name);
     logger::write("game_tick: '%s' disabled until the next resync", name);
-    char text[kTextLength];
-    snprintf(text, sizeof(text), "Sync stopped: %s", name);
-    debug_overlay::toast(text, kStoppedToastSeconds);
 }
 
 void rearm(const char* name, bool& disabled) {

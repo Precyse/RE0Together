@@ -51,6 +51,7 @@
 #include "prop_sync.h"
 #include "protocol.h"
 #include "puppet.h"
+#include "host_exit.h"
 #include "rescue.h"
 #include "resync.h"
 #include "save_redirect.h"
@@ -102,6 +103,7 @@ void enableCoop(const Config& config) {
     enemy_state::enable(g_net);
     command_input::enable();
     rescue::enable();
+    host_exit::enable();
     pad_commands::install();
     party_mode::enable(g_net);
     camera_parity::enable();

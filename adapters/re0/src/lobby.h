@@ -1,5 +1,6 @@
 #pragma once
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -49,5 +50,11 @@ void announceStart(int32_t slot, uint32_t slotHash);
 std::optional<lobby_wire::SessionLoad> takeStart();
 
 View view();
+
+// Any thread: a partner announced a fresh presence that says it is loading the session.
+bool partnerLoading();
+
+// Any thread: the lobby name of the player in `slot`, empty when the lobby has none.
+std::string nameOf(uint8_t slot);
 
 }  // namespace lobby

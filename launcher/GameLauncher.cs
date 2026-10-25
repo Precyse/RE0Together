@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CoopLauncher.Gui;
 
 namespace CoopLauncher;
 
@@ -68,6 +69,7 @@ public static class GameLauncher
             Log.Info($"The {profile.Name} mod is not installed, install it from the launcher first");
             return LaunchResult.ModNotInstalled;
         }
+        if (gameDir != null) RefreshUiArt(profile, gameDir);
         Log.Info($"Starting {profile.Name} via Steam");
         try
         {
@@ -78,6 +80,19 @@ public static class GameLauncher
         {
             Log.Info($"Could not start {profile.Name} through Steam: {e.Message}");
             return LaunchResult.SteamStartFailed;
+        }
+    }
+
+    /// <summary>The art the overlay draws is taken from the game folder before every start; a failure only leaves the overlay plainer.</summary>
+    private static void RefreshUiArt(GameProfile profile, string gameDir)
+    {
+        try
+        {
+            UiArt.Refresh(profile, gameDir);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not write the {profile.Name} UI art: {e.Message}");
         }
     }
 }

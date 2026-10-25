@@ -3,6 +3,9 @@ import { play, clear } from './motion.js';
 import { icon } from './icons.js';
 
 const ARROW_WIDTH = 10;
+const MENU_GAP = 2;          // between the trigger and the menu, as in base.css
+const MENU_MAX_HEIGHT = 240;  // base.css .select-menu
+const VIEW_MARGIN = 8;        // kept free between the menu and the window's edge
 
 /**
  * A painted dropdown: trigger plus a menu that opens with the menu-dropdown recipe. Keyboard: Up / Down / Enter / Space open it, Up / Down move,
@@ -23,12 +26,23 @@ export function createDropdown({ label, onSelect }) {
     [...menu.children].forEach((option, index) => toggle(option, 'highlight', index === highlight));
   }
 
+  /** Opens the menu below the trigger, or above it when there is more room there, never past the window's edge. */
+  function placeMenu() {
+    const box = trigger.getBoundingClientRect();
+    const below = window.innerHeight - box.bottom - MENU_GAP - VIEW_MARGIN;
+    const above = box.top - MENU_GAP - VIEW_MARGIN;
+    const up = below < Math.min(menu.scrollHeight, MENU_MAX_HEIGHT) && above > below;
+    toggle(menu, 'up', up);
+    menu.style.maxHeight = `${Math.min(MENU_MAX_HEIGHT, Math.max(0, up ? above : below))}px`;
+  }
+
   function openMenu() {
     if (open || trigger.disabled) return;
     open = true;
     highlight = Math.max(0, items.findIndex((item) => item.value === value));
     clear(menu, 'dropdown-out');
     menu.hidden = false;
+    placeMenu();
     paintHighlight();
     play(menu, 'dropdown-in');
     trigger.setAttribute('aria-expanded', 'true');

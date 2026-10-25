@@ -73,7 +73,7 @@ bool mayFinish(uint16_t here) {
     if (verdict == room_gate_rule::Verdict::Hold) {
         if (!g_waitingShown && room_gate_rule::showsWaiting(held)) {
             g_waitingShown = true;
-            debug_overlay::toast("Waiting for partner", kWaitingToastSeconds);
+            debug_overlay::toast("Waiting for partner.", kWaitingToastSeconds, toast_queue::Style::Line);
         }
         return false;
     }

@@ -184,6 +184,9 @@ constexpr std::array<uint8_t, 14> kPhaseManagerPopBytes = {0xff, 0x49, 0x3c, 0x8
 // sRoomControl::requestPhase: thiscall (phase), ret 4. The vanilla V requests Change (9), which zaps to the partner
 // and loads its room when the two are apart (player think 0x4fed48 / 0x50395e).
 constexpr uintptr_t kRequestRoomPhaseFunction = 0x610e00;
+// u8: 1 before room phase Exit (sGameOver::update 0x5ae775) makes cRoomPhaseExit 0x608820 open the title at its main menu
+// (state 0x1f, logos and Press Start skipped); 0xdcc130 is the pause menu's quit, which starts at Press Start.
+constexpr uintptr_t kExitToTitleMenuFlag = 0xdcc131;
 // sDoorLoad::start: thiscall (room, entry, a, b, flag), ret 0x14. Every room change starts here: it plays the door,
 // counts down and then calls sRoomControl::changeRoom (0x610c60), which carries the partner when sPlayer +0x40 is set
 // and partner +0xff4 equals the scene's current room record.

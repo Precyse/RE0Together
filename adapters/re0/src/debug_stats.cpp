@@ -41,7 +41,7 @@ std::string g_lastCommand;
 Clock::time_point g_commandTime;
 std::string g_lastDecision;
 Clock::time_point g_decisionTime;
-std::string g_partnerLine;
+partner_status::Tag g_partnerTag;
 std::string g_roomAuthorityLine;
 Clock::time_point g_windowStart = Clock::now();
 std::array<uint32_t, kCounterCount> g_windowBase{};
@@ -105,14 +105,14 @@ void setLastDecision(const char* text) {
     g_decisionTime = Clock::now();
 }
 
-void setPartnerLine(const std::string& line) {
+void setPartnerTag(const partner_status::Tag& tag) {
     std::lock_guard lock(g_mutex);
-    g_partnerLine = line;
+    g_partnerTag = tag;
 }
 
-std::string partnerLine() {
+partner_status::Tag partnerTag() {
     std::lock_guard lock(g_mutex);
-    return g_partnerLine;
+    return g_partnerTag;
 }
 
 void setRoomAuthorityLine(const std::string& line) {

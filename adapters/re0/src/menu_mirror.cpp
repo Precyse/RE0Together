@@ -5,6 +5,9 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <optional>
+#include <string>
+#include <utility>
 
 #include "character_owner.h"
 #include "debug_overlay.h"
@@ -15,11 +18,15 @@
 #include "hooks.h"
 #include "inventory_sync.h"
 #include "live_menus.h"
+#include "lobby.h"
 #include "log.h"
 #include "menu_hold_rule.h"
 #include "net_pad.h"
 #include "protocol.h"
+#include "pose_wire.h"
 #include "split_rooms.h"
+#include "wait_notice.h"
+#include "wait_notice_rule.h"
 
 namespace {
 
@@ -35,6 +42,9 @@ menu_mirror::MenuState g_lastSent{};  // net thread only
 Clock::time_point g_lastSend;
 
 bool g_frozen = false;  // game thread only
+bool g_inGame = false;               // game thread: a character is controlled
+uint32_t g_inGameSinceMs = 0;        // game thread: when it last became so
+bool g_pausedByPeer = false;         // game thread: the current freeze is a partner's screen
 
 using character_owner::Character;
 using UpdateAllFunction = void(__fastcall*)(void* self, void* edx);
@@ -43,21 +53,53 @@ UpdateAllFunction g_originalUpdateAll = nullptr;
 OpenFunction g_originalOpen = nullptr;
 Character g_focusBeforeMenu = Character::Unknown;  // game thread: focus to give back when the menu closes
 
-bool anyPeerMenu(bool (*test)(const menu_hold_rule::PeerMenu&, menu_hold_rule::Clock::time_point)) {
+// The first peer whose screen passes `test`, with its slot.
+std::optional<std::pair<uint8_t, menu_hold_rule::PeerMenu>> peerWhere(bool (*test)(const menu_hold_rule::PeerMenu&,
+                                                                                     menu_hold_rule::Clock::time_point)) {
     const auto now = Clock::now();
     std::lock_guard lock(g_mutex);
     for (const auto& [slot, menu] : g_peerMenus) {
-        if (test(menu, now)) return true;
+        if (test(menu, now)) return std::make_pair(slot, menu);
     }
-    return false;
+    return std::nullopt;
+}
+
+bool anyPeerMenu(bool (*test)(const menu_hold_rule::PeerMenu&, menu_hold_rule::Clock::time_point)) {
+    return peerWhere(test).has_value();
 }
 
 void setFrozen(bool frozen) {
     g_frozen = frozen;
     debug_stats::set(debug_stats::Gauge::WorldFrozen, frozen);
     if (frozen) debug_stats::count(debug_stats::Counter::MenuFreezes);
-    debug_overlay::toast(frozen ? "Waiting for partner" : "Resumed", kToastSeconds);
+    if (!frozen && g_pausedByPeer) debug_overlay::toast("Resumed.", kToastSeconds, toast_queue::Style::Line);
+    if (!frozen) wait_notice::clear();
     logger::write("menu_mirror: world %s", frozen ? "frozen" : "resumed");
+}
+
+// Milliseconds this game has had a controlled character, 0 while it has none.
+uint32_t inGameMs() {
+    const bool inGame = game::controlled() != 0;
+    if (inGame && !g_inGame) g_inGameSinceMs = pose_wire::clockMs();
+    g_inGame = inGame;
+    return inGame ? pose_wire::clockMs() - g_inGameSinceMs : 0;
+}
+
+// Why the world waits for a partner now, with the notice that says so; Notice::None when it does not.
+wait_notice_rule::Notice waitReason(std::string& text) {
+    using wait_notice_rule::Notice;
+    const uint32_t playedMs = inGameMs();
+    if (split_rooms::apart() || live_menus::localScreen() == live_menu_rule::Screen::Holding) return Notice::None;
+    if (const auto peer = peerWhere(menu_hold_rule::holds)) {
+        const Notice notice = wait_notice_rule::holdNotice(peer->second.phase);
+        text = wait_notice_rule::text(notice, lobby::nameOf(peer->first));
+        return notice;
+    }
+    if (wait_notice_rule::loadHolds(lobby::partnerLoading(), playedMs)) {
+        text = wait_notice_rule::text(Notice::PartnerLoading, {});
+        return Notice::PartnerLoading;
+    }
+    return Notice::None;
 }
 
 // Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze. A peer in another room
@@ -65,8 +107,13 @@ void setFrozen(bool frozen) {
 // already stops it.
 void __fastcall updateAllDetour(void* self, void* edx) {
     live_menus::onUnitUpdate();
-    const bool freeze = anyPeerMenu(menu_hold_rule::holds) && !split_rooms::apart() &&
-                        live_menus::localScreen() != live_menu_rule::Screen::Holding;
+    std::string text;
+    const wait_notice_rule::Notice reason = waitReason(text);
+    const bool freeze = reason != wait_notice_rule::Notice::None;
+    if (freeze) {
+        g_pausedByPeer = reason != wait_notice_rule::Notice::PartnerLoading;
+        wait_notice::show(reason, std::move(text));
+    }
     if (freeze != g_frozen) setFrozen(freeze);
     if (freeze) return;
     g_originalUpdateAll(self, edx);

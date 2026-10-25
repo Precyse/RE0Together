@@ -151,7 +151,7 @@ bool routeSave(SaveRequestFn original, void* self, void* edx, int32_t slot, int3
                                                net_pad::active());
     if (route == session_rule::SaveRoute::Refuse) {
         logger::writeUnlessRepeated("session_slot: guest save of slot %d refused", slot);
-        debug_overlay::toast("Only the host can save", kRefusedToastSeconds);
+        debug_overlay::toast("Only the host can save the game.", kRefusedToastSeconds, toast_queue::Style::Panel);
         return false;
     }
     const bool coop = route == session_rule::SaveRoute::CoopSlot;

@@ -9,7 +9,7 @@ namespace CoopLauncher.Gui;
 /// PNG cache in <see cref="AppData.ArtDir"/>. The game's files are only read.</summary>
 internal static class OutfitArt
 {
-    private const int ArtFormatVersion = 1;
+    private const int ArtFormatVersion = 2;
     private const string ValueToken = "{value}";
     private const string DlcFolder = "DLC";
     private const string DlcCostumeFolders = "costume_*";
@@ -43,16 +43,28 @@ internal static class OutfitArt
     /// <see cref="ArgumentException"/>.</summary>
     public static Bitmap? Load(GameProfile game, string gameDir, OptionValue value)
     {
+        if (PlanOf(game, gameDir, value) is not { } plan) return null;
+        if (ReadCached(plan.CachePath) is { } hit) return hit;
+
+        var body = MtArc.ReadEntry(plan.Arc, plan.Texture) ?? throw new InvalidDataException($"{Path.GetFileName(plan.Arc)} has no {plan.Texture}");
+        var picture = Shape(MtTexture.Decode(body), plan.Source);
+        var bitmap = AvatarPixels.ToBitmap(picture.Bgra, picture.Width, picture.Height);
+        Store(bitmap, plan.CachePath, value.Value);
+        return bitmap;
+    }
+
+    /// <summary>The cache file of an outfit's picture (named by <see cref="CacheKey"/>, so it changes when the game file does);
+    /// null when the value has no picture. The file exists once <see cref="Load"/> has returned a picture.</summary>
+    public static string? CachePath(GameProfile game, string gameDir, OptionValue value) => PlanOf(game, gameDir, value)?.CachePath;
+
+    private sealed record Plan(ArtSource Source, string Arc, string Texture, string CachePath);
+
+    private static Plan? PlanOf(GameProfile game, string gameDir, OptionValue value)
+    {
         if (value.Value.Length == 0 || (value.Art ?? game.OutfitArt) is not { } source || Locate(gameDir, source, value) is not { } arc) return null;
         var texture = source.Texture.Replace(ValueToken, value.Value);
         var cached = Path.Combine(AppData.ArtDir, game.Id, $"{value.Value}-{CacheKey(gameDir, arc, source, texture):x8}{CacheExtension}");
-        if (ReadCached(cached) is { } hit) return hit;
-
-        var body = MtArc.ReadEntry(arc, texture) ?? throw new InvalidDataException($"{Path.GetFileName(arc)} has no {texture}");
-        var picture = Shape(MtTexture.Decode(body), source);
-        var bitmap = AvatarPixels.ToBitmap(picture.Bgra, picture.Width, picture.Height);
-        Store(bitmap, cached, value.Value);
-        return bitmap;
+        return new Plan(source, arc, texture, cached);
     }
 
     /// <summary>The picture's shape in one colour: its transparency filled with <paramref name="fill"/>.</summary>
@@ -102,7 +114,8 @@ internal static class OutfitArt
         return Cut(texture, left, 0, Math.Min(texture.Width, last + 1 + TrimMargin) - left, texture.Height);
     }
 
-    private static DecodedTexture Crop(DecodedTexture texture, IReadOnlyList<int> crop)
+    /// <summary>The part (x, y, width, height) of a texture; a crop outside it throws <see cref="InvalidDataException"/>.</summary>
+    public static DecodedTexture Crop(DecodedTexture texture, IReadOnlyList<int> crop)
     {
         if (crop.Count != CropFields || crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0
             || crop[0] + crop[2] > texture.Width || crop[1] + crop[3] > texture.Height)
@@ -142,10 +155,16 @@ internal static class OutfitArt
     /// file or a changed way of taking the picture makes a new file. FNV-1a, 32 bit.</summary>
     private static uint CacheKey(string gameDir, string arc, ArtSource source, string texture)
     {
-        var info = new FileInfo(arc);
         var crop = source.Crop == null ? string.Empty : string.Join(',', source.Crop);
-        var text = $"{Path.GetRelativePath(gameDir, arc)}|{info.Length}|{info.LastWriteTimeUtc.Ticks}|{texture}|{crop}|{source.Feather}|{ArtFormatVersion}";
-        return Fnv1a.Hash(System.Text.Encoding.UTF8.GetBytes(text));
+        return ArchiveKey(gameDir, arc, $"{texture}|{crop}|{source.Feather}|{ArtFormatVersion}");
+    }
+
+    /// <summary>The key of something taken from an archive: its place, size and write time with <paramref name="detail"/> (what is
+    /// taken and how), so a changed game file or a changed way of taking it makes a new key. FNV-1a, 32 bit.</summary>
+    public static uint ArchiveKey(string gameDir, string arc, string detail)
+    {
+        var info = new FileInfo(arc);
+        return Fnv1a.Hash(System.Text.Encoding.UTF8.GetBytes($"{Path.GetRelativePath(gameDir, arc)}|{info.Length}|{info.LastWriteTimeUtc.Ticks}|{detail}"));
     }
 
     /// <summary>The cached picture, or null when there is none or the file is not a picture (it is then made again).</summary>

@@ -22,9 +22,11 @@ enum class RowKind : uint8_t {
     Info,    // text only, never under the cursor
     Choice,  // left / right change its value
     Action,  // confirm runs it
+    Link,    // confirm opens the menu named by its action (no handler)
 };
 
-// A row of a menu definition: its id and the id of the registered action that receives its events (empty: none).
+// A row of a menu definition: its id and the id of the registered action that receives its events (empty: none); a Link
+// row's action is the id of the menu it opens.
 struct RowDef {
     std::string_view id;
     RowKind kind;
@@ -36,6 +38,7 @@ struct MenuDef {
     std::string_view action;  // receives Opened, Cancel and Closed
     std::array<RowDef, kMaxRows> rows;
     size_t count;
+    std::string_view parent = {};  // the menu cancel returns to (empty: cancel closes the page)
 };
 
 // What a row shows this frame, from the menu's view source.
@@ -142,19 +145,41 @@ inline bool allowed(const MenuDef& menu, const PageView& view, const Event& even
         case EventKind::Change:
         case EventKind::Confirm: {
             if (!selectable(menu, view, event.row)) return false;
-            const RowKind wanted = event.kind == EventKind::Change ? RowKind::Choice : RowKind::Action;
-            return menu.rows[static_cast<size_t>(event.row)].kind == wanted && !view.rows[static_cast<size_t>(event.row)].locked;
+            const RowKind kind = menu.rows[static_cast<size_t>(event.row)].kind;
+            const bool fits = event.kind == EventKind::Change ? kind == RowKind::Choice : kind == RowKind::Action || kind == RowKind::Link;
+            return fits && !view.rows[static_cast<size_t>(event.row)].locked;
         }
     }
     return false;
 }
 
+// The menu an event leads to, or empty: a confirm on a Link row opens the menu it names, a cancel on a menu with a parent
+// returns to it. Such an event is the page's own: no action receives it.
+inline std::string_view navigation(const MenuDef& menu, const PageView& view, const Event& event) {
+    if (event.kind == EventKind::Cancel) return menu.parent;
+    if (event.kind != EventKind::Confirm || !allowed(menu, view, event)) return {};
+    const RowDef& row = menu.rows[static_cast<size_t>(event.row)];
+    return row.kind == RowKind::Link ? row.action : std::string_view{};
+}
+
+// The row of `menu` that links to the menu `target`, or -1: the cursor's place when that menu is left for this one.
+inline int linkRow(const MenuDef& menu, std::string_view target) {
+    for (size_t row = 0; row < menu.count; ++row) {
+        if (menu.rows[row].kind == RowKind::Link && menu.rows[row].action == target) return static_cast<int>(row);
+    }
+    return -1;
+}
+
 // The action that receives an event: the row's for Change and Confirm, the menu's for Opened, Cancel and Closed, none
-// for Select (the page moves the cursor itself).
+// for Select (the page moves the cursor itself) and none for a Link row.
 inline std::string_view actionOf(const MenuDef& menu, const Event& event) {
     switch (event.kind) {
         case EventKind::Change:
-        case EventKind::Confirm: return rowExists(menu, event.row) ? menu.rows[static_cast<size_t>(event.row)].action : "";
+        case EventKind::Confirm: {
+            if (!rowExists(menu, event.row)) return "";
+            const RowDef& row = menu.rows[static_cast<size_t>(event.row)];
+            return row.kind == RowKind::Link ? std::string_view{} : row.action;
+        }
         case EventKind::Select: return "";
         default: return menu.action;
     }

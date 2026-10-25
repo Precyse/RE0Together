@@ -40,6 +40,10 @@ public sealed record BridgeCondition(string Key, string Value);
 /// fade out.</summary>
 public sealed record ArtSource(string Arc, string Texture, List<int>? Crop = null, int Feather = 0);
 
+/// <summary>Where the game's own UI art for the in-game overlay is in the game folder: the archive holding the message font's
+/// texture and layout (<see cref="Gui.UiArt"/> writes them to coop/ui at launch) and the archive and texture of the dialog panel.</summary>
+public sealed record UiArtSource(string FontArc, string FontTexture, string FontGfd, string DialogArc, string DialogTexture);
+
 /// <summary>One value of a game option. A value with a DlcAppId is offered only when the game folder holds that DLC. Art
 /// replaces the profile's OutfitArt for this value. A value of the character option may name the character in full (FullName) and
 /// the unit it belongs to (Unit), which the player cards show.</summary>
@@ -72,8 +76,9 @@ public sealed record GameProfile(
     List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
     SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
-    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null)
+    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null, UiArtSource? UiArt = null)
 {
+    // UiArt: the game art the in-game overlay draws, taken from the player's own install at launch.
     // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").
     // SaveIndex: where the save slots are (a game whose save file the launcher can list; the host picks a slot to load at launch).
 

@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 
+#include "toast_queue.h"
+
 // In-game status panel drawn with Dear ImGui (DX9 backend, no input) from inside IDirect3DDevice9::EndScene.
 // Reads debug_stats only, never game memory. Nothing ImGui-related exists until the panel or a toast is first shown.
 namespace debug_overlay {
@@ -21,7 +23,8 @@ bool disabled();
 
 void setVisible(bool visible);
 
-// Shows a message top-center for `seconds` even while the panel is hidden. Callable from any thread.
-void toast(const char* text, float seconds);
+// Shows a banner for `seconds` even while the panel is hidden: a line of text at the bottom, or on the panel at the top for
+// an important message (toast_queue::Style). Callable from any thread.
+void toast(const char* text, float seconds, toast_queue::Style style);
 
 }  // namespace debug_overlay

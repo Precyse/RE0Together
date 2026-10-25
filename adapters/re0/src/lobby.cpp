@@ -208,6 +208,22 @@ std::optional<lobby_wire::SessionLoad> takeStart() {
     return load;
 }
 
+bool partnerLoading() {
+    std::lock_guard lock(g_mutex);
+    for (const Received& received : g_received) {
+        if (Clock::now() - received.at <= kPresenceStale && received.presence.place == static_cast<uint8_t>(Place::Loading)) return true;
+    }
+    return false;
+}
+
+std::string nameOf(uint8_t slot) {
+    std::lock_guard lock(g_mutex);
+    for (const lobby_wire::Member& member : g_state.members) {
+        if (member.slot == slot) return member.name;
+    }
+    return {};
+}
+
 View view() {
     View out;
     std::lock_guard lock(g_mutex);

@@ -30,6 +30,10 @@ target_include_directories(imgui PUBLIC ${IMGUI_DIR})
 
 set(NET_SOURCES src/net_client.cpp src/debug_stats.cpp src/log.cpp src/paths.cpp)
 
+# The in-game HUD the overlay draws: the game's art and font (WIC textures), the shipped typefaces and the parts that use them.
+set(HUD_SOURCES src/ui_textures.cpp src/gfd_text.cpp src/hud_text.cpp src/hud_partner.cpp src/hud_notice.cpp src/hud_banner.cpp
+    src/hud_coop_scene.cpp src/coop_scene.cpp)
+
 # DS2's pure authority table, compiled as is; its headers need DS2's src beside this adapter's own.
 set(DS2_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ds2/src)
 set(DS2_AUTHORITY_SOURCES ${DS2_SRC_DIR}/authority.cpp ${DS2_SRC_DIR}/reject_counters.cpp)
@@ -145,10 +149,13 @@ add_library(re0_adapter SHARED
     src/debug_lines.cpp
     src/debug_overlay.cpp
     src/toast_queue.cpp
+    src/wait_notice.cpp
+    src/host_exit.cpp
+    ${HUD_SOURCES}
     dinput8.def)
 set_target_properties(re0_adapter PROPERTIES OUTPUT_NAME dinput8 PREFIX "")
 target_include_directories(re0_adapter PRIVATE src ${DS2_SRC_DIR})
-target_link_libraries(re0_adapter PRIVATE minhook imgui ws2_32 dbghelp)
+target_link_libraries(re0_adapter PRIVATE minhook imgui ws2_32 dbghelp windowscodecs ole32)
 add_custom_command(TARGET re0_adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:re0_adapter> ${CMAKE_CURRENT_SOURCE_DIR}/dinput8.dll)
 
@@ -164,9 +171,9 @@ add_executable(settled_copy_test tests/settled_copy_test.cpp)
 add_executable(floor_pending_test tests/floor_pending_test.cpp src/floor_pending.cpp)
 
 add_executable(overlay_test tests/overlay_test.cpp src/d3d9_hook.cpp
-    src/debug_lines.cpp src/debug_overlay.cpp src/toast_queue.cpp src/title_label.cpp src/hooks.cpp src/window_focus.cpp
-    src/crash_dump.cpp src/game_tick.cpp src/slow_frame.cpp ${NET_SOURCES})
-target_link_libraries(overlay_test PRIVATE minhook imgui d3d9 ws2_32 dbghelp)
+    src/debug_lines.cpp src/debug_overlay.cpp src/toast_queue.cpp src/wait_notice.cpp src/title_label.cpp src/hooks.cpp src/window_focus.cpp
+    src/crash_dump.cpp src/game_tick.cpp src/slow_frame.cpp ${HUD_SOURCES} ${NET_SOURCES})
+target_link_libraries(overlay_test PRIVATE minhook imgui d3d9 ws2_32 dbghelp windowscodecs ole32)
 
 add_executable(command_rules_test tests/command_rules_test.cpp src/key_config.cpp)
 
@@ -197,7 +204,17 @@ add_executable(menu_hold_rule_test tests/menu_hold_rule_test.cpp)
 
 add_executable(live_menu_rule_test tests/live_menu_rule_test.cpp)
 
+add_executable(wait_notice_rule_test tests/wait_notice_rule_test.cpp)
+target_include_directories(wait_notice_rule_test PRIVATE src)
 add_executable(partner_status_test tests/partner_status_test.cpp src/partner_status.cpp)
+
+add_executable(partner_tag_rule_test tests/partner_tag_rule_test.cpp)
+
+add_executable(toast_rule_test tests/toast_rule_test.cpp)
+
+add_executable(gfd_rule_test tests/gfd_rule_test.cpp)
+
+add_executable(coop_scene_rule_test tests/coop_scene_rule_test.cpp)
 
 add_executable(gui_text_rule_test tests/gui_text_rule_test.cpp)
 
@@ -321,6 +338,6 @@ add_executable(rescue_rule_test tests/rescue_rule_test.cpp)
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test save_load_rule_test menu_hold_rule_test live_menu_rule_test partner_status_test gui_text_rule_test title_coop_rule_test title_label_rule_test native_menu_rule_test coop_menu_rule_test lobby_wire_test save_index_rule_test title_load_rule_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test world_epoch_rule_test flag_load_hold_rule_test room_authority_test weapon_fx_wire_test weapon_fx_sites_test weapon_fx_matrix_test enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test item_ledger_test item_wire_test prop_rule_test prop_wire_test room_move_wire_test room_move_rule_test slow_frame_test contact_rule_test enemy_lease_rule_test enemy_lease_wire_test hit_fx_wire_test demo_skip_test boss_wire_test boss_handover_test session_ready_test join_extras_test save_gate_rule_test hang_rule_test dev_command_rule_test world_digest_test rescue_rule_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test save_load_rule_test menu_hold_rule_test live_menu_rule_test partner_status_test partner_tag_rule_test toast_rule_test gfd_rule_test coop_scene_rule_test wait_notice_rule_test gui_text_rule_test title_coop_rule_test title_label_rule_test native_menu_rule_test coop_menu_rule_test lobby_wire_test save_index_rule_test title_load_rule_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test world_epoch_rule_test flag_load_hold_rule_test room_authority_test weapon_fx_wire_test weapon_fx_sites_test weapon_fx_matrix_test enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test item_ledger_test item_wire_test prop_rule_test prop_wire_test room_move_wire_test room_move_rule_test slow_frame_test contact_rule_test enemy_lease_rule_test enemy_lease_wire_test hit_fx_wire_test demo_skip_test boss_wire_test boss_handover_test session_ready_test join_extras_test save_gate_rule_test hang_rule_test dev_command_rule_test world_digest_test rescue_rule_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

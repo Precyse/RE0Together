@@ -96,14 +96,14 @@ void release() {
     event_sync::releaseHeldPause(event_sync::PauseRelease::Rescue);
     logger::write("rescue: released (followed %u, event phase %s, demo %s, pause bits 0x%x, menu hold %s)", followed,
                   popped ? "popped" : "-", skipped ? "skipped" : "-", bits, g_menuHoldDropped.exchange(false) ? "dropped" : "-");
-    debug_overlay::toast("Rescue: freed", kToastSeconds);
+    debug_overlay::toast("Rescue: freed.", kToastSeconds, toast_queue::Style::Line);
 }
 
 // Step 1: the door that led into the room runs again for the own character.
 void reload(const door_sync::DoorChange& change) {
     logger::write("rescue: reloading scene 0x%02x through entry %u", static_cast<unsigned>(change.room), change.entry);
     door_sync::runRescue(change);
-    debug_overlay::toast("Rescue: room reloaded", kToastSeconds);
+    debug_overlay::toast("Room reloaded.", kToastSeconds, toast_queue::Style::Line);
 }
 
 void onPress() {
@@ -125,7 +125,7 @@ void onPress() {
     } else {
         logger::write("rescue: nothing left to try in scene 0x%02x", static_cast<unsigned>(scene));
     }
-    debug_overlay::toast("Quit and rejoin", kToastSeconds);
+    debug_overlay::toast("Quit and rejoin.", kToastSeconds, toast_queue::Style::Panel);
 }
 
 // Pause bits no script holds are the engine's leftovers: released the same way the rescue frees them.

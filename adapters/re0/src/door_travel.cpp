@@ -130,7 +130,7 @@ void checkDesync(Clock::time_point now) {
     if (!g_desyncReported && now - g_mismatchSince >= kDesyncAfter) {
         g_desyncReported = true;
         debug_stats::count(debug_stats::Counter::RoomDesyncs);
-        debug_overlay::toast("Room desync", kDesyncToastSeconds);
+        debug_overlay::toast("Resyncing.", kDesyncToastSeconds, toast_queue::Style::Line);
         logger::write("door_travel: room desync, local scene 0x%02x peer 0x%02x", scene::current(), peer.scene);
     }
     if (g_autoResyncs < kMaxAutoResyncs && now - g_mismatchSince >= kResyncEvery * (g_autoResyncs + 1)) {

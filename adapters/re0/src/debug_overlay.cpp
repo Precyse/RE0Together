@@ -4,18 +4,25 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "backends/imgui_impl_dx9.h"
+#include "coop_scene.h"
 #include "d3d9_hook.h"
 #include "game.h"
 #include "debug_lines.h"
 #include "debug_stats.h"
+#include "hud.h"
+#include "hud_text.h"
 #include "imgui.h"
 #include "log.h"
 #include "title_label.h"
 #include "toast_queue.h"
+#include "ui_textures.h"
+#include "wait_notice.h"
 #include "window_focus.h"
 
 namespace {
@@ -25,7 +32,6 @@ constexpr int kScrollUpKey = VK_PRIOR;   // Page Up
 constexpr int kScrollDownKey = VK_NEXT;  // Page Down
 constexpr float kScrollPerFrame = 12.0f;
 constexpr float kMargin = 8.0f;
-constexpr float kToastGap = 4.0f;
 constexpr float kFrameSeconds = 1.0f / 60.0f;
 constexpr ImVec4 kPanelColor{0.04f, 0.04f, 0.04f, 0.63f};
 constexpr ImVec4 kTextColor{0.78f, 0.78f, 0.78f, 1.0f};
@@ -77,15 +83,9 @@ bool backbufferSize(IDirect3DDevice9* device, ImVec2& size) {
     return same;
 }
 
-std::string narrow(const std::wstring& text) {
-    const int bytes = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
-    std::string out(static_cast<size_t>(bytes), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), out.data(), bytes, nullptr, nullptr);
-    return out;
-}
-
 void shutdownImGui() {
     if (!g_device) return;
+    ui_textures::release();
     ImGui_ImplDX9_Shutdown();
     ImGui::DestroyContext();
     g_device = nullptr;
@@ -112,6 +112,7 @@ bool ensureImGui(IDirect3DDevice9* device) {
     io.MouseDrawCursor = false;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard | ImGuiConfigFlags_NoMouseCursorChange;
     styleImGui();
+    hud_text::load();
     if (!ImGui_ImplDX9_Init(device)) {
         ImGui::DestroyContext();
         return false;
@@ -142,30 +143,8 @@ void drawRow(const std::string& label, const std::string& value, bool bad) {
 void drawLines() {
     const auto lines = debug_lines::build(debug_stats::snapshot());
     if (!beginRows("lines", debug_lines::kLabelChars, debug_lines::kValueChars)) return;
-    for (const auto& line : lines) drawRow(narrow(line.label), narrow(line.value), line.bad);
+    for (const auto& line : lines) drawRow(hud_text::utf8(line.label), hud_text::utf8(line.value), line.bad);
     ImGui::EndTable();
-}
-
-// Stacked top-center boxes; a fading toast dims through the style alpha.
-void drawToasts(const std::vector<toast_queue::Visible>& toasts, float displayWidth) {
-    float y = kMargin;
-    for (size_t i = 0; i < toasts.size(); ++i) {
-        ImGui::SetNextWindowPos(ImVec2(displayWidth * 0.5f, y), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, toasts[i].alpha);
-        if (ImGui::Begin(("toast" + std::to_string(i)).c_str(), nullptr, kPanelFlags)) {
-            ImGui::TextUnformatted(toasts[i].text.c_str());
-            y += ImGui::GetWindowHeight() + kToastGap;
-        }
-        ImGui::End();
-        ImGui::PopStyleVar();
-    }
-}
-
-// The partner status line, top-right, always on while it has text.
-void drawPartnerLine(const std::string& line, float displayWidth) {
-    ImGui::SetNextWindowPos(ImVec2(displayWidth - kMargin, kMargin), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-    if (ImGui::Begin("partner", nullptr, kPanelFlags)) ImGui::TextUnformatted(line.c_str());
-    ImGui::End();
 }
 
 // Mod name in the bottom-right corner while no player is loaded (title screen and main menu).
@@ -178,7 +157,30 @@ void drawTitleMark(const ImVec2& display) {
     ImGui::End();
 }
 
-void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>& toasts, const std::string& partnerLine, bool showTitle) {
+// Everything the HUD draws this frame, gathered before the frame starts.
+struct HudContent {
+    std::vector<toast_queue::Visible> toasts;
+    partner_status::Tag partner;
+    std::optional<wait_notice::Shown> notice;
+    std::optional<coop_scene::Scene> scene;
+
+    bool any() const { return !toasts.empty() || !partner.name.empty() || notice || scene; }
+};
+
+float secondsSinceStart() {
+    static const auto start = std::chrono::steady_clock::now();
+    return std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
+}
+
+void drawHud(IDirect3DDevice9* device, const ImVec2& size, const HudContent& content) {
+    const hud::Frame frame{device, ImGui::GetForegroundDrawList(), size, hud_text::scaleOf(size.y), secondsSinceStart()};
+    if (content.scene) hud::drawCoopScene(frame, *content.scene);
+    hud::drawPartnerTag(frame, content.partner);
+    if (content.notice) hud::drawWaitNotice(frame, *content.notice);
+    hud::drawBanners(frame, content.toasts);
+}
+
+void drawFrame(IDirect3DDevice9* device, bool showTitle, const HudContent& content) {
     ImVec2 size;
     if (!backbufferSize(device, size) || !ensureImGui(device)) return;
     ImGuiIO& io = ImGui::GetIO();
@@ -197,8 +199,7 @@ void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>
         ImGui::End();
     }
     if (showTitle) drawTitleMark(size);
-    if (!partnerLine.empty()) drawPartnerLine(partnerLine, size.x);
-    drawToasts(toasts, size.x);
+    drawHud(device, size, content);
     ImGui::Render();
     ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
     ++g_drawn;
@@ -207,12 +208,9 @@ void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>
 void frame(IDirect3DDevice9* device) {
     pollToggle();
     pollScroll();
-    const auto toasts = toast_queue::visible();
-    const std::string partnerLine = debug_stats::partnerLine();
+    const HudContent content{toast_queue::visible(), debug_stats::partnerTag(), wait_notice::current(), coop_scene::current()};
     const bool showTitle = game::controlled() == 0;
-    if (g_visible || showTitle || !toasts.empty() || !partnerLine.empty()) {
-        drawFrame(device, toasts, partnerLine, showTitle);
-    }
+    if (g_visible || showTitle || content.any()) drawFrame(device, showTitle, content);
 }
 
 void invalidate(IDirect3DDevice9*) {
@@ -261,6 +259,6 @@ bool disabled() { return g_disabled.load(); }
 
 void setVisible(bool visible) { g_visible = visible; }
 
-void toast(const char* text, float seconds) { toast_queue::push(text, seconds); }
+void toast(const char* text, float seconds, toast_queue::Style style) { toast_queue::push(text, seconds, style); }
 
 }  // namespace debug_overlay

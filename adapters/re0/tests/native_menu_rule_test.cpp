@@ -1,5 +1,6 @@
 // Checks the native menu rules: the cursor's steps over rows that cannot be selected, the one event a frame of input
-// gives, which events reach a row's action, and the text a row object gets (no game). Exit 0 when every check passes.
+// gives, which events reach a row's action, the way between a menu and its sub menu, and the text a row object gets (no
+// game). Exit 0 when every check passes.
 #include <cstdio>
 
 #include "../src/native_menu_rule.h"
@@ -25,6 +26,12 @@ constexpr MenuDef kMenu{"test",
                           {"d", RowKind::Action, "test.d"},
                           {"e", RowKind::Choice, "test.e"}}},
                         5};
+
+// The main page of a two page menu: a choice, then a link to the sub page, then an action.
+constexpr MenuDef kMain{"main", "", {{{"a", RowKind::Choice, "main.a"}, {"opts", RowKind::Link, "sub"}, {"go", RowKind::Action, "main.go"}}}, 3};
+
+// The sub page: a choice, then a link back; cancel returns to the main page.
+constexpr MenuDef kSub{"sub", "", {{{"x", RowKind::Choice, "sub.x"}, {"back", RowKind::Link, "main"}}}, 2, "main"};
 
 PageView plainView() {
     PageView view;
@@ -101,6 +108,25 @@ void testActionOf() {
     check(actionOf(kMenu, {EventKind::Select, 3}).empty(), "a select is the page's own");
 }
 
+void testNavigation() {
+    PageView view = plainView();
+    check(allowed(kMain, view, {EventKind::Confirm, 1}), "a link row confirms");
+    check(!allowed(kMain, view, {EventKind::Change, 1, 1}), "a link row does not change");
+    check(!arrowsShown(kMain, view, 1), "a link row shows no arrows");
+    check(navigation(kMain, view, {EventKind::Confirm, 1}) == "sub", "confirming a link opens the menu it names");
+    check(navigation(kMain, view, {EventKind::Confirm, 2}).empty(), "confirming an action opens nothing");
+    check(navigation(kMain, view, {EventKind::Cancel}).empty(), "cancel on a menu without a parent leaves it to the page (it closes)");
+    check(navigation(kSub, view, {EventKind::Cancel}) == "main", "cancel on a sub page returns to its parent");
+    check(navigation(kSub, view, {EventKind::Confirm, 1}) == "main", "the back row returns too");
+    view.rows[1].locked = true;
+    check(navigation(kMain, view, {EventKind::Confirm, 1}).empty(), "a locked link opens nothing");
+    check(navigation(kMain, view, {EventKind::Select, 1}).empty(), "a select goes nowhere");
+    check(actionOf(kMain, {EventKind::Confirm, 1}).empty(), "no action receives a link row's confirm");
+    check(actionOf(kMain, {EventKind::Confirm, 2}) == "main.go", "an action row still does");
+    check(linkRow(kMain, "sub") == 1 && linkRow(kSub, "main") == 1 && linkRow(kMain, "other") == -1, "the row that links to a menu");
+    check(selectable(kMain, plainView(), 1), "a link row is selectable");
+}
+
 void testSanitized() {
     check(sanitized("Billy") == "Billy", "plain text stays");
     check(sanitized("Pr\xc3\xa9" "cis\t") == "Pr??cis?", "bytes outside the printable range become ?");
@@ -114,6 +140,7 @@ int main() {
     testDecode();
     testAllowed();
     testActionOf();
+    testNavigation();
     testSanitized();
     if (g_failures == 0) std::printf("PASS\n");
     return g_failures == 0 ? 0 : 1;

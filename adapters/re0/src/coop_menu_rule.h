@@ -7,10 +7,10 @@
 #include "lobby_wire.h"
 #include "native_menu_rule.h"
 
-// Pure rules of the Co-op page (coop_menu.cpp, unit tested; docs/RE0_NOTES.md "Menus: the native Co-op page"): its
-// rows, the text of each, which a guest only reads, and how a choice steps through its values. Like the launcher's
-// hosting screen: the players with their role and readiness, this player's character (the host's choice) and outfit, the
-// host options, the save the session plays and the host's start.
+// Pure rules of the Co-op page and its Options page (coop_menu.cpp, unit tested; docs/RE0_NOTES.md "Menus: the native
+// Co-op page"): their rows, the text of each, which a guest only reads, and how a choice steps through its values. The
+// page: this player's character (the host's choice), outfit, the save the session plays, the Options page and the host's
+// start. The players themselves are drawn beside the page (coop_scene_rule.h).
 namespace coop_menu_rule {
 
 using lobby_wire::Place;
@@ -18,12 +18,17 @@ using native_menu_rule::PageView;
 using native_menu_rule::RowView;
 
 constexpr std::string_view kMenuId = "coop";
+constexpr std::string_view kOptionsMenuId = "coop.options";
 constexpr const char kHeader[] = "Co-op";
-
-enum Row : int { kHostPlayer, kGuestPlayer, kCharacter, kOutfit, kWorldPause, kPartnerMode, kSave, kStart, kRowCount };
-static_assert(kRowCount == static_cast<int>(native_menu_rule::kMaxRows));
+constexpr const char kOptionsHeader[] = "Options";
 
 constexpr uint64_t kPresenceStaleMs = 6000;  // a game that announced nothing for this long is away (presence every 2 s)
+
+enum Row : int { kCharacter, kOutfit, kSave, kOptions, kStart, kRowCount };
+static_assert(kRowCount <= static_cast<int>(native_menu_rule::kMaxRows));
+
+enum OptionsRow : int { kWorldPause, kBack, kOptionsRowCount };
+static_assert(kOptionsRowCount <= static_cast<int>(native_menu_rule::kMaxRows));
 
 // A member as the page shows it: from the launcher's LOBBY_STATE, and how its game last reported itself.
 struct Player {
@@ -31,26 +36,15 @@ struct Player {
     bool host = false;
     bool local = false;
     std::optional<lobby_wire::Presence> presence;  // fresh presence (this machine's own for the local player)
+    std::string outfitLabel;                       // the launcher's label of its outfit; empty without the launcher's text
 };
 
-// The state word of a player: where its game is, and for a guest on the page whether its save copy is the host's.
-inline std::string stateText(const Player& player) {
-    if (!player.presence) return "Away";
-    switch (static_cast<Place>(player.presence->place)) {
-        case Place::InGame: return "In game";
-        case Place::Loading: return "Loading";
-        case Place::Title: return "In menu";
-        case Place::Page: break;
-    }
+// Whether a player's game waits on the Co-op page and, for a guest, holds the host's save.
+inline bool isReady(const Player& player) {
+    if (!player.presence || static_cast<Place>(player.presence->place) != Place::Page) return false;
     const uint8_t flags = player.presence->flags;
     const bool differs = (flags & lobby_wire::kSaveChecked) != 0 && (flags & lobby_wire::kSaveMatches) == 0;
-    return !player.host && differs ? "Save differs" : "Ready";
-}
-
-inline RowView playerRow(const std::optional<Player>& player) {
-    if (!player) return {"Open", "", true, false};
-    return {player->local ? player->name + " (you)" : player->name,
-            std::string(player->host ? "Host" : "Guest") + " / " + stateText(*player), true, false};
+    return player.host || !differs;
 }
 
 // How the host's start goes on this machine.
@@ -68,13 +62,9 @@ inline std::string startStatusText(StartStatus status) {
 // Everything the page shows, gathered by coop_menu.cpp.
 struct Inputs {
     bool isHost = false;
-    std::optional<Player> host;
-    std::optional<Player> guest;
     std::string character;    // this player's character label
     std::string outfit;       // its outfit's label
     bool outfitChoosable = false;
-    std::string worldPause;   // the host option's label
-    std::string partnerMode;
     std::string save;         // the picked slot's label, "None" without a pick
     bool savePicked = false;
     bool savesOffered = false;  // host: the save manager's blocks were readable
@@ -88,16 +78,22 @@ inline PageView view(const Inputs& in) {
     const bool busy = in.start != StartStatus::Idle;
     PageView page;
     page.header = kHeader;
-    page.rows[kHostPlayer] = playerRow(in.host);
-    page.rows[kGuestPlayer] = playerRow(in.guest);
     page.rows[kCharacter] = {"Character", in.character, true, guest || busy};
     page.rows[kOutfit] = {"Outfit", in.outfit, true, !in.outfitChoosable || busy};
-    page.rows[kWorldPause] = {"World pause", in.worldPause, true, guest || busy};
-    page.rows[kPartnerMode] = {"Partner mode", in.partnerMode, true, true};
     page.rows[kSave] = {"Save", in.save, true, guest || !in.savesOffered || busy};
+    page.rows[kOptions] = {"Options", "", true, false};
     const std::string status = startStatusText(in.start);
     page.rows[kStart] = guest ? RowView{in.start == StartStatus::Idle ? "Waiting for host" : status, "", true, true}
                               : RowView{"Start", status, true, !in.savePicked || busy};
+    return page;
+}
+
+// The Options page: the host's settings (a guest reads them) and the way back.
+inline PageView optionsView(bool isHost, const std::string& worldPause) {
+    PageView page;
+    page.header = kOptionsHeader;
+    page.rows[kWorldPause] = {"Pause in Menus", worldPause, true, !isHost};
+    page.rows[kBack] = {"Back", "", true, false};
     return page;
 }
 

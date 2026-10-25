@@ -54,7 +54,7 @@ public static class LobbyStateTextTests
     private static void OptionLines(string[] lines)
     {
         Check.That(lines[2] == Row("option", "partner_mode", "state", "State"), "LOBBY_STATE: the lobby's partner mode with its label");
-        Check.That(lines[3] == Row("option", "world_pause", "never", "Never"), "LOBBY_STATE: an option the lobby does not carry shows its default");
+        Check.That(lines[3] == Row("option", "world_pause", "never", "Off"), "LOBBY_STATE: an option the lobby does not carry shows its default");
         Check.That(lines[4] == Row("option", "character", "rebecca", "Rebecca"), "LOBBY_STATE: the host's character with its label");
         Check.That(!lines.Any(line => line.Contains("load_slot") || line.Contains("load_hash") || line.Contains(GameOptions.SeatsKey)), "LOBBY_STATE: no save slot, hash or player count line");
     }
@@ -65,7 +65,7 @@ public static class LobbyStateTextTests
         string[] expected =
         [
             Row("value", "partner_mode", "input", "Input"), Row("value", "partner_mode", "state", "State"),
-            Row("value", "world_pause", "never", "Never"), Row("value", "world_pause", "menus", "Menus pause"),
+            Row("value", "world_pause", "never", "Off"), Row("value", "world_pause", "menus", "On"),
             Row("value", "character", "rebecca", "Rebecca"), Row("value", "character", "billy", "Billy"),
         ];
         Check.That(values.SequenceEqual(expected), $"LOBBY_STATE: every value of the page's host options, in profile order ({string.Join(" | ", values)})");

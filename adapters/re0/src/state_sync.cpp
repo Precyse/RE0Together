@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstdio>
 #include <cstring>
 #include <map>
 #include <string>
@@ -13,6 +12,7 @@
 #include "character_owner.h"
 #include "command_input.h"
 #include "debug_overlay.h"
+#include "host_exit.h"
 #include "debug_stats.h"
 #include "dev_command.h"
 #include "door_sync.h"
@@ -57,9 +57,6 @@ constexpr const char* kGameId = "re0";
 constexpr auto kSendInterval = std::chrono::microseconds(static_cast<int>(1'000'000 / state_sync::kSendHz));
 constexpr auto kLogInterval = std::chrono::seconds(1);
 constexpr float kPeerToastSeconds = 4.0f;
-constexpr float kHostLeftToastSeconds = 10.0f;
-constexpr float kModeMismatchToastSeconds = 15.0f;
-constexpr size_t kToastLength = 96;
 
 std::atomic<bool> g_modeMismatchNoted{false};
 Clock::time_point g_lastSend;
@@ -73,11 +70,10 @@ struct KnownPeer {
 std::map<uint8_t, KnownPeer> g_knownPeers;  // slot -> peer, as of the last tick
 SessionSnapshot g_lastSession;                // the previous tick's session without its peers
 
-// This guest's host went away: nothing played from here on reaches the host's save.
+// This guest's host went away: it goes back to the main menu, since nothing played on would reach the host's save.
 void announceHostLeft(const std::string& name) {
-    debug_overlay::toast("Host left: not saved", kHostLeftToastSeconds);
-    partner_hud::onHostLeft();
-    logger::write("state_sync: host %s left, this game is not saved", name.c_str());
+    host_exit::request();
+    logger::write("state_sync: host %s left, returning to the main menu", name.c_str());
 }
 
 // Toasts peers that appeared or disappeared since the previous tick. A PEER_UP for a slot that is already up (a new join
@@ -90,7 +86,7 @@ void announcePeerChanges(const SessionSnapshot& session) {
     for (const auto& [slot, peer] : now) {
         const auto known = g_knownPeers.find(slot);
         if (known == g_knownPeers.end()) {
-            debug_overlay::toast(("Co-op player joined: " + peer.name).c_str(), kPeerToastSeconds);
+            debug_overlay::toast((peer.name + " joined the game.").c_str(), kPeerToastSeconds, toast_queue::Style::Line);
             partner_hud::onPeerJoined();
         } else if (guest && known->second.joinSerial != peer.joinSerial) {
             resync::request("partner reconnected");
@@ -98,7 +94,7 @@ void announcePeerChanges(const SessionSnapshot& session) {
     }
     for (const auto& [slot, peer] : g_knownPeers) {
         if (now.contains(slot)) continue;
-        debug_overlay::toast(("Co-op player left: " + peer.name).c_str(), kPeerToastSeconds);
+        debug_overlay::toast((peer.name + " left the game.").c_str(), kPeerToastSeconds, toast_queue::Style::Line);
         const bool wasGuest = g_lastSession.localSlot != g_lastSession.hostSlot;
         if (g_lastSession.linked && wasGuest && slot == g_lastSession.hostSlot) announceHostLeft(peer.name);
     }
@@ -144,9 +140,7 @@ void noteModeMismatch(const GameFrame& frame) {
     const char* const peer = partnerModeName(state_mode::on() ? PartnerMode::Input : PartnerMode::State);
     logger::write("state_sync: the peer runs partner_mode=%s (type 0x%04x from slot %u), this machine runs %s", peer, frame.type,
                   frame.slot, own);
-    char text[kToastLength];
-    snprintf(text, sizeof(text), "Partner runs partner_mode=%s, this machine %s", peer, own);
-    debug_overlay::toast(text, kModeMismatchToastSeconds);
+    debug_stats::setError("Partner runs partner_mode=%s, this machine %s", peer, own);
 }
 
 void onFrame(const GameFrame& frame) {

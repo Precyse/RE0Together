@@ -28,9 +28,10 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/flag_sync.cpp | story flags (sFlagManager 0xdcc014 +0x20, 0x11c bytes) kept equal: every 6 frames each machine sends changed words as set/clear masks (FLAG_DIFF 0x010C) | `flag_sync::enable`, `onFrame`, `applyIncoming`, `logChanges`, `onLocalLoad` |
 | src/join_sync.cpp | joining a game in progress: the loaded guest sends SNAPSHOT_REQUEST 0x010D (every 3 s until answered) | `join_sync::enable`, `onFrame`, `caughtUp`, `requestResync`, `join_extras::send`, `finish`, ... |
 | src/session_slot.cpp | session save slot: hooks the save manager's save (0x6134c0, and 0x613500 save by copy) and load (0x613390) requests | `session_slot::enable(loadOrder)`, `onFrame`, `onNetTick`, `current`, `guestSession`, `hostInGame`, ... |
+| src/host_exit.cpp, src/host_exit.h | a guest whose host left returns to the main menu: `request` (from `state_sync`) toasts and a game tick step writes `game::kExitToTitleMenuFlag` (0xdcc131) = 1 and `requestRoomPhase(Exit)` once `game_state::playing()` | `host_exit::enable`, `request` |
 | src/auto_join.cpp | net thread: a guest at game over (always) or outside gameplay | `auto_join::onNetTick` |
-| src/partner_status.cpp | pure text of the partner status line (unit tested): name, condition Fine / Caution / Danger from hp against the highest hp seen (floor 150), same room or `room 0x..`, `in menu` | `partner_status::text`, `condition` |
-| src/partner_hud.cpp | net thread: gathers the status line, on host and guest alike, from the session (the other peer), its own copy of the partner's latest PLAYER_STATE | `partner_hud::onNetTick`, `onPeerJoined`, `onHostLeft` |
+| src/partner_status.cpp | pure content of the HUD's partner tag (unit tested): name, condition Fine / Caution / Danger from hp against the highest hp seen (floor 150), and the detail line (`Room 0x..`, `In menu`) while the partner is apart; empty without a partner | `partner_status::tag`, `condition` |
+| src/partner_hud.cpp | net thread: gathers the partner tag, on host and guest alike, from the session (the other peer), its own copy of the partner's latest PLAYER_STATE, the room report and the menu mirror | `partner_hud::onNetTick`, `onFrame`, `onPeerJoined` |
 | src/resync.cpp | resync on demand: F9 (command_input), `coop\resync_now.txt` (polled every second, deleted when taken) and `request` (door_travel's persisting desync) | `resync::request`, `onFrame`, `onNetTick` |
 | src/session_rule.h | pure session-flow rules (unit tested): where a save request goes (`saveRoute`: pass, co-op slot, refuse for a guest) and what the automatic join does (`joinMode`: idle, waiting, confirming) | `session_rule::saveRoute`, `joinMode` |
 | src/virtual_keys.cpp | virtual keyboard on DirectInput: the proxy hands over IDirectInput8, CreateDevice is hooked, the keyboard's GetDeviceState records the real keys of each read | `virtual_keys::onDirectInput`, `tap`, `realKeyDown`, `setRealKeyboardMuted`, `setHiddenKeys` |
@@ -45,7 +46,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/phase_watch.cpp | net thread: logs every room phase change by name (`phase: Main -> EventDemo`), F8 room phase | `phase_watch::onNetTick` |
 | src/menu_mirror.cpp | MENU_STATE (0x0105, {screen (`live_menu_rule::Screen`: none, holding, live), room phase}) sent from the net thread on a screen change and every 2 s while open | `menu_mirror::enable`, `onNetTick`, `onFrame`, `peerMenuOpen`, `releasePeerHold` |
 | src/menu_hold_rule.h | pure rule (unit tested): `PeerMenu` per peer (open, holding, phase, since, seen), `holds` | `menu_hold_rule::observe`, `holds`, `isOpen` |
-| src/live_menus.cpp, src/live_menu_rule.h | live menus (adapter.ini `world_pause=never`, the default and the launcher's host option World pause; state mode only, with a peer; docs/RE0_NOTES.md "Live menus") | `live_menus::configure`, `localScreen`, `onUnitUpdate`, `inputHeld`; `live_menu_rule::screenOf`, `HurtWatch` |
+| src/live_menus.cpp, src/live_menu_rule.h | live menus (adapter.ini `world_pause=never`, the default and the launcher's host option Pause in Menus; state mode only, with a peer; docs/RE0_NOTES.md "Live menus") | `live_menus::configure`, `localScreen`, `onUnitUpdate`, `inputHeld`; `live_menu_rule::screenOf`, `HurtWatch` |
 | src/gui_text.cpp, src/gui_text_rule.h | hook of the game's one text lookup `rGUIMessage::getString` 0x887090 (thiscall table, id; `ret 4`), site bytes checked first | `gui_text::enable`, `gui_text_rule::find` |
 | src/title_coop.cpp, src/title_coop_rule.h | "Co-op" on the title screen's main menu (docs/RE0_NOTES.md "Menus: the Co-op entry on the title screen"): hooks `uGUITitle::v8` 0x5ebad0 (state +0x27c) | `title_coop::enable`, `title_coop_rule::step`, `closesPage` |
 | src/title_label.cpp, src/title_label_rule.h | the row's label: the title's atlas | `title_label::publish`, `applyPending`, `title_label_rule::composeLabel`, `encodeCell` |
@@ -179,19 +180,33 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/fnv1a32.h | FNV-1a 32 over a byte span, continuable from a state: the world canary's authority hash and a save slot's hash | `fnv1a32::hash`, `kOffsetBasis`, `kPrime` |
 | src/save_redirect.cpp | patches the SteamRemoteStorage IAT slot (0xcb1458); FileWrite/Read/Delete/Exists/GetFileSize served from `coop/session` | `save_redirect::install`, `uninstall` |
 | src/config.cpp | `coop/adapter.ini` | `loadConfig`, `PartnerMode` |
-| src/debug_stats.cpp | thread-safe status registry (atomic counters with per-second rates, gauges, session, disabled (and re-armed) callbacks, last error, last command / decision notes, the partner status line) | `debug_stats::count`, `set`, `setSession`, `setError`, `snapshot` |
+| src/debug_stats.cpp | thread-safe status registry (atomic counters with per-second rates, gauges, session, disabled (and re-armed) callbacks, last error, last command / decision notes, the partner tag) | `debug_stats::count`, `set`, `setSession`, `setError`, `snapshot`, `setPartnerTag` |
 | src/debug_lines.cpp | turns a stats snapshot into the panel lines (label, value, red flag) | `debug_lines::build`, `room moves sent/applied/healed`, `door follows sent/accepted/rejected`, `event body ops skipped`, `demo skips sent/applied`, `session ready sent/echoed/refused`, ... |
 | src/d3d9_hook.cpp | inline-hooks d3d9!Direct3DCreate9 before the decryption wait, wraps CreateDevice, hooks the game device's EndScene/Reset | `d3d9_hook::install`, `uninstall` |
-| src/debug_overlay.cpp | Dear ImGui (DX9 backend, draw-only, no input) panel drawn in EndScene, height capped to the screen and scrolled with Page Up / Page Down | `debug_overlay::install`, `framesSeen`, `framesDrawn`, `disabled`, `setVisible`, `toast` |
-| src/toast_queue.cpp | mutex-guarded timed message queue behind the overlay toasts; no ImGui | `toast_queue::push`, `visible` |
-| src/native_menu.cpp, src/native_menu_rule.h | registry of data-driven native menus: a menu is a row table plus a view source, each row names a registered action | `registerAction`, `registerMenu`, `dispatch`, `afterClose` |
-| src/native_page.cpp | the Options screen's PC Setup page shows a registered native_menu instead of its settings; the title opens it | `enable`, `openFromTitle`, `requestClose`, `active` |
-| src/coop_menu.cpp, src/coop_menu_rule.h | the Co-op page: players, character, outfit, options and save rows (host edits, guest reads), Start | `coop_menu::enable` |
+| src/debug_overlay.cpp | the frame owner: Dear ImGui (DX9 backend, draw-only, no input) in EndScene; the F8 panel (height capped to the screen, Page Up / Page Down), the title mark, and each frame the HUD parts (`hud.h`) gathered into one `HudContent`; fonts and textures are made with the ImGui context and released with it | `debug_overlay::install`, `framesSeen`, `framesDrawn`, `disabled`, `setVisible`, `toast(text, seconds, style)` |
+| src/toast_queue.cpp, src/toast_queue.h, src/toast_rule.h | mutex-guarded timed banner queue (style Line or Panel, newest 3 shown, no ImGui); `toast_rule::alpha` = fade in 0.5 s, hold, fade out 0.6 s (unit tested) | `toast_queue::push`, `visible`, `Style`, `toast_rule::alpha` |
+| src/native_menu.cpp, src/native_menu_rule.h | registry of data-driven native menus: a menu is a row table plus a view source, each row names a registered action; a Link row opens the menu it names, cancel returns to the menu's `parent` (`navigation`, `linkRow`) | `registerAction`, `registerMenu`, `dispatch`, `afterClose`, `native_menu_rule::navigation` |
+| src/native_page.cpp | the Options screen's PC Setup page shows a registered native_menu instead of its settings (and switches to a linked menu on the same page); the title opens it | `enable`, `openFromTitle`, `requestClose`, `active` |
+| src/coop_menu.cpp, src/coop_menu_rule.h | the Co-op page (Character, Outfit, Save, Options, Start; host edits, guest reads) and its Options page (Pause in Menus, Back), and the scene beside them published from each refresh | `coop_menu::enable`, `coop_menu_rule::view`, `optionsView`, `isReady` |
 | src/lobby.cpp, src/lobby_wire.h | in-game lobby net side: LOBBY_STATE 0x0062 from the launcher, OPTION_SET 0x0061 back, LOBBY_PRESENCE 0x0118, SESSION_LOAD 0x0117 | `onNetTick`, `sendOption`, `announceStart`, `takeStart`, `view` |
 | src/option_values.h | option keys and values shared with launcher/games/re0.json (adapter.ini, LOBBY_STATE, OPTION_SET) |  |
 | src/save_blocks.cpp, src/save_index_rule.h | the save manager's decrypted slot blocks; slot FNV-1a hash and label matching the launcher's SaveIndex | `hash`, `summary`, `loaded` |
 | src/title_load.cpp, src/title_load_rule.h | session load from the title: host's Start loads the picked slot like Load Game -> Continue; guests follow SESSION_LOAD | `startHost`, `titleBefore`, `titleAfter`, `followsHost` |
 | src/save_redirect_rule.h | which copy of a session save the guest reads: session folder or the newer staged one |  |
+| src/wait_notice.cpp, src/wait_notice_rule.h | the one on-screen wait notice (partner paused / busy / loading) the world hold sets and the HUD draws; rules: load hold window, notice text, the loading notice's pulse and sweep | `wait_notice::show`, `clear`, `current`, `wait_notice_rule::loadHolds`, `holdNotice`, `text`, `pulseAlpha`, `sweepStart` |
+| src/hud.h | the HUD's parts and the frame they draw into (`hud::Frame`: device, foreground draw list, display, scale = height / 720, seconds) | `hud::drawPartnerTag`, `drawWaitNotice`, `drawBanners`, `drawCoopScene` |
+| src/hud_text.cpp, src/hud_text.h | the shipped typefaces (Cinzel Medium and Bold, Cormorant Garamond Medium Italic from `coop\fonts`; a missing file falls back to the default font, logged once), letter-spaced text with a black shadow, colours with alpha, the screen scale | `hud_text::load`, `draw`, `measure`, `ascent`, `colour`, `scaleOf`, `pixel`, `upper`, `utf8` |
+| src/hud_partner.cpp, src/partner_tag_rule.h | the partner tag at the bottom left (name, sweeping heartbeat trace coloured by condition, detail line); rule: style / beats / period per condition, trace polyline, sweep (unit tested) | `hud::drawPartnerTag`, `partner_tag_rule::styleOf`, `trace`, `sweepX`, `visible` |
+| src/hud_notice.cpp | the wait notices: a loading partner (bottom, pulsing, hairline with a sweeping segment), a paused or busy one (dimmed screen, text between two hairlines) | `hud::drawWaitNotice` |
+| src/hud_banner.cpp | the banners in the game's font: a line on a feathered band at the bottom, a panel (rods and leather) at the top | `hud::drawBanners` |
+| src/hud_coop_scene.cpp | the characters beside the Co-op page: both pictures, names and the line under each, the open seat's silhouette | `hud::drawCoopScene` |
+| src/coop_scene.cpp, src/coop_scene.h, src/coop_scene_rule.h | what the Co-op page publishes for the HUD (each side: outfit picture, name, role line, open), stale 300 ms after the page stops refreshing; rules: the picture of the saved outfit, the role lines, the silhouette pulse (unit tested) | `coop_scene::publish`, `current`, `coop_scene_rule::pictureValue`, `hostRole`, `guestRole`, `silhouetteAlpha` |
+| src/pulse_rule.h | the cosine swell shared by the loading notice and the silhouette | `pulse_rule::between` |
+| src/gfd_rule.h | pure reader of the game's font layout (GFD): glyph rectangles, advances, x offsets (unit tested, and checked against the real file) | `gfd_rule::parse`, `Font::find` |
+| src/gfd_text.cpp, src/gfd_text.h | text in the game's own message font: the layout and atlas from `coop\ui`, one image per glyph with a shadow; the default font at the same line height while they are missing | `gfd_text::prepare`, `measure`, `draw`, `lineHeight` |
+| src/ui_textures.cpp, src/ui_textures.h | `coop\ui\*.png` as managed-pool D3D9 textures through WIC, made on the render thread on first use, released with ImGui | `ui_textures::get`, `release` |
+| src/ui_art_files.h | the names of the files in `coop\fonts` and `coop\ui` (the launcher's `UiArt.cs` writes the same names) | `ui_art_files::kFontFolder`, `kArtFolder` |
+| adapters/re0/fonts/ | Cinzel Medium and Bold, Cormorant Garamond Medium Italic (static instances of the Google Fonts variable fonts) and their OFL texts; installed to `coop\fonts` by the profile's folder entry |  |
 | src/log.cpp, src/paths.cpp | `coop/adapter.log`, game/coop dirs | `logger::write`, `writeUnlessRepeated`, `coopDirectory` |
 | tests/proxy_test.cpp | x86 exe: fake 64-slot interface, checks thunk forwarding, overrides, caching |  |
 | tests/enemy_hit_wire_test.cpp | HIT payload layout (80 bytes, offset at 4, HP before and after, random state, class, reaction flag and record last), the point relative to the enemy and rebuilt around the receiver's |  |
@@ -223,12 +238,12 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/session_rule_test.cpp | x86 exe: save routing (guest refused, host co-op slot, boot save passes) and the automatic join modes (game over without full join, title with it) |  |
 | tests/menu_hold_rule_test.cpp | x86 exe: a menu releases after 20 s, reading and cutscenes never, close, stale expiry, reopen, a live menu never holds, a pause after a live menu gets its own cap |  |
 | tests/live_menu_rule_test.cpp | x86 exe: which screens are live, holding or none |  |
-| tests/partner_status_test.cpp | x86 exe: condition thresholds and the status line texts (together, apart, in menu, long name, host left) |  |
+| tests/partner_status_test.cpp | x86 exe: condition thresholds and the tag content (name, detail apart and in a menu, long name, no partner) |  |
 | tests/gui_text_rule_test.cpp | x86 exe: no game id is relabelled, every entry names a slot and an id above the tables' own |  |
 | tests/title_coop_rule_test.cpp | x86 exe: the page opens only on the fifth row's choice (state 0x2b), stays while parked, closes on confirm or cancel, is dropped when the game moved the title |  |
 | tests/title_label_rule_test.cpp | x86 exe: the cell holds every language's "Online Store" ink and leaves the rows above and below alone, DXT5 encode / decode |  |
 | tests/coop_page_rule_test.cpp | x86 exe: the seven status rows as a guest, as a host, waiting for a partner and with the link down, name clipping, outfit names and unlisted models, the page expiring without a refresh |  |
-| tests/overlay_test.cpp | x86 exe: real windowed D3D9 device, installs the overlay hook, renders frames with fake stats, toasts (panel hidden and shown) and a Reset, checks the hook fires |  |
+| tests/overlay_test.cpp | x86 exe: real windowed D3D9 device, installs the overlay hook, renders frames with fake stats, banners of both styles, the partner tag, the Co-op scene, both wait notices (panel hidden and shown) and a Reset, checks the hook fires |  |
 | tests/room_authority_test.cpp | x86 exe, links DS2's `authority.cpp` + `reject_counters.cpp` |  |
 | tests/enemy_policy_test.cpp | x86 exe: 38 classes, 31 Observer / 4 Legacy / 3 Native with the exact Legacy and Native sets, the wire index is the position in `game::kEnemyVtables`, unknown vtables are Native |  |
 | tests/enemy_observer_wire_test.cpp | x86 exe, DS2 include path: header 16 / pose entry 60 / motion entry 20 bytes, round trips, 37 entries split into 18 + 18 + 1 with consecutive numbers, refusals |  |
@@ -252,9 +267,9 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/world_digest_test.cpp | x86 exe: id 0x0178, the 32-byte round trip and every refusal (size, unknown flag bit), CRC-32 check value, presence flags never change a CRC, each flag family changes only its own CRC |  |
 | tests/room_move_wire_test.cpp | x86 exe: message ids, sizes 12 / 28 / 8, round trips, every refusal (size, scene, entry, serial, character, reason, result, spot mode, reserved) |  |
 | tests/room_move_rule_test.cpp | x86 exe: leave / enter / between, the move inbox (newest wins, repeats and older dropped, wrap), self-heal timing |  |
-| tests/coop_menu_rule_test.cpp | x86 exe: Co-op page rows, guest read-only rows, start row, value steps |  |
+| tests/coop_menu_rule_test.cpp | x86 exe: Co-op page rows, guest read-only rows, start row, the Options page, readiness, value steps |  |
 | tests/lobby_wire_test.cpp | x86 exe: LOBBY_STATE text, OPTION_SET, LOBBY_PRESENCE, SESSION_LOAD |  |
-| tests/native_menu_rule_test.cpp | x86 exe: cursor over unselectable rows, one event a frame, which events reach a row |  |
+| tests/native_menu_rule_test.cpp | x86 exe: cursor over unselectable rows, one event a frame, which events reach a row, Link rows and the way back to a parent |  |
 | tests/save_index_rule_test.cpp | x86 exe: slot summary and label against SaveIndexTests.cs; save_redirect's staged pick |  |
 | tests/title_load_rule_test.cpp | x86 exe: where a pending start takes the title and what a finished load leads to |  |
 | tests/frame_router_rule_test.cpp | x86 exe: the frame router's sender policies |  |
@@ -269,5 +284,10 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/weapon_fx_matrix_test.cpp | x86 exe: muzzle matrix to position+quaternion round trip, all four branches |  |
 | tests/weapon_fx_sites_test.cpp | x86 exe: weapon effect allow-list of return addresses |  |
 | tests/weapon_fx_wire_test.cpp | x86 exe: WEAPON_FX entry sizes, round trips, refusals |  |
+| tests/wait_notice_rule_test.cpp | x86 exe: load hold window, which notice a partner's screen gives, notice texts, the pulse and the sweep |  |
+| tests/partner_tag_rule_test.cpp | x86 exe: condition styles, the polyline of one to three beats, the sweep and the part drawn |  |
+| tests/toast_rule_test.cpp | x86 exe: fade in, hold, fade out, a life shorter than both |  |
+| tests/gfd_rule_test.cpp | x86 exe: the font layout on a synthetic buffer (header, path, glyph fields, order) and every refusal |  |
+| tests/coop_scene_rule_test.cpp | x86 exe: the saved outfit's default picture, role lines, silhouette pulse, staleness |  |
 | tests/net_test.cpp | x86 exe driving `NetClient` against a launcher, checks PLAYER_STATE and PAD_FRAME round trips | `--port --seconds --expect-peer` |
 

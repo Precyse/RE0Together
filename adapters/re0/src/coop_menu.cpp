@@ -1,10 +1,13 @@
 #include "coop_menu.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "character_owner.h"
 #include "coop_menu_rule.h"
+#include "coop_scene.h"
+#include "coop_scene_rule.h"
 #include "debug_stats.h"
 #include "lobby.h"
 #include "native_menu.h"
@@ -13,7 +16,6 @@
 #include "save_index_rule.h"
 #include "save_load_rule.h"
 #include "session_slot.h"
-#include "state_mode.h"
 #include "title_load.h"
 
 namespace {
@@ -27,16 +29,21 @@ using native_menu_rule::Reply;
 using native_menu_rule::RowKind;
 
 constexpr native_menu_rule::MenuDef kMenu{coop_menu_rule::kMenuId,
-                                          "coop.menu",
-                                          {{{"host_player", RowKind::Info, ""},
-                                            {"guest_player", RowKind::Info, ""},
-                                            {"character", RowKind::Choice, "coop.character"},
+                                          "",
+                                          {{{"character", RowKind::Choice, "coop.character"},
                                             {"outfit", RowKind::Choice, "coop.outfit"},
-                                            {"world_pause", RowKind::Choice, "coop.world_pause"},
-                                            {"partner_mode", RowKind::Info, ""},
                                             {"save", RowKind::Choice, "coop.save"},
+                                            {"options", RowKind::Link, coop_menu_rule::kOptionsMenuId},
                                             {"start", RowKind::Action, "coop.start"}}},
-                                          native_menu_rule::kMaxRows};
+                                          coop_menu_rule::kRowCount};
+
+// Cancel returns to the Co-op page.
+constexpr native_menu_rule::MenuDef kOptionsMenu{coop_menu_rule::kOptionsMenuId,
+                                                 "",
+                                                 {{{"world_pause", RowKind::Choice, "coop.world_pause"},
+                                                   {"back", RowKind::Link, coop_menu_rule::kMenuId}}},
+                                                 coop_menu_rule::kOptionsRowCount,
+                                                 coop_menu_rule::kMenuId};
 
 constexpr int kNoPick = save_load_rule::kUnknownSlot;
 
@@ -79,18 +86,27 @@ Player playerOf(const Context& c, const std::string& name, bool host, uint8_t sl
     return player;
 }
 
+struct Players {
+    std::optional<Player> host;
+    std::optional<Player> guest;
+};
+
 // The players host first: the launcher's members, or without its text the session's peers.
-void fillPlayers(const Context& c, coop_menu_rule::Inputs& in) {
+Players playersOf(const Context& c) {
+    Players players;
     for (const lobby_wire::Member& member : c.lobby.state.members) {
-        std::optional<Player>& row = member.host ? in.host : in.guest;
-        if (!row) row = playerOf(c, member.name, member.host, member.slot, member.local);
+        std::optional<Player>& row = member.host ? players.host : players.guest;
+        if (row) continue;
+        row = playerOf(c, member.name, member.host, member.slot, member.local);
+        row->outfitLabel = member.outfitLabel;
     }
-    if (c.lobby.haveState) return;
-    if (!in.host) in.host = playerOf(c, c.isHost ? "You" : "Host", true, c.session.hostSlot, c.isHost);
+    if (c.lobby.haveState) return players;
+    if (!players.host) players.host = playerOf(c, c.isHost ? "You" : "Host", true, c.session.hostSlot, c.isHost);
     for (const PeerInfo& peer : c.session.peers) {
-        if (peer.slot != c.session.hostSlot && !in.guest) in.guest = playerOf(c, peer.name, false, peer.slot, false);
+        if (peer.slot != c.session.hostSlot && !players.guest) players.guest = playerOf(c, peer.name, false, peer.slot, false);
     }
-    if (!c.isHost) in.guest = playerOf(c, "You", false, c.session.localSlot, true);
+    if (!c.isHost) players.guest = playerOf(c, "You", false, c.session.localSlot, true);
+    return players;
 }
 
 std::string labelOf(const std::vector<Value>& values, const std::string& value) {
@@ -123,26 +139,60 @@ std::string slotLabel(int slot) {
     return summary ? save_index_rule::label(slot, *summary) : coop_menu_rule::kNone;
 }
 
+// The outfit value a player's character wears: this player's own choice, or the launcher's label of the other's matched
+// to the values on offer (empty, the saved outfit, when it matches none).
+std::string outfitValueOf(const Context& c, const Player& player, Character character) {
+    if (player.local) return ownOutfit(c, character);
+    for (const Value& outfit : c.lobby.state.outfitsOf(option_values::valueOf(character))) {
+        if (outfit.label == player.outfitLabel) return outfit.value;
+    }
+    return {};
+}
+
+coop_scene::Side sideOf(const Context& c, const Player& player, Character character, const std::string& role) {
+    return {coop_scene_rule::pictureValue(character == Character::Billy, outfitValueOf(c, player, character)), character_owner::name(character), role,
+            false};
+}
+
+// A seat nobody sits in yet: the character it would have, as a silhouette.
+coop_scene::Side openSide(Character character) {
+    return {coop_scene_rule::pictureValue(character == Character::Billy, ""), character_owner::name(character), coop_scene_rule::kOpenRole, true};
+}
+
+// The characters drawn beside the page, kept current by the page's own refresh (each frame while it is open).
+void publishScene(const Context& c) {
+    const Players players = playersOf(c);
+    const Character host = hostCharacter(c);
+    coop_scene::Scene scene;
+    if (players.host) scene.host = sideOf(c, *players.host, host, coop_scene_rule::hostRole(*players.host));
+    scene.guest = players.guest ? sideOf(c, *players.guest, character_owner::other(host), coop_scene_rule::guestRole(*players.guest))
+                                : openSide(character_owner::other(host));
+    coop_scene::publish(scene);
+}
+
 native_menu_rule::PageView view() {
     const Context c = context();
+    publishScene(c);
     coop_menu_rule::Inputs in;
     in.isHost = c.isHost;
-    fillPlayers(c, in);
     const Character local = localCharacter(c);
     in.character = labelOf(c.lobby.state.valuesOf(option_values::kCharacterKey), std::string(option_values::valueOf(local)));
     if (in.character == option_values::valueOf(local)) in.character = character_owner::name(local);
     const std::vector<Value> outfits = c.lobby.state.outfitsOf(option_values::valueOf(local));
     in.outfit = outfits.empty() ? coop_menu_rule::kNone : labelOf(outfits, ownOutfit(c, local));
     in.outfitChoosable = outfits.size() > 1;
-    in.worldPause = optionLabel(c, option_values::kWorldPauseKey);
-    in.partnerMode = c.lobby.state.option(option_values::kPartnerModeKey) ? optionLabel(c, option_values::kPartnerModeKey)
-                                                                           : partnerModeName(state_mode::on() ? PartnerMode::State : PartnerMode::Input);
     const int slot = pickedSlot(c);
     in.save = slotLabel(slot);
     in.savePicked = in.save != coop_menu_rule::kNone;
     in.savesOffered = save_blocks::request() != 0;
     in.start = title_load::status();
     return coop_menu_rule::view(in);
+}
+
+native_menu_rule::PageView optionsView() {
+    const Context c = context();
+    publishScene(c);
+    return coop_menu_rule::optionsView(c.isHost, optionLabel(c, option_values::kWorldPauseKey));
 }
 
 // The value after the current one in a list the launcher offers, sent back to the launcher as the player's choice; the
@@ -156,8 +206,6 @@ Reply stepOption(std::string_view key, const std::vector<Value>& values, const s
     if (next < 0 || values.size() < 2) return Reply::Reject;
     return lobby::sendOption(key, values[static_cast<size_t>(next)].value) ? Reply::Stay : Reply::Reject;
 }
-
-Reply onMenu(const Event&) { return Reply::Stay; }
 
 Reply onCharacter(const Event& event) {
     const Context c = context();
@@ -225,7 +273,7 @@ namespace coop_menu {
 
 void enable() {
     native_menu::registerMenu(kMenu, view);
-    native_menu::registerAction("coop.menu", onMenu);
+    native_menu::registerMenu(kOptionsMenu, optionsView);
     native_menu::registerAction("coop.character", onCharacter);
     native_menu::registerAction("coop.outfit", onOutfit);
     native_menu::registerAction("coop.world_pause", onWorldPause);

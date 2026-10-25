@@ -42,7 +42,7 @@ void announce() {
     g_net->send(proto::kMsgPartyMode, true, proto::kSlotAll, {&mode, sizeof(mode)});
 }
 
-void toastMode() { debug_overlay::toast(g_mode == PartyMode::Team ? "Team" : "Split up", kToastSeconds); }
+void toastMode() { debug_overlay::toast(g_mode == PartyMode::Team ? "Team up." : "Split up.", kToastSeconds, toast_queue::Style::Line); }
 
 // The game's own follow flag carries the partner through doors with the focused character, so it mirrors the
 // mode: following in TEAM, staying in LEAVE_BEHIND. Written only when it differs. In state mode it stays 0: the

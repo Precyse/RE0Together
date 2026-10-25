@@ -1,18 +1,21 @@
 { "id": "re0", "name": "Resident Evil 0 HD", "steamAppId": 339340, "exe": "re0hd.exe",
   "maxPlayers": 2, "port": 27960, "characters": ["Rebecca", "Billy"], "supportedBuilds": [17178773],
-  "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
+  "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" },
+                    { "src": "adapters/re0/fonts", "dst": "coop/fonts", "folder": true } ],
   "adapterIni": "coop/adapter.ini",
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session" },
   "saveIndex": { "file": "data0.bin", "keyAddress": "0xce7938", "keyLength": 32, "entry": "GAMEDATA{0}", "slots": 20, "slotSize": 116816 },
   "adapterLog": "coop/adapter.log",
   "crashFiles": ["coop/crash-*.dmp", "coop/dumps/*.dmp", "coop/dumps/*.txt"],
   "freshTypes": ["0x0140", "0x0160", "0x0173", "0x0178"],
+  "uiArt": { "fontArc": "nativePC/arc/message/msg_eng.arc", "fontTexture": "font_eng_00_ID", "fontGfd": "font_eng",
+             "dialogArc": "nativePC/arc/ui/resident.arc", "dialogTexture": "Dialog_00_ID_HQ" },
   "outfitArt": { "arc": "nativePC/arc/ui/cos_{value}.arc", "texture": "cos_{value}_ID_HQ" },
   "options": [
     { "key": "partner_mode", "label": "Partner mode", "host": true, "values": [
       { "value": "input", "label": "Input" }, { "value": "state", "label": "State" } ] },
-    { "key": "world_pause", "label": "World pause", "host": true, "values": [
-      { "value": "never", "label": "Never" }, { "value": "menus", "label": "Menus pause" } ] },
+    { "key": "world_pause", "label": "Pause in Menus", "host": true, "values": [
+      { "value": "never", "label": "Off" }, { "value": "menus", "label": "On" } ] },
     { "key": "load_slot", "label": "Save", "host": true, "source": "saveSlots", "values": [ { "value": "", "label": "None" } ] },
     { "key": "load_hash", "label": "Save hash", "host": true, "source": "saveHash", "values": [ { "value": "", "label": "None" } ] },
     { "key": "character", "label": "Character", "host": true, "values": [

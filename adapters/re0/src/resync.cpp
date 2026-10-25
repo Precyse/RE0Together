@@ -37,7 +37,7 @@ namespace resync {
 void request(const char* reason) {
     if (!net_pad::active() || !g_net) return;
     logger::write("resync: %s", reason);
-    debug_overlay::toast("Resync", kToastSeconds);
+    debug_overlay::toast("Resyncing.", kToastSeconds, toast_queue::Style::Line);
     if (character_owner::isHost()) g_net->send(proto::kMsgResyncRequest, true, proto::kSlotAll, {});
     else join_sync::requestResync();
 }

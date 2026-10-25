@@ -41,6 +41,7 @@ const MenuDef* g_menu = nullptr;         // the open page's menu
 uintptr_t g_page = 0;                    // the borrowed PC Setup page while open
 bool g_opened = false;                   // the Opened event was sent
 bool g_closeRequested = false;
+bool g_cancelWasDown = false;            // the cancel input of the last frame
 bool g_faulted = false;
 PageView g_shown;                        // what the page's objects hold
 bool g_shownValid = false;
@@ -154,7 +155,9 @@ native_menu_rule::Input readInput(const PageView& view) {
     const uintptr_t manager = field(g_page, game::kPcSetupManagerOffset);
     if (manager) game::callThiscall<void>(game::kOptionMouseInputFunction, asPointer(manager), &trigger, &repeat);
     native_menu_rule::Input input;
-    input.cancel = subMenuClosing() || (trigger & padMask(game::kPadCancelMaskOffset)) != 0;
+    const bool cancelDown = subMenuClosing() || (trigger & padMask(game::kPadCancelMaskOffset)) != 0;
+    input.cancel = cancelDown && !g_cancelWasDown;  // the sub menu's close request may stay up for frames: one cancel per press
+    g_cancelWasDown = cancelDown;
     input.decide = (trigger & padMask(game::kPadDecideMaskOffset)) != 0;
     input.up = (repeat & game::kRepeatUp) != 0;
     input.down = (repeat & game::kRepeatDown) != 0;
@@ -189,12 +192,28 @@ void settleArrows() {
     }
 }
 
+// The page shows another menu (a Link row's target, or the parent on cancel); coming back, the cursor lands on the row that
+// led away.
+void switchMenu(const MenuDef& next) {
+    const int back = native_menu_rule::linkRow(next, g_menu->id);
+    g_menu = &next;
+    g_cursor = back >= 0 ? back : native_menu_rule::firstCursor(next, native_menu::view(next));
+    show(native_menu::view(next), true);
+}
+
 void handle(const Event& event, const PageView& view) {
     if (event.kind == EventKind::Select) {
         if (event.row == g_cursor) return;
         playSound(game::kSoundMove);
         g_cursor = event.row;
         placeCursor(view);
+        return;
+    }
+    const std::string_view target = native_menu_rule::navigation(*g_menu, view, event);
+    if (!target.empty()) {
+        const MenuDef* next = native_menu::find(target);
+        playSound(next && event.kind != EventKind::Cancel ? game::kSoundDecide : game::kSoundCancel);
+        if (next) switchMenu(*next);
         return;
     }
     const Reply reply = native_menu::dispatch(*g_menu, view, event);
@@ -254,6 +273,7 @@ void openPage(uintptr_t manager, uintptr_t page) {
     g_page = page;
     g_opened = false;
     g_shownValid = false;
+    g_cancelWasDown = true;  // the press that opened the page (or a request still up) is not a cancel
     g_cursor = native_menu_rule::firstCursor(*g_menu, native_menu::view(*g_menu));
     game::writeMemory(page + game::kPcSetupCursorOffset, static_cast<uint32_t>(g_cursor));
     game::writeMemory(page + game::kPcSetupDecidedOffset, uint16_t{0});

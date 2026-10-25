@@ -1,4 +1,4 @@
-// Checks the partner status line text and the condition thresholds (no game). Exit 0 when every check passes.
+// Checks the partner tag content and the condition thresholds (no game). Exit 0 when every check passes.
 #include <cstdio>
 
 #include "../src/partner_status.h"
@@ -8,7 +8,7 @@ namespace {
 using partner_status::Condition;
 using partner_status::Input;
 using partner_status::condition;
-using partner_status::text;
+using partner_status::tag;
 
 int g_failures = 0;
 
@@ -18,8 +18,8 @@ void check(bool ok, const char* what) {
     ++g_failures;
 }
 
-void checkText(const Input& input, const char* expected, const char* what) {
-    const std::string actual = text(input);
+void checkDetail(const Input& input, const char* expected, const char* what) {
+    const std::string actual = tag(input).detail;
     if (actual == expected) return;
     std::printf("FAIL: %s: got \"%s\" expected \"%s\"\n", what, actual.c_str(), expected);
     ++g_failures;
@@ -35,33 +35,36 @@ void testCondition() {
     check(condition(10, 0) == Condition::Danger, "no known maximum is danger");
 }
 
-void testLine() {
+void testTag() {
     Input input;
     input.name = "Ahmad";
-    checkText(input, "Ahmad", "name before the first state");
+    check(tag(input).name == "Ahmad" && !tag(input).hasCondition, "the name shows before the first state");
     input.hasState = true;
     input.hp = 150;
     input.sameRoom = true;
-    checkText(input, "Ahmad / Fine / same room", "together");
+    check(tag(input).hasCondition && tag(input).condition == Condition::Fine, "together and healthy");
+    checkDetail(input, "", "together has no detail line");
     input.sameRoom = false;
     input.room = 0x24;
     input.hp = 30;
-    checkText(input, "Ahmad / Danger / room 0x24", "apart");
+    check(tag(input).condition == Condition::Danger, "low health is danger");
+    checkDetail(input, "Room 0x24", "apart names the room");
     input.inMenu = true;
-    checkText(input, "Ahmad / Danger / room 0x24 / in menu", "apart in a menu");
+    checkDetail(input, "Room 0x24 / In menu", "apart in a menu");
     input.room = partner_status::kNoRoom;
-    checkText(input, "Ahmad / Danger / in menu", "unknown room is left out");
+    checkDetail(input, "In menu", "an unknown room is left out");
+    input.inMenu = false;
+    checkDetail(input, "", "an unknown room alone says nothing");
     input.name = "AVeryLongSteamNameIndeed";
-    checkText(input, "AVeryLongSteamNa / Danger / in menu", "long names are cut");
-    input.hostLeft = true;
-    checkText(input, "Host left / not saved", "host left replaces the line");
+    check(tag(input).name == "AVeryLongSteamNa", "long names are cut");
+    check(tag(Input{}).name.empty(), "no partner, no tag");
 }
 
 }  // namespace
 
 int main() {
     testCondition();
-    testLine();
+    testTag();
     if (g_failures == 0) std::printf("PASS\n");
     return g_failures == 0 ? 0 : 1;
 }

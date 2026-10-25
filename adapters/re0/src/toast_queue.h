@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -6,14 +7,17 @@
 namespace toast_queue {
 
 constexpr size_t kMaxVisible = 3;
-constexpr float kFadeSeconds = 0.5f;
+
+// Where and how a banner is drawn: a line of text on a soft band at the bottom, or an important message on the panel at the top.
+enum class Style : uint8_t { Line, Panel };
 
 struct Visible {
     std::string text;
-    float alpha;  // 1 until the last kFadeSeconds, then falls to 0
+    Style style;
+    float alpha;  // toast_rule::alpha of its age
 };
 
-void push(const char* text, float seconds);
+void push(const char* text, float seconds, Style style);
 
 // Drops expired toasts; returns the newest kMaxVisible, oldest first.
 std::vector<Visible> visible();

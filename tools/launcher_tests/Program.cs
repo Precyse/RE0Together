@@ -55,6 +55,7 @@ public static class Program
         LogRotationTests.Run();
         GameProfileTests.Run();
         AvatarTests.Run();
+        UiArtTests.Run();
         FramingTests.Run();
         InstanceGuardTests.Run();
         UpdaterTests.Run();

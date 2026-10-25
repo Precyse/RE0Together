@@ -98,7 +98,9 @@ public static class MtTexture
     private const int Rgb565GreenShift = 5;
     private const int Rgb565GreenMask = 63;
     private const int Rgb565BlueMask = 31;
-    private const int ChromaZero = 128;
+    // Neutral chroma as a 5-bit endpoint stores it: 128 rounds to 15, which expands to 123.4, not 128 (subtracting 128 tinted
+    // dark pictures green).
+    private const float ChromaZero = 15f * MaxChannel / Rgb565BlueMask;
     private const float RedFromCr = 1.402f;
     private const float GreenFromCb = 0.344136f;
     private const float GreenFromCr = 0.714136f;
@@ -190,7 +192,7 @@ public static class MtTexture
 
     /// <summary>The 0x2B format keeps luma in the alpha channel, Cr in red, Cb in blue and the real alpha in green (BT.601,
     /// full range); each result is clamped and cut to a whole number.</summary>
-    private static void WriteYCbCr(byte[] bgra, int at, int luma, int cr, int alpha, int cb)
+    private static void WriteYCbCr(byte[] bgra, int at, int luma, float cr, int alpha, float cb)
     {
         bgra[at] = Channel(luma + BlueFromCb * cb);
         bgra[at + 1] = Channel(luma - GreenFromCb * cb - GreenFromCr * cr);

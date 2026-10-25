@@ -12,16 +12,14 @@
 
 namespace {
 
-bool g_hostLeft = false;                          // net thread only
 int g_maxHp = partner_status::kBaseMaxHp;         // the highest hp the partner reported this session
-std::string g_shown;                              // the line the overlay has now
+partner_status::Tag g_shown;                     // the tag the overlay has now
 state_sync::PlayerState g_partnerState{};          // net thread only: the partner's latest PLAYER_STATE
 int g_partnerStateSlot = -1;                      // the slot it came from, -1 before the first
 
 partner_status::Input gather(const PeerInfo& peer) {
     partner_status::Input input;
     input.name = peer.name;
-    input.hostLeft = g_hostLeft;
     input.inMenu = menu_mirror::peerMenuOpen();
     input.sameRoom = door_travel::peerPlace() == door_travel::PeerPlace::Here;
     if (g_partnerStateSlot == peer.slot) {
@@ -40,12 +38,11 @@ namespace partner_hud {
 
 void onNetTick(const SessionSnapshot& session) {
     const PeerInfo* peer = otherPeer(session.peers, session.localSlot);
-    std::string line;
-    if (peer) line = partner_status::text(gather(*peer));
-    else if (g_hostLeft) line = partner_status::text(gather(PeerInfo{}));
-    if (line == g_shown) return;
-    g_shown = line;
-    debug_stats::setPartnerLine(line);
+    partner_status::Tag tag;
+    if (peer) tag = partner_status::tag(gather(*peer));
+    if (tag == g_shown) return;
+    g_shown = tag;
+    debug_stats::setPartnerTag(tag);
 }
 
 void onFrame(const GameFrame& frame) {
@@ -55,11 +52,8 @@ void onFrame(const GameFrame& frame) {
 }
 
 void onPeerJoined() {
-    g_hostLeft = false;
     g_partnerStateSlot = -1;
     g_maxHp = partner_status::kBaseMaxHp;
 }
-
-void onHostLeft() { g_hostLeft = true; }
 
 }  // namespace partner_hud

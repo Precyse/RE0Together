@@ -1,7 +1,6 @@
 #include "state_mode.h"
 
 #include <atomic>
-#include <cstdio>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -9,7 +8,6 @@
 #include "boss_handover.h"
 #include "contact_net.h"
 #include "hit_fx.h"
-#include "debug_overlay.h"
 #include "debug_stats.h"
 #include "demo_skip.h"
 #include "door_follow.h"
@@ -35,8 +33,6 @@
 
 namespace {
 
-constexpr float kIncompleteToastSeconds = 10.0f;
-constexpr size_t kToastLength = 128;
 
 std::atomic<bool> g_on{false};
 
@@ -94,9 +90,7 @@ void reportIncomplete(const std::vector<const char*>& failed) {
         names += name;
     }
     logger::write("adapter: state mode incomplete, %zu of %zu modules unavailable", failed.size(), std::size(kModules));
-    char text[kToastLength];
-    snprintf(text, sizeof(text), "State mode incomplete: %s", names.c_str());
-    debug_overlay::toast(text, kIncompleteToastSeconds);
+    debug_stats::setError("State mode incomplete: %s", names.c_str());
 }
 
 }  // namespace

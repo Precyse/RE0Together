@@ -7,9 +7,11 @@
 
 #include <cstdio>
 
+#include "../src/coop_scene.h"
 #include "../src/debug_lines.h"
 #include "../src/debug_overlay.h"
 #include "../src/debug_stats.h"
+#include "../src/wait_notice.h"
 
 namespace {
 
@@ -66,7 +68,12 @@ void fillFakeStats() {
     debug_stats::set(debug_stats::Gauge::BillyOwner, 0);
     debug_stats::setError("fake error");
     debug_stats::noteCallbackDisabled("fake_callback");
-    debug_stats::setPartnerLine("Ahmad / Caution / room 0x24 / in menu");
+    partner_status::Tag tag;
+    tag.name = "Ahmad";
+    tag.hasCondition = true;
+    tag.condition = partner_status::Condition::Caution;
+    tag.detail = "Room 0x24 / In menu";
+    debug_stats::setPartnerTag(tag);
 }
 
 bool hasLabel(const std::vector<debug_lines::Line>& lines, const wchar_t* label) {
@@ -113,15 +120,29 @@ int main() {
     }
 
     debug_overlay::setVisible(false);
-    for (int i = 0; i <= static_cast<int>(kToastCount); ++i) debug_overlay::toast("Co-op player joined: test", kToastSeconds);
+    for (int i = 0; i <= static_cast<int>(kToastCount); ++i) {
+        debug_overlay::toast("Test joined the game.", kToastSeconds, i % 2 ? toast_queue::Style::Panel : toast_queue::Style::Line);
+    }
     renderFrame(device);
     if (debug_overlay::framesDrawn() != 1) return fail("toast was not drawn with the panel hidden");
     if (debug_overlay::disabled()) return fail("overlay faulted on a toast");
 
+    coop_scene::Scene scene;
+    scene.host = {"02", "Rebecca", "You / Host", false};
+    scene.guest = {"05", "Billy", "Open", true};
+    coop_scene::publish(scene);
+    wait_notice::show(wait_notice_rule::Notice::PartnerPaused, "Kestrel has paused");
+    renderFrame(device);
+    if (debug_overlay::framesDrawn() != 2 || debug_overlay::disabled()) return fail("the scene and the wait notice did not draw");
+    wait_notice::show(wait_notice_rule::Notice::PartnerLoading, "Waiting for partner");
+    renderFrame(device);
+    if (debug_overlay::framesDrawn() != 3 || debug_overlay::disabled()) return fail("the loading notice did not draw");
+    wait_notice::clear();
+
     debug_overlay::setVisible(true);
     for (int i = 0; i < kFrames; ++i) renderFrame(device);
-    if (debug_overlay::framesSeen() != kFrames + 1) return fail("EndScene hook did not fire once per frame");
-    if (debug_overlay::framesDrawn() != kFrames + 1) return fail("panel was not drawn each frame");
+    if (debug_overlay::framesSeen() != kFrames + 3) return fail("EndScene hook did not fire once per frame");
+    if (debug_overlay::framesDrawn() != kFrames + 3) return fail("panel was not drawn each frame");
 
     D3DPRESENT_PARAMETERS params = presentParameters(window);
     const HRESULT reset = device->Reset(&params);
@@ -130,8 +151,8 @@ int main() {
         return fail("Reset");
     }
     renderFrame(device);
-    if (debug_overlay::framesSeen() != kFrames + 2) return fail("EndScene hook stopped after Reset");
-    if (debug_overlay::framesDrawn() != kFrames + 2) return fail("panel stopped drawing after Reset");
+    if (debug_overlay::framesSeen() != kFrames + 4) return fail("EndScene hook stopped after Reset");
+    if (debug_overlay::framesDrawn() != kFrames + 4) return fail("panel stopped drawing after Reset");
     if (debug_overlay::disabled()) return fail("overlay faulted");
     if (const int result = checkLines()) return result;
 

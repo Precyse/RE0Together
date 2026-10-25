@@ -2,8 +2,8 @@
 #include <cstdint>
 #include <string>
 
-// The partner status line (pure text, no game, unit tested): name, condition, same room or its room, and "in menu".
-// "Host left / not saved" replaces it on a guest whose host went away.
+// The partner tag's content (pure text, no game, unit tested): the name, the condition, and the detail line while the
+// partner is in another room or in a menu. Nothing to show without a partner.
 namespace partner_status {
 
 enum class Condition { Fine, Caution, Danger };
@@ -16,7 +16,6 @@ constexpr uint16_t kNoRoom = 0xffff;
 
 struct Input {
     std::string name;
-    bool hostLeft = false;
     bool hasState = false;   // a PLAYER_STATE arrived
     int hp = 0;
     int maxHp = kBaseMaxHp;  // the highest hp seen from this player
@@ -27,9 +26,16 @@ struct Input {
 
 Condition condition(int hp, int maxHp);
 
-const char* conditionName(Condition condition);
+// What the HUD's partner tag shows. An empty name means nothing is shown.
+struct Tag {
+    std::string name;
+    bool hasCondition = false;  // false until a PLAYER_STATE arrived
+    Condition condition = Condition::Fine;
+    std::string detail;         // "Room 0x24", "In menu" or both; empty while together
 
-// The status line; empty when there is nothing to show.
-std::string text(const Input& input);
+    bool operator==(const Tag&) const = default;
+};
+
+Tag tag(const Input& input);
 
 }  // namespace partner_status

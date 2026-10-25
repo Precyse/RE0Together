@@ -10,10 +10,9 @@ constexpr const char kSeparator[] = " / ";
 constexpr size_t kRoomTextCapacity = 16;
 
 std::string roomText(const Input& input) {
-    if (input.sameRoom) return "same room";
-    if (input.room == kNoRoom) return "";
+    if (input.sameRoom || input.room == kNoRoom) return "";
     char text[kRoomTextCapacity];
-    std::snprintf(text, sizeof(text), "room 0x%02x", input.room);
+    std::snprintf(text, sizeof(text), "Room 0x%02x", input.room);
     return text;
 }
 
@@ -31,25 +30,16 @@ Condition condition(int hp, int maxHp) {
     return percent > kCautionPercent ? Condition::Caution : Condition::Danger;
 }
 
-const char* conditionName(Condition condition) {
-    switch (condition) {
-        case Condition::Fine: return "Fine";
-        case Condition::Caution: return "Caution";
-        case Condition::Danger: break;
-    }
-    return "Danger";
-}
-
-std::string text(const Input& input) {
-    if (input.hostLeft) return "Host left / not saved";
-    std::string line;
-    append(line, input.name.substr(0, kNameChars));
+Tag tag(const Input& input) {
+    Tag out;
+    out.name = input.name.substr(0, kNameChars);
     if (input.hasState) {
-        append(line, conditionName(condition(input.hp, input.maxHp)));
-        append(line, roomText(input));
+        out.hasCondition = true;
+        out.condition = condition(input.hp, input.maxHp);
+        append(out.detail, roomText(input));
     }
-    if (input.inMenu) append(line, "in menu");
-    return line;
+    if (input.inMenu) append(out.detail, "In menu");
+    return out;
 }
 
 }  // namespace partner_status

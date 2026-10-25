@@ -1,6 +1,7 @@
 #include "door_follow.h"
 
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include "character_owner.h"
@@ -141,6 +142,12 @@ void judge(const Inbound& inbound, uint32_t nowMs) {
     logger::write("door_follow: serial %u rejected (%s)", request.serial, room_move_wire::name(verdict));
 }
 
+// The partner's character stayed in its room (the follow request was refused or never answered).
+void toastPartnerStayed() {
+    const std::string text = std::string(character_owner::name(character_owner::other(character_owner::localCharacter()))) + " stayed behind.";
+    debug_overlay::toast(text.c_str(), kToastSeconds, toast_queue::Style::Line);
+}
+
 void settle(const DoorFollowResult& answer) {
     const auto result = static_cast<Result>(answer.result);
     switch (g_tracker.onResult(answer.serial, result)) {
@@ -152,7 +159,7 @@ void settle(const DoorFollowResult& answer) {
             break;
         case FollowTracker::Outcome::Rejected:
             logger::write("door_follow: serial %u partner rejected (%s)", answer.serial, room_move_wire::name(result));
-            debug_overlay::toast("Partner stayed", kToastSeconds);
+            toastPartnerStayed();
             break;
     }
 }
@@ -172,7 +179,7 @@ void onTick() {
     const uint32_t now = pose_wire::clockMs();
     if (const auto serial = g_tracker.expire(now)) {
         logger::write("door_follow: serial %u timed out", *serial);
-        debug_overlay::toast("Partner stayed", kToastSeconds);
+        toastPartnerStayed();
     }
     if (g_arrival.expired(now)) logger::write("door_follow: serial %u never reached its room", g_followSerial);
     for (const DoorFollowResult& answer : drain(g_results)) settle(answer);
