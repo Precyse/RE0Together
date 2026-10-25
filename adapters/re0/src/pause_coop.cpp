@@ -192,6 +192,8 @@ void frame() {
         if (game::callThiscall<bool>(game::kOptionTakeClosedFunction, reinterpret_cast<void*>(g_openManager))) {
             holdWorld(g_openManager, false);
             g_openManager = 0;
+            const uintptr_t fade = game::fadeObject();  // the Options screen faded out on close; the status screen fades back in
+            if (fade) game::callThiscall<void>(game::kFadeInFunction, reinterpret_cast<void*>(fade), game::kMenuFadeSeconds);
             logger::write("pause_coop: Co-op page closed, back to the game");
         }
         return;

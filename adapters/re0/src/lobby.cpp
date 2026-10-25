@@ -216,6 +216,16 @@ bool partnerLoading() {
     return false;
 }
 
+bool hostInGame() {
+    std::lock_guard lock(g_mutex);
+    for (const Received& received : g_received) {
+        if (character_owner::isHostSlot(received.slot) && Clock::now() - received.at <= kPresenceStale) {
+            return received.presence.place == static_cast<uint8_t>(Place::InGame);
+        }
+    }
+    return false;
+}
+
 std::string nameOf(uint8_t slot) {
     std::lock_guard lock(g_mutex);
     for (const lobby_wire::Member& member : g_state.members) {

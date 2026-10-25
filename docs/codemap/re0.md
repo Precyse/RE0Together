@@ -28,7 +28,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/flag_sync.cpp | story flags (sFlagManager 0xdcc014 +0x20, 0x11c bytes) kept equal: every 6 frames each machine sends changed words as set/clear masks (FLAG_DIFF 0x010C) | `flag_sync::enable`, `onFrame`, `applyIncoming`, `logChanges`, `onLocalLoad` |
 | src/join_sync.cpp | joining a game in progress: the loaded guest sends SNAPSHOT_REQUEST 0x010D (every 3 s until answered) | `join_sync::enable`, `onFrame`, `caughtUp`, `requestResync`, `join_extras::send`, `finish`, ... |
 | src/session_slot.cpp | session save slot: hooks the save manager's save (0x6134c0, and 0x613500 save by copy) and load (0x613390) requests | `session_slot::enable(loadOrder)`, `onFrame`, `onNetTick`, `current`, `guestSession`, `hostInGame`, ... |
-| src/host_exit.cpp, src/host_exit.h | a guest whose host left returns to the main menu: `request` (from `state_sync`) toasts and a game tick step writes `game::kExitToTitleMenuFlag` (0xdcc131) = 1 and `requestRoomPhase(Exit)` once `game_state::playing()` | `host_exit::enable`, `request` |
+| src/host_exit.cpp, src/host_exit.h, src/host_exit_rule.h | a guest whose host left (or whose host's game left play for 5 s) returns to the main menu: `request` (from `state_sync`) toasts and a game tick step writes `game::kExitToTitleMenuFlag` (0xdcc131) = 1 and `requestRoomPhase(Exit)` once `game_state::playing()` | `host_exit::enable`, `request` |
 | src/auto_join.cpp | net thread: a guest at game over (always) or outside gameplay | `auto_join::onNetTick` |
 | src/partner_status.cpp | pure content of the HUD's partner tag (unit tested): name, condition Fine / Caution / Danger from hp against the highest hp seen (floor 150), and the detail line (`Room 0x..`, `In menu`) while the partner is apart; empty without a partner | `partner_status::tag`, `condition` |
 | src/partner_hud.cpp | net thread: gathers the partner tag, on host and guest alike, from the session (the other peer), its own copy of the partner's latest PLAYER_STATE, the room report and the menu mirror | `partner_hud::onNetTick`, `onFrame`, `onPeerJoined` |
@@ -292,5 +292,6 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | tests/gfd_rule_test.cpp | x86 exe: the font layout on a synthetic buffer (header, path, glyph fields, order) and every refusal |  |
 | tests/coop_scene_rule_test.cpp | x86 exe: the saved outfit's default picture, role lines, silhouette pulse, staleness |  |
 | tests/pause_coop_rule_test.cpp | x86 exe: the three rows' layout, wrap, clicks, decide on each row, cancel |  |
+| tests/host_exit_rule_test.cpp | x86 exe: a guest leaves after the host's game is out of play 5 s; blips and the title start over |  |
 | tests/net_test.cpp | x86 exe driving `NetClient` against a launcher, checks PLAYER_STATE and PAD_FRAME round trips | `--port --seconds --expect-peer` |
 

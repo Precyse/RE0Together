@@ -3,6 +3,7 @@
 #include <intrin.h>
 
 #include <array>
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -32,7 +33,10 @@ namespace {
 namespace wire = hit_fx_wire;
 
 constexpr uintptr_t kSpawnHitEffectFunction = 0x4c8b80;  // uEnemyBase::spawnHitEffectByAttackType, thiscall ret 0xc
-constexpr uintptr_t kPlaySeAtPositionFunction = 0x644740;  // playSeAtPosition, stdcall (float*, bank, id, u8) ret 0x10
+// playSeAtPosition: (float*, bank, id, u8) ret 0x10, run on the caller's ECX: it hands ECX on as `this` of the sound
+// request 0x644a00, which locks this + 0xf04. A detour must pass ECX through (an stdcall one let the compiler reuse ECX:
+// a live crash locked 0x40 + 0xf04), and a replay needs the sound manager the game's own calls carry.
+constexpr uintptr_t kPlaySeAtPositionFunction = 0x644740;
 constexpr uintptr_t kPartBurstFunction = 0x4256a0;  // the base family's part burst, thiscall (enemy) (part, arg) ret 8
 constexpr std::array<uint8_t, 8> kSpawnHitEffectBytes = {0x8b, 0x44, 0x24, 0x0c, 0x48, 0x56, 0x8b, 0xf1};  // mov eax,[esp+0xc]; dec eax; push esi; mov esi,ecx
 constexpr std::array<uint8_t, 6> kPlaySeBytes = {0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf0};  // push ebp; mov ebp,esp; and esp,-16
@@ -41,11 +45,12 @@ constexpr size_t kMaxInbox = 64;
 constexpr size_t kEffectHandleWords = 2;  // sEffect::create's out handle
 
 using SpawnHitEffect = void(__fastcall*)(void* enemy, void* edx, game::HitPoint* point, int32_t zone, int32_t attackType);
-using PlaySe = int(__stdcall*)(float* pos, uint32_t bank, uint32_t id, uint8_t flag);
+using PlaySe = int(__fastcall*)(void* sound, void* edx, float* pos, uint32_t bank, uint32_t id, uint8_t flag);
 using PartBurst = void(__fastcall*)(void* enemy, void* edx, int32_t part, int32_t arg);
 
 SpawnHitEffect g_originalSpawn = nullptr;
 PlaySe g_originalPlaySe = nullptr;
+std::atomic<void*> g_soundManager{nullptr};  // the ECX of the game's last own call: replays play through it
 PartBurst g_originalBurst = nullptr;
 
 // Messages from the room's simulator: received on the net thread, shown on the game thread at the sender's time to show.
@@ -131,7 +136,8 @@ void __fastcall spawnDetour(void* enemy, void* edx, game::HitPoint* point, int32
     g_originalSpawn(enemy, edx, point, zone, attackType);
 }
 
-int __stdcall playSeDetour(float* pos, uint32_t bank, uint32_t id, uint8_t flag) {
+int __fastcall playSeDetour(void* sound, void* edx, float* pos, uint32_t bank, uint32_t id, uint8_t flag) {
+    g_soundManager = sound;
     if (pos && g_recorder.recording()) {
         const float at[3] = {pos[0], pos[1], pos[2]};
         g_recorder.addSound(at, bank, id, flag);
@@ -139,7 +145,7 @@ int __stdcall playSeDetour(float* pos, uint32_t bank, uint32_t id, uint8_t flag)
                g_tickSounds.size() < wire::kMaxBatchSounds) {
         g_tickSounds.push_back({g_movingRecord, flag, 0, {pos[0], pos[1], pos[2]}, bank, id});
     }
-    return g_originalPlaySe(pos, bank, id, flag);
+    return g_originalPlaySe(sound, edx, pos, bank, id, flag);
 }
 
 // The simulator of an enemy sends each part it loses; the other machines call the original through showBurst.
@@ -159,6 +165,11 @@ void __fastcall burstDetour(void* enemy, void* edx, int32_t part, int32_t arg) {
     if (state_net::send(wire::kMsgPartBurst, true, proto::bytesOf(burst))) {
         logger::write("hit_fx: slot %d record %u lost part %d, sent", slot, origin->record, part);
     }
+}
+
+// A sound of the other machine's, through the sound manager the game's own calls use; none before the first such call.
+void playSound(float (&pos)[3], uint32_t bank, uint32_t id, uint8_t flag) {
+    if (void* sound = g_soundManager.load()) g_originalPlaySe(sound, nullptr, pos, bank, id, flag);
 }
 
 // The local copy of the enemy a message names, in the loaded room and the table's epoch, or 0.
@@ -192,7 +203,7 @@ void showHit(const wire::HitFx& fx) {
     for (uint8_t i = 0; i < fx.sounds; ++i) {
         const wire::Sound& sound = fx.sound[i];
         float pos[3] = {sound.pos[0], sound.pos[1], sound.pos[2]};
-        g_originalPlaySe(pos, sound.bank, sound.id, sound.flag);
+        playSound(pos, sound.bank, sound.id, sound.flag);
     }
     debug_stats::count(debug_stats::Counter::HitFxShown);
 }
@@ -261,7 +272,7 @@ void showSounds(const wire::EnemySoundBatch& batch) {
         const wire::EnemySoundEntry& e = batch.entry[i];
         if (!localEnemy(batch.scene, batch.roomEpoch, e.spawnRecord)) continue;
         float pos[3] = {e.pos[0], e.pos[1], e.pos[2]};
-        g_originalPlaySe(pos, e.bank, e.id, e.flag);
+        playSound(pos, e.bank, e.id, e.flag);
     }
 }
 

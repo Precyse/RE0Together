@@ -27,7 +27,8 @@ def main():
     thread = next(t for t in dump.threads.threads if t.ThreadId == record.ThreadId)
     ctx = thread.ContextObject
     code = record.ExceptionRecord.ExceptionCode
-    kind = "hang" if int(code) & 0xFFFFFFFF == HANG_CODE else f"exception {code}"
+    value = int(getattr(code, "value", code))  # newer minidump versions give an enum
+    kind = "hang" if value & 0xFFFFFFFF == HANG_CODE else f"exception {value:#x}"
     print(f"{kind} at {record.ExceptionRecord.ExceptionAddress:#x}")
     print(f"eax {ctx.Eax:#x} ebx {ctx.Ebx:#x} ecx {ctx.Ecx:#x} edx {ctx.Edx:#x} esi {ctx.Esi:#x} edi {ctx.Edi:#x} "
           f"esp {ctx.Esp:#x} ebp {ctx.Ebp:#x}")

@@ -320,6 +320,7 @@ constexpr uintptr_t kDemoFadeDurationOffset = 0x64;
 constexpr uintptr_t kDemoFadeHolderGlobal = 0xdcbea4;
 constexpr uintptr_t kDemoFadeObjectOffset = 0x20;
 constexpr uintptr_t kFadeStartFunction = 0x5aa410;
+constexpr uintptr_t kFadeInFunction = 0x5aa2c0;  // thiscall(fade, f32 seconds): from black back to the picture (sSubMenu after its Options, 0.5 s)
 // The inputs that test true for a skip in state 5 (0x54b496 .. 0x54b4f9): the active pad's trigger word bit 8, the
 // keyboard word & 0x8050000, the mouse byte & 2. The pad word is [pad + [pad + 0xc38] * 0x2cc + 0x1a0].
 constexpr uintptr_t kPadActiveIndexOffset = 0xc38;

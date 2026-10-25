@@ -54,6 +54,9 @@ View view();
 // Any thread: a partner announced a fresh presence that says it is loading the session.
 bool partnerLoading();
 
+// Any thread: the host's fresh presence says it is in play (false when it says another place or has gone quiet).
+bool hostInGame();
+
 // Any thread: the lobby name of the player in `slot`, empty when the lobby has none.
 std::string nameOf(uint8_t slot);
 
