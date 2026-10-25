@@ -58,7 +58,8 @@ bool otherIn(uintptr_t player, uintptr_t record) {
 
 // The door carry's sequence for one character (0x61e2c0): detach its units, find or load the room's record, place
 // it on the entry spot, assign it, attach its units to the new room; then the old record goes if it is dormant and
-// empty.
+// empty. A record loaded for another room took over the room message table, so the loaded room's is put back, as the
+// engine does after its own loads of another room; otherwise this room's `mes N` shows the other room's message N.
 void moveUnguarded(uintptr_t player, uint16_t sceneId, uint32_t entry, std::optional<uint32_t> spotMode) {
     void* info = reinterpret_cast<void*>(sceneInfo());
     const uintptr_t old = recordOf(player);
@@ -68,6 +69,10 @@ void moveUnguarded(uintptr_t player, uint16_t sceneId, uint32_t entry, std::opti
     auto* record = game::callThiscall<void*>(game::kSceneRecordFunction, info, static_cast<uint32_t>(sceneId), flags);
     if (!record) return;
     const auto recordAddress = reinterpret_cast<uintptr_t>(record);
+    const uintptr_t loaded = currentRecord();
+    if (loaded && recordAddress != loaded) {
+        game::callThiscall<void>(game::kSceneLoadMessagesFunction, nullptr, reinterpret_cast<void*>(loaded));
+    }
     game::callThiscall<void>(game::kScenePlaceFunction, record, reinterpret_cast<void*>(player), entry,
                              spotMode ? *spotMode : placeMode(recordAddress, entry, otherIn(player, recordAddress)));
     game::callThiscall<void>(game::kSceneAssignFunction, info, record, reinterpret_cast<void*>(player));

@@ -3,8 +3,9 @@
 
 #include <cstdint>
 
-// The game's own resource and equip calls that both the weapon re-equip (equip_refresh) and the outfit swap
-// (appearance) repeat from the menu close (0x5d8040): all run on the game thread and must be wrapped in `guarded`.
+// The game's own resource and equip calls that the weapon re-equip (equip_refresh) and the outfit swap (appearance)
+// repeat from the menu close (0x5d8040), and a peer's floor put (floor_items_sync) from the drop menu: all run on the
+// game thread and must be wrapped in `guarded`.
 namespace equip_steps {
 
 // Runs `step` and returns false when it raised an exception.

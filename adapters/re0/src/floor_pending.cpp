@@ -1,5 +1,7 @@
 #include "floor_pending.h"
 
+#include <algorithm>
+
 namespace {
 
 using floor_pending::Event;
@@ -28,6 +30,14 @@ size_t findPut(const std::vector<Event>& events, const Event& take) {
 }  // namespace
 
 namespace floor_pending {
+
+std::vector<uint32_t> putItemIds(const std::vector<Event>& events) {
+    std::vector<uint32_t> ids;
+    for (const Event& event : events) {
+        if (!event.isTake && std::find(ids.begin(), ids.end(), event.itemId) == ids.end()) ids.push_back(event.itemId);
+    }
+    return ids;
+}
 
 AddResult Queue::add(uint16_t room, const Event& event) {
     std::vector<Event>& events = m_rooms[room];

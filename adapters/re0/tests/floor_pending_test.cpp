@@ -1,5 +1,5 @@
 // Checks the per-room pending floor queue: put/take coalescing, the per-room cap and drop reporting, ordering and
-// room isolation. Exit 0 when every check passes.
+// room isolation, the put item ids of a batch. Exit 0 when every check passes.
 #include <cstdio>
 
 #include "../src/floor_pending.h"
@@ -102,6 +102,12 @@ void testLoadDropsEventsForTheOldWorld() {
     check(events.size() == 1 && events[0].isTake, "only the new world's event is applied when the room loads");
 }
 
+void testPutItemIdsListsEachPutOnce() {
+    const std::vector<uint32_t> ids = floor_pending::putItemIds({put(kKnife), take(kHerb), put(kHerb), put(kKnife)});
+    check(ids == std::vector<uint32_t>{kKnife, kHerb}, "each put item once, in first-put order");
+    check(floor_pending::putItemIds({take(kHerb)}).empty(), "takes need no model");
+}
+
 void testSnapshotRoundTrip() {
     Queue queue;
     queue.add(kRoomA, {false, kHerb, 3, {1.0f, 2.0f, 3.0f}, {0.0f, 0.5f, 0.0f}});
@@ -143,6 +149,7 @@ int main() {
     testTakeReturnsOrderAndClears();
     testAllAndClear();
     testLoadDropsEventsForTheOldWorld();
+    testPutItemIdsListsEachPutOnce();
     testSnapshotRoundTrip();
     testSnapshotRejectsBadSizes();
     testSnapshotCapsEvents();

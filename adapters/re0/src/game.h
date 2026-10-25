@@ -112,6 +112,9 @@ constexpr uintptr_t kItemPutFunction = 0x4de500;     // thiscall on sItemPut, (I
 // each time the room loads; the only other caller is the player's drop at 0x5e4b84. Return address of the script call:
 constexpr uintptr_t kScriptItemPutReturn = 0x581b58;
 constexpr uintptr_t kItemRemoveFunction = 0x4de730;  // thiscall, (uItem*), ret 4; loads its own `this` from [0xdcbf40], ecx is ignored
+// A floor item's model is its own sGameChara set {kind 0x71, item id}. put only binds a set already there (0x51fa40 ->
+// 0x51f570); the drop requests it first (0x5e49b9, record = controlled +0xff4) and waits for the loads (0x5e4a09).
+constexpr int32_t kItemUnitKind = 0x71;
 
 // Pickup action step (reached through the handler table at 0xd8ac6c): thiscall on the action state, (player), ret 4.
 // Phase 1 waits for the animation, looks the item up by key without a null check and takes it.
@@ -245,8 +248,12 @@ constexpr uintptr_t kSceneCurrentRecordOffset = 0x20;
 constexpr uintptr_t kSceneRecordIdOffset = 8;
 constexpr uintptr_t kPlayerSceneRecordOffset = 0xff4;
 constexpr uintptr_t kPlayerUnitHandleOffset = 0xff0;       // handle in the per-room unit registry
-// thiscall (scene id, flags) ret 8: the record of a room, loading a dormant one when no record holds it.
+// thiscall (scene id, flags) ret 8: the record of a room, loading a dormant one when no record holds it. The load
+// (0x61b8e0) also replaces the room message table (sGameGUI slot 9, the one `mes N` reads) with that room's.
 constexpr uintptr_t kSceneRecordFunction = 0x61e0f0;
+// (record) ret 4, ECX unused: puts the message table of the record's room in sGameGUI slot 9. The engine calls it after
+// its record loads with the room it activates (enterRoom 0x61e2c0) or the player's record (eventProc_2C 0x57fe40).
+constexpr uintptr_t kSceneLoadMessagesFunction = 0x61dbe0;
 constexpr uintptr_t kSceneDefaultFlagsGlobal = 0xdd1d44;   // u32 flags a door passes, plus kSceneDoorFlag
 constexpr uint32_t kSceneDoorFlag = 4;
 // thiscall on a record (player, entry, mode) ret 0xC: puts the player on the entry's spot (mode 0 the one coming

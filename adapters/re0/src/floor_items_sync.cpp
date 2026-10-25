@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "debug_stats.h"
+#include "equip_steps.h"
 #include "floor_pending.h"
 #include "floor_snapshot.h"
 #include "game.h"
@@ -57,6 +58,15 @@ floor_pending::Queue g_pending;    // game thread only: events for rooms that ar
 floor_pending::Queue g_journal;    // game thread only: floor changes since the last save or load, for a joining guest
 uint32_t g_settleFrames = 0;       // game thread only: frames left before the arrived room takes events
 std::vector<Incoming> g_delayed;   // game thread only, state mode: arrived events waiting for their time, in order
+
+// The loaded room's events, in order, held until the floor models their puts requested have loaded.
+struct Held {
+    uint16_t room = 0;
+    std::vector<Event> events;
+    uint64_t sinceMs = 0;
+    bool waited = false;  // a tick ended with the models still loading
+};
+Held g_held;  // game thread only
 
 bool readRecords(Records& out) {
     const uintptr_t table = game::readPointer(game::kItemPutGlobal);
@@ -206,11 +216,45 @@ bool roomReady() {
            game::controlled();
 }
 
-void applyPending(uint16_t room) {
-    for (const Event& event : g_pending.take(room)) {
-        apply(event);
-        debug_stats::count(Counter::FloorPendingApplied);
+// The drop's model step for a peer's puts: the set of each item is requested the way the drop menu does, because put
+// alone leaves an item this machine never loaded (a weapon carried since the start) without a model.
+void requestModels(const std::vector<Event>& events) {
+    void* chara = equip_steps::gameChara();
+    uint32_t record = 0;
+    if (!chara || !game::readMemory(game::controlled() + game::kPlayerSceneRecordOffset, record)) return;
+    for (const uint32_t itemId : floor_pending::putItemIds(events)) {
+        equip_steps::guarded(
+            [&] { equip_steps::requestSet(chara, game::kItemUnitKind, static_cast<int32_t>(itemId), record); });
     }
+}
+
+// A fault in the load check lets the events apply rather than hold the room's floor forever.
+bool modelsLoaded() {
+    bool loaded = false;
+    return !equip_steps::guarded([&] { loaded = equip_steps::requestsLoaded(); }) || loaded;
+}
+
+// Events for the loaded room join the held ones, their puts' models requested.
+void hold(uint16_t room, std::vector<Event> events) {
+    if (events.empty()) return;
+    requestModels(events);
+    if (g_held.events.empty()) g_held = {room, {}, monotonicMs(), false};
+    g_held.events.insert(g_held.events.end(), events.begin(), events.end());
+}
+
+// The room changed under held events: they wait in their room's queue again.
+void requeueHeld() {
+    for (const Event& event : g_held.events) g_pending.add(g_held.room, event);
+    g_held = Held{};
+}
+
+void applyHeld() {
+    for (const Event& event : g_held.events) apply(event);
+    if (g_held.waited) {
+        logger::write("floor_items_sync: %zu floor changes applied after %llu ms of item model loading",
+                      g_held.events.size(), monotonicMs() - g_held.sinceMs);
+    }
+    g_held = Held{};
 }
 
 // State mode: the arrived events join the ones still waiting; those whose time has come are returned in order. An event
@@ -235,17 +279,25 @@ void onTick() {
     if (g_settleFrames > 0 && !game_state::doorActive()) --g_settleFrames;
     const uint16_t room = game_state::currentRoom();
     const bool ready = roomReady();
-    if (ready) applyPending(room);
+    if (!g_held.events.empty() && g_held.room != room) requeueHeld();
+    std::vector<Event> arrived;
+    if (ready) {
+        arrived = g_pending.take(room);
+        debug_stats::count(Counter::FloorPendingApplied, static_cast<uint32_t>(arrived.size()));
+    }
     for (const Incoming& item : incoming) {
         g_journal.add(item.room, item.event);
         if (ready && item.room == room) {
-            apply(item.event);
+            arrived.push_back(item.event);
             continue;
         }
         const floor_pending::AddResult result = g_pending.add(item.room, item.event);
         if (result.droppedOldest) debug_stats::count(Counter::FloorPendingDropped);
     }
-    debug_stats::set(debug_stats::Gauge::FloorPending, static_cast<int>(g_pending.total()));
+    hold(room, std::move(arrived));
+    if (ready && !g_held.events.empty() && modelsLoaded()) applyHeld();
+    if (!g_held.events.empty()) g_held.waited = true;
+    debug_stats::set(debug_stats::Gauge::FloorPending, static_cast<int>(g_pending.total() + g_held.events.size()));
 }
 
 void enqueue(uint16_t room, const Event& event, uint32_t delayMs = 0) {
@@ -294,6 +346,7 @@ void onLoad() {
     onSave();
     g_pending.clear();
     g_delayed.clear();
+    g_held = Held{};
     std::lock_guard lock(g_mutex);
     g_incoming.clear();
 }

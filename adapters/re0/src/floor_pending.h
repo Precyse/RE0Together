@@ -37,6 +37,9 @@ struct AddResult {
     bool droppedOldest;  // the room was full and its oldest event was discarded
 };
 
+// The item ids the events put, each once, in order of their first put (the floor models a batch needs loaded).
+std::vector<uint32_t> putItemIds(const std::vector<Event>& events);
+
 class Queue {
 public:
     // A take that matches a pending put of the same room cancels both; otherwise the event is appended, dropping the
