@@ -162,6 +162,7 @@ export default {
      "ready": false
     }
    ],
+   "save": null,
    "seatsClickable": false,
    "notice": null
   },

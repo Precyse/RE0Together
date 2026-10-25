@@ -95,7 +95,7 @@ void enableCoop(const Config& config) {
     resync::enable(g_net);
     event_place::enable(g_net);
     if (!event_sync::enable(g_net)) logger::write("adapter: event sync unavailable");
-    if (!session_slot::enable()) logger::write("adapter: session slot unavailable");
+    if (!session_slot::enable(config.loadOrder)) logger::write("adapter: session slot unavailable");
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
     command_input::enable();

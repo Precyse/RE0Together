@@ -56,7 +56,7 @@ public static class SessionCardsTests
         Check.That(Fix(RefusalKind.LauncherBuild) == NoticeFix.None && Fix(RefusalKind.UnknownGame) == NoticeFix.None, "fix: none without a newer release");
         Check.That(Fix(RefusalKind.GameNotFound) == NoticeFix.Browse, "fix: game not found browses");
         foreach (var kind in new[] { RefusalKind.LobbyFull, RefusalKind.LobbyClosed, RefusalKind.LobbyNotAllowed, RefusalKind.LobbyFailed,
-                     RefusalKind.NotCoopLobby, RefusalKind.SteamOffline, RefusalKind.SaveTimedOut, RefusalKind.RejoinGaveUp })
+                     RefusalKind.NotCoopLobby, RefusalKind.SteamOffline, RefusalKind.SaveTimedOut, RefusalKind.SaveDiffers, RefusalKind.RejoinGaveUp })
         {
             Check.That(Fix(kind, LobbyId) == NoticeFix.JoinAgain, $"fix: {kind} joins again when the refusal carries a lobby");
             Check.That(Fix(kind) == NoticeFix.None, $"fix: {kind} has no fix without a lobby");

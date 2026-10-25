@@ -2,12 +2,13 @@ namespace CoopLauncher;
 
 /// <summary>Trading characters between the seats until the game starts. A guest asks by publishing the character it wants in its
 /// options (<see cref="GameOptions.SwapRequestKey"/>); the host's launcher answers by flipping the host's own character option
-/// and writing it to the lobby's host options, which turns the seats' characters for everyone.</summary>
+/// and writing it to the lobby's host options, which turns the seats' characters for everyone. The same write carries the host's other
+/// choices that change while the lobby is open (the save slot to load).</summary>
 public sealed partial class App
 {
     private string? _swapWanted;
-    private ILobby? _hostCharacterSyncedTo;
-    private AppSettings? _hostCharacterSyncedFrom;
+    private ILobby? _hostChoicesSyncedTo;
+    private AppSettings? _hostChoicesSyncedFrom;
 
     /// <summary>A guest's swap: asks the host to give up the character the guest wants (<paramref name="character"/>).</summary>
     public void RequestSeatSwap(string character) => _commands.Enqueue(() => _swapWanted = character);
@@ -30,18 +31,20 @@ public sealed partial class App
             AppSettings.Update(settings => settings.WithOption(profile.Id, GameOptions.CharacterKey, GameOptions.OtherCharacter(profile, hostCharacter)!));
     }
 
-    /// <summary>Writes the host's character choice to the lobby when it is not what the lobby carries (looked at only when the
-    /// settings or the lobby were replaced, never every tick).</summary>
-    private void PublishHostCharacter(ILobby lobby)
+    /// <summary>Writes the host's choices that change while the lobby is open (the character, the save slot and its hash) to the lobby
+    /// when they are not what it carries (looked at only when the settings or the lobby were replaced, never every tick).</summary>
+    private void PublishHostChoices(ILobby lobby)
     {
         var settings = AppSettings.Current;
-        if (_profile is not { HasCharacterSelect: true } profile
-            || (ReferenceEquals(lobby, _hostCharacterSyncedTo) && ReferenceEquals(settings, _hostCharacterSyncedFrom))) return;
-        _hostCharacterSyncedTo = lobby;
-        _hostCharacterSyncedFrom = settings;
-        var character = GameOptions.Current(profile, _gameDir)[GameOptions.CharacterKey];
-        if (lobby.HostOptions.GetValueOrDefault(GameOptions.CharacterKey) == character) return;
-        var options = new Dictionary<string, string>(lobby.HostOptions) { [GameOptions.CharacterKey] = character };
+        if (_profile == null || (ReferenceEquals(lobby, _hostChoicesSyncedTo) && ReferenceEquals(settings, _hostChoicesSyncedFrom))) return;
+        _hostChoicesSyncedTo = lobby;
+        _hostChoicesSyncedFrom = settings;
+        var current = GameOptions.Current(_profile, _gameDir);
+        var keys = (_profile.Options ?? []).Where(option => GameOptions.IsRuntime(option) || (_profile.HasCharacterSelect && option.Key == GameOptions.CharacterKey)).Select(option => option.Key);
+        var changed = keys.Where(key => lobby.HostOptions.GetValueOrDefault(key) != current[key]).ToList();
+        if (changed.Count == 0) return;
+        var options = new Dictionary<string, string>(lobby.HostOptions);
+        foreach (var key in changed) options[key] = current[key];
         lobby.SetLobbyData(LobbyKey.HostOptions, GameOptions.Encode(options));
     }
 }

@@ -43,7 +43,7 @@ internal static class SessionCards
             RefusalKind.LauncherBuild or RefusalKind.UnknownGame => newerBuild > 0 ? NoticeFix.UpdateLauncher : NoticeFix.None,
             RefusalKind.GameNotFound => NoticeFix.Browse,
             RefusalKind.LobbyFull or RefusalKind.LobbyClosed or RefusalKind.LobbyNotAllowed or RefusalKind.LobbyFailed
-                or RefusalKind.NotCoopLobby or RefusalKind.SteamOffline or RefusalKind.SaveTimedOut or RefusalKind.RejoinGaveUp =>
+                or RefusalKind.NotCoopLobby or RefusalKind.SteamOffline or RefusalKind.SaveTimedOut or RefusalKind.SaveDiffers or RefusalKind.RejoinGaveUp =>
                 refusal.LobbyId != 0 ? NoticeFix.JoinAgain : NoticeFix.None,
             _ => NoticeFix.None,
         };

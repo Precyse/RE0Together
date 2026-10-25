@@ -137,6 +137,7 @@ export default {
      "ready": false
     }
    ],
+   "save": null,
    "seatsClickable": true,
    "notice": null
   },

@@ -46,6 +46,8 @@
 .session-state { display: flex; align-items: center; gap: 12px; }
 .session-state-words { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: 0.02em; }
 .session-state-timer { font-size: 14px; color: var(--muted); }
+.session-save { display: flex; flex-direction: column; gap: 6px; }
+.session-save .select { width: 100%; }
 .session-options { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 12px; }
 .session-option { display: contents; }
 .session-option-label { color: var(--muted); }

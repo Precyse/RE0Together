@@ -93,7 +93,7 @@ public sealed partial class App
     private void PublishLobbyData(AppStatus status)
     {
         if (_lobby is not { IsReady: true } lobby || _hostId != _transport!.LocalId) return;
-        PublishHostCharacter(lobby);
+        PublishHostChoices(lobby);
         if (_hostStartedUnix == 0 && status.Step == SessionStep.InGame) _hostStartedUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         PublishLobbyValue(lobby, LobbyKey.Roster, RosterCodec.Encode(status.Players.Select(player => new RosterEntry(player.Name, player.Step))));
         if (_hostStartedUnix != 0) PublishLobbyValue(lobby, LobbyKey.Started, _hostStartedUnix.ToString());

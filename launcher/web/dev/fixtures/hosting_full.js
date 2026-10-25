@@ -207,6 +207,7 @@ export default {
      "ready": true
     }
    ],
+   "save": null,
    "seatsClickable": false,
    "notice": null
   },

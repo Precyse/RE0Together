@@ -162,6 +162,19 @@ export default {
      "ready": false
     }
    ],
+   "save": {
+    "key": "load_slot",
+    "label": "Save",
+    "value": "2",
+    "values": [
+      { "value": "", "label": "None" },
+      { "value": "0", "label": "Slot 1 / Normal / 1:12:33 / Area 4" },
+      { "value": "1", "label": "Slot 2 / Normal / 0:24:40 / Area 1" },
+      { "value": "2", "label": "Slot 3 / Hard / 2:14:05 / Area 13" },
+      { "value": "3", "label": "Slot 4 / Easy / 0:02:16 / Area 1" }
+    ],
+    "locked": false
+  },
    "seatsClickable": false,
    "notice": null
   },

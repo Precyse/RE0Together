@@ -424,6 +424,12 @@ public sealed partial class App
             return false;
         }
         if (_saveSync?.Ready == false || StartGateClosed()) return true;
+        if (!SaveMatchesHost())
+        {
+            Log.Info("The save received from the host does not hold the slot the host loads, not launching the game");
+            Refuse(RefusalKind.SaveDiffers);
+            return false;
+        }
         _launchPending = false;
         var options = AdapterOptions();
         _saveSync?.EnableAdapter(options);
@@ -435,6 +441,11 @@ public sealed partial class App
         if (result == LaunchResult.Started) _launchedAtMs = Environment.TickCount64;
         return result is LaunchResult.Started or LaunchResult.AlreadyRunning || RefuseLaunch(result);
     }
+
+    /// <summary>A guest's copy of the host's save must hold the slot the host makes its game load (the host's hash of it); a host forcing
+    /// none, and the host itself, always match.</summary>
+    private bool SaveMatchesHost() =>
+        _hostId == _transport!.LocalId || OptionSources.SessionCopyMatches(_profile!, _gameDir, _lobby!.HostOptions);
 
     /// <summary>The window's launchers wait for the start gate (<see cref="StartGate"/>): the host for its START GAME, a guest for the
     /// host's game to start. Once the host was seen starting, a guest stays open. A command-line run holds nothing.</summary>

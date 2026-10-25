@@ -127,7 +127,7 @@ internal static partial class SessionScreens
     private static JoinStep RefusalStep(RefusalKind kind) => kind switch
     {
         RefusalKind.LauncherBuild or RefusalKind.GameBuild or RefusalKind.ModFiles or RefusalKind.ModNotInstalled => JoinStep.BuildCheck,
-        RefusalKind.SaveTimedOut or RefusalKind.SaveFolderMissing => JoinStep.ReceivingSave,
+        RefusalKind.SaveTimedOut or RefusalKind.SaveFolderMissing or RefusalKind.SaveDiffers => JoinStep.ReceivingSave,
         RefusalKind.LaunchFailed or RefusalKind.GameUnsupported or RefusalKind.PortInUse => JoinStep.Starting,
         _ => JoinStep.Lobby,
     };

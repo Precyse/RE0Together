@@ -10,7 +10,7 @@ public enum RefusalKind
 {
     LauncherBuild, GameBuild, ModFiles, ModNotInstalled, GameUnsupported, GameNotFound, RequirementMissing,
     UnknownGame, LobbyFull, LobbyClosed, LobbyNotAllowed, LobbyFailed, NotCoopLobby, SteamOffline, SaveTimedOut,
-    SaveFolderMissing, HostLeft, RejoinGaveUp, PortInUse, LaunchFailed,
+    SaveFolderMissing, SaveDiffers, HostLeft, RejoinGaveUp, PortInUse, LaunchFailed,
 }
 
 /// <summary>A refused start: the kind, a detail for the words that carry one (build number, file name, port), the game it

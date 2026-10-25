@@ -164,7 +164,7 @@ internal static partial class SessionScreens
     /// listed here).</summary>
     private static IReadOnlyList<(string Label, string Value)> HostOptions(AppStatus s, GameProfile g) =>
         (g.Options ?? [])
-            .Where(option => option.Host && !GameOptions.InCharacterSelect(g, option))
+            .Where(option => option.Host && !GameOptions.InCharacterSelect(g, option) && !GameOptions.IsRuntime(option))
             .Select(option => (Option: option, Value: option.Values.FirstOrDefault(v => s.HostOptions.TryGetValue(option.Key, out var key) && v.Value == key)))
             .Where(pair => pair.Value != null)
             .Select(pair => (Label: pair.Option.Label, Value: pair.Value!.Label))

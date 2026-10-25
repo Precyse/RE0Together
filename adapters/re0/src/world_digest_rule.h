@@ -8,6 +8,7 @@
 #include "event_rule.h"
 #include "flag_diff.h"
 #include "flag_family.h"
+#include "fnv1a32.h"
 #include "world_digest_wire.h"
 
 // The world digest canary's rules (partner_mode=state): how the digest is computed and when two digests that differ are
@@ -21,8 +22,6 @@ constexpr uint32_t kHoldOffMs = 15000;  // after a report the scope stays quiet 
 
 constexpr uint32_t kCrcPolynomial = 0xEDB88320u;
 constexpr uint32_t kCrcInit = 0xFFFFFFFFu;
-constexpr uint32_t kFnvOffset = 2166136261u;
-constexpr uint32_t kFnvPrime = 16777619u;
 constexpr size_t kByteBits = 8;
 constexpr uint32_t kBitsPerWord = 32;
 
@@ -84,9 +83,9 @@ struct AuthorityEntry {
 // FNV-1a over (scene, owner, epoch) of every entry in scene order, so the order the table lists them in does not matter.
 inline uint32_t authorityHash(std::vector<AuthorityEntry> entries) {
     std::sort(entries.begin(), entries.end(), [](const AuthorityEntry& a, const AuthorityEntry& b) { return a.scene < b.scene; });
-    uint32_t hash = kFnvOffset;
+    uint32_t hash = fnv1a32::kOffsetBasis;
     const auto mix = [&hash](uint32_t value, size_t bytes) {
-        for (size_t i = 0; i < bytes; ++i) hash = (hash ^ ((value >> (i * kByteBits)) & 0xffu)) * kFnvPrime;
+        for (size_t i = 0; i < bytes; ++i) hash = (hash ^ ((value >> (i * kByteBits)) & 0xffu)) * fnv1a32::kPrime;
     };
     for (const AuthorityEntry& entry : entries) {
         mix(entry.scene, sizeof(entry.scene));

@@ -20,8 +20,6 @@ internal static class OutfitArt
     private const int CropFields = 4;
     private const int BytesPerPixel = 4;
     private const int AlphaOffset = 3;
-    private const uint FnvOffset = 2166136261;
-    private const uint FnvPrime = 16777619;
 
     /// <summary>The archive that holds the outfit's picture: the game folder's own, or for a DLC outfit the first
     /// <c>DLC\app\costume_*</c> folder that has it; null when the game does not have the outfit.</summary>
@@ -147,7 +145,7 @@ internal static class OutfitArt
         var info = new FileInfo(arc);
         var crop = source.Crop == null ? string.Empty : string.Join(',', source.Crop);
         var text = $"{Path.GetRelativePath(gameDir, arc)}|{info.Length}|{info.LastWriteTimeUtc.Ticks}|{texture}|{crop}|{source.Feather}|{ArtFormatVersion}";
-        return System.Text.Encoding.UTF8.GetBytes(text).Aggregate(FnvOffset, (hash, next) => (hash ^ next) * FnvPrime);
+        return Fnv1a.Hash(System.Text.Encoding.UTF8.GetBytes(text));
     }
 
     /// <summary>The cached picture, or null when there is none or the file is not a picture (it is then made again).</summary>

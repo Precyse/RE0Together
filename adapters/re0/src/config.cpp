@@ -88,6 +88,19 @@ void parseOutfit(const char* key, character_owner::Character character, const st
     config.outfit[static_cast<size_t>(character)] = *model;
 }
 
+void parseLoadOrder(const std::string& slot, const std::string& hash, Config& config) {
+    const save_load_rule::Parsed parsed = save_load_rule::parse(slot, hash);
+    if (!parsed.valid) {
+        logger::write("config: load_slot=%s load_hash=%s ignored (slot 0 to 19, hash up to 8 hex digits), no forced load",
+                      slot.c_str(), hash.c_str());
+        return;
+    }
+    config.loadOrder = parsed.order;
+    if (!parsed.order.active()) return;
+    if (parsed.order.hash) logger::write("config: load_slot=%d load_hash=%08x", parsed.order.slot, *parsed.order.hash);
+    else logger::write("config: load_slot=%d without load_hash, the slot is trusted unchecked", parsed.order.slot);
+}
+
 }  // namespace
 
 const char* partnerModeName(PartnerMode mode) { return mode == PartnerMode::State ? "state" : "input"; }
@@ -97,6 +110,8 @@ Config loadConfig() {
     if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) std::ofstream(path) << kDefaultIni;
 
     Config config;
+    std::string loadSlot;
+    std::string loadHash;
     std::ifstream file(path);
     std::string line;
     while (std::getline(file, line)) {
@@ -128,10 +143,15 @@ Config loadConfig() {
             parseOutfit("outfit_rebecca", character_owner::Character::Rebecca, value, config);
         } else if (key == "outfit_billy") {
             parseOutfit("outfit_billy", character_owner::Character::Billy, value, config);
+        } else if (key == "load_slot") {
+            loadSlot = value;
+        } else if (key == "load_hash") {
+            loadHash = value;
         } else if (key == "trace_vtables") {
             config.traceVtables = parseVtables(value);
         }
     }
+    parseLoadOrder(loadSlot, loadHash, config);
     logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d auto_join=%d", config.port, config.trace,
                   config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.autoJoin);
     logger::write("config: partner_mode=%s world_pause=%s dev_commands=%d", partnerModeName(config.partnerMode),

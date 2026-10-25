@@ -28,7 +28,18 @@ internal static partial class UiSnapshot
             model.State is { } state ? new LobbyStateDto(state.Kind, state.Words, state.Timer) : null,
             model.Options.Select(option => new[] { option.Label, option.Value }).ToArray(), model.Events.ToArray(), model.Relaunch, model.Counter,
             model.Layout, Cards(i, game.Profile.Id, model.Seats), model.Seats.Any(card => card.Local && card.Figure != null),
-            model.Notice == null ? null : Notice(model.Notice));
+            model.Notice == null ? null : Notice(model.Notice), SavePicker(i, game.Profile, model));
+    }
+
+    /// <summary>The host's save picker on the hosting screen: the slots of its save, the chosen one selected; none for a guest, a game
+    /// without one or once the host's game starts.</summary>
+    private static OptionRowDto? SavePicker(SnapshotInput i, GameProfile game, SessionModel model)
+    {
+        var folder = i.FolderOf(game);
+        if (!model.Hosting || !model.IsHost || OptionsModel.SavePicker(game, folder, i.Status.Step) is not { } option) return null;
+        return new OptionRowDto(
+            option.Key, option.Label, GameOptions.Current(game, folder)[option.Key],
+            GameOptions.Offered(game, option, folder).Select(value => new OptionValueDto(value.Value, value.Label)).ToArray(), false);
     }
 
     /// <summary>The mini page's state for the game the session is about.</summary>

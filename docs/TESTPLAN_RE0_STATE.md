@@ -78,6 +78,20 @@ Setup: `coop=1`, `overlay=1`, any `partner_mode`, delete `adapter.log`, start th
 | h. language | change the language in Options (each of English, French, German, Italian, Spanish, Japanese), return to the main menu | the label reads Co-op in the same lettering as the other rows (Japanese CO-OP; German in a slightly different system font); the page still works | label lost, garbled, letters on different baselines or uneven spacing |
 | i. coop=0 / overlay=0 unchanged | set `coop=0`, start the game; then `coop=1` with `overlay=0` | vanilla four-row main menu, no `title_coop:` / `title_label:` / `coop_page:` lines (with `overlay=0` the log has `adapter: overlay off, no Co-op entry on the title`) | any difference from vanilla |
 
+### T16 Forced save load (one PC; coop=1, the launcher's host options in adapter.ini, no partner needed)
+
+Setup: in `<game dir>\coop\adapter.ini` set `coop=1`, `load_slot=<N>` (a used slot) and `load_hash=<hex>` (the launcher writes both; the FNV-1a 32 of that slot's 0x1c850 bytes). Back up the save first. Delete `adapter.log`, start the game, take Load Game on the title and confirm a different used slot (the cursor row is not N). Send `adapter.log` and a screenshot of the world that loaded.
+
+| step | do | pass | fail |
+|---|---|---|---|
+| a. config | open the log | `config: load_slot=N load_hash=xxxxxxxx`; no `config: load_slot=... ignored` | a key ignored although valid |
+| b. redirect | Load Game, confirm slot M (M not N), Continue | `save_load: slot M requested, loading slot N (redirect)`, then `session_slot: playing slot N`; the game that starts is slot N's (room, play time and count of the launcher's row) | `save_load: slot N hash differs, not redirected` with an unchanged save (the block read at 0x613390 + 0x23a7c8 + N * 0x1c850 is not the plaintext slot, or the hash was made from other bytes), or slot M loads |
+| c. hash guard | change `load_hash` by one digit, restart, repeat b | `save_load: slot N hash differs, not redirected`, slot M loads as the player chose | the redirect happens |
+| d. other keys | `load_slot=20`, then `load_slot=x`, then no `load_slot` | each: one `config: ... ignored` line (none when absent) and the game's own load list decides | a redirect |
+| e. pass-through | boot with the order set, watch the log before the main menu | no `save_load:` line for the title's boot read of the system data (slot 0x15) | the system data redirected |
+| f. game over | die, wait for the title, Load Game, confirm any slot | `save_load: ... loading slot N` again (or the co-op slot 19 after a save: `loading slot 19`), no hash line | an old slot after a co-op save |
+| g. guest | a guest with the same keys joins the host already in game | the guest's confirm logs `session_slot: load of slot M turned into the host's slot K` once the host announced its slot; before that `save_load: ... (redirect)` | the guest loads its own slot |
+
 ## TWO-PC
 
 Setup: both PCs install (Setup above), same build. Host: `character=rebecca` (default). Host opens `launcher\test\coop-launcher.exe`, Host, sends the code; guest Join. Both launcher logs: `Fresh channel: 3 types`. Wi-Fi guest is fine. Start with a fresh save the host owns; guest gets it automatically.

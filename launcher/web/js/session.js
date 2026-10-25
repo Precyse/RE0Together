@@ -5,12 +5,13 @@ import { createNotice } from './notice.js';
 import { createCards } from './cards.js';
 import { createImage, setImage } from './image.js';
 import { createSteps, fillList, setGlyph } from './steps.js';
+import { createDropdown } from './dropdown.js';
 
 const SCREEN_HOSTING = 'hosting';
 const COPY_ICON_PX = 20;
 const STATE_GLYPH_SIZE = 'large';
 const STATE_MARKS = { inGame: 'done', reconnecting: 'active', waitingForHost: 'active', gameClosed: 'failed' };
-const LABELS = { code: 'LOBBY CODE', players: 'PLAYERS', start: 'START GAME', waiting: 'WAITING FOR HOST', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
+const LABELS = { code: 'LOBBY CODE', save: 'SAVE', players: 'PLAYERS', start: 'START GAME', waiting: 'WAITING FOR HOST', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
 
 const makeOption = () => h('div', { class: 'session-option' }, h('span', { class: 'session-option-label' }), h('span'));
 
@@ -42,17 +43,35 @@ function createCode(ctx) {
   };
 }
 
-/** Hosting: the step list, START GAME (a guest sees a disabled Waiting for host in its place, RELAUNCH when its game stalled) and Leave. */
+/** The host's save picker: a caption over a dropdown of the save's slots (the first is no forced load); hidden when the session has none. */
+function createSavePicker(ctx) {
+  let target = { gameId: null, key: null };
+  const dropdown = createDropdown({ label: LABELS.save, onSelect: (value) => ctx.send('option.set', { ...target, value }) });
+  const el = h('div', { class: 'session-save', hidden: true }, h('span', { class: 'caption', text: LABELS.save }), dropdown.el);
+  return {
+    el,
+    update(save, gameId) {
+      el.hidden = !save;
+      if (!save) return;
+      target = { gameId, key: save.key };
+      dropdown.set({ items: save.values, value: save.value, disabled: save.locked });
+    },
+  };
+}
+
+/** Hosting: the step list, the host's save picker, START GAME (a guest sees a disabled Waiting for host in its place, RELAUNCH when its game stalled) and Leave. */
 function createHostingBody(ctx) {
   const steps = createSteps('large');
   steps.el.classList.add('steps-tight');
+  const save = createSavePicker(ctx);
   let relaunch = false;
   const primary = button(LABELS.start, 'btn-primary session-primary', () => ctx.send(relaunch ? 'session.relaunch' : 'session.start'));
-  const el = h('div', { class: 'session-body' }, steps.el, h('div', { class: 'session-buttons' }, primary, button(LABELS.leave, 'btn-ghost session-leave', () => ctx.send('session.leave'))));
+  const el = h('div', { class: 'session-body' }, steps.el, save.el, h('div', { class: 'session-buttons' }, primary, button(LABELS.leave, 'btn-ghost session-leave', () => ctx.send('session.leave'))));
   return {
     el,
-    update(session) {
+    update(session, gameId) {
       steps.update(session.steps);
+      save.update(session.save, gameId);
       relaunch = !session.isHost && session.relaunch;
       setText(primary, session.isHost ? LABELS.start : relaunch ? LABELS.relaunch : LABELS.waiting);
       primary.disabled = !session.startEnabled && !relaunch;
@@ -123,7 +142,7 @@ export function create(ctx) {
     setImage(backdrop, state.art.hero);
     setImage(logo, state.art.logo);
     code.update(session.code);
-    body.update(session);
+    body.update(session, state.games.find((game) => game.selected)?.id ?? null);
     notice.update(session.notice);
     if (hosting) reel(counter, session.counter);
     cards.setLayout(session.layout);

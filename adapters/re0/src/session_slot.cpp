@@ -1,14 +1,17 @@
 #include "session_slot.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <optional>
 
 #include "character_owner.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
+#include "fnv1a32.h"
 #include "game.h"
 #include "game_state.h"
 #include "hooks.h"
@@ -19,6 +22,7 @@
 #include "protocol.h"
 #include "room_phase.h"
 #include "save_gate.h"
+#include "save_load_rule.h"
 #include "save_redirect.h"
 #include "session_rule.h"
 #include "state_mode.h"
@@ -31,10 +35,11 @@ using session_slot::kUnknown;
 
 constexpr auto kAnnounceInterval = std::chrono::seconds(2);
 constexpr float kRefusedToastSeconds = 3.0f;
-constexpr int32_t kPlayerSlots = 20;  // slots 0..19 are player saves; higher ones are system data (options)
-constexpr int32_t kCoopSlot = kPlayerSlots - 1;  // every save made during a session goes here, never over a solo save
+constexpr int32_t kCoopSlot = save_load_rule::kPlayerSlots - 1;  // every save made during a session goes here, never over a solo save
+constexpr size_t kHashChunkBytes = 2384;  // divides the slot block (49 chunks), so a read never leaves the block
+static_assert(game::kSaveSlotBytes % kHashChunkBytes == 0);
 
-bool isPlayerSlot(int32_t slot) { return slot >= 0 && slot < kPlayerSlots; }
+using save_load_rule::isPlayerSlot;
 
 using SaveRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot, int32_t arg);
 using LoadRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot);
@@ -42,6 +47,7 @@ using LoadRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot);
 SaveRequestFn g_originalSave = nullptr;
 SaveRequestFn g_originalSaveCopy = nullptr;
 LoadRequestFn g_originalLoad = nullptr;
+save_load_rule::Order g_loadOrder;  // set once by enable(), read on the game thread
 
 struct Announcement {
     int32_t slot;
@@ -57,12 +63,40 @@ save_gate_rule::Patience g_patience;  // game thread: how long the save screen's
 
 bool guestInSession() { return net_pad::active() && !character_owner::isHost(); }
 
-// A guest always loads the host's slot; the host remembers what it loads.
-int32_t chooseSlot(int32_t requested) {
-    const int32_t hostSlot = g_slot.load();
-    if (guestInSession() && hostSlot != kUnknown && isPlayerSlot(requested)) {
-        if (requested != hostSlot) logger::write("session_slot: load of slot %d turned into the host's slot %d", requested, hostSlot);
-        return hostSlot;
+// FNV-1a 32 of slot `slot`'s block in the save manager's request object (`request` is the `this` of the load request),
+// or nothing when the memory cannot be read.
+std::optional<uint32_t> slotBlockHash(void* request, int32_t slot) {
+    uintptr_t address = reinterpret_cast<uintptr_t>(request) + game::kSaveSlotBlocksOffset +
+                        static_cast<size_t>(slot) * game::kSaveSlotBytes;
+    uint32_t hash = fnv1a32::kOffsetBasis;
+    for (size_t done = 0; done < game::kSaveSlotBytes; done += kHashChunkBytes, address += kHashChunkBytes) {
+        std::array<uint8_t, kHashChunkBytes> chunk{};
+        if (!game::readMemory(address, chunk)) return std::nullopt;
+        hash = fnv1a32::hash(chunk, hash);
+    }
+    return hash;
+}
+
+// The slot a load request really loads: a guest the host's slot, and with a launcher order (docs/RE0_NOTES.md "Forced
+// save load") every player's confirm loads the session's slot, the first time the launcher's pick if it is the bytes
+// the launcher hashed.
+int32_t chooseSlot(void* request, int32_t requested) {
+    const save_load_rule::Pick pick = save_load_rule::pick(g_loadOrder, guestInSession(), requested, g_slot.load());
+    switch (pick.reason) {
+        case save_load_rule::Reason::None: break;
+        case save_load_rule::Reason::HostSlot:
+            logger::write("session_slot: load of slot %d turned into the host's slot %d", requested, pick.slot);
+            return pick.slot;
+        case save_load_rule::Reason::SessionSlot:
+            logger::write("save_load: slot %d requested, loading slot %d (redirect)", requested, pick.slot);
+            return pick.slot;
+        case save_load_rule::Reason::Order:
+            if (!save_load_rule::hashAccepts(g_loadOrder, slotBlockHash(request, pick.slot))) {
+                logger::write("save_load: slot %d hash differs, not redirected", pick.slot);
+                break;
+            }
+            logger::write("save_load: slot %d requested, loading slot %d (redirect)", requested, pick.slot);
+            return pick.slot;
     }
     return requested;
 }
@@ -90,10 +124,21 @@ void onLoad(int32_t slot) {
 }
 
 bool __fastcall loadDetour(void* self, void* edx, int32_t slot) {
-    const int32_t chosen = chooseSlot(slot);
+    const int32_t chosen = chooseSlot(self, slot);
     const bool accepted = g_originalLoad(self, edx, chosen);
     if (accepted) onLoad(chosen);
     return accepted;
+}
+
+// The load request's prologue is checked first: a game build that moved it must not get a hook on other code.
+bool installLoadHook() {
+    if (!game::bytesMatch(game::kLoadRequestFunction, game::kLoadRequestBytes)) {
+        logger::write("session_slot: load request 0x%x does not hold the expected bytes, not hooked",
+                      static_cast<unsigned>(game::kLoadRequestFunction));
+        return false;
+    }
+    return hooks::install("load request", game::kLoadRequestFunction, reinterpret_cast<void*>(&loadDetour),
+                          reinterpret_cast<void**>(&g_originalLoad));
 }
 
 // State mode: the host's save waits until the partner stands in plain gameplay, for at most save_gate_rule::kMaxWaitMs
@@ -171,13 +216,13 @@ bool guestSession() { return save_redirect::servingSession() && !character_owner
 
 bool hostInGame() { return room_phase::isGameplay(g_hostPhase.load()); }
 
-bool enable() {
+bool enable(const save_load_rule::Order& loadOrder) {
+    g_loadOrder = loadOrder;
     return hooks::install("save request", game::kSaveRequestFunction, reinterpret_cast<void*>(&saveDetour),
                           reinterpret_cast<void**>(&g_originalSave)) &&
            hooks::install("save request (copy)", game::kSaveCopyRequestFunction, reinterpret_cast<void*>(&saveCopyDetour),
                           reinterpret_cast<void**>(&g_originalSaveCopy)) &&
-           hooks::install("load request", game::kLoadRequestFunction, reinterpret_cast<void*>(&loadDetour),
-                          reinterpret_cast<void**>(&g_originalLoad));
+           installLoadHook();
 }
 
 void uninstall() {

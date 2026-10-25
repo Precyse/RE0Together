@@ -88,7 +88,7 @@ public sealed class SaveSyncCoordinator : IDisposable
     }
 
     /// <summary>The host's save folder from the profile's template, else the Steam cloud cache; null when neither is known here.</summary>
-    private static string? HostSaveDir(GameProfile profile, SaveSyncProfile config, uint? steamAccountId) =>
+    internal static string? HostSaveDir(GameProfile profile, SaveSyncProfile config, uint? steamAccountId) =>
         config.HostSaveDir is { } template
             ? SavePaths.Expand(template)
             : steamAccountId is { } account ? SteamLibrary.UserRemoteDir(profile.SteamAppId, account) : null;

@@ -17,6 +17,11 @@ public sealed record SaveSyncProfile(
     List<string> SteamRemoteFiles, string SessionDir,
     string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
 
+/// <summary>Where a game keeps its save slots: the save file (in the save folder, and in the session folder on a guest), where the executable
+/// holds the file's cipher key (a virtual address as hex text, KeyLength bytes), the name of each slot's entry (<c>{0}</c> is the slot
+/// number), how many slots there are and how big each one is. The key is read from the player's own game at run time, never shipped.</summary>
+public sealed record SaveIndexProfile(string File, string KeyAddress, int KeyLength, string Entry, int Slots, int SlotSize);
+
 /// <summary>Where a game's co-op session lives. A Lobby game uses the launcher's Steam lobby, transport and save sync; a
 /// Native game matches players itself, so the launcher only installs the mod, writes the options and starts the game; a
 /// Rendezvous game is Native with a Steam lobby that says who hosts: the mod connects itself, so there is no bridge, no
@@ -43,9 +48,10 @@ public sealed record OptionValue(string Value, string Label, string? DlcAppId = 
 /// <summary>A per-game choice shown as a dropdown and written to the adapter ini under Key; the first value is the
 /// default. A Host option is the host's alone (the guest takes what follows from it). A Settings option is shown in the
 /// settings view, not in the session's options grid. An option with a Character is the outfit of that character (a value
-/// of the game's character option).</summary>
+/// of the game's character option. An option with a Source takes its values from this machine at run time (<see cref="OptionSources"/>):
+/// Values are the ones always offered (the first is the default), the grids do not list it, and a guest takes the host's value as it is.</summary>
 public sealed record GameOption(string Key, string Label, List<OptionValue> Values, bool Host = false, bool Settings = false,
-    string? Character = null)
+    string? Character = null, string? Source = null)
 {
     private const string DlcFolder = "DLC";
 
@@ -66,9 +72,10 @@ public sealed record GameProfile(
     List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
     SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
-    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null)
+    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null)
 {
     // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").
+    // SaveIndex: where the save slots are (a game whose save file the launcher can list; the host picks a slot to load at launch).
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly ConcurrentDictionary<string, GameProfile> Loaded = new();

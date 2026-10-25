@@ -1,5 +1,5 @@
 // Unit tests for the launcher's pure rules (no Steam, no sockets): the mod content hash and the BUILD_INFO comparison, the
-// member grace, the token buckets, the fresh-frame queue, the adapter option values. Usage: dotnet run --project tools/launcher_tests. Exit 0 when every check passes.
+// member grace, the token buckets, the fresh-frame queue, the adapter option values, the save slot index. Usage: dotnet run --project tools/launcher_tests. Exit 0 when every check passes.
 namespace LauncherTests;
 
 public static class Check
@@ -36,6 +36,9 @@ public static class Program
         PeerBudgetTests.Run();
         FreshQueueTests.Run();
         GameOptionsTests.Run();
+        BlowfishTests.Run();
+        SaveIndexTests.Run();
+        OptionSourcesTests.Run();
         LobbyCodeTests.Run();
         SessionProgressTests.Run();
         RefusalTests.Run();
@@ -116,6 +119,7 @@ public static class Program
 
     private static int RunWebSuites()
     {
+        OptionSourcesTests.Run();
         SessionScreensTests.Run();
         ScreensTests.Run();
         SelectModelTests.Run();

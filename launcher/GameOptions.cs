@@ -17,9 +17,25 @@ public static class GameOptions
     private const char PairSeparator = ';';
     private const char KeyValueSeparator = '=';
 
-    /// <summary>Every option's current value (the player's choice if it is still offered, else the default).</summary>
-    public static Dictionary<string, string> Current(GameProfile profile, string? gameDir) =>
-        (profile.Options ?? []).ToDictionary(option => option.Key, option => ValueOf(profile.Id, option, gameDir));
+    /// <summary>Every option's current value (the player's choice if it is still offered, else the default; an option the save works out,
+    /// like the hash of the chosen save slot, takes that).</summary>
+    public static Dictionary<string, string> Current(GameProfile profile, string? gameDir)
+    {
+        var options = profile.Options ?? [];
+        var values = options.Where(option => option.Source != OptionSources.SaveHash)
+            .ToDictionary(option => option.Key, option => ValueOf(profile, option, gameDir));
+        foreach (var option in options.Where(option => option.Source == OptionSources.SaveHash))
+            values[option.Key] = OptionSources.SlotHash(profile, gameDir, values.GetValueOrDefault(OptionSources.SlotKey));
+        return values;
+    }
+
+    /// <summary>The values an option offers on this machine: its profile values, a DLC outfit only when the game folder holds the DLC, and for
+    /// an option with a source the ones this machine supplies.</summary>
+    public static IEnumerable<OptionValue> Offered(GameProfile profile, GameOption option, string? gameDir) =>
+        option.Source == null ? option.AvailableIn(gameDir) : option.Values.Concat(OptionSources.Values(profile, option, gameDir));
+
+    /// <summary>An option the grids do not list because its values come from this machine at run time (the save slot picker has its own row).</summary>
+    public static bool IsRuntime(GameOption option) => option.Source != null;
 
     /// <summary>The options that are in the character select view and not in the options grid: the character option and
     /// each character's outfit option, for a game that has a character select.</summary>
@@ -61,8 +77,8 @@ public static class GameOptions
     }
 
     /// <summary>The values the adapter ini gets: the player's own, except that a guest takes the host's value of every host
-    /// option the lobby carries (a value the profile does not offer is ignored), so both machines run the same character
-    /// and partner mode.</summary>
+    /// option the lobby carries (a value the profile does not offer is ignored; an option with a source takes any value, and its default
+    /// when the lobby has none), so both machines run the same character, partner mode and forced save slot.</summary>
     public static Dictionary<string, string> ForAdapter(GameProfile profile, IReadOnlyDictionary<string, string> own,
         IReadOnlyDictionary<string, string> hostValues, bool isHost)
     {
@@ -70,7 +86,8 @@ public static class GameOptions
         if (isHost) return values;
         foreach (var option in (profile.Options ?? []).Where(option => option.Host))
         {
-            if (hostValues.TryGetValue(option.Key, out var hostValue) && option.Values.Any(v => v.Value == hostValue)) values[option.Key] = hostValue;
+            if (hostValues.TryGetValue(option.Key, out var hostValue) && (IsRuntime(option) || option.Values.Any(v => v.Value == hostValue))) values[option.Key] = hostValue;
+            else if (IsRuntime(option)) values[option.Key] = option.Default;
         }
         return values;
     }
@@ -108,9 +125,9 @@ public static class GameOptions
         return chosen == null ? characters : characters.Where(c => c == chosen).Concat(characters.Where(c => c != chosen)).ToList();
     }
 
-    private static string ValueOf(string gameId, GameOption option, string? gameDir)
+    private static string ValueOf(GameProfile profile, GameOption option, string? gameDir)
     {
-        var chosen = AppSettings.Current.Option(gameId, option.Key);
-        return chosen != null && option.AvailableIn(gameDir).Any(v => v.Value == chosen) ? chosen : option.Default;
+        var chosen = AppSettings.Current.Option(profile.Id, option.Key);
+        return chosen != null && Offered(profile, option, gameDir).Any(v => v.Value == chosen) ? chosen : option.Default;
     }
 }

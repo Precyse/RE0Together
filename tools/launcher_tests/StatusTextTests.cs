@@ -24,6 +24,7 @@ public static class StatusTextTests
         [RefusalKind.SteamOffline] = "Steam offline",
         [RefusalKind.SaveTimedOut] = "Save transfer timed out",
         [RefusalKind.SaveFolderMissing] = "Save folder not found",
+        [RefusalKind.SaveDiffers] = "Save differs from host's",
         [RefusalKind.HostLeft] = "Host left",
         [RefusalKind.RejoinGaveUp] = "Could not rejoin",
         [RefusalKind.PortInUse] = "Port 27960 in use",

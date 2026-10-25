@@ -200,6 +200,13 @@ constexpr uintptr_t kSubMenuStateOffset = 0x2c;
 constexpr uintptr_t kSaveRequestFunction = 0x6134c0;
 constexpr uintptr_t kSaveCopyRequestFunction = 0x613500;
 constexpr uintptr_t kLoadRequestFunction = 0x613390;
+// 12 bytes at 0x613390: cmp [ecx+4],0 / jne / cmp [ecx+8],0 / jne. sSaveManager::requestLoad 0x613c40 (every menu's
+// entry: the load list, the title's boot read of slot 0x15) only loads ecx from [ecx+0x20] and jumps here.
+constexpr std::array<uint8_t, 12> kLoadRequestBytes = {0x83, 0x79, 0x04, 0x00, 0x75, 0x2E, 0x83, 0x79, 0x08, 0x00, 0x75, 0x28};
+// The request object (this of the load request) keeps the decrypted file blocks the boot read filled: GAMEDATA<n> of
+// slot n (registered by str_SYSTEMDATA 0x613640) at +0x23a7c8 + n * 0x1c850.
+constexpr uintptr_t kSaveSlotBlocksOffset = 0x23a7c8;
+constexpr size_t kSaveSlotBytes = 0x1c850;
 constexpr uintptr_t kSubMenuOpenFunction = 0x5d9030;  // thiscall, no args: opens the inventory for the focused character
 constexpr uint8_t kSubMenuClosed = 0x0d;
 // cPlayerThink vtable slot 28, reached from the lethal hit: kills the player (setHP 0) and enters the dead state.

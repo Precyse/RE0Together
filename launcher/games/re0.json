@@ -3,6 +3,7 @@
   "adapterFiles": [ { "src": "adapters/re0/dinput8.dll", "dst": "dinput8.dll" } ],
   "adapterIni": "coop/adapter.ini",
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session" },
+  "saveIndex": { "file": "data0.bin", "keyAddress": "0xce7938", "keyLength": 32, "entry": "GAMEDATA{0}", "slots": 20, "slotSize": 116816 },
   "adapterLog": "coop/adapter.log",
   "crashFiles": ["coop/crash-*.dmp", "coop/dumps/*.dmp", "coop/dumps/*.txt"],
   "freshTypes": ["0x0140", "0x0160", "0x0173", "0x0178"],
@@ -12,6 +13,8 @@
       { "value": "input", "label": "Input" }, { "value": "state", "label": "State" } ] },
     { "key": "world_pause", "label": "World pause", "host": true, "values": [
       { "value": "never", "label": "Never" }, { "value": "menus", "label": "Menus pause" } ] },
+    { "key": "load_slot", "label": "Save", "host": true, "source": "saveSlots", "values": [ { "value": "", "label": "None" } ] },
+    { "key": "load_hash", "label": "Save hash", "host": true, "source": "saveHash", "values": [ { "value": "", "label": "None" } ] },
     { "key": "character", "label": "Character", "host": true, "values": [
       { "value": "rebecca", "label": "Rebecca", "fullName": "Rebecca Chambers", "unit": "S.T.A.R.S. Bravo Team" },
       { "value": "billy", "label": "Billy", "fullName": "Billy Coen", "unit": "U.S. Marine Corps" } ] },

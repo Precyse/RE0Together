@@ -28,9 +28,12 @@ public static class SavePaths
         return template.Replace(DocumentsToken, documents).Replace(SteamIdToken, steamId64.ToString()).Replace('/', Path.DirectorySeparatorChar);
     }
 
-    private static ulong? SteamId64()
+    /// <summary>The signed-in Steam user's account id (the folder name under Steam's userdata), or null when nobody is signed in.</summary>
+    public static uint? SteamAccountId()
     {
         var account = Registry.CurrentUser.OpenSubKey(ActiveProcessKey)?.GetValue(ActiveUserValue) as int? ?? 0;
-        return account == 0 ? null : SteamId64Base + (uint)account;
+        return account == 0 ? null : (uint)account;
     }
+
+    private static ulong? SteamId64() => SteamAccountId() is { } account ? SteamId64Base + account : null;
 }

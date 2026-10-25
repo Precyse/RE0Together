@@ -441,15 +441,28 @@ internal sealed partial class UiController
 
     // ---------------------------------------------------------------- options and settings
 
-    /// <summary>Saves an option the page chose: a session option of the selected game while its popup is open, or a settings option of
-    /// any game in the settings view; the value must be one the option offers here.</summary>
+    /// <summary>Saves an option the page chose: a session option of the selected game while its popup is open, a settings option of
+    /// any game in the settings view, or the save slot on the hosting screen; the value must be one the option offers here.</summary>
     private string? SetOption(UiCommand command)
     {
+        if (_screen == ScreenKind.Hosting) return SetSaveSlot(command);
         var settingsOptions = _screen == ScreenKind.Settings;
         if (!settingsOptions && !(_popup == PopupKind.Options && _screen == ScreenKind.Home)) return Refused;
         if (!Free || GameFor(command) is not { } game || (!settingsOptions && game.Profile.Id != _selectedId)) return UnknownTarget;
         var option = OptionsModel.OptionsOf(game.Profile, settingsOptions).FirstOrDefault(candidate => candidate.Key == command.Text("key"));
         if (option == null || OptionsModel.Values(option, GameFolders.Find(game.Profile)).All(value => value.Value != command.Text("value"))) return UnknownTarget;
+        OptionsModel.Save(game.Profile.Id, option.Key, command.Text("value"));
+        Apply(_app.Status);
+        return null;
+    }
+
+    /// <summary>The host's pick on the hosting screen's save picker, while it is shown.</summary>
+    private string? SetSaveSlot(UiCommand command)
+    {
+        if (CurrentSession() is not { IsHost: true, Hosting: true } || GameFor(command) is not { } game || game.Profile.Id != GameOf(_app.Status)?.Profile.Id) return UnknownTarget;
+        var folder = GameFolders.Find(game.Profile);
+        var option = OptionsModel.SavePicker(game.Profile, folder, _app.Status.Step);
+        if (option == null || option.Key != command.Text("key") || GameOptions.Offered(game.Profile, option, folder).All(value => value.Value != command.Text("value"))) return UnknownTarget;
         OptionsModel.Save(game.Profile.Id, option.Key, command.Text("value"));
         Apply(_app.Status);
         return null;

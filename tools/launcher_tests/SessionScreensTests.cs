@@ -105,6 +105,8 @@ public static class SessionScreensTests
 
         Check.That(Marks(Join(Re0Status(SessionStep.Refused, guest) with { Refusal = new Refusal(RefusalKind.SaveTimedOut, "", "re0", LobbyId) })) == "DDFPPP",
             "refusal: a save that timed out fails the save step");
+        Check.That(Marks(Join(Re0Status(SessionStep.Refused, guest) with { Refusal = new Refusal(RefusalKind.SaveDiffers, "", "re0", LobbyId) })) == "DDFPPP",
+            "refusal: a save that differs from the host's fails the save step");
         Check.That(Marks(Join(Re0Status(SessionStep.Refused, guest) with { Refusal = new Refusal(RefusalKind.LaunchFailed, "", "re0") })) == "DDDDFP",
             "refusal: a launch that failed fails starting");
         var full = Join(Re0Status(SessionStep.None) with { Refusal = new Refusal(RefusalKind.LobbyFull, "", "re0", LobbyId) });
