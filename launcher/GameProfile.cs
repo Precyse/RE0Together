@@ -36,8 +36,9 @@ public sealed record BridgeCondition(string Key, string Value);
 public sealed record ArtSource(string Arc, string Texture, List<int>? Crop = null, int Feather = 0);
 
 /// <summary>One value of a game option. A value with a DlcAppId is offered only when the game folder holds that DLC. Art
-/// replaces the profile's OutfitArt for this value.</summary>
-public sealed record OptionValue(string Value, string Label, string? DlcAppId = null, ArtSource? Art = null);
+/// replaces the profile's OutfitArt for this value. A value of the character option may name the character in full (FullName) and
+/// the unit it belongs to (Unit), which the player cards show.</summary>
+public sealed record OptionValue(string Value, string Label, string? DlcAppId = null, ArtSource? Art = null, string? FullName = null, string? Unit = null);
 
 /// <summary>A per-game choice shown as a dropdown and written to the adapter ini under Key; the first value is the
 /// default. A Host option is the host's alone (the guest takes what follows from it). A Settings option is shown in the
@@ -49,6 +50,11 @@ public sealed record GameOption(string Key, string Label, List<OptionValue> Valu
     private const string DlcFolder = "DLC";
 
     public string Default => Values[0].Value;
+
+    /// <summary>The value whose picture shows an outfit choice: the choice itself, except the saved outfit (the empty value, "use
+    /// the outfit in the save"), which is shown as the first value without a DLC. Null stays null (not known).</summary>
+    public string? PictureOf(string? value) =>
+        value == string.Empty ? Values.FirstOrDefault(v => v.Value.Length > 0 && v.DlcAppId == null)?.Value ?? value : value;
 
     public IEnumerable<OptionValue> AvailableIn(string? gameDir) =>
         Values.Where(v => v.DlcAppId == null || (gameDir != null && Directory.Exists(Path.Combine(gameDir, DlcFolder, v.DlcAppId))));

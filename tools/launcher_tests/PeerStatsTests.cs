@@ -36,5 +36,14 @@ public static class PeerStatsTests
         stats.Remove(Slot2);
         Check.That(stats.RttOf(Slot2) == null && stats.RttMs == stats.RttOf(Slot1), "Remove forgets the round-trip time");
         Check.That(!stats.SilentFor(Slot2, now + 1_000_000), "Remove forgets the silence too");
+
+        var queuedPing = PeerStats.NowMicros - 2_000_000;
+        stats.Restart(Slot1);
+        Check.That(stats.RttOf(Slot1) == null, "Restart forgets the average");
+        stats.OnPong(Slot1, queuedPing);
+        Check.That(stats.RttOf(Slot1) == null && !stats.SilentFor(Slot1, now + PeerStats.SilentAfterMs),
+            "a pong to a ping sent before the restart answers but never seeds the average");
+        stats.OnPong(Slot1, PeerStats.NowMicros);
+        Check.That(stats.RttOf(Slot1) is >= 0 and < 100, "the first ping after the restart starts the average fresh");
     }
 }

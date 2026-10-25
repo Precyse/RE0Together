@@ -58,7 +58,15 @@ public static class ScreensTests
         Check.That(Screens.For(InLobby(AppState.PeerConnected, host: true, SessionStep.InGame), Intent.Host, null, Tab.Play) == ScreenKind.Lobby, "screen: the host in game is in the lobby");
         Check.That(Screens.For(InLobby(AppState.PeerConnected, host: true, SessionStep.GameClosed), Intent.Host, null, Tab.Play) == ScreenKind.Lobby, "screen: the host's game closed is the lobby");
 
-        Check.That(Screens.For(InLobby(AppState.Joined, host: false, SessionStep.ReceivingSave), Intent.Join, Target, Tab.Play) == ScreenKind.Joining, "screen: a guest before its game is joining");
+        foreach (var step in new[] { SessionStep.Lobby, SessionStep.CheckingBuild, SessionStep.ReceivingSave })
+            Check.That(Screens.For(InLobby(AppState.Joined, host: false, step), Intent.Join, Target, Tab.Play) == ScreenKind.Joining, $"screen: a guest at {step} is joining");
+        foreach (var step in new[] { SessionStep.Ready, SessionStep.StartingGame })
+            Check.That(Screens.For(InLobby(AppState.Joined, host: false, step), Intent.Join, Target, Tab.Play) == ScreenKind.Hosting, $"screen: a guest at {step} stays on the hosting screen");
+        var refusal = new Refusal(RefusalKind.ModFiles, "412/409", "re0", LobbyId);
+        Check.That(Screens.For(InLobby(AppState.Joined, host: false, SessionStep.Refused) with { Refusal = refusal }, Intent.Join, Target, Tab.Play) == ScreenKind.Joining,
+            "screen: a guest that was refused keeps joining for its fix");
+        Check.That(Screens.For(InLobby(AppState.Joined, host: false, SessionStep.Lobby) with { Refusal = refusal }, Intent.Join, Target, Tab.Play) == ScreenKind.Joining,
+            "screen: a refusal alone keeps joining");
         Check.That(Screens.For(InLobby(AppState.PeerConnected, host: false, SessionStep.InGame), Intent.Join, Target, Tab.Play) == ScreenKind.Lobby, "screen: a guest in game is in the lobby");
         Check.That(Screens.For(InLobby(AppState.PeerConnected, host: false, SessionStep.GameClosed), Intent.Join, Target, Tab.Play) == ScreenKind.Lobby, "screen: a guest's game closed is the lobby");
 

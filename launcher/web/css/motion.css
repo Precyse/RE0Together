@@ -121,6 +121,15 @@
   to { opacity: 0; transform: scale(var(--dropdown-closing-scale)); }
 }
 
+.m-stamp { animation: t-stamp var(--stamp-dur) var(--stamp-ease) var(--stamp-delay) backwards; will-change: transform, opacity, filter; }
+.m-stamp-flash { animation: t-stamp-flash var(--stamp-flash-dur) ease-out calc(var(--stamp-delay) + var(--stamp-flash-delay)) backwards; will-change: opacity; }
+@keyframes t-stamp {
+  from { opacity: 0; transform: scale(var(--stamp-scale)) rotate(var(--stamp-rotate-from)); filter: blur(var(--stamp-blur)); }
+  55% { opacity: 1; transform: scale(var(--stamp-undershoot)) rotate(var(--stamp-rotate-over)); filter: blur(0); }
+  to { opacity: 1; transform: scale(1) rotate(var(--stamp-rotate)); filter: blur(0); }
+}
+@keyframes t-stamp-flash { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+
 .t-icon-swap { position: relative; display: inline-grid; }
 .t-icon-swap .t-icon {
   grid-area: 1 / 1; transition: opacity var(--icon-swap-dur) var(--icon-swap-ease), filter var(--icon-swap-dur) var(--icon-swap-ease), transform var(--icon-swap-dur) var(--icon-swap-ease);

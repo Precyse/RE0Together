@@ -2,14 +2,15 @@ import { h, setText } from './dom.js';
 import { icon } from './icons.js';
 import { reel, rollDigits, swapText } from './motion.js';
 import { createNotice } from './notice.js';
-import { createCards, createImage, setImage } from './cards.js';
+import { createCards } from './cards.js';
+import { createImage, setImage } from './image.js';
 import { createSteps, fillList, setGlyph } from './steps.js';
 
 const SCREEN_HOSTING = 'hosting';
 const COPY_ICON_PX = 20;
 const STATE_GLYPH_SIZE = 'large';
 const STATE_MARKS = { inGame: 'done', reconnecting: 'active', waitingForHost: 'active', gameClosed: 'failed' };
-const LABELS = { code: 'LOBBY CODE', players: 'PLAYERS', start: 'START GAME', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
+const LABELS = { code: 'LOBBY CODE', players: 'PLAYERS', start: 'START GAME', waiting: 'WAITING FOR HOST', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
 
 const makeOption = () => h('div', { class: 'session-option' }, h('span', { class: 'session-option-label' }), h('span'));
 
@@ -23,12 +24,12 @@ function button(label, kind, onClick) {
 }
 
 /** The lobby code with its copy button; `copied()` plays the icon swap clipboard -> check -> clipboard (CSS, one animation including the hold). */
-function createCode(ctx, hosting) {
+function createCode(ctx) {
   const swap = h('span', { class: 't-icon-swap', 'data-state': 'a' },
     h('span', { class: 't-icon', 'data-icon': 'a' }, icon('copy', COPY_ICON_PX)),
     h('span', { class: 't-icon', 'data-icon': 'b' }, icon('check', COPY_ICON_PX)));
   const copy = h('button', { class: 'btn-icon', type: 'button', 'aria-label': 'Copy lobby code', on: { click: () => ctx.send('session.copyCode') } }, swap);
-  const value = h('span', { class: `session-code mono ${hosting ? 'large' : 'medium'}` });
+  const value = h('span', { class: 'session-code mono' });
   const el = h('div', { class: 'session-code-block' }, h('span', { class: 'caption', text: LABELS.code }), h('div', { class: 'session-code-row' }, value, copy));
   return {
     el,
@@ -41,17 +42,20 @@ function createCode(ctx, hosting) {
   };
 }
 
-/** Hosting: the step list, START GAME and Leave. */
+/** Hosting: the step list, START GAME (a guest sees a disabled Waiting for host in its place, RELAUNCH when its game stalled) and Leave. */
 function createHostingBody(ctx) {
   const steps = createSteps('large');
   steps.el.classList.add('steps-tight');
-  const start = button(LABELS.start, 'btn-primary session-primary', () => ctx.send('session.start'));
-  const el = h('div', { class: 'session-body' }, steps.el, h('div', { class: 'session-buttons' }, start, button(LABELS.leave, 'btn-ghost session-leave', () => ctx.send('session.leave'))));
+  let relaunch = false;
+  const primary = button(LABELS.start, 'btn-primary session-primary', () => ctx.send(relaunch ? 'session.relaunch' : 'session.start'));
+  const el = h('div', { class: 'session-body' }, steps.el, h('div', { class: 'session-buttons' }, primary, button(LABELS.leave, 'btn-ghost session-leave', () => ctx.send('session.leave'))));
   return {
     el,
     update(session) {
       steps.update(session.steps);
-      start.disabled = !session.startEnabled;
+      relaunch = !session.isHost && session.relaunch;
+      setText(primary, session.isHost ? LABELS.start : relaunch ? LABELS.relaunch : LABELS.waiting);
+      primary.disabled = !session.startEnabled && !relaunch;
     },
   };
 }
@@ -100,7 +104,7 @@ export function create(ctx) {
   const hosting = ctx.screen === SCREEN_HOSTING;
   const backdrop = createImage('art-backdrop');
   const logo = createImage('art-logo');
-  const code = createCode(ctx, hosting);
+  const code = createCode(ctx);
   const body = hosting ? createHostingBody(ctx) : createLobbyBody(ctx);
   const notice = createNotice(ctx);
   const counter = h('span', { class: 'session-count' });

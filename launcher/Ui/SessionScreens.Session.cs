@@ -12,51 +12,54 @@ internal static partial class SessionScreens
     private const string OpenName = "Open";
     private const string PingFormat = "{0} ms";
 
-    /// <summary>The hosting screen (the host until its game starts) or the lobby (everyone once in game, and while the lobby is
-    /// rebuilt). <paramref name="events"/> are the player events, oldest first; <paramref name="unixNow"/> is the clock the session
-    /// timer counts against (now when omitted).</summary>
+    /// <summary>The hosting screen (every member until its game starts: the host with its steps and START GAME, a guest with its own
+    /// joining steps) or the lobby (everyone once in game, and while the lobby is rebuilt). <paramref name="events"/> are the player
+    /// events, oldest first; <paramref name="unixNow"/> is the clock the session timer counts against (now when omitted).</summary>
     public static SessionModel Session(AppStatus s, GameProfile g, string? gameDir, GameStatus mod, GameCondition c,
         IReadOnlyList<string> events, long nowMs, long? unixNow = null)
     {
         var local = s.Players.FirstOrDefault(player => player.IsLocal);
-        var hosting = local is { IsHost: true } && s.State is not (AppState.Rejoining or AppState.WaitingForHost)
+        var isHost = local is { IsHost: true };
+        var preGame = local != null && s.State is not (AppState.Rejoining or AppState.WaitingForHost)
             && s.Step is not (SessionStep.InGame or SessionStep.GameClosed);
-        var seats = Seats(s, g, gameDir, hosting);
-        var state = hosting ? null : LobbyStateOf(s, c, unixNow ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var seats = Seats(s, g, gameDir, preGame);
+        var state = preGame ? null : LobbyStateOf(s, c, unixNow ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         return new SessionModel(
-            hosting, s.LobbyId != 0 ? s.LobbyId.ToString(CultureInfo.InvariantCulture) : string.Empty,
-            hosting ? HostingSteps(s, mod, nowMs) : [], hosting && StartEnabled(s, local!), state,
-            hosting ? [] : HostOptions(s, g), hosting ? [] : events.TakeLast(RecentEvents).ToList(),
-            state?.Kind == LobbyStateKind.GameClosed, hosting ? $"{s.Players.Count}/{seats.Count}" : string.Empty,
-            seats, hosting && seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
+            preGame, isHost, s.LobbyId != 0 ? s.LobbyId.ToString(CultureInfo.InvariantCulture) : string.Empty,
+            !preGame ? [] : isHost ? HostingSteps(s, mod, nowMs) : JoiningSteps(s, g, s.Players.FirstOrDefault(player => player.IsHost)?.Name ?? string.Empty, nowMs),
+            preGame && isHost && StartEnabled(s, local!), state,
+            preGame ? [] : HostOptions(s, g), preGame ? [] : events.TakeLast(RecentEvents).ToList(),
+            preGame ? !isHost && LaunchStalled(s, c, nowMs) : state?.Kind == LobbyStateKind.GameClosed, preGame ? $"{s.Players.Count}/{seats.Count}" : string.Empty,
+            seats, preGame && seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
     }
 
     /// <summary>One card per seat: the host first, then the other members, then open seats up to the seat count.</summary>
-    public static IReadOnlyList<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir) => Seats(s, g, gameDir, hosting: false);
+    public static IReadOnlyList<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir) => Seats(s, g, gameDir, preGame: false);
 
     /// <summary>The character a card is for (the part of its detail line before the outfit); empty for a game without characters.</summary>
     public static string CharacterOf(PlayerCard card) => card.Detail.Split(DetailGap)[0];
 
-    /// <summary>The cards of the screen: in the hosting screen the local host's corner says Host (the card is the host's own);
-    /// a joining player's card carries its step list on the large cards of a two-seat game.</summary>
-    private static List<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir, bool hosting, bool compact = false)
+    /// <summary>The cards of the screen: in the hosting screen (<paramref name="preGame"/>) the local host's corner says Host (the
+    /// card is the host's own); another joining player's card carries its step list on the large cards of a two-seat game without a
+    /// character select (the local player's steps are the screen's own, a game with characters shows its field file instead).</summary>
+    private static List<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir, bool preGame, bool compact = false)
     {
         var members = Ordered(s);
-        var count = SeatCount(s, g, gameDir, hosting);
-        var withSteps = !compact && count <= TwoSeats;
+        var count = SeatCount(s, g, gameDir);
+        var withSteps = !compact && count <= TwoSeats && !g.HasCharacterSelect;
         var cards = new List<PlayerCard>();
         for (var seat = 0; seat < count; seat++)
         {
             var character = seat < s.SeatCharacters.Count ? s.SeatCharacters[seat] : string.Empty;
-            cards.Add(seat < members.Count ? Taken(members[seat], character, g, gameDir, hosting, withSteps) : OpenCard(character));
+            cards.Add(seat < members.Count ? Taken(members[seat], character, g, gameDir, preGame, withSteps && !members[seat].IsLocal) : OpenCard(character));
         }
         return cards;
     }
 
     /// <summary>The seats the lobby takes (never fewer than its members); none while a rebuilt lobby has no members.</summary>
-    private static int SeatCount(AppStatus s, GameProfile g, string? gameDir, bool hosting)
+    private static int SeatCount(AppStatus s, GameProfile g, string? gameDir)
     {
-        if (s.Players.Count == 0 && !hosting) return 0;
+        if (s.Players.Count == 0) return 0;
         var seats = s.Seats > 0 ? s.Seats : GameOptions.Seats(g, GameOptions.HostValues(g, gameDir));
         return Math.Max(seats, s.Players.Count);
     }
@@ -64,16 +67,18 @@ internal static partial class SessionScreens
     private static PlayerCard OpenCard(string character) =>
         new(0, OpenName, string.Empty, character, string.Empty, string.Empty, CardState.Open, false, null, [], null, string.Empty);
 
-    private static PlayerCard Taken(PlayerSlot player, string character, GameProfile g, string? gameDir, bool hosting, bool withSteps)
+    private static PlayerCard Taken(PlayerSlot player, string character, GameProfile g, string? gameDir, bool preGame, bool withSteps)
     {
         var corner = Corner(player);
-        var hostCorner = player.IsHost && (corner.Length == 0 || (hosting && player.IsLocal));
+        var hostCorner = player.IsHost && (corner.Length == 0 || (preGame && player.IsLocal));
         var outfit = OutfitValue(player, character, g, gameDir);
+        var entry = g.HasCharacterSelect ? GameOptions.CharacterEntry(g, character) : null;
         return new PlayerCard(
             player.Id, player.Name, hostCorner ? HostWord : corner, DetailOf(character, outfit, g), CardStates.Words(player),
             player.IsHost && !hostCorner ? HostWord : string.Empty, CardStates.Of(player), player.IsLocal, FigureOf(character, outfit, g),
             withSteps ? JoinerSteps(player, g) : [], player.Step == SessionStep.ReceivingSave ? player.Percent / PercentScale : null,
-            player.Held ? MinutesSeconds(player.HoldSecondsLeft) : string.Empty);
+            player.Held ? MinutesSeconds(player.HoldSecondsLeft) : string.Empty,
+            entry?.Unit ?? string.Empty, entry?.FullName ?? string.Empty, OutfitLabel(character, outfit, g) ?? string.Empty, CardStates.IsReady(player));
     }
 
     /// <summary>You on the local card, else the hold countdown while held, else the ping.</summary>
@@ -94,19 +99,21 @@ internal static partial class SessionScreens
         return player.IsLocal && player.Options.Length == 0 ? GameOptions.Current(g, gameDir).GetValueOrDefault(option.Key) : null;
     }
 
-    /// <summary>The character, then its outfit's label (a gap of two spaces); the outfit "saved" and an unknown one have none.</summary>
-    private static string DetailOf(string character, string? outfit, GameProfile g)
-    {
-        var label = outfit is { Length: > 0 } && GameOptions.CharacterValue(g, character) is { } value
+    /// <summary>The character, then its outfit's label (a gap of two spaces, "Saved" for the outfit in the save); an unknown outfit
+    /// has none.</summary>
+    private static string DetailOf(string character, string? outfit, GameProfile g) =>
+        OutfitLabel(character, outfit, g) is { } label ? character + DetailGap + label : character;
+
+    /// <summary>The label of a character's outfit choice (the outfit in the save reads Saved); null when the outfit is not known.</summary>
+    private static string? OutfitLabel(string character, string? outfit, GameProfile g) =>
+        outfit != null && GameOptions.CharacterValue(g, character) is { } value
             ? GameOptions.OutfitOf(g, value)?.Values.FirstOrDefault(v => v.Value == outfit)?.Label
             : null;
-        return label == null ? character : character + DetailGap + label;
-    }
 
     private static Figure? FigureOf(string character, string? outfit, GameProfile g)
     {
         if (!g.HasCharacterSelect || GameOptions.CharacterValue(g, character) is not { } value) return null;
-        return new Figure(value, GameOptions.OutfitOf(g, value)?.Key ?? string.Empty, outfit, character[..1]);
+        return Figure.Of(g, value, outfit, character[..1]);
     }
 
     /// <summary>The mini step list of a joining player: the build check, then the save with its percent and bar.</summary>

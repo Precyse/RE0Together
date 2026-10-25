@@ -1,5 +1,7 @@
 import { h, svg, setText, setAttr, setVar, keyed, wasCreated } from './dom.js';
-import { play, shake, stagger, swapText, rollDigits } from './motion.js';
+import { play, shake, stagger, swapText, roll } from './motion.js';
+import { createFile } from './card-file.js';
+import { createImage, setImage } from './image.js';
 import { createSpinner } from './spinner.js';
 import { createSteps } from './steps.js';
 
@@ -9,30 +11,11 @@ const HOST_WORD = 'Host';
 const STATE_PROBLEM = 'problem';
 const STATE_PROGRESS = 'progress';
 const STATE_INGAME = 'ingame';
+const STATE_OPEN = 'open';
 const LAYOUT_TALL = 'tall';
+const LAYOUT_WIDE = 'wide';
 const PAIR_SEATS = 2;
-const DIGIT = /\d/;
 const ENTER_KEYS = ['Enter', ' '];
-
-/** An <img> that hides itself when it fails to load, so the placeholder under it shows. */
-export function createImage(className) {
-  const img = h('img', { class: className, alt: '', draggable: 'false' });
-  img.addEventListener('error', () => { img.hidden = true; });
-  return img;
-}
-
-/** Points the image at `src`; no source hides it. */
-export function setImage(img, src) {
-  if (!src) {
-    img.hidden = true;
-    img.removeAttribute('src');
-    return;
-  }
-  if (img.getAttribute('src') !== src) {
-    img.hidden = false;
-    img.setAttribute('src', src);
-  }
-}
 
 /** A square avatar: the initial on gray until the picture loads. `update(img)` takes `{ src, initial }`. */
 export function createAvatar(className) {
@@ -64,18 +47,6 @@ export function createPortrait() {
       setImage(avatar, card.figure ? null : card.avatar.src);
     },
   };
-}
-
-/** A number-bearing text (ping, percent, timer) rolls its digits; plain words are written as they are. */
-function roll(el, text) {
-  const numeric = DIGIT.test(text);
-  el.hidden = !text;
-  el.classList.toggle('mono', numeric);
-  if (numeric) rollDigits(el, text);
-  else {
-    delete el.dataset.rolled;
-    setText(el, text);
-  }
 }
 
 function buildComet() {
@@ -122,6 +93,20 @@ function buildCard() {
   return el;
 }
 
+/** A card of a game with characters in the wide layout is a field file; an open seat keeps the plain card. */
+function showsFile(card, layout) {
+  return layout === LAYOUT_WIDE && Boolean(card.unit) && card.state !== STATE_OPEN;
+}
+
+/** The field file of a card, built the first time the card needs it (in front of the ring, so a local card's edge stays on top). */
+function fileOf(el) {
+  if (!el.refs.file) {
+    el.refs.file = createFile();
+    el.querySelector('.ring').before(el.refs.file.el);
+  }
+  return el.refs.file;
+}
+
 function renderCard(el, card, layout) {
   const { bloom, portrait, name, corner, right, detail, spinner, words, foot, state, steps, bar, fill, body } = el.refs;
   const created = wasCreated(el);
@@ -131,9 +116,15 @@ function renderCard(el, card, layout) {
     if (card.state === STATE_PROBLEM) shake(el);
     else if (card.state === STATE_INGAME) play(bloom, 'bloom');
   }
-  if (!created && el.dataset.occupant !== card.occupant) play(body, 'content-in');
+  const file = showsFile(card, layout) ? fileOf(el) : null;
+  setAttr(el, 'data-file', file !== null);
+  if (!created && el.dataset.occupant !== card.occupant) play(file ? file.el : body, 'content-in');
   el.dataset.occupant = card.occupant;
   el.toggleAttribute('data-local', card.local);
+  if (file) {
+    file.update(card);
+    return;
+  }
 
   portrait.update(card);
   setText(name, card.name);
@@ -156,9 +147,9 @@ function renderCard(el, card, layout) {
 }
 
 /**
- * The player cards of a session in one layout: 'wide', 'tall', 'mini' or 'miniPortrait'. Cards are keyed by seat: a seat whose occupant changes
- * cross-fades its content, a state change cross-fades tint, edge and glow (CSS, by `data-state`) and plays the entry effect, `enter()` brings the
- * cards in staggered. `update(cards, clickable)`: a clickable grid opens the character select from the local card.
+ * The player cards of a session in one layout: 'wide' (a game with characters shows each player as a field file, see card-file.js), 'tall', 'mini' or
+ * 'miniPortrait'. Cards are keyed by seat: a seat whose occupant changes cross-fades its content, a state change cross-fades tint, edge and glow
+ * (CSS, by `data-state`) and plays the entry effect, `enter()` brings the cards in staggered. `update(cards, clickable)`: a clickable grid opens the character select from the local card.
  */
 export function createCards(ctx, layout) {
   const el = h('div', { class: 'cards', 'data-layout': layout });
@@ -183,6 +174,7 @@ export function createCards(ctx, layout) {
   function update(cards, canClick = false) {
     clickable = canClick;
     setAttr(el, 'data-count', cards.length > PAIR_SEATS ? 'many' : 'pair');
+    setAttr(el, 'data-file', cards.some((card) => showsFile(card, current)));
     keyed(el, cards, (card) => card.key, build, (card, data) => {
       renderCard(card, data, current);
       setAttr(card, 'data-character', data.character);

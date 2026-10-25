@@ -1,7 +1,8 @@
 import { h } from './dom.js';
 import { icon } from './icons.js';
 import { swapText, rollDigits } from './motion.js';
-import { createCards, createImage, createPortrait, setImage } from './cards.js';
+import { createCards, createPortrait } from './cards.js';
+import { createImage, setImage } from './image.js';
 import { createSpinner } from './spinner.js';
 
 const EXPAND_PX = 12;

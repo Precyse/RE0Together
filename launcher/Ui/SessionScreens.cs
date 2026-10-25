@@ -27,12 +27,15 @@ internal static partial class SessionScreens
         var hostId = target?.HostId ?? host?.Id ?? s.Listing?.HostId ?? 0;
         var fix = s.Refusal == null ? NoticeFix.None : SessionCards.FixFor(s, newerBuild);
         var label = fix == NoticeFix.None ? string.Empty : SessionCards.NoticeFor(s, newerBuild)?.Action?.ToUpperInvariant() ?? string.Empty;
-        var starting = s.Step == SessionStep.StartingGame && s.StepSinceMs is { } since && nowMs - since >= StartAgainAfterMs;
         return new JoiningModel(
             hostName.Length > 0 ? $"Joining {hostName}" : "Joining", SeatLine(s, g), hostId, hostName,
-            JoiningSteps(s, g, hostName, nowMs), fix, label, FixEnabled(fix, mod),
-            StartAgain: starting || c is GameCondition.NotStarted or GameCondition.Exited);
+            JoiningSteps(s, g, hostName, nowMs), fix, label, FixEnabled(fix, mod), StartAgain: LaunchStalled(s, c, nowMs));
     }
+
+    /// <summary>A guest's game that has been starting for <see cref="StartAgainAfterMs"/>, never started or exited: it may be started again.</summary>
+    private static bool LaunchStalled(AppStatus s, GameCondition c, long nowMs) =>
+        s.Step == SessionStep.StartingGame && s.StepSinceMs is { } since && nowMs - since >= StartAgainAfterMs
+        || c is GameCondition.NotStarted or GameCondition.Exited;
 
     /// <summary>Whole seconds as <c>m:ss</c> (minutes keep counting past an hour).</summary>
     public static string MinutesSeconds(long seconds)

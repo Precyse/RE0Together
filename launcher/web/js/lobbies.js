@@ -20,7 +20,8 @@ export function create(ctx) {
   const header = h('div', { class: 'lobby-head caption' }, ...HEADERS.map((text) => h('span', { text })));
   const rows = h('div', { class: 'lobby-rows' });
   const skeleton = h('div', { class: 'lobby-rows lobby-skeleton', hidden: true }, ...Array.from({ length: SKELETON_ROWS }, () => h('div', { class: 'lobby-row skeleton-row m-skeleton-pulse' })));
-  const el = h('section', { class: 'lobbies' }, toolbar, header, h('div', { class: 'lobby-list' }, skeleton, rows));
+  const art = createImage('page-art-img');
+  const el = h('section', { class: 'lobbies' }, h('div', { class: 'page-art' }, art.el), toolbar, header, h('div', { class: 'lobby-list' }, skeleton, rows));
   let skeletonShown = false;
   let seen = false;
 
@@ -79,6 +80,7 @@ export function create(ctx) {
     update(state) {
       const { lobbies } = state;
       if (!lobbies) return;
+      art.set(state.art.hero);
       filter.setActive(lobbies.filter);
       game.set({ items: [{ value: ALL_GAMES_VALUE, label: ALL_GAMES }, ...lobbies.games.map((g) => ({ value: g.id, label: g.name }))], value: lobbies.gameId ?? ALL_GAMES_VALUE });
       showSkeleton(lobbies.searching && lobbies.rows.length === 0);

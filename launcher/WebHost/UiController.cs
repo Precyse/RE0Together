@@ -11,7 +11,6 @@ internal sealed partial class UiController : IDisposable
 {
     private const int KeptEvents = 50;
     private const long ModRefreshMinMs = 2000;
-    private const string DevBuildLabel = "Dev build";
 
     private readonly App _app;
     private readonly Action<Action> _post;
@@ -20,7 +19,6 @@ internal sealed partial class UiController : IDisposable
     private readonly UpdateFlow _update = new();
     private readonly List<string> _events = new();
     private readonly Dictionary<string, ModRunView> _modRuns = new();
-    private readonly string _buildLabel = BuildLabel();
     private List<GameEntry> _games = new();
 
     private string? _selectedId;
@@ -151,14 +149,8 @@ internal sealed partial class UiController : IDisposable
         var update = new UpdateView(_update.Label, _update.Enabled, _update.NewerBuild, Updater.Staged, _update.CheckState, _update.NewerMods);
         return new SnapshotInput(
             _app.Status, _games, _selectedId, _screen, _view, _tab, _popup, _popupLobbyId, _filter, _lobbyGameId, _target, _watch.Condition,
-            update, _events, _buildLabel, BuildCheck.LocalBuild(), _selectFocus, Environment.TickCount64, DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            update, _events, BuildCheck.LocalBuild(), _selectFocus, Environment.TickCount64, DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             GameFolders.Find, Avatars.Revision, _modRuns);
-    }
-
-    private static string BuildLabel()
-    {
-        var build = BuildCheck.LocalBuild();
-        return build > BuildInfo.DevBuild ? $"Build {build}" : DevBuildLabel;
     }
 
     /// <summary>Fills the rail with the games whose profile can be read; one unreadable profile is logged and skipped. The game of

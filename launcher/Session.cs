@@ -93,6 +93,12 @@ public sealed class Session : IDisposable
     /// <summary>A member's round-trip time, null before its first pong (and for the local member).</summary>
     public int? RttOf(ulong memberId) => PeerSlot(memberId) is { } slot ? _stats.RttOf(slot) : null;
 
+    /// <summary>Starts a member's round-trip time again from the next ping (see <see cref="PeerStats.Restart"/>).</summary>
+    public void RestartRtt(ulong memberId)
+    {
+        if (PeerSlot(memberId) is { } slot) _stats.Restart(slot);
+    }
+
     /// <summary>True when a member that is not held has not answered a ping for <see cref="PeerStats.SilentAfterMs"/>.</summary>
     public bool IsSilent(ulong memberId, long nowMs) => PeerSlot(memberId) is { } slot && _stats.SilentFor(slot, nowMs);
 

@@ -1,7 +1,7 @@
 import { h, setVar } from './dom.js';
 import { icon } from './icons.js';
 import { isReduced, swapText, tokenMs, tokenValue } from './motion.js';
-import { createImage, setImage } from './cards.js';
+import { createImage, setImage } from './image.js';
 
 const SCREEN = 'select';
 const HALVES = 2;

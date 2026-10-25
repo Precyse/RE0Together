@@ -18,6 +18,9 @@ internal sealed class TempData : IDisposable
 
     public string Root { get; }
 
+    /// <summary>Replaces the settings with the defaults (the player's own are otherwise what a test reads).</summary>
+    public static void UseDefaults() => AppSettings.Update(_ => new AppSettings());
+
     public void Dispose()
     {
         AppSettings.Update(_ => _previousSettings);

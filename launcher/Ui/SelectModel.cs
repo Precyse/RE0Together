@@ -114,7 +114,7 @@ internal static class SelectModels
     private static string NameOf(GameOption characters, string character) => CharacterLabel(characters, character).ToUpperInvariant();
 
     private static Figure FigureOf(GameProfile game, GameOption characters, string character, string? outfit) =>
-        new(character, OutfitKey(game, character), outfit, CharacterLabel(characters, character)[..1]);
+        Figure.Of(game, character, outfit, CharacterLabel(characters, character)[..1]);
 
     private static string CharacterLabel(GameOption characters, string character) => characters.Values.First(value => value.Value == character).Label;
 }

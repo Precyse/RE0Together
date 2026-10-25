@@ -31,8 +31,11 @@ public static class GameOptions
         profile.Options?.FirstOrDefault(option => option.Character == character);
 
     /// <summary>The value of the character option with this label ("Rebecca" is "rebecca"), or null.</summary>
-    public static string? CharacterValue(GameProfile profile, string label) =>
-        profile.Options?.FirstOrDefault(option => option.Key == CharacterKey)?.Values.FirstOrDefault(v => v.Label == label)?.Value;
+    public static string? CharacterValue(GameProfile profile, string label) => CharacterEntry(profile, label)?.Value;
+
+    /// <summary>The entry of the character option with this label (its full name and unit come with it), or null.</summary>
+    public static OptionValue? CharacterEntry(GameProfile profile, string label) =>
+        profile.Options?.FirstOrDefault(option => option.Key == CharacterKey)?.Values.FirstOrDefault(v => v.Label == label);
 
     /// <summary>The character (a value of the character option) of a seat in the seat order, or null when there is no such seat.</summary>
     public static string? CharacterAtSeat(GameProfile profile, IReadOnlyList<string> seatCharacters, int seat) =>

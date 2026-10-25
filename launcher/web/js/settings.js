@@ -3,6 +3,7 @@ import { createDropdown } from './dropdown.js';
 import { createToggle } from './toggle.js';
 import { createModRun } from './mod-run.js';
 import { createSpinner } from './spinner.js';
+import { createImage } from './art.js';
 
 const LAUNCHER_TITLE = 'Launcher';
 const UPDATES_LABEL = 'Check for updates at start';
@@ -57,7 +58,8 @@ export function create(ctx) {
   const report = tool('Create report', () => send('report.create'));
   const launcher = section(LAUNCHER_TITLE, h('div', { class: 'settings-grid' }, ...labelled(UPDATES_LABEL, updates.el, check), ...labelled(VISIBILITY_LABEL, visibility.el), ...labelled('', logs, report)));
   const games = h('div', { class: 'settings-games' });
-  const el = h('section', { class: 'settings' }, h('div', { class: 'settings-scroll' }, launcher, games));
+  const art = createImage('page-art-img');
+  const el = h('section', { class: 'settings' }, h('div', { class: 'page-art' }, art.el), h('div', { class: 'settings-scroll' }, launcher, games));
   const resize = new ResizeObserver(() => {
     for (const path of el.querySelectorAll('.settings-path')) fitPath(path, path.dataset.full);
   });
@@ -110,6 +112,7 @@ export function create(ctx) {
     update(state) {
       const { settings } = state;
       if (!settings) return;
+      art.set(state.art.hero);
       updates.set(settings.checkForUpdates);
       const checking = settings.updateCheck === 'checking';
       check.disabled = checking;

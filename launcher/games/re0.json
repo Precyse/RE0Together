@@ -5,13 +5,14 @@
   "saveSync": { "steamRemoteFiles": ["data0.bin"], "sessionDir": "coop/session" },
   "adapterLog": "coop/adapter.log",
   "crashFiles": ["coop/crash-*.dmp", "coop/dumps/*.dmp", "coop/dumps/*.txt"],
-  "freshTypes": ["0x0140", "0x0160", "0x0173"],
+  "freshTypes": ["0x0140", "0x0160", "0x0173", "0x0178"],
   "outfitArt": { "arc": "nativePC/arc/ui/cos_{value}.arc", "texture": "cos_{value}_ID_HQ" },
   "options": [
     { "key": "partner_mode", "label": "Partner mode", "host": true, "values": [
       { "value": "input", "label": "Input" }, { "value": "state", "label": "State" } ] },
     { "key": "character", "label": "Character", "host": true, "values": [
-      { "value": "rebecca", "label": "Rebecca" }, { "value": "billy", "label": "Billy" } ] },
+      { "value": "rebecca", "label": "Rebecca", "fullName": "Rebecca Chambers", "unit": "S.T.A.R.S. Bravo Team" },
+      { "value": "billy", "label": "Billy", "fullName": "Billy Coen", "unit": "U.S. Marine Corps" } ] },
     { "key": "outfit_rebecca", "label": "Rebecca outfit", "character": "rebecca", "values": [
       { "value": "", "label": "Saved" }, { "value": "02", "label": "S.T.A.R.S. 2002" }, { "value": "7d", "label": "Western" },
       { "value": "81", "label": "Leather" }, { "value": "91", "label": "Team Wesker" },

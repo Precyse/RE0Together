@@ -15,7 +15,6 @@ export default {
   "top": {
    "mode": "browse",
    "tab": "lobbies",
-   "build": "Build 412",
    "update": null
   },
   "games": [
@@ -24,7 +23,7 @@ export default {
     "name": "DEATH STRANDING 2: ON THE BEACH",
     "capsule": "/dev/art/3280350/capsule.jpg",
     "sub": "2 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": false
@@ -34,7 +33,7 @@ export default {
     "name": "Resident Evil 0 HD",
     "capsule": "/dev/art/339340/capsule.jpg",
     "sub": "2 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": true
@@ -44,7 +43,7 @@ export default {
     "name": "Saints Row 2",
     "capsule": "/dev/art/9480/capsule.jpg",
     "sub": "4 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": false

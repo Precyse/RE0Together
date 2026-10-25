@@ -7,7 +7,7 @@
 .mini-game { font-size: 12px; font-weight: 700; letter-spacing: var(--ls-brand); text-transform: uppercase; white-space: nowrap; }
 .mini-spacer { flex: 1; }
 .mini-status { font-size: 11px; font-weight: 700; letter-spacing: var(--ls-brand); text-transform: uppercase; white-space: nowrap; }
-.mini-header[data-kind="ping"] .mini-status { font: 400 11px var(--font-mono); letter-spacing: 0; text-transform: none; }
+.mini-header[data-kind="ping"] .mini-status { font: 400 11px var(--font-num); letter-spacing: 0; text-transform: none; }
 .mini-expand { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: var(--text); transition: background-color var(--hover-dur) var(--hover-ease); }
 .mini-expand:hover { background: var(--card); }
 .mini-body { flex: 1; min-height: 0; padding: 10px 12px; }

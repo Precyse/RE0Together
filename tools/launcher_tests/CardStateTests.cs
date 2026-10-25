@@ -10,6 +10,7 @@ public static class CardStateTests
     {
         States();
         Words();
+        Ready();
     }
 
     private static PlayerSlot Player(SessionStep step = SessionStep.None, int? rtt = null, bool held = false, bool silent = false, string status = "") =>
@@ -29,6 +30,14 @@ public static class CardStateTests
         Check.That(CardStates.Of(Player(SessionStep.Lobby, rtt: 30)) == CardState.Idle, "a ping does not make a lobby player in game");
         Check.That(CardStates.OfStep(SessionStep.ReceivingSave) == CardState.Progress && CardStates.OfStep(SessionStep.InGame) == CardState.InGame
             && CardStates.OfStep(SessionStep.None) == CardState.Idle && CardStates.OfStep(SessionStep.Refused) == CardState.Problem, "a roster step maps the same way");
+    }
+
+    private static void Ready()
+    {
+        Check.That(CardStates.IsReady(Player(SessionStep.Ready)), "a player on the Ready step is ready");
+        foreach (var step in new[] { SessionStep.Lobby, SessionStep.CheckingBuild, SessionStep.ReceivingSave, SessionStep.StartingGame, SessionStep.InGame, SessionStep.Refused })
+            Check.That(!CardStates.IsReady(Player(step)), $"{step} is not ready");
+        Check.That(!CardStates.IsReady(Player(SessionStep.Ready, held: true)) && !CardStates.IsReady(Player(SessionStep.Ready, silent: true)), "a held or silent player is not ready");
     }
 
     private static void Words()

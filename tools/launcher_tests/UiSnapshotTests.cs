@@ -27,6 +27,7 @@ public static class UiSnapshotTests
         try
         {
             Hosting();
+            GuestHosting();
             RefusedJoin();
             Lobby();
             MiniAlert();
@@ -50,7 +51,7 @@ public static class UiSnapshotTests
         var screen = Screens.For(status, intent, target, tab);
         return new SnapshotInput(
             status, games, status.GameId ?? "re0", screen, null, tab, popup, popupLobby, LobbyFilter.All, null, target, GameCondition.Fine,
-            new UpdateView(null, false, newer, false), [], "Build 412", 412, null, NowMs, UnixNow, _ => null, avatars ?? (_ => null));
+            new UpdateView(null, false, newer, false), [], 412, null, NowMs, UnixNow, _ => null, avatars ?? (_ => null));
     }
 
     private static PlayerSlot Host(bool local = false, SessionStep step = SessionStep.InGame) =>
@@ -68,11 +69,11 @@ public static class UiSnapshotTests
         var state = UiSnapshot.MainPage(Input(status, Intent.Host), ScreenKind.Home);
         Check.That(state.Screen == ScreenKind.Hosting, "H1: the hosting screen shows");
         Check.That(state.Transition == new TransitionDto(TransitionKind.PanelIn, 0), "H1: it opens over the tabs with the panel reveal");
-        Check.That(state.Top.Mode == TopMode.Session && state.Top.Build == "Build 412" && state.Top.Update == null, "H1: the top bar is the session's");
+        Check.That(state.Top.Mode == TopMode.Session && state.Top.Update == null, "H1: the top bar is the session's");
         Check.That(state.Home == null && state.Lobbies == null && state.Joining == null && state.Select == null && state.Settings == null && state.Popup == null,
             "H1: only the screen on show has its DTO");
         var session = state.Session!;
-        Check.That(session.Hosting && session.Code == "109775243712345678" && session.State == null, "H1: hosting with the code as text and no lobby state");
+        Check.That(session.Hosting && session.IsHost && session.Code == "109775243712345678" && session.State == null, "H1: hosting with the code as text and no lobby state");
         Check.That(string.Join("/", session.Steps.Select(step => step.Text)) == "Lobby open/Mod 412/Waiting for players/In game", "H1: the hosting steps");
         Check.That(string.Join("", session.Steps.Select(step => step.Mark switch { StepMark.Done => 'D', StepMark.Active => 'A', _ => 'P' })) == "DDAP", "H1: lobby open and mod are done, waiting is active");
         Check.That(session.Steps[2].Trailing == "0:12", "H1: waiting for players counts from the lobby's opening");
@@ -83,12 +84,32 @@ public static class UiSnapshotTests
             "H1: the host's own card says Host, names its player and has an initial before an avatar");
         Check.That(host.Figure?.Src?.StartsWith(WebHosts.ImageOrigin + "figure/re0/") == true && host.Right == string.Empty && host.Progress == null,
             "H1: the card's figure is a route on the image host");
+        Check.That(host is { Seat: 1, Unit: "S.T.A.R.S. Bravo Team", Agent: "Rebecca Chambers", Outfit: "Saved", Ready: false },
+            "H1: the card's field file: seat from 1, the character's unit and full name, the outfit's label");
         var open = session.Seats[1];
+        Check.That(open is { Seat: 2, Unit: "", Agent: "", Outfit: "", Ready: false }, "H1: the open seat is seat 2 and has no field file");
         Check.That(open.State == "open" && open.Name == "Open" && open.Occupant == string.Empty && open.Figure == null && open.Avatar.Initial == string.Empty, "H1: the second seat is open");
         var rail = state.Games;
-        Check.That(rail.Length == 2 && rail[0].Id == "re0" && rail[0].Selected && !rail[0].Locked && rail[1].Locked && rail[0].Sub == "2 players" && rail[0].Line == "Mod 412",
-            "H1: the rail locks the other game and says the selected game's line");
+        Check.That(rail.Length == 2 && rail[0].Id == "re0" && rail[0].Selected && !rail[0].Locked && rail[1].Locked && rail[0].Sub == "2 players" && rail[0].Line == string.Empty,
+            "H1: the rail locks the other game and gives the quiet selected game no line");
+        var modified = new GameStatus(new ModStatus(ModState.Modified, 412), true, 412, 17178773);
+        Check.That(RailModel.Line(modified) == "Mod modified" && RailModel.Line(Mod) == string.Empty, "H1: the rail line shows only when the game needs attention");
         Check.That(UiSnapshot.MainPage(Input(status, Intent.Host), ScreenKind.Hosting).Transition.Kind == TransitionKind.None, "H1: no transition while the screen stays");
+    }
+
+    private static void GuestHosting()
+    {
+        var status = Re0Status(AppState.Joined, SessionStep.Ready, Host(step: SessionStep.Ready), Guest(SessionStep.Ready, local: true));
+        var state = UiSnapshot.MainPage(Input(status, Intent.Join, new JoinTarget(LobbyId, "Precyse", 2)), ScreenKind.Joining);
+        Check.That(state.Screen == ScreenKind.Hosting && state.Joining == null, "G1: a guest through its join steps sees the hosting screen");
+        var session = state.Session!;
+        Check.That(session.Hosting && !session.IsHost && !session.StartEnabled && session.Counter == "2/2" && session.Layout == CardLayout.Wide,
+            "G1: not the host, so START GAME is never usable");
+        Check.That(string.Join("/", session.Steps.Select(step => step.Text)) == "Lobby/Build check/Receiving save/Waiting for Precyse/Starting game/In game", "G1: the guest's own steps");
+        Check.That(session.Seats[0].Name == "Precyse" && !session.Seats[0].Local && session.Seats[1].Local && session.Seats[1].Corner == "You", "G1: the host first, the own card marked You");
+        Check.That(session.Seats[0] is { Seat: 1, Agent: "Rebecca Chambers", Ready: true } && session.Seats[1] is { Seat: 2, Unit: "U.S. Marine Corps", Agent: "Billy Coen", Ready: true },
+            "G1: seats count from 1 in the order shown, and both ready players are ready");
+        Check.That(session.SeatsClickable, "G1: the own card has a figure, so it opens the character select");
     }
 
     private static void RefusedJoin()

@@ -20,6 +20,9 @@ public static class CardStates
         return OfStep(player.Step);
     }
 
+    /// <summary>The player has everything it needs for the game to start: its step is Ready and it is neither held nor silent.</summary>
+    public static bool IsReady(PlayerSlot player) => player.Step == SessionStep.Ready && !player.Held && !player.Silent;
+
     /// <summary>The state of a step alone (a roster entry of a lobby listing has no ping or hold).</summary>
     public static CardState OfStep(SessionStep step) => step switch
     {

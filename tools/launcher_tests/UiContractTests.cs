@@ -157,7 +157,7 @@ public static class UiContractTests
             PopupKind popup = PopupKind.None, ulong popupLobby = 0, string? selected = null) =>
             new(status, games.Select(profile => new GameEntry(profile, mod, new ArtDto("h", "l", "c"))).ToList(), selected ?? status.GameId ?? "re0",
                 view ?? Screens.For(status, intent, target, tab), view, tab, popup, popupLobby, LobbyFilter.All, null, target, GameCondition.Fine,
-                new UpdateView("Update to 413", true, 413, false), ["Amy joined"], "Build 412", 412, null, 1000, 1_800_000_000, _ => null, _ => 1);
+                new UpdateView("Update to 413", true, 413, false), ["Amy joined"], 412, null, 1000, 1_800_000_000, _ => null, _ => 1);
 
         const ulong lobbyId = 109775243712345678;
         PlayerSlot host(bool local = false, SessionStep step = SessionStep.InGame) => new(2, "Precyse", true, local, Step: step, RttMs: local ? null : 18);
@@ -179,6 +179,7 @@ public static class UiContractTests
         AddInput(Input(AppStatus.Idle with { Lobbies = [listing] }, tab: Tab.Lobbies, popup: PopupKind.Lobby, popupLobby: lobbyId));
         AddInput(Input(AppStatus.Idle with { Refusal = refusal }, Intent.Join, target));
         AddInput(Input(session("re0", AppState.Hosting, SessionStep.Lobby, host(local: true, step: SessionStep.Lobby)), Intent.Host));
+        AddInput(Input(session("re0", AppState.Joined, SessionStep.ReceivingSave, host(step: SessionStep.Ready), guest(SessionStep.ReceivingSave, local: true)), Intent.Join, target));
         AddInput(Input(session("re0", AppState.PeerConnected, SessionStep.InGame, host(), guest(SessionStep.InGame, local: true))));
         AddInput(Input(session("sr2", AppState.PeerConnected, SessionStep.InGame, host(), guest(SessionStep.InGame, local: true))));
         AddInput(Input(session("re0", AppState.PeerConnected, SessionStep.Ready, host(step: SessionStep.Ready), guest(SessionStep.Ready, local: true)), view: ScreenKind.Select));

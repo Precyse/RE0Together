@@ -23,7 +23,7 @@ internal sealed record UpdateView(string? Label, bool Enabled, int NewerBuild, b
 internal sealed record SnapshotInput(
     AppStatus Status, IReadOnlyList<GameEntry> Games, string? SelectedId, ScreenKind Screen, ScreenKind? View, Tab Tab,
     PopupKind Popup, ulong PopupLobbyId, LobbyFilter Filter, string? LobbyGameId, JoinTarget? Target, GameCondition Condition,
-    UpdateView Update, IReadOnlyList<string> Events, string BuildLabel, int LocalBuild, int? SelectFocus, long NowMs, long UnixNow,
+    UpdateView Update, IReadOnlyList<string> Events, int LocalBuild, int? SelectFocus, long NowMs, long UnixNow,
     Func<GameProfile, string?> FolderOf, Func<ulong, int?> AvatarRevision, IReadOnlyDictionary<string, ModRunView>? ModRuns = null)
 {
     /// <summary>A mod action is under way: sessions and other mod actions wait for it.</summary>
@@ -81,14 +81,14 @@ internal static partial class UiSnapshot
     private static TopDto Top(SnapshotInput i, ScreenKind screen)
     {
         var mode = screen is ScreenKind.Home or ScreenKind.Lobbies ? TopMode.Browse : i.View != null ? TopMode.View : TopMode.Session;
-        return new TopDto(mode, i.Tab, i.BuildLabel, i.Update.Label is { } label ? new BtnDto(label, i.Update.Enabled) : null);
+        return new TopDto(mode, i.Tab, i.Update.Label is { } label ? new BtnDto(label, i.Update.Enabled) : null);
     }
 
     private static RailGameDto RailGame(SnapshotInput i, GameEntry entry, string? runningId)
     {
         var selected = entry.Profile.Id == i.SelectedId;
         return new RailGameDto(
-            entry.Profile.Id, entry.Profile.Name, entry.Art.Capsule, RailModel.Sub(entry.Profile, runningId), entry.Status.Line,
+            entry.Profile.Id, entry.Profile.Name, entry.Art.Capsule, RailModel.Sub(entry.Profile, runningId), RailModel.Line(entry.Status),
             RailModel.Tone(entry.Status), RailModel.Locked(i.Free, selected), selected);
     }
 

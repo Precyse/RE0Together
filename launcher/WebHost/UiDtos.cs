@@ -36,7 +36,7 @@ internal sealed record TransitionDto(TransitionKind Kind, int Direction);
 /// <summary>What the top bar is: the tabs, a session screen, or an open view (settings, select).</summary>
 internal enum TopMode { Browse, Session, View }
 
-internal sealed record TopDto(TopMode Mode, Tab Tab, string Build, BtnDto? Update);
+internal sealed record TopDto(TopMode Mode, Tab Tab, BtnDto? Update);
 
 internal sealed record RailGameDto(string Id, string Name, string? Capsule, string Sub, string Line, RailTone Tone, bool Locked, bool Selected);
 
@@ -85,12 +85,13 @@ internal sealed record JoiningDto(string Title, string Sub, ImgDto Host, StepDto
 
 internal sealed record LobbyStateDto(LobbyStateKind Kind, string Words, string Timer);
 
+/// <summary>A player card. Seat counts from 1; Unit, Agent, Outfit and Ready are the field file of a game with characters (empty without one).</summary>
 internal sealed record CardDto(
     string Key, string Occupant, ImgDto Avatar, ImgDto? Figure, string Name, string Corner, string Detail, string Words, string Footer,
-    string State, bool Local, StepDto[] Steps, string Right, double? Progress);
+    string State, bool Local, StepDto[] Steps, string Right, double? Progress, int Seat, string Unit, string Agent, string Outfit, bool Ready);
 
 internal sealed record SessionDto(
-    bool Hosting, string Code, StepDto[] Steps, bool StartEnabled, LobbyStateDto? State, string[][] Options, string[] Events, bool Relaunch,
+    bool Hosting, bool IsHost, string Code, StepDto[] Steps, bool StartEnabled, LobbyStateDto? State, string[][] Options, string[] Events, bool Relaunch,
     string Counter, CardLayout Layout, CardDto[] Seats, bool SeatsClickable, NoticeDto? Notice);
 
 internal sealed record HalfDto(ImgDto Figure, string Name, string Role, string Label, string Kind, bool Locked, int Dots, int Index, bool CanCycle, double Opacity);

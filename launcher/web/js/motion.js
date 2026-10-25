@@ -111,6 +111,18 @@ export function rollDigits(el, text) {
   }
 }
 
+/** A number-bearing text (ping, percent, timer) rolls its digits; plain words are written as they are; no text hides the element. */
+export function roll(el, text) {
+  const numeric = DIGIT_PATTERN.test(text);
+  el.hidden = !text;
+  el.classList.toggle('mono', numeric);
+  if (numeric) rollDigits(el, text);
+  else {
+    delete el.dataset.rolled;
+    setText(el, text);
+  }
+}
+
 const reels = new WeakMap();
 
 function reelPattern(text) {
@@ -163,6 +175,11 @@ export function reel(el, text) {
 /** error-state-shake: replays the shake on the element. */
 export function shake(el) {
   return play(el, 'shake');
+}
+
+/** stamp-in: the stamp lands with a flash behind it (what it replaces leaves by a CSS transition on the same state change). */
+export function stampIn(stamp, flash) {
+  return Promise.all([play(stamp, 'stamp'), play(flash, 'stamp-flash')]);
 }
 
 /** icon-swap: the element holds two `.t-icon` children (data-icon a / b); shows `toIcon` ('a' or 'b'). */

@@ -9,7 +9,7 @@ export function createCodeField(ctx) {
   const { send, motion } = ctx;
   const input = h('input', { id: 'lobby-code', class: 'field code-input', type: 'text', maxlength: MAX_CODE_LENGTH, spellcheck: 'false', autocomplete: 'off' });
   const join = h('button', { class: 'btn btn-over-art code-join', type: 'button', text: JOIN_LABEL });
-  const label = h('label', { class: 'code-label', for: 'lobby-code', text: LABEL });
+  const label = h('label', { class: 'caption code-label', for: 'lobby-code', text: LABEL });
   const el = h('div', { class: 'code-row' }, label, input, join);
   let revert = 0;
 

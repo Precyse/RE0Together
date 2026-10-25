@@ -8,7 +8,7 @@ const OPEN_LABEL = 'Open';
 const HOST_LABEL = 'Host';
 const FACT_LABELS = ['Ping', 'Mod', 'Game', 'Network', 'Playing'];
 const GLYPH = 12;
-const STATE_CLASS = { ingame: 'tint-green', progress: 'tint-amber', problem: 'tint-red' };
+const STATE_CLASS = { ingame: 'tint-neutral', progress: 'tint-amber', problem: 'tint-red' };
 
 /** A check or cross glyph plus a value: `set(ok, text)`. */
 function createVerdict(icons) {

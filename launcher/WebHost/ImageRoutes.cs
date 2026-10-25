@@ -51,7 +51,7 @@ internal static partial class ImageRoutes
         string.Create(CultureInfo.InvariantCulture, $"{WebHosts.ImageOrigin}{AvatarPrefix}{steamId}?r={revision}");
 
     /// <summary>The route of a card's or stage half's figure: the outfit picture, or the character's silhouette when the outfit
-    /// is not known or is the saved one.</summary>
+    /// is not known.</summary>
     public static string FigureUrl(string gameId, Figure figure) => string.IsNullOrEmpty(figure.Value)
         ? $"{WebHosts.ImageOrigin}{FigurePrefix}{gameId}/{figure.Character}/{SilhouetteWord}"
         : $"{WebHosts.ImageOrigin}{FigurePrefix}{gameId}/{figure.OptionKey}/{figure.Value}";

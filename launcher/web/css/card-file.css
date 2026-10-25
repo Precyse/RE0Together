@@ -1,0 +1,32 @@
+/* The field file: the wide card of a game with characters (card-file.js). Sizes live on .c-file (--cf-*); colours and motion come from tokens.css. */
+.cards[data-file] .card { height: var(--cf-height, 150px); display: flex; flex-direction: column; justify-content: center; }
+.card[data-file] { box-shadow: inset 0 0 0 1px var(--hairline); }
+.card[data-file] .c-body { display: none; }
+.card[data-file] .fx-progress { --fx-tint: transparent; --fx-edge: 55%; --fx-glow: 0; }
+.card[data-file] .comet { display: none; }
+.card[data-state="problem"] .cf-figure { opacity: 0.5; }
+
+.c-file {
+  --cf-head-h: 26px; --cf-pad-x: 14px; --cf-key-w: 58px; --cf-key-size: 9.5px; --cf-key-tracking: 0.16em; --cf-name-size: 19px;
+  --cf-rows-top: 40px; --cf-rows-right: 100px; --cf-figure-w: 170px; --cf-figure-top: 6px; --cf-figure-fade: 45%;
+  --cf-status-bottom: 16px; --cf-stamp-bottom: 12px; --cf-stamp-size: 12px; --cf-stamp-tracking: 0.2em; --cf-stamp-border: 1.5px; --cf-bar-h: 2px;
+  position: absolute; inset: 0;
+}
+.cf-figure { position: absolute; right: 0; top: var(--cf-figure-top); width: var(--cf-figure-w); height: auto; pointer-events: none; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--cf-figure-fade)); mask-image: linear-gradient(90deg, transparent 0, #000 var(--cf-figure-fade)); }
+.cf-head { position: relative; display: flex; align-items: center; justify-content: space-between; height: var(--cf-head-h); padding: 0 var(--cf-pad-x); border-bottom: 1px solid var(--hairline); background: var(--file-head-fill); }
+.cf-rows { position: absolute; left: var(--cf-pad-x); right: var(--cf-rows-right); top: var(--cf-rows-top); display: grid; grid-template-columns: var(--cf-key-w) minmax(0, 1fr); gap: 5px 10px; align-items: baseline; font-size: var(--fs-small); }
+.cf-rows > span:not(.cf-key) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-key { font: 600 var(--cf-key-size) var(--font-display); letter-spacing: var(--cf-key-tracking); color: var(--dim); text-transform: uppercase; }
+.cf-player { font: 600 var(--cf-name-size)/1 var(--font-display); letter-spacing: 0.02em; }
+
+.cf-status { position: absolute; left: var(--cf-pad-x); bottom: var(--cf-status-bottom); display: flex; align-items: center; gap: 6px; font-size: var(--fs-small); font-weight: 600; }
+.cf-percent { color: var(--muted); }
+.cf-bar { position: absolute; left: 0; right: 0; bottom: 0; height: var(--cf-bar-h); background: var(--hairline); }
+.cf-fill { position: absolute; inset: 0; background: var(--armed); transform-origin: left center; transform: scaleX(var(--v, 0)); transition: transform var(--resize-dur) var(--resize-ease); }
+.cf-stamp { position: absolute; left: var(--cf-pad-x); bottom: var(--cf-stamp-bottom); padding: 3px 8px; border: var(--cf-stamp-border) solid currentColor; font: 700 var(--cf-stamp-size) var(--font-display); letter-spacing: var(--cf-stamp-tracking); text-transform: uppercase; transform: rotate(var(--stamp-rotate)); }
+.cf-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(60% 80% at 15% 85%, var(--stamp-flash-fill), transparent 70%); }
+
+.cf-status, .cf-bar { transition: opacity var(--stamp-out-dur) var(--stamp-out-ease), transform var(--stamp-out-dur) var(--stamp-out-ease), filter var(--stamp-out-dur) var(--stamp-out-ease); }
+.c-file[data-ready="true"] .cf-status, .c-file[data-ready="true"] .cf-bar { opacity: 0; transform: translateY(var(--stamp-out-distance)); filter: blur(var(--stamp-out-blur)); }
+.c-file[data-ready="true"] .cf-bar { transition-duration: var(--stamp-bar-out-dur); }
+.c-file[data-ready="false"] .cf-stamp { opacity: 0; }

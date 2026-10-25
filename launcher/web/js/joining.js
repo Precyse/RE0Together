@@ -1,6 +1,7 @@
 import { h, setText } from './dom.js';
 import { swapText } from './motion.js';
-import { createAvatar, createImage, setImage } from './cards.js';
+import { createAvatar } from './cards.js';
+import { createImage, setImage } from './image.js';
 import { createSteps } from './steps.js';
 
 const SCREEN = 'joining';

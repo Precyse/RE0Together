@@ -204,11 +204,22 @@ public sealed partial class App
                 var (step, percent) = isLocal ? local : PublishedStep(lobby, member);
                 return new PlayerSlot(
                     member.Id, member.Name, member.Id == hostId, isLocal, NativeJoin.Readable(lobby.MemberData(member, MemberKey.GameStatus)),
-                    step, percent, _session?.RttOf(member.Id), _session?.IsHeld(member.Id) ?? false, _session?.IsSilent(member.Id, nowMs) ?? false,
+                    step, percent, isLocal ? null : MeasuredRtt(member.Id, step, local.Step), _session?.IsHeld(member.Id) ?? false, _session?.IsSilent(member.Id, nowMs) ?? false,
                     lobby.MemberData(member, MemberKey.Options), HoldSecondsLeft(member.Id, nowMs));
             })
             .ToList();
     }
+
+    /// <summary>A member's ping, none while it or this player is still checking the build or moving the save: those pongs wait
+    /// behind the transfer and read as seconds, so the average starts again once the transfer is over.</summary>
+    private int? MeasuredRtt(ulong memberId, SessionStep memberStep, SessionStep localStep)
+    {
+        if (!Transferring(memberStep) && !Transferring(localStep)) return _session?.RttOf(memberId);
+        _session?.RestartRtt(memberId);
+        return null;
+    }
+
+    private static bool Transferring(SessionStep step) => step is SessionStep.CheckingBuild or SessionStep.ReceivingSave;
 
     private int HoldSecondsLeft(ulong memberId, long nowMs) =>
         _session is { } session ? (int)Math.Ceiling(session.HoldMsLeft(memberId, nowMs) / (double)MillisPerSecond) : 0;

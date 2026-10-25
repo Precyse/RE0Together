@@ -30,7 +30,12 @@ export default {
      "local": true,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 1,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": false
     },
     {
      "key": "1",
@@ -49,7 +54,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 2,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": false
     },
     {
      "key": "2",
@@ -68,7 +78,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "40%",
-     "progress": 0.4
+     "progress": 0.4,
+     "seat": 3,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": false
     },
     {
      "key": "3",
@@ -87,7 +102,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 4,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": false
     }
    ],
    "alert": null,

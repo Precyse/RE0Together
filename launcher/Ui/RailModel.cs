@@ -16,6 +16,9 @@ internal static class RailModel
     /// <summary>The colour of the status line: a problem is red, an update or other attention amber, else quiet.</summary>
     public static RailTone Tone(GameStatus status) => !status.NeedsAttention ? RailTone.Quiet : status.HasProblem ? RailTone.Red : RailTone.Amber;
 
+    /// <summary>The status line under a game's name, shown only when it needs attention (an update, a problem); a quiet game has none.</summary>
+    public static string Line(GameStatus status) => Tone(status) == RailTone.Quiet ? string.Empty : status.Line;
+
     /// <summary>While a session is open the rail is locked and the rows other than the selected one are dimmed.</summary>
     public static bool Locked(bool railEnabled, bool selected) => !railEnabled && !selected;
 }

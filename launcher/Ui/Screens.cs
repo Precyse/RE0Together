@@ -26,8 +26,9 @@ internal static class Screens
 
     /// <summary>Which screen the status asks for. Idle and offline show the tab, except that an idle status holding a refusal
     /// for the lobby the player asked to join keeps the joining screen (its failed step and its fix) until Cancel. Connecting
-    /// shows hosting after HOST and joining otherwise. Rejoining and waiting for the host show the lobby. In a lobby the host
-    /// sees hosting and a guest joining until their own game is in (or closed), then the lobby.</summary>
+    /// shows hosting after HOST and joining otherwise. Rejoining and waiting for the host show the lobby. In a lobby the host sees
+    /// hosting until its game is in; a guest sees joining through its join steps (and for a refusal's fix), then hosting while it
+    /// waits for the host and while its game starts; once the game is in (or closed) it is the lobby.</summary>
     public static ScreenKind For(AppStatus status, Intent intent, JoinTarget? target, Tab tab)
     {
         switch (status.State)
@@ -39,9 +40,10 @@ internal static class Screens
             case AppState.Rejoining or AppState.WaitingForHost:
                 return ScreenKind.Lobby;
             default:
-                var host = status.Players.FirstOrDefault(player => player.IsLocal)?.IsHost ?? (status.State == AppState.Hosting || intent == Intent.Host);
-                var inGame = status.Step is SessionStep.InGame or SessionStep.GameClosed;
-                return inGame ? ScreenKind.Lobby : host ? ScreenKind.Hosting : ScreenKind.Joining;
+                var local = status.Players.FirstOrDefault(player => player.IsLocal);
+                var host = local?.IsHost ?? (status.State == AppState.Hosting || intent == Intent.Host);
+                if (status.Step is SessionStep.InGame or SessionStep.GameClosed) return ScreenKind.Lobby;
+                return host || local != null && JoinedWaiting(status) ? ScreenKind.Hosting : ScreenKind.Joining;
         }
     }
 
@@ -55,6 +57,11 @@ internal static class Screens
         if (before == after || before == SessionDepth && after == LobbyDepth) return new Transition(TransitionKind.Page, 1);
         return new Transition(after > before ? TransitionKind.PanelIn : TransitionKind.PanelOut);
     }
+
+    /// <summary>A guest that has not been refused and is through its join steps (build check, save): it waits for the host and
+    /// stays through the launch on the hosting screen.</summary>
+    private static bool JoinedWaiting(AppStatus status) =>
+        status.Refusal == null && status.Step is SessionStep.Ready or SessionStep.StartingGame;
 
     private static bool RefusedJoin(AppStatus status, Intent intent, JoinTarget? target) =>
         intent == Intent.Join && target != null && status.Refusal is { LobbyId: not 0 } refusal && refusal.LobbyId == target.LobbyId;

@@ -14,7 +14,6 @@ export default {
   "top": {
    "mode": "session",
    "tab": "play",
-   "build": "Build 412",
    "update": null
   },
   "games": [
@@ -23,7 +22,7 @@ export default {
     "name": "DEATH STRANDING 2: ON THE BEACH",
     "capsule": "/dev/art/3280350/capsule.jpg",
     "sub": "2 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": false
@@ -33,7 +32,7 @@ export default {
     "name": "Resident Evil 0 HD",
     "capsule": "/dev/art/339340/capsule.jpg",
     "sub": "2 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": false
@@ -43,7 +42,7 @@ export default {
     "name": "Saints Row 2",
     "capsule": "/dev/art/9480/capsule.jpg",
     "sub": "4 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": true
@@ -63,6 +62,7 @@ export default {
   "joining": null,
   "session": {
    "hosting": false,
+   "isHost": false,
    "code": "109775243712345678",
    "steps": [],
    "startEnabled": true,
@@ -94,7 +94,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 1,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": true
     },
     {
      "key": "1",
@@ -113,7 +118,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 2,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": true
     },
     {
      "key": "2",
@@ -132,7 +142,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 3,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": true
     },
     {
      "key": "3",
@@ -151,7 +166,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 4,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": true
     },
     {
      "key": "4",
@@ -170,7 +190,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 5,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": false
     },
     {
      "key": "5",
@@ -189,7 +214,12 @@ export default {
      "local": true,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 6,
+     "unit": "",
+     "agent": "",
+     "outfit": "",
+     "ready": true
     }
    ],
    "seatsClickable": false,

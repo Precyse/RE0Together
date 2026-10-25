@@ -14,7 +14,6 @@ export default {
   "top": {
    "mode": "session",
    "tab": "play",
-   "build": "Build 412",
    "update": null
   },
   "games": [
@@ -23,7 +22,7 @@ export default {
     "name": "DEATH STRANDING 2: ON THE BEACH",
     "capsule": "/dev/art/3280350/capsule.jpg",
     "sub": "2 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": false
@@ -33,7 +32,7 @@ export default {
     "name": "Resident Evil 0 HD",
     "capsule": "/dev/art/339340/capsule.jpg",
     "sub": "2 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": true
@@ -43,7 +42,7 @@ export default {
     "name": "Saints Row 2",
     "capsule": "/dev/art/9480/capsule.jpg",
     "sub": "4 players",
-    "line": "Mod 412",
+    "line": "",
     "tone": "quiet",
     "locked": false,
     "selected": false
@@ -63,6 +62,7 @@ export default {
   "joining": null,
   "session": {
    "hosting": true,
+   "isHost": true,
    "code": "109775243712345678",
    "steps": [
     {
@@ -130,7 +130,12 @@ export default {
      "local": true,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 1,
+     "unit": "S.T.A.R.S. Bravo Team",
+     "agent": "Rebecca Chambers",
+     "outfit": "S.T.A.R.S. 2002",
+     "ready": true
     },
     {
      "key": "1",
@@ -146,32 +151,18 @@ export default {
      "name": "Amy",
      "corner": "18 ms",
      "detail": "Billy  Jacket",
-     "words": "",
+     "words": "Receiving save",
      "footer": "",
      "state": "progress",
      "local": false,
-     "steps": [
-      {
-       "text": "Build check",
-       "mark": "done",
-       "trailing": "",
-       "bar": null,
-       "indeterminate": false,
-       "lines": [],
-       "pairs": []
-      },
-      {
-       "text": "Receiving save",
-       "mark": "active",
-       "trailing": "40%",
-       "bar": 0.4,
-       "indeterminate": false,
-       "lines": [],
-       "pairs": []
-      }
-     ],
-     "right": "",
-     "progress": null
+     "steps": [],
+     "right": "40%",
+     "progress": 0.4,
+     "seat": 2,
+     "unit": "U.S. Marine Corps",
+     "agent": "Billy Coen",
+     "outfit": "Jacket",
+     "ready": false
     }
    ],
    "seatsClickable": false,

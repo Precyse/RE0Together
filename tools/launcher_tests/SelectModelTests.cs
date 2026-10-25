@@ -13,9 +13,12 @@ public static class SelectModelTests
     public static void Run()
     {
         using var data = new TempData();
+        TempData.UseDefaults();
         BeforeASession();
         HostInALobby();
         GuestInALobby();
+        GuestChangesItsOutfit();
+        SavedShowsTheDefaultOutfit();
         LockedOnceTheGameStarts();
         Stepping();
     }
@@ -60,6 +63,30 @@ public static class SelectModelTests
         Check.That(model.Centre == StageCentre.Swap && model.SwapCharacter == "rebecca", "a guest can swap too: the swap asks for the host's character");
         var unknown = SelectModels.Build(Profile(), null, Session(SessionStep.Lobby, Slot("Precyse", host: true, local: false), Slot("Amy", host: false, local: true)), free: false);
         Check.That(unknown.Left.Label.Length == 0 && unknown.Left.Figure.Value == null, "an outfit that was not published shows no label and the silhouette");
+    }
+
+    private static AppStatus GuestLobby() =>
+        Session(SessionStep.Ready, Slot("Precyse", host: true, local: false, options: "outfit_rebecca=85"), Slot("Amy", host: false, local: true));
+
+    /// <summary>The guest's right half cycles its own seat character's outfit, as the controller does it: the choice is saved under
+    /// the half's outfit key and the next build shows it.</summary>
+    private static void GuestChangesItsOutfit()
+    {
+        var shown = SelectModels.Build(Profile(), null, GuestLobby(), free: false).Right;
+        Check.That(shown.CanCycle && shown.Figure.OptionKey == "outfit_billy" && shown.Index == 0, "a guest's half cycles the outfit of its seat's character");
+        OptionsModel.Save(Game, shown.Figure.OptionKey, SelectModels.Neighbor(shown, 1).Value);
+        var after = SelectModels.Build(Profile(), null, GuestLobby(), free: false).Right;
+        Check.That(after.Index == 1 && after.Label == "Prisoner" && after.Figure.Value == "05", "the next build shows the chosen outfit");
+        Check.That(GameOptions.OwnValues(Profile(), null)["outfit_billy"] == "05", "and it is what the guest publishes");
+        OptionsModel.Save(Game, "outfit_billy", "");
+    }
+
+    private static void SavedShowsTheDefaultOutfit()
+    {
+        var saved = SelectModels.Build(Profile(), null, GuestLobby(), free: false).Right;
+        Check.That(saved.Label == "Saved" && saved.Figure.Value == "05" && saved.Outfits[0].Label == "Saved" && saved.Outfits[0].Figure.Value == "05",
+            "the saved outfit is labelled Saved and shows the character's first outfit");
+        Check.That(saved.Outfits[0].Value == string.Empty, "its tile still sets the saved value");
     }
 
     private static void LockedOnceTheGameStarts()

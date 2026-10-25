@@ -33,7 +33,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 1,
+     "unit": "S.T.A.R.S. Bravo Team",
+     "agent": "Rebecca Chambers",
+     "outfit": "",
+     "ready": false
     },
     {
      "key": "1",
@@ -55,7 +60,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 2,
+     "unit": "U.S. Marine Corps",
+     "agent": "Billy Coen",
+     "outfit": "",
+     "ready": false
     }
    ],
    "alert": {
@@ -79,7 +89,12 @@ export default {
      "local": false,
      "steps": [],
      "right": "",
-     "progress": null
+     "progress": null,
+     "seat": 2,
+     "unit": "U.S. Marine Corps",
+     "agent": "Billy Coen",
+     "outfit": "",
+     "ready": false
     },
     "words": "Reconnecting",
     "remaining": 0.7,

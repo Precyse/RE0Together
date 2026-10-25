@@ -16,8 +16,8 @@ internal static partial class SessionScreens
     {
         var partners = s.Players.Where(player => !player.IsLocal).ToList();
         var lost = partners.FirstOrDefault(player => player.Held || player.Silent);
-        var portrait = g.HasCharacterSelect && SeatCount(s, g, gameDir, hosting: false) <= TwoSeats;
-        var seats = Seats(s, g, gameDir, hosting: false, compact: true);
+        var portrait = g.HasCharacterSelect && SeatCount(s, g, gameDir) <= TwoSeats;
+        var seats = Seats(s, g, gameDir, preGame: false, compact: true);
         if (portrait) seats = seats.Select(card => card with { Detail = CharacterOf(card) }).ToList();
         return new MiniModel(
             g.Name.ToUpperInvariant(), MiniHeaderOf(partners, lost), seats, portrait ? CardLayout.MiniPortrait : CardLayout.Mini,

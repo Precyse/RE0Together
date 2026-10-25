@@ -34,13 +34,18 @@ public static class SessionScreensTests
 
     public static void Run()
     {
+        using var data = new TempData();
+        TempData.UseDefaults();
         JoiningSteps();
         JoiningRefusals();
         JoiningHeader();
         StartAgain();
         Hosting();
+        GuestWaiting();
         Lobby();
         Seats();
+        SavedOutfit();
+        OutfitPublished();
         Mini();
     }
 
@@ -143,7 +148,7 @@ public static class SessionScreensTests
     {
         var alone = Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true)) with { State = AppState.Hosting, LobbyOpenedAtMs = Now - 42_000 };
         var model = Host(alone);
-        Check.That(model.Hosting && model.Code == "109775243712345678", "hosting: the host's screen with the code");
+        Check.That(model.Hosting && model.IsHost && model.Code == "109775243712345678", "hosting: the host's screen with the code");
         Check.That(string.Join("/", model.Steps.Select(row => row.Text)) == "Lobby open/Mod 412/Waiting for players/In game", "hosting: the steps");
         Check.That(model.Steps[0].Mark == StepMark.Done && model.Steps[1].Mark == StepMark.Done && model.Steps[2].Mark == StepMark.Active && model.Steps[3].Mark == StepMark.Pending,
             "hosting: the lobby and the mod are done, waiting is active");
@@ -169,6 +174,21 @@ public static class SessionScreensTests
             GuestSlot(SessionStep.Ready, id: 5)), Sr2);
         Check.That(four.Counter == "4/4" && four.Layout == CardLayout.Tall && four.StartEnabled, "hosting: four seats are tall cards");
         Check.That(Host(Re0Status(SessionStep.InGame, HostSlot(SessionStep.InGame, local: true))).Hosting == false, "hosting: once the host is in game it is the lobby");
+    }
+
+    private static void GuestWaiting()
+    {
+        var receiving = Re0Status(SessionStep.ReceivingSave, HostSlot(SessionStep.Ready), GuestSlot(SessionStep.ReceivingSave, local: true, percent: 40))
+            with { SavePercent = 40 };
+        var model = Host(receiving);
+        Check.That(model.Hosting && !model.IsHost && model.Code == "109775243712345678" && model.State == null, "guest: the hosting screen with the code, not the host's");
+        Check.That(!model.StartEnabled && !Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready), GuestSlot(SessionStep.Ready, local: true))).StartEnabled,
+            "guest: START GAME is never usable, so the button reads Waiting for host and is disabled");
+        Check.That(string.Join("/", model.Steps.Select(row => row.Text)) == "Lobby/Build check/Receiving save/Waiting for Precyse/Starting game/In game", "guest: its own steps");
+        Check.That(model.Steps[2].Mark == StepMark.Active && model.Steps[2].Trailing == "40%", "guest: the save step shows its percent");
+        Check.That(model.Counter == "2/2" && model.Layout == CardLayout.Wide, "guest: the same PLAYERS count and wide cards");
+        Check.That(model.Seats[0].Name == "Precyse" && model.Seats[0].Footer == "Host" && model.Seats[1].Local && model.Seats[1].Corner == "You", "guest: the host first, the own card says You");
+        Check.That(Host(Re0Status(SessionStep.InGame, HostSlot(), GuestSlot(SessionStep.InGame, local: true))).Hosting == false, "guest: once in game it is the lobby");
     }
 
     private static void Lobby()
@@ -213,11 +233,15 @@ public static class SessionScreensTests
         Check.That(wide[0].Detail == "Rebecca  S.T.A.R.S. 2002" && wide[0].Figure is { Character: "rebecca", OptionKey: "outfit_rebecca", Value: "02", Initial: "R" },
             "seats: the character and the outfit, and the figure");
         Check.That(wide[1].Corner == "42 ms" && wide[1].Detail == "Billy  Jacket" && wide[1].State == CardState.Progress, "seats: ping, outfit and state of a guest");
-        Check.That(wide[1].Steps.Count == 2 && wide[1].Steps[0].Mark == StepMark.Done && wide[1].Steps[1].Trailing == "40%" && wide[1].Progress is { } share && Math.Abs(share - 0.4) < 1e-9,
-            "seats: a receiving guest shows the build check done and the save with its percent");
+        Check.That(wide[1].Steps.Count == 0 && wide[1].Words == "Receiving save" && wide[1].RightText == "40%" && wide[1].Progress is { } share && Math.Abs(share - 0.4) < 1e-9,
+            "seats: a receiving guest of a game with characters shows the save's words and percent, not the step list");
+        Check.That(wide[0] is { Unit: "S.T.A.R.S. Bravo Team", Agent: "Rebecca Chambers", Outfit: "S.T.A.R.S. 2002", Ready: true },
+            "seats: the field file of the host: the character's unit and full name, the outfit's label, ready");
+        Check.That(wide[1] is { Unit: "U.S. Marine Corps", Agent: "Billy Coen", Outfit: "Jacket", Ready: false }, "seats: the field file of a guest still receiving: not ready");
 
         var open = Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true))).Seats;
         Check.That(open.Count == 2 && open[1].State == CardState.Open && open[1].Name == "Open" && open[1].Detail == "Billy", "seats: an open seat names its character");
+        Check.That(open[1] is { Unit: "", Agent: "", Outfit: "", Ready: false }, "seats: an open seat has no field file");
 
         var lobby = Host(Re0Status(SessionStep.InGame, HostSlot(options: "outfit_rebecca=02"), GuestSlot(SessionStep.InGame, local: true, options: "outfit_billy=a5"))).Seats;
         Check.That(lobby[0].Corner == "18 ms" && lobby[0].Footer == "Host" && !lobby[0].Local, "seats: a remote host shows its ping and Host in the footer");
@@ -230,6 +254,35 @@ public static class SessionScreensTests
         Check.That(sr2.Count == 4 && sr2[3].State == CardState.Open && sr2[3].Detail == "" && sr2.All(card => card.Figure == null), "seats: open seats up to the seat count, no figures without a character select");
         Check.That(sr2[2].Steps.Count == 0 && sr2[2].Progress is { } p && Math.Abs(p - 0.4) < 1e-9, "seats: four seats show the percent, not the step list");
         Check.That(sr2[0].Footer == "Host" && sr2[0].Name == "Precyse", "seats: the host first");
+        Check.That(sr2.All(card => card is { Unit: "", Agent: "", Outfit: "" }), "seats: no field file without a character select");
+        Check.That(Host(Sr2Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true), GuestSlot(SessionStep.ReceivingSave, percent: 40)) with { Seats = 2 }, Sr2).Seats[1].Steps is [{ Text: "Build check" }, ..],
+            "seats: a game without characters keeps the step list of a joining guest on a two-seat card");
+    }
+
+    private static void SavedOutfit()
+    {
+        var players = new[] { HostSlot(SessionStep.Ready, local: true, options: "outfit_rebecca="), GuestSlot(SessionStep.Lobby, options: "outfit_billy=") };
+        var seats = Host(Re0Status(SessionStep.Ready, players)).Seats;
+        Check.That(seats[0].Detail == "Rebecca  Saved" && seats[0].Outfit == "Saved" && seats[0].Figure is { Value: "02", OptionKey: "outfit_rebecca" }, "saved: the label and the character's default outfit picture");
+        Check.That(seats[1].Detail == "Billy  Saved" && seats[1].Figure is { Value: "05" }, "saved: the same for the other character");
+        var unknown = Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true), GuestSlot(SessionStep.Lobby))).Seats[1];
+        Check.That(unknown.Detail == "Billy" && unknown.Outfit == "" && unknown.Figure is { Value: null }, "saved: an outfit that was not published has no label and the silhouette");
+    }
+
+    /// <summary>A player's outfit choice reaches every card: what the settings hold is what the player publishes, and a card reads
+    /// the published text (the own card reads the settings until the player has published).</summary>
+    private static void OutfitPublished()
+    {
+        OptionsModel.Save("re0", "outfit_billy", "95");
+        var published = GameOptions.Encode(GameOptions.OwnValues(Re0, null));
+        var onHost = Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true), GuestSlot(SessionStep.Lobby, options: published))).Seats[1];
+        Check.That(onHost.Detail == "Billy  Jacket" && onHost.Figure is { Value: "95" }, "outfit: a guest's published outfit shows on the host's card");
+        var onGuest = Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready), GuestSlot(SessionStep.Lobby, local: true, options: published))).Seats[1];
+        Check.That(onGuest.Detail == "Billy  Jacket" && onGuest.Figure is { Value: "95" }, "outfit: and on the guest's own card");
+        var unpublished = Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready), GuestSlot(SessionStep.Lobby, local: true))).Seats[1];
+        Check.That(unpublished.Detail == "Billy  Jacket", "outfit: the own card reads the settings before anything is published");
+        OptionsModel.Save("re0", "outfit_billy", "05");
+        Check.That(GameOptions.Encode(GameOptions.OwnValues(Re0, null)) != published, "outfit: a new choice changes the text the player publishes");
     }
 
     private static void Mini()
