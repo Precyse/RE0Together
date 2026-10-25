@@ -91,6 +91,18 @@ void testSeek() {
     pr::SeekTracker dead;
     check(!seeksAfter(dead, puppet, ahead, 200, false), "with drift not allowed (a dead enemy) drift never seeks");
     check(seeksAfter(dead, puppet, {kRun, 5.0f}, pr::kSeekHoldTicks, false), "but another motion still does");
+
+    pr::SeekTracker still;
+    const pw::Layer held{kWalk, 0.0f};
+    const pr::LayerFrame standingUp{kWalk, 4.0f, kLoopLength};
+    pr::Verdict verdict = pr::Verdict::Follow;
+    for (uint32_t i = 0; i < pr::kStillOwnerTicks; ++i) verdict = still.update(standingUp, held, true, true);
+    check(verdict == pr::Verdict::Follow, "an owner frame still for less than the limit is not held");
+    check(still.update(standingUp, held, true, true) == pr::Verdict::Hold, "an owner frame that stays put is held at once");
+    check(still.update({kWalk, held.frame, kLoopLength}, held, true, true) == pr::Verdict::Follow, "a puppet on the held frame is left alone");
+    pr::SeekTracker notAsked;
+    for (uint32_t i = 0; i < 2 * pr::kStillOwnerTicks; ++i) verdict = notAsked.update(standingUp, held);
+    check(verdict == pr::Verdict::Follow, "only a caller that asks holds a still owner");
 }
 
 const pr::ControlLayout kLayout{kBodyControl, kFirstSubControl, kSubStride};

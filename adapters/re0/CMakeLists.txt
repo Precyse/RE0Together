@@ -153,6 +153,7 @@ add_library(re0_adapter SHARED
     src/wait_notice.cpp
     src/host_exit.cpp
     src/load_flavor.cpp
+    src/shot_probe.cpp
     src/pause_coop.cpp
     src/gui_input.cpp
     ${HUD_SOURCES}

@@ -26,6 +26,7 @@
 #include "room_move.h"
 #include "scene.h"
 #include "session_ready.h"
+#include "shot_probe.h"
 #include "slow_frame.h"
 #include "state_net.h"
 #include "weapon_fx_capture.h"
@@ -71,6 +72,7 @@ constexpr Module kModules[] = {
     {"enemy lease", enemy_lease::enable, false},
     {"enemy observer", enemy_observer::enable, false},
     {"enemy drift", enemy_drift::enable, false},
+    {"shot probe", shot_probe::enable, false},
     {"item ledger", item_ledger::enable, false},
     {"room move", room_move::enable, false},
     {"door follow", door_follow::enable, false},

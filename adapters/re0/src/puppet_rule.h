@@ -19,6 +19,13 @@ constexpr uint32_t kSeekHoldTicks = 6;          // consecutive moves a differenc
 // the two copies play it at another rate; restarting it every hold replays the clip in steps (2026-10-25 live: an
 // observed zombie re-sought ~7 times a second through its death fall).
 constexpr uint32_t kDriftSeekCooldownTicks = 60;
+// The owner holds one frame of a motion (2026-10-25 live: a zombie lying in wait on 0x1b frame 0 on the simulator,
+// standing up over and over on the observer, which played the clip on and was sought back every cooldown): once the
+// owner's frame has not moved for kStillOwnerTicks moves, a puppet that left it by more than kStillSeekFrames seeks at
+// once, so the copy holds the frame too.
+constexpr uint32_t kStillOwnerTicks = 10;
+constexpr float kStillFrameEpsilon = 0.01f;
+constexpr float kStillSeekFrames = 1.0f;
 constexpr float kLoopHalf = 0.5f;
 constexpr uint32_t kWeaponRefreshMs = 1000;  // the held weapon differs from the owner's this long, with no re-equip pending
 
@@ -85,21 +92,30 @@ struct LayerFrame {
     float frameMax;
 };
 
-enum class Verdict { Follow, Seek };
+enum class Verdict { Follow, Seek, Hold };  // Hold: seek to the owner's still frame (every few moves, so not logged)
 
 // Compares one of the puppet's layers with the owner's, once per puppet move. A timeline reset asks for a seek at once. A
 // different motion seeks after the hold; frame drift on the same motion only when `driftAllowed` and no seek ran in the
-// last kDriftSeekCooldownTicks moves.
+// last kDriftSeekCooldownTicks moves. With `holdsStillOwner`, an owner frame that stays put is held (kStillOwnerTicks).
 class SeekTracker {
 public:
-    Verdict update(const LayerFrame& puppet, const pose_wire::Layer& owner, bool driftAllowed = true) {
+    Verdict update(const LayerFrame& puppet, const pose_wire::Layer& owner, bool driftAllowed = true, bool holdsStillOwner = false) {
         if (sinceSeek_ < kDriftSeekCooldownTicks) ++sinceSeek_;
+        const bool ownerStill = owner.motion == lastOwnerMotion_ && std::fabs(owner.frame - lastOwnerFrame_) < kStillFrameEpsilon;
+        stillTicks_ = ownerStill ? stillTicks_ + 1 : 0;
+        lastOwnerMotion_ = owner.motion;
+        lastOwnerFrame_ = owner.frame;
         if (owner.motion == pose_wire::kNoMotion) {
             ticks_ = 0;
             return Verdict::Follow;
         }
         if (seekPending_) return seek();
         const bool otherMotion = puppet.motion != owner.motion;
+        if (holdsStillOwner && !otherMotion && stillTicks_ >= kStillOwnerTicks &&
+            frameDistance(puppet.frame, owner.frame, puppet.frameMax) > kStillSeekFrames) {
+            seek();
+            return Verdict::Hold;
+        }
         const bool drift = !otherMotion && frameDistance(puppet.frame, owner.frame, puppet.frameMax) > kSeekFrames;
         const bool apart = otherMotion || (drift && driftAllowed && sinceSeek_ >= kDriftSeekCooldownTicks);
         if (!apart) {
@@ -130,6 +146,9 @@ private:
     uint32_t ticks_ = 0;
     bool seekPending_ = false;
     uint32_t sinceSeek_ = kDriftSeekCooldownTicks;
+    uint32_t stillTicks_ = 0;  // moves the owner's frame has stayed put
+    uint16_t lastOwnerMotion_ = pose_wire::kNoMotion;
+    float lastOwnerFrame_ = 0.0f;
 };
 
 // Times how long the puppet's weapon has differed from the owner's, once per puppet move.

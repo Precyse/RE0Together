@@ -490,17 +490,20 @@ void replayMotion(size_t index, uintptr_t enemy, Slot& slot, const rule::MotionI
 
 // One of the enemy's motion layers has fallen away from the simulator's (a request lost, or one that bypasses
 // cAnimControl::set, as the overlay layer's hit reactions do): request the simulator's again at the simulator's frame.
-// A dead enemy follows a change of motion only: re-seeking its fall on drift replayed it in steps.
+// A dead enemy follows a change of motion only: re-seeking its fall on drift replayed it in steps. A frame the simulator
+// holds still is held here too (puppet_rule::kStillOwnerTicks), silently.
 void followLayer(size_t index, uintptr_t enemy, Slot& slot, size_t layer, const pose_wire::Layer& owner, bool alive) {
     puppet_rule::LayerFrame own;
-    if (!pose_game::readLayerFrame(enemy, layer, own) || slot.seek[layer].update(own, owner, alive) != puppet_rule::Verdict::Seek) return;
+    if (!pose_game::readLayerFrame(enemy, layer, own)) return;
+    const puppet_rule::Verdict verdict = slot.seek[layer].update(own, owner, alive, true);
+    if (verdict == puppet_rule::Verdict::Follow) return;
     if (owner.motion != pose_wire::kNoMotion && !pose_game::motionAvailable(enemy, pose_wire::kBodyTarget, owner.motion)) {
         debug_stats::count(Counter::EnemyObserverMisses);
         logger::writeUnlessRepeated("enemy_observer: slot %zu has no motion 0x%04x loaded", index, owner.motion);
         return;
     }
     const auto request = pose_game::MotionRequest{static_cast<uint32_t>(layer), owner.motion, slot.layerFlags[layer], kNoSeekInterp, owner.frame};
-    if (!pose_game::replay(enemy, pose_wire::kBodyTarget, request)) return;
+    if (!pose_game::replay(enemy, pose_wire::kBodyTarget, request) || verdict == puppet_rule::Verdict::Hold) return;
     debug_stats::count(Counter::EnemyObserverSeeks);
     logger::writeUnlessRepeated("enemy_observer: slot %zu layer %zu sought motion 0x%04x frame %.1f (was 0x%04x frame %.1f)", index,
                                 layer, owner.motion, owner.frame, own.motion, own.frame);
