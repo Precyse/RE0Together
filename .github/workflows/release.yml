@@ -20,8 +20,85 @@ concurrency:
 env:
   CHANNEL: ${{ github.ref_name == 'main' && 'latest' || 'preview' }}
 
+# The adapters and the launcher tests run as parallel jobs; packaging waits for all of them. An adapter whose sources match a
+# run that already built and tested them (the cache key is the hash of its sources) skips its build: the package ships the
+# committed DLL either way, so the build is a gate, not an input. DS2 is left out of the release for now: no build, no profile,
+# no mod-ds2.zip (installed launchers keep the DS2 files they have; a component missing from the manifest is never touched).
 jobs:
+  re0:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: tested
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci/tested
+          key: re0-tested-${{ hashFiles('adapters/re0/CMakeLists.txt', 'adapters/re0/src/**', 'adapters/re0/tests/**', 'adapters/re0/third_party/**') }}
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Build and test RE0 adapter
+        if: steps.tested.outputs.cache-hit != 'true'
+        shell: pwsh
+        working-directory: adapters/re0
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          Get-ChildItem build/*_test.exe -Exclude net_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
+          New-Item -ItemType File -Force ../../.ci/tested | Out-Null
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .ci/tested
+          key: ${{ steps.tested.outputs.cache-primary-key }}
+
+  sr2:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: tested
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci/tested
+          key: sr2-tested-${{ hashFiles('adapters/sr2/CMakeLists.txt', 'adapters/sr2/src/**', 'adapters/sr2/tests/**', 'adapters/re0/src/**', 'adapters/re0/third_party/**') }}
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Build and test SR2 adapter
+        if: steps.tested.outputs.cache-hit != 'true'
+        shell: pwsh
+        working-directory: adapters/sr2
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          Get-ChildItem build/*_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
+          New-Item -ItemType File -Force ../../.ci/tested | Out-Null
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .ci/tested
+          key: ${{ steps.tested.outputs.cache-primary-key }}
+
+  launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Launcher end-to-end tests
+        shell: pwsh
+        run: |
+          dotnet build launcher/CoopLauncher.csproj -c Release -o launcher/bin/Release/net8.0-windows
+          python tools/save_sync_test.py
+          if ($LASTEXITCODE -ne 0) { throw "save_sync_test failed" }
+          python tools/diagnostics_test.py
+          if ($LASTEXITCODE -ne 0) { throw "diagnostics_test failed" }
+
   package:
+    needs: [re0, sr2, launcher]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,50 +110,9 @@ jobs:
         run: |
           python tools/release_manifest_test.py
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x86
-
-      - name: Build RE0 adapter
-        shell: pwsh
-        working-directory: adapters/re0
-        run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-          Get-ChildItem build/*_test.exe -Exclude net_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
-
-      - name: Build SR2 adapter
-        shell: pwsh
-        working-directory: adapters/sr2
-        run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-          Get-ChildItem build/*_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
-
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Build DS2 adapter
-        shell: pwsh
-        working-directory: adapters/ds2
-        run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-          Get-ChildItem build/*_test.exe -Exclude net_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
-      - name: Launcher end-to-end tests
-        shell: pwsh
-        run: |
-          dotnet build launcher/CoopLauncher.csproj -c Release -o launcher/bin/Release/net8.0-windows
-          python tools/save_sync_test.py
-          if ($LASTEXITCODE -ne 0) { throw "save_sync_test failed" }
-          python tools/diagnostics_test.py
-          if ($LASTEXITCODE -ne 0) { throw "diagnostics_test failed" }
 
       - name: Fetch current release
         shell: pwsh
@@ -100,12 +136,11 @@ jobs:
           # The SR2 mission scripts are not shipped: the launcher generates them on the player's PC from this delta.
           if (-not (Test-Path adapters/sr2/scripts.delta.json)) { throw "adapters/sr2/scripts.delta.json is missing (rebuild.cmd in adapters/sr2 writes it)" }
           dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
-          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/sr2, pkg/adapters/ds2 | Out-Null
-          Copy-Item launcher/games/*.json pkg/launcher/games/
+          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/sr2 | Out-Null
+          Copy-Item launcher/games/*.json pkg/launcher/games/ -Exclude ds2.json
           Copy-Item adapters/re0/dinput8.dll pkg/adapters/re0/
           Copy-Item adapters/sr2/dinput8.dll pkg/adapters/sr2/
           Copy-Item adapters/sr2/scripts.delta.json pkg/adapters/sr2/
-          Copy-Item adapters/ds2/version.dll pkg/adapters/ds2/
           Copy-Item launcher/package/README.txt pkg/
           $legacy = if ($env:CHANNEL -eq 'latest') { @('--legacy-zip', 'RE0-Coop.zip') } else { @() }
           $previous = if (Test-Path previous/manifest.json) { @('--previous', 'previous') } else { @() }
