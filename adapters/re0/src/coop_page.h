@@ -1,8 +1,8 @@
 #pragma once
 
-// The Co-op page of the Options screen: a read-only status page (partner, link, mode, character, outfit, host) and its
-// Back row, drawn by the overlay from coop_page_view. All calls are on the game thread, from the Options router's move
-// (options_coop.cpp).
+// The Co-op page of the title screen: a read-only status page (partner, link, mode, character, outfit, host) and its
+// Back row, drawn by the overlay from coop_page_view. All calls are on the game thread, from the title's move
+// (title_coop.cpp).
 namespace coop_page {
 
 // The page opens: publishes the first frame of rows.

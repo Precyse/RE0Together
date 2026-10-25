@@ -1,6 +1,5 @@
 // Checks the text override table of the game's text lookup (no game). Exit 0 when every check passes.
 #include <cstdio>
-#include <cstring>
 
 #include "../src/gui_text_rule.h"
 
@@ -17,14 +16,6 @@ void check(bool ok, const char* what) {
     ++g_failures;
 }
 
-void testCoopHelp() {
-    const char* text = gui_text_rule::find(gui_text_rule::kOptionTableSlot, gui_text_rule::kCoopHelpId);
-    check(text && std::strcmp(text, "Co-op") == 0, "the Co-op help line is served from the option table");
-    check(!gui_text_rule::find(gui_text_rule::kOptionTableSlot + 1, gui_text_rule::kCoopHelpId), "another table is not touched");
-    check(!gui_text_rule::find(0, gui_text_rule::kCoopHelpId), "the common table is not touched");
-    check(!gui_text_rule::find(gui_text_rule::kOptionTableSlot, gui_text_rule::kCoopHelpId + 1), "a neighbouring id is not touched");
-}
-
 void testGameIdsStayAlone() {
     for (int slot = 0; slot < kTableSlots; ++slot) {
         for (uint32_t id = 0; id < kOwnIdLimit; ++id) {
@@ -33,7 +24,7 @@ void testGameIdsStayAlone() {
             ++g_failures;
         }
     }
-    check(!gui_text_rule::find(gui_text_rule::kOptionTableSlot, 0xffffffffu), "the no-text id is not touched");
+    check(!gui_text_rule::find(0, 0xffffffffu), "the no-text id is not touched");
 }
 
 void testEntries() {
@@ -47,7 +38,6 @@ void testEntries() {
 }  // namespace
 
 int main() {
-    testCoopHelp();
     testGameIdsStayAlone();
     testEntries();
     if (g_failures == 0) std::printf("PASS\n");

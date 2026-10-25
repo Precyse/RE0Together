@@ -15,6 +15,7 @@
 #include "debug_stats.h"
 #include "imgui.h"
 #include "log.h"
+#include "title_label.h"
 #include "toast_queue.h"
 #include "window_focus.h"
 
@@ -260,6 +261,7 @@ void guarded(void (*step)(IDirect3DDevice9*), IDirect3DDevice9* device) {
 
 void onEndScene(IDirect3DDevice9* device) {
     ++g_frames;
+    title_label::applyPending();
     guarded(frame, device);
 }
 

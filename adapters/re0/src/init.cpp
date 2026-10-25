@@ -41,7 +41,6 @@
 #include "net_client.h"
 #include "net_pad.h"
 #include "net_trace.h"
-#include "options_coop.h"
 #include "pad_commands.h"
 #include "partner_think.h"
 #include "party_mode.h"
@@ -59,6 +58,7 @@
 #include "state_correction.h"
 #include "state_mode.h"
 #include "state_sync.h"
+#include "title_coop.h"
 #include "vtable_tracer.h"
 
 namespace {
@@ -115,7 +115,8 @@ void enableCoop(const Config& config) {
     live_menus::configure(config.liveMenus && state_mode::on());
     menu_mirror::enable();
     if (!gui_text::enable()) logger::write("adapter: menu text hook unavailable");
-    if (!options_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
+    if (!config.overlay) logger::write("adapter: overlay off, no Co-op entry on the title");
+    else if (!title_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
     if (state_mode::on()) state_mode::enableAll(g_net);
 }
 
@@ -170,7 +171,7 @@ void shutdownAdapter() {
     pad_commands::uninstall();
     player_damage::uninstall();
     menu_mirror::uninstall();
-    options_coop::uninstall();
+    title_coop::uninstall();
     gui_text::uninstall();
     appearance::uninstall();
     floor_items_sync::uninstall();

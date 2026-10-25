@@ -7,20 +7,14 @@
 // count, so the game never asks for them itself; a relabel reuses a game id.
 namespace gui_text_rule {
 
-constexpr int kOptionTableSlot = 5;  // "option": the help lines of the Options screen
-
-// The help line of the Co-op item in the Options top menu (options_coop.cpp points the item's help entry at it).
-constexpr uint32_t kCoopHelpId = 0x1000;
-
 struct Entry {
     int slot;
     uint32_t id;
     const char* text;  // UTF-8, static
 };
 
-constexpr std::array kEntries = std::to_array<Entry>({
-    {kOptionTableSlot, kCoopHelpId, "Co-op"},
-});
+// No entries today: the title's Co-op entry is a texture label (title_label.h). New menu strings go here.
+constexpr std::array<Entry, 0> kEntries{};
 
 // The override for the message, or null when the game's own text stays.
 constexpr const char* find(int slot, uint32_t id) {

@@ -159,6 +159,13 @@ Replicate: redirect the game's own GetRawInputData import (not a global hook) an
 Seen in: DS2: `input_filter.cpp`, `cargo_menu.cpp`, `import_patch.cpp` (shared with the save redirect).
 Traps: RE0: "GetAsyncKeyState while the game window is in front" refused a guest's controller presses all session (another window had the focus; the game reads XInput regardless of focus, so the player kept playing). Read a command from the same input the game reads: the game's own keyboard device read (its cooperative level decides focus) and the controller whenever the game polls it (`command_input.cpp`, docs/RE0_NOTES.md "Command input source").
 
+## A menu entry from the game's own hidden row  [ui-perspective]
+Shape: a menu built for several platforms often keeps a row the PC build hides (a store, an online mode) behind one flag, with its layout, animations, cursor bounds and choice state all in place; its label is usually a texture cell, not text.
+Find it: in the menu's input state, the row count (a `4 + flag` compare) and the state written per row; the flag's writers (only zeroes on PC means it is hidden).
+Replicate: set the flag when the menu opens, park the row's choice in a state above the dispatch's range while the mod's page is open (nothing runs, nothing reads input), and return through the state the game itself uses to reopen the menu so the closing press is not read twice. A label in an atlas is rebuilt in its cell in memory from letters cut out of the atlas's other labels (fill runs; outlines of neighbours touch, fills do not), so it has the game's own lettering per language, with a system-font fallback where a letter is missing (a managed texture can be locked; decode and encode the atlas format); never by patching the game's archives.
+Seen in: RE0: uGUITitle `+0x27a` (console "Online Store", state 0x2b), park 0x7f, return 0x1f; label written into `title_00_<lang>_win` (DXT5) cell (0, 220, 256 x 44) (`title_coop.cpp`, `title_label.cpp`, docs/RE0_NOTES.md "Menus: the Co-op entry on the title screen"). Similar in RE1-Coop (study): a CO-OP title entry, made by patching the title arcs instead.
+Traps: a text hook cannot relabel a texture row; check the screen's rGUI for a font or message object first.
+
 ## When there is no veto point, watch the owner field and undo  [authority, world-state]
 Shape: some player actions (DS2 cargo pickup) send no "is it allowed?" query the adapter can refuse, but the object they act on keeps its identity and only changes an owner field.
 Find it: snapshot the objects around the player (handle, owner, position) twice and diff; check the handle survives the move.

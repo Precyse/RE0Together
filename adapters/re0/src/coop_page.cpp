@@ -9,7 +9,7 @@
 #include "debug_stats.h"
 #include "game.h"
 #include "log.h"
-#include "options_coop_rule.h"
+#include "title_coop_rule.h"
 
 namespace {
 
@@ -43,7 +43,7 @@ void open() {
 
 bool update() {
     publishRows();
-    return options_coop_rule::closesPage(menuTrigger(), padMask(game::kPadDecideMaskOffset),
+    return title_coop_rule::closesPage(menuTrigger(), padMask(game::kPadDecideMaskOffset),
                                          padMask(game::kPadCancelMaskOffset));
 }
 

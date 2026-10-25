@@ -659,31 +659,32 @@ constexpr uintptr_t kReactionEntrySize = 0x10;
 constexpr uintptr_t kGrabCommandFunction = 0x517340;
 constexpr uintptr_t kStruggleFunction = 0x4c8ed0;
 
-// Menu text and the Options screen (docs/RE0_NOTES.md "Menus: text hook and the Co-op entry in Options")
+// Menu text (docs/RE0_NOTES.md "Menus: text hook")
 constexpr uintptr_t kGameGuiGlobal = 0xe2daa4;        // sGameGUI*
 constexpr uintptr_t kGuiTablesOffset = 0x158;         // rGUIMessage*[kGuiTableSlots], one per message table slot
 constexpr int kGuiTableSlots = 19;
-constexpr int kGuiOptionTableSlot = 5;                // "option": the Options help lines
 constexpr uintptr_t kGetStringFunction = 0x887090;    // thiscall(rGUIMessage table, id) ret 4 -> UTF-8 char*, "" past the count
-constexpr uintptr_t kOptionHelpTable = 0xcdf8b8;      // u32 per Options item id: the help line's id in the option table, -1 none
-constexpr uintptr_t kOptionTopBuildFunction = 0x5c8970;   // uGUIOptionTop::v5, fastcall(top): fills the item list
-constexpr uintptr_t kOptionManagerMoveFunction = 0x5cb5a0;  // uOptionManager::v8, fastcall(manager): the screen router
-constexpr uintptr_t kOptionKeyGuideFunction = 0x5cc1b0;   // thiscall(manager, bool) ret 4: the button guide of the screen
-constexpr uintptr_t kOptionRouterJumpCheck = 0x5cba3d;    // dec eax; cmp eax, 0x15; ja default: the router's state dispatch
-constexpr uintptr_t kOptionRouterDefault = 0x5cc07e;      // default case: unlock and return
-// uOptionManager
-constexpr uintptr_t kOptionCreatingOffset = 0x48;         // u8: 1 until the pages are built
-constexpr uintptr_t kOptionDialogOffset = 0x4d;           // u8: 1 while a confirm dialog is up
-constexpr uintptr_t kOptionStateOffset = 0x54;            // u32 router state, 0 closed
-constexpr uintptr_t kOptionTopOffset = 0x15c;             // uGUIOptionTop*
-// uGUIOptionTop (the field block from +0x264 is read in one copy)
-constexpr uintptr_t kOptionTopFieldsOffset = 0x264;       // u8 cancel pressed
-constexpr uintptr_t kOptionTopStateOffset = 0x268;        // u32 screen state, 0 closed
-constexpr uintptr_t kOptionTopItemsOffset = 0x26c;        // u32[10] item ids in list order
-constexpr uintptr_t kOptionTopCountOffset = 0x294;        // u32 item count
-constexpr uintptr_t kOptionTopScrollOffset = 0x298;       // u32 first visible item
-constexpr uintptr_t kOptionTopCursorOffset = 0x29c;       // u32 cursor row within the visible rows
-constexpr size_t kOptionTopFieldsSize = 0x3c;
+// The title screen (uGUITitle) and its main menu (docs/RE0_NOTES.md "Menus: the Co-op entry on the title screen")
+constexpr uintptr_t kTitleMoveFunction = 0x5ebad0;    // uGUITitle::v8, fastcall(title): runs the state on +0x27c
+constexpr uintptr_t kTitleDispatchCheck = 0x5ebb22;   // cmp eax, 0x3a; ja return: a state above 0x3a does nothing
+constexpr uintptr_t kTitleFiveRowsRead = 0x5ed721;    // stateMainMenuInput: cmp byte [esi+0x27a], 1 (rows = 4 + it)
+constexpr uintptr_t kTitleStoreChoice = 0x5ed8eb;     // stateMainMenuInput: the fifth row chosen -> state 0x2b
+constexpr uintptr_t kTitleRequestsOffset = 0x258;     // uGameGUI: first requested resource node {+8 resource, +0xc next}
+constexpr uintptr_t kTitleFiveRowsOffset = 0x27a;     // u8: 1 shows the main menu's fifth row (0 on PC)
+constexpr uintptr_t kTitleStateOffset = 0x27c;        // u32 state
+constexpr uint32_t kTitleAtlasRequest = 2;            // third request (queueResources): the title_00_<lang>_win atlas
+constexpr uintptr_t kTitleAtlasPathOffset = 0x2c0;    // char[0x40]: that request's localized path
+constexpr size_t kTitleAtlasPathSize = 0x40;
+constexpr uintptr_t kRequestResourceOffset = 0x8;
+constexpr uintptr_t kRequestNextOffset = 0xc;
+// rTexture and its nDraw::Texture (rTexture::v10 0x895dc0 creates it, 0x81fa60 creates the D3D texture)
+constexpr uintptr_t kTextureDrawOffset = 0xd4;        // rTexture: nDraw::Texture*
+constexpr uintptr_t kDrawTextureVtable = 0xd23364;
+constexpr uintptr_t kDrawTextureTypeOffset = 0x10;    // u32 buffer type: 0 static (D3DPOOL_MANAGED, lockable)
+constexpr uintptr_t kDrawTextureSizeOffset = 0x20;    // u32: width in bits 0..15, height in bits 16..29
+constexpr uintptr_t kDrawTextureLevelsOffset = 0x25;  // u8 mip levels
+constexpr uintptr_t kDrawTextureFormatOffset = 0x30;  // u32 D3DFORMAT
+constexpr uintptr_t kDrawTextureD3dOffset = 0x34;     // IDirect3DTexture9*
 // Menu input as every screen reads it: the trigger bits of pad, keyboard and mouse merged (cdecl() -> bits)
 constexpr uintptr_t kMenuTriggerFunction = 0x5ef420;
 constexpr uintptr_t kPadDecideMaskOffset = 0xb6c;         // sGamePad: the trigger bit mask of confirm
