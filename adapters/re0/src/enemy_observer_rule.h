@@ -217,7 +217,7 @@ public:
     void clear() { *this = CreatePacer{}; }
 
 private:
-    static constexpr size_t kSlots = 64;  // above the 37 pool slots
+    static constexpr size_t kSlots = game::kEnemyPoolSlots;
     std::array<uint32_t, kSlots> lastMs_{};
     std::array<bool, kSlots> seen_{};
     size_t used_ = 0;

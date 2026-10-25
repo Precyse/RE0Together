@@ -319,16 +319,16 @@ constexpr uintptr_t kObstacleUnitTable = 0xcd5398;
 constexpr uintptr_t kObstacleUnitRowSize = 4;
 constexpr uintptr_t kUnitFindFunction = 0x410070;
 
-// Enemies: sEnemy holds a 37-entry pool; the pool slot index is the enemy's network id.
+// Enemies: sEnemy's pool is its seven per-class tables back to back; the pool slot index is the enemy's network id.
 constexpr uintptr_t kEnemyGlobal = 0xdcdc78;  // sEnemy*
 constexpr uintptr_t kEnemyPoolOffset = 0x4b0;
 constexpr uintptr_t kEnemyPoolEntrySize = 16;
 constexpr uintptr_t kEnemyPoolObjectOffset = 0xc;  // uEnemy* inside a pool entry
-constexpr int kEnemyPoolSlots = 37;
 // The "pool" is seven per-class tables of 20 weak handles {vtable, next, prev, uEnemy*} back to back from +0x4b0 (sEnemy
 // ctor 0x416560); a class's start (vtable slot 32) find-or-adds the enemy with its table's insert, thiscall (enemy) ret 4,
-// returning the index (20 when the table is full). Slot = (table - kEnemyPoolOffset) / kEnemyPoolEntrySize + index, so
-// kEnemyPoolSlots covers the base family's table and the first 17 entries of uEnemy2a's.
+// returning the index (20 when the table is full). Slot = (table - kEnemyPoolOffset) / kEnemyPoolEntrySize + index, so the
+// pool has 7 x 20 slots. (It was 37 until 2026-10-25: uEnemy2b/2c insects took slots 60..81, were never streamed, and each
+// machine ran them on its own.)
 struct EnemyTableInsert {
     uintptr_t function;
     uintptr_t table;  // sEnemy offset of the table's first handle
@@ -343,6 +343,10 @@ constexpr std::array<EnemyTableInsert, 7> kEnemyTableInserts = {{
     {0x416a90, 0xc30},  // uEnemy30 (start 0x4536f0)
 }};
 constexpr uint32_t kEnemyTableEntries = 20;
+constexpr int kEnemyPoolSlots = static_cast<int>(kEnemyTableInserts.size() * kEnemyTableEntries);
+static_assert(kEnemyTableInserts.back().table + kEnemyTableEntries * kEnemyPoolEntrySize ==
+                  kEnemyPoolOffset + kEnemyPoolSlots * kEnemyPoolEntrySize,
+              "the class tables are back to back from kEnemyPoolOffset");
 constexpr uintptr_t kEnemyHpOffset = 0x1030;  // i32, dead enemies hold -1
 constexpr uintptr_t kEnemyActionOffset = 0x67a4;  // 4 x i32 {state, action id, a, b}, written by the class setAction
 // The base family: the 15 vtables whose per-frame update (slot 41) is 0x420f70 (uEnemy10..1a, 50, 51, 5a, 5b, 6a, 6b).

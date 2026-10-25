@@ -144,7 +144,8 @@ wire::PoseEntry mutated(void (*change)(wire::PoseEntry&)) {
 
 void testEntryRefusals() {
     check(wire::valid(poseEntry(36)), "slot 36 is the last pool slot");
-    check(!wire::valid(mutated([](wire::PoseEntry& e) { e.slot = 37; })), "slot 37 is refused");
+    check(!wire::valid(mutated([](wire::PoseEntry& e) { e.slot = game::kEnemyPoolSlots; })), "a slot past the pool is refused");
+    check(wire::valid(mutated([](wire::PoseEntry& e) { e.slot = 60; })), "an insect's slot (uEnemy2b table, 60) is valid");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.classIndex = 38; })), "class index 38 is refused");
     check(wire::valid(mutated([](wire::PoseEntry& e) { e.spawnRecord = 999; })), "spawn record 999 is accepted");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.spawnRecord = 1000; })), "spawn record 1000 is refused");
@@ -158,8 +159,8 @@ void testEntryRefusals() {
     check(wire::valid(mutated([](wire::PoseEntry& e) { e.flags |= wire::kFlagLeased; e.leaseToken = 7; })), "a leased entry with its token is valid");
 
     check(wire::valid(motionEntry(36)), "a motion for slot 36 is fine");
-    wire::MotionEntry bad = motionEntry(37);
-    check(!wire::valid(bad), "a motion for slot 37 is refused");
+    wire::MotionEntry bad = motionEntry(game::kEnemyPoolSlots);
+    check(!wire::valid(bad), "a motion past the pool is refused");
     bad = motionEntry(1);
     bad.layer = 8;
     check(!wire::valid(bad), "layer 8 is refused");
@@ -168,7 +169,7 @@ void testEntryRefusals() {
     check(!wire::valid(bad), "a non-finite start is refused");
 
     uint32_t seq = 0;
-    const std::vector<wire::PoseEntry> mixed = {poseEntry(1), mutated([](wire::PoseEntry& e) { e.slot = 99; })};
+    const std::vector<wire::PoseEntry> mixed = {poseEntry(1), mutated([](wire::PoseEntry& e) { e.slot = game::kEnemyPoolSlots; })};
     check(!wire::decode<wire::PoseEntry>(wire::encode<wire::PoseEntry>(header(), mixed, seq).at(0)).has_value(),
           "one bad entry refuses the batch");
 }

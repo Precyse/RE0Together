@@ -33,7 +33,7 @@ void testTable() {
     check(table.roleOf(3) == rule::Role::None, "an empty table has no roles");
     check(table.add(away(3, 0x10001)), "a lease is added");
     check(!table.add(away(3, 0x10002)), "a second lease on the enemy is refused");
-    check(!table.add(away(37, 0x10003)), "a slot past the pool is refused");
+    check(!table.add(away(game::kEnemyPoolSlots, 0x10003)), "a slot past the pool is refused");
     check(table.roleOf(3) == rule::Role::Away && table.any(rule::Role::Away) && !table.any(rule::Role::Held), "the role is Away");
     rule::Lease held = away(4, 0x10005);
     held.role = rule::Role::Held;

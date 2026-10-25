@@ -113,7 +113,7 @@ void testLeaseRefusals() {
     using L = wire::EnemyLease;
     check(refusedAfter(lease(), [](L& m) { m.token = 0x10000; }), "a token with zero low bits");
     check(refusedAfter(lease(), [](L& m) { m.scene = 0xaf; }), "a scene past the limit");
-    check(refusedAfter(lease(), [](L& m) { m.slot = 37; }), "slot 37");
+    check(refusedAfter(lease(), [](L& m) { m.slot = game::kEnemyPoolSlots; }), "slot past the pool");
     check(refusedAfter(lease(), [](L& m) { m.classIndex = 38; }), "class 38");
     check(refusedAfter(lease(), [](L& m) { m.victim = 2; }), "a victim that is no character");
     check(refusedAfter(lease(), [](L& m) { m.kind = 0x1d; }), "a kind past the table");
@@ -129,7 +129,7 @@ void testEndAndHitRefusals() {
     using E = wire::EnemyLeaseEnd;
     check(refusedAfter(leaseEnd(), [](E& m) { m.reason = 0; }), "reason None");
     check(refusedAfter(leaseEnd(), [](E& m) { m.reason = contact_rule::kEndCount; }), "a reason past the list");
-    check(refusedAfter(leaseEnd(), [](E& m) { m.slot = 40; }), "an end for slot 40");
+    check(refusedAfter(leaseEnd(), [](E& m) { m.slot = game::kEnemyPoolSlots; }), "an end past the pool");
     check(refusedAfter(leaseEnd(), [](E& m) { m.pad = 2; }), "an end with a pad");
     check(refusedAfter(leaseEnd(), [](E& m) { m.pos[0] = NAN; }), "an end with a non-finite position");
     wire::EnemyLeaseEnd dead = leaseEnd();

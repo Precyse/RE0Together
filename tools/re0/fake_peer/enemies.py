@@ -15,7 +15,7 @@ DEAD_HP = -1
 RATE_TOLERANCE = 0.25
 SPAWN_ID_STEP = 1
 PROBES = ("binding", "epoch", "sender", "slot")
-POOL_SLOTS = 37  # game.h kEnemyPoolSlots
+POOL_SLOTS = 140  # game.h kEnemyPoolSlots (7 class tables x 20)
 
 
 class ObservedSlot:

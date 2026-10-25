@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fake_peer import wire
 from fake_peer import wire_check
+from fake_peer.enemies import POOL_SLOTS
 from fake_peer.wire import Msg
 
 GOLDEN_PATH = Path(__file__).resolve().parent / "tests" / "golden_frames.bin"
@@ -154,7 +155,7 @@ def samples():
         refuse(Msg.JOIN_EXTRAS, extras([dict(CLAIM, epoch=0)])),
         refuse(Msg.JOIN_EXTRAS, wire.pack_extras(1, 0, [], [], [], world_epoch=0)),
         accept(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose())),
-        refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(slot=37))),
+        refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(slot=POOL_SLOTS))),
         accept(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(spawn_record=wire.SPAWN_RECORD_LIMIT - 1))),
         refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(spawn_record=wire.SPAWN_RECORD_LIMIT))),
         refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(flags=wire.ENEMY_LEASED))),

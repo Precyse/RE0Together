@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fake_peer.enemies import POOL_SLOTS
 from fake_peer import wire
 from fake_peer.gates import FAIL, MISSING, PASS, Evidence
 from fake_peer.library import Journal
@@ -45,7 +46,7 @@ class SlotProbeTests(unittest.TestCase):
     def test_the_slot_probe_wraps_at_the_end_of_the_pool(self):
         ctx = replay_context()
         ctx.enemies.pause_replay()
-        ctx.enemies.start_replay(SCENE, {"frames": [dict(dt=0.0, type=Msg.ENEMY_POSE, payload=batch([entry(36)], epoch=1))]})
+        ctx.enemies.start_replay(SCENE, {"frames": [dict(dt=0.0, type=Msg.ENEMY_POSE, payload=batch([entry(POOL_SLOTS - 1)], epoch=1))]})
         ctx.enemies.pause_replay()
         ctx.enemies.probe("slot")
         self.assertEqual(pose_entries(ctx)[0].slot, 0)
