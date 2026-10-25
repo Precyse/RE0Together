@@ -18,7 +18,9 @@ constexpr uint8_t kResultKilled = 3;  // wire only: the leader's thread vanished
 constexpr int64_t kStallMs = 3000;          // a followed op still running this long after the leader finished it, and
                                             // after it began here, ends
 constexpr int64_t kPendingStartMs = 10000;  // a start for a room this machine is still loading waits this long
-constexpr uint32_t kBusyHoldMs = 2000;       // a thread stays busy this long after an op that does something (the waits between are short)
+constexpr int64_t kStartRetryMs = 5000;     // a start that cannot be applied yet (no free thread, our own examine run still
+                                            // going) waits this long
+constexpr uint32_t kBusyHoldMs = 2000;      // a thread stays busy this long after an op that does something (the waits between are short)
 
 // Who may fire a trigger. Local conditions read only the controlled character (its zone, pad, inventory, the entry it
 // came in by, the item it is using): each machine keeps its own character controlled, so they fire where that player
@@ -54,12 +56,13 @@ constexpr bool isPresenceFlag(uint32_t flag) {
     return false;
 }
 
+constexpr uint32_t kExamineCondition = 2;
 constexpr uint32_t kCameraCondition = 35;
 
 // `obstaclesByPusher` is state mode: an obstacle unit's trigger belongs to its pusher.
 constexpr TriggerKind classify(uint32_t type, uint32_t p2, bool obstaclesByPusher = false) {
     switch (type) {
-        case 1: case 2: case 6: case 7: case 8: case 9: case 10: case 22: case 30: case 31: case kCameraCondition:
+        case 1: case kExamineCondition: case 6: case 7: case 8: case 9: case 10: case 22: case 30: case 31: case kCameraCondition:
             return TriggerKind::Local;
         case 4: case 5:
             if (p2 == kSubjectControlled) return TriggerKind::Local;
@@ -374,6 +377,21 @@ constexpr StartFate startFate(uint16_t startScene, uint16_t here, bool doorRunni
     if (here == startScene) return StartFate::Apply;
     if (ageMs >= kPendingStartMs) return StartFate::Drop;
     return here == kNoScene || doorRunning ? StartFate::Wait : StartFate::Drop;
+}
+
+// Why the peer's start (for the room this machine is in) did not start a thread here: the script has no free thread
+// (or cannot acquire the trigger), this machine already leads a thread of the same trigger, or already follows one.
+enum class StartBlock : uint8_t { NoThread, OwnLed, Followed };
+enum class RetryFate : uint8_t { Wait, Drop };
+
+// A blocked start waits for a free thread, and for our own run of an examine trigger to end (both players examined the
+// same object and the characters take different branches: the sh1d winch, 2026-10-25). Other triggers (camera cuts fire
+// on both machines constantly) keep "each runs its own", and a followed thread stays a drop. No wait outlasts
+// kStartRetryMs.
+constexpr RetryFate retryFate(StartBlock block, uint32_t type, int64_t ageMs) {
+    if (ageMs >= kStartRetryMs) return RetryFate::Drop;
+    if (block == StartBlock::NoThread) return RetryFate::Wait;
+    return block == StartBlock::OwnLed && type == kExamineCondition ? RetryFate::Wait : RetryFate::Drop;
 }
 
 }  // namespace event_rule

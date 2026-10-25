@@ -98,6 +98,7 @@ struct QueuedStep {
 struct PendingStart {
     EventStart start;
     Clock::time_point received;
+    bool waitLogged = false;  // the onset line of a start waiting for a free thread was written
 };
 
 std::mutex g_mutex;
@@ -112,7 +113,7 @@ int64_t msSince(Clock::time_point then) {
     return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - then).count();
 }
 
-enum class Line : uint8_t { Fired, Following, Ended, Dropped, LoopTail };
+enum class Line : uint8_t { Fired, Following, Ended, Dropped, LoopTail, Waits };
 
 std::map<uint32_t, Clock::time_point> g_lastLogged;  // game thread: per line kind, script key and trigger index
 
@@ -672,8 +673,19 @@ bool resume(uintptr_t script, const EventStart& start) {
     return false;
 }
 
-void applyStart(uintptr_t script, const EventStart& start) {
-    if (resume(script, start)) return;
+const char* blockReason(event_rule::StartBlock block) {
+    switch (block) {
+        case event_rule::StartBlock::NoThread: return "the script cannot start it here";
+        case event_rule::StartBlock::OwnLed: return "both machines fired it, each runs its own";
+        case event_rule::StartBlock::Followed: break;
+    }
+    return "another followed thread of the same trigger runs here";
+}
+
+// Applies the peer's start; true when it cannot start yet and must be tried again next frame (event_rule::retryFate).
+bool applyStart(uintptr_t script, PendingStart& pending) {
+    const EventStart& start = pending.start;
+    if (resume(script, start)) return false;
     void* self = reinterpret_cast<void*>(script);
     const bool fork = start.index == game::kForkThreadIndex;
     const uintptr_t thread = fork ? game::callThiscall<uintptr_t>(game::kStartForkThreadFunction, self, start.key,
@@ -681,18 +693,25 @@ void applyStart(uintptr_t script, const EventStart& start) {
                                   : g_originalStart(self, nullptr, start.key, start.index, start.type);
     if (slotOf(thread) != kNoSlot) {
         follow(thread, start);
-        return;
+        return false;
     }
     const uintptr_t running =
         fork ? 0 : game::callThiscall<uintptr_t>(game::kFindTriggerThreadFunction, self, start.key, start.index);
     const uint8_t i = slotOf(running);
-    if (i == kNoSlot) {
-        dropStart(start, "the script cannot start it here");
-    } else if (g_slots[i].role == Role::Leads) {
-        dropStart(start, "both machines fired it, each runs its own");
-    } else {
-        dropStart(start, "another followed thread of the same trigger runs here");
+    const event_rule::StartBlock block = i == kNoSlot                   ? event_rule::StartBlock::NoThread
+                                         : g_slots[i].role == Role::Leads ? event_rule::StartBlock::OwnLed
+                                                                          : event_rule::StartBlock::Followed;
+    if (event_rule::retryFate(block, start.type, msSince(pending.received)) == event_rule::RetryFate::Drop) {
+        dropStart(start, blockReason(block));
+        return false;
     }
+    if (!pending.waitLogged && logDue(Line::Waits, start.key, start.index)) {
+        logger::write("event_sync: peer's scene 0x%02x trigger %u serial %u waits: %s", start.key, start.index,
+                      start.serial, block == event_rule::StartBlock::NoThread ? "no free script thread here"
+                                                                              : "our own run of it is still going");
+    }
+    pending.waitLogged = true;
+    return true;
 }
 
 void applyStarts(uintptr_t script) {
@@ -702,10 +721,12 @@ void applyStarts(uintptr_t script) {
         starts.swap(g_pendingStarts);
     }
     std::vector<PendingStart> waiting;
-    for (const PendingStart& pending : starts) {
+    for (PendingStart& pending : starts) {
         switch (event_rule::startFate(pending.start.scene, scene::current(), game_state::doorActive(),
                                       msSince(pending.received))) {
-            case event_rule::StartFate::Apply: applyStart(script, pending.start); break;
+            case event_rule::StartFate::Apply:
+                if (applyStart(script, pending)) waiting.push_back(pending);
+                break;
             case event_rule::StartFate::Wait: waiting.push_back(pending); break;
             case event_rule::StartFate::Drop: dropStart(pending.start, "this player is in another room"); break;
         }

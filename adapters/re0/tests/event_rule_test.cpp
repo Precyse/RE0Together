@@ -181,6 +181,22 @@ void testStartFate() {
     check(rule::startFate(kRoom, kRoom, false, rule::kPendingStartMs * 2) == StartFate::Apply, "same room even late");
 }
 
+void testRetryFate() {
+    using rule::RetryFate;
+    using rule::StartBlock;
+    constexpr uint32_t kExamine = rule::kExamineCondition;
+    check(rule::retryFate(StartBlock::NoThread, kExamine, 0) == RetryFate::Wait, "no free thread: wait");
+    check(rule::retryFate(StartBlock::NoThread, rule::kCameraCondition, rule::kStartRetryMs - 1) == RetryFate::Wait,
+          "any trigger waits for a free thread until the cap");
+    check(rule::retryFate(StartBlock::NoThread, kExamine, rule::kStartRetryMs) == RetryFate::Drop, "no free thread at the cap: drop");
+    check(rule::retryFate(StartBlock::OwnLed, kExamine, 100) == RetryFate::Wait, "our own examine run going: wait");
+    check(rule::retryFate(StartBlock::OwnLed, kExamine, rule::kStartRetryMs) == RetryFate::Drop, "our own run outlasts the cap: drop");
+    check(rule::retryFate(StartBlock::OwnLed, rule::kCameraCondition, 100) == RetryFate::Drop,
+          "camera triggers fire on both machines: each runs its own");
+    check(rule::retryFate(StartBlock::Followed, kExamine, 100) == RetryFate::Drop, "another followed thread: drop");
+    check(rule::classify(rule::kExamineCondition, 0) == TriggerKind::Local, "the examine type is the player's");
+}
+
 void testBodyRoles() {
     namespace o = rule::op;
     const uint16_t bodyOps[] = {o::kSubMove, o::kCharPoint, o::kCharPointY, o::kCharAddY, o::kChPosSet, o::kCorrectPos,
@@ -353,6 +369,7 @@ int main() {
     testClimbPlacement();
     testBusyThreads();
     testStartFate();
+    testRetryFate();
     testObstacleTriggers();
     testPresenceWalk();
     testWire();
