@@ -30,6 +30,7 @@ public static class GameOptionsTests
         UnofferedOrMissingValuesAreIgnored();
         DecodeKeepsTheLastDuplicate();
         SeatsFollowTheHostsChoice();
+        GuestTakesTheHostsWorldPause();
     }
 
     private static void DecodeKeepsTheLastDuplicate()
@@ -54,6 +55,15 @@ public static class GameOptionsTests
         Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "-2" }) == 4, "negative: the maximum");
         Check.That(GameOptions.Seats(withSeats, new Dictionary<string, string> { [GameOptions.SeatsKey] = "many" }) == 4, "not a number: the maximum");
         Check.That(GameOptions.Seats(Profile, new Dictionary<string, string> { [GameOptions.SeatsKey] = "1" }) == Profile.MaxPlayers, "a profile that does not offer the option ignores it");
+    }
+
+    private static void GuestTakesTheHostsWorldPause()
+    {
+        var re0 = GameProfile.Load("re0");
+        var own = new Dictionary<string, string> { ["world_pause"] = "never" };
+        var host = new Dictionary<string, string> { ["world_pause"] = "menus" };
+        Check.That(GameOptions.ForAdapter(re0, own, host, isHost: false)["world_pause"] == "menus", "a guest's adapter runs the host's world pause");
+        Check.That(GameOptions.ForAdapter(re0, own, host, isHost: true)["world_pause"] == "never", "the host's adapter keeps its own world pause");
     }
 
     private static void HostKeepsItsOwn()

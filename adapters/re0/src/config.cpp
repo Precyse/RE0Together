@@ -50,6 +50,23 @@ void parsePartnerMode(const std::string& value, Config& config) {
     }
 }
 
+// world_pause=never (default): with a peer the inventory, the map and the player's own messages keep the world
+// running (live menus); menus: every screen pauses the world as the game does.
+constexpr const char* kWorldPauseNever = "never";
+constexpr const char* kWorldPauseMenus = "menus";
+
+const char* worldPauseName(bool liveMenus) { return liveMenus ? kWorldPauseNever : kWorldPauseMenus; }
+
+void parseWorldPause(const std::string& value, Config& config) {
+    if (value == kWorldPauseNever) {
+        config.liveMenus = true;
+    } else if (value == kWorldPauseMenus) {
+        config.liveMenus = false;
+    } else {
+        logger::write("config: world_pause=%s ignored (never or menus), keeping never", value.c_str());
+    }
+}
+
 void parseCharacter(const std::string& value, Config& config) {
     if (value == "rebecca") {
         config.hostCharacter = character_owner::Character::Rebecca;
@@ -101,8 +118,8 @@ Config loadConfig() {
             config.autoJoin = value == "1";
         } else if (key == "dev_commands") {
             config.devCommands = value == "1";
-        } else if (key == "live_menus") {
-            config.liveMenus = value != "0";
+        } else if (key == "world_pause") {
+            parseWorldPause(value, config);
         } else if (key == "partner_mode") {
             parsePartnerMode(value, config);
         } else if (key == "character") {
@@ -117,8 +134,8 @@ Config loadConfig() {
     }
     logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d auto_join=%d", config.port, config.trace,
                   config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.autoJoin);
-    logger::write("config: partner_mode=%s live_menus=%d dev_commands=%d", partnerModeName(config.partnerMode),
-                  config.liveMenus, config.devCommands);
+    logger::write("config: partner_mode=%s world_pause=%s dev_commands=%d", partnerModeName(config.partnerMode),
+                  worldPauseName(config.liveMenus), config.devCommands);
     logger::write("config: character=%s outfit_rebecca=%02x outfit_billy=%02x", character_owner::name(config.hostCharacter),
                   config.outfit[static_cast<size_t>(character_owner::Character::Rebecca)],
                   config.outfit[static_cast<size_t>(character_owner::Character::Billy)]);

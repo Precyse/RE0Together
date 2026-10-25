@@ -10,6 +10,8 @@
   "options": [
     { "key": "partner_mode", "label": "Partner mode", "host": true, "values": [
       { "value": "input", "label": "Input" }, { "value": "state", "label": "State" } ] },
+    { "key": "world_pause", "label": "World pause", "host": true, "values": [
+      { "value": "never", "label": "Never" }, { "value": "menus", "label": "Menus pause" } ] },
     { "key": "character", "label": "Character", "host": true, "values": [
       { "value": "rebecca", "label": "Rebecca", "fullName": "Rebecca Chambers", "unit": "S.T.A.R.S. Bravo Team" },
       { "value": "billy", "label": "Billy", "fullName": "Billy Coen", "unit": "U.S. Marine Corps" } ] },

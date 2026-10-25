@@ -16,6 +16,13 @@ bool menuOpen();
 // Current room phase (room_phase.h), or room_phase::kUnreadable.
 int32_t roomPhase();
 
+// The phase the current room phase was pushed over (the top of the phase manager's stack), or room_phase::kUnreadable
+// when nothing was pushed.
+int32_t phaseBeneath();
+
+// True while sGameInfo +0x50 holds a scripted event's pause bits (game::kScriptEventBits).
+bool scriptEventPaused();
+
 // True while the pause menu (sGamePause, sUnit stop reason 6) is up.
 bool paused();
 

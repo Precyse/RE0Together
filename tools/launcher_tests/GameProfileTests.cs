@@ -12,6 +12,9 @@ public static class GameProfileTests
         Check.That(ReferenceEquals(GameProfile.ListIds(), GameProfile.ListIds()) && GameProfile.ListIds().Contains("re0"), "the profile list is read once");
         Check.That(first.Options!.Single(o => o.Key == GameOptions.SeatsKey) is { Host: true, Settings: false }, "sr2 players is a host option");
         Check.That(first.Options!.Single(o => o.Key == "trace") is { Settings: true }, "sr2 trace is a settings option");
+        var worldPause = GameProfile.Load("re0").Options!.Single(o => o.Key == "world_pause");
+        Check.That(worldPause is { Host: true, Default: "never" } && worldPause.Values.Select(v => v.Value).SequenceEqual(["never", "menus"]),
+            "re0 world pause is a host option, never by default, menus the vanilla pause");
         foreach (var id in GameProfile.ListIds()) GameProfile.Load(id);
 
         var threw = false;

@@ -1,10 +1,11 @@
 #pragma once
 #include "live_menu_rule.h"
 
-// Live menus (adapter.ini live_menus, state mode only; docs/RE0_NOTES.md "Live menus"): with a peer connected the
-// inventory, files, item pickup prompt and map no longer stop the world. The game stops it there with sUnit stop
-// reasons 7 and 8; this module clears them every frame while such a screen is open, holds the local character's
-// input meanwhile (it stands still, enemies can still reach it) and gives the stop back once it is hurt.
+// Live menus (adapter.ini world_pause=never, state mode only; docs/RE0_NOTES.md "Live menus"): with a peer connected the
+// inventory, files, item pickup prompt, map and the player's own message windows no longer stop the world. The game
+// stops it there with sUnit stop reasons (live_menu_rule::screenStops); this module clears them every frame while such
+// a screen is open, holds the local character's input meanwhile (it stands still, enemies can still reach it) and
+// gives the stop back once it is hurt.
 namespace live_menus {
 
 // Records the switch (configured and state mode) and checks the stop reason setter's bytes. Call once at start.

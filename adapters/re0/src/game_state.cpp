@@ -35,6 +35,21 @@ int32_t roomPhase() {
     return control && game::readMemory(control + game::kRoomPhaseCurrentOffset, phase) ? phase : room_phase::kUnreadable;
 }
 
+int32_t phaseBeneath() {
+    const uintptr_t control = game::readPointer(game::kRoomControlGlobal);
+    int32_t depth = 0;
+    int32_t phase = room_phase::kUnreadable;
+    if (!control || !game::readMemory(control + game::kRoomPhaseDepthOffset, depth)) return room_phase::kUnreadable;
+    if (depth < 1 || depth > game::kRoomPhaseStackSize) return room_phase::kUnreadable;
+    const uintptr_t top = control + game::kRoomPhaseStackOffset + static_cast<uintptr_t>(depth - 1) * sizeof(int32_t);
+    return game::readMemory(top, phase) ? phase : room_phase::kUnreadable;
+}
+
+bool scriptEventPaused() {
+    uint32_t flags = 0;
+    return game::readMemory(game::modeFlagsAddress(), flags) && (flags & game::kScriptEventBits) != 0;
+}
+
 bool unitsStopped(uint32_t reason) {
     const uintptr_t units = game::readPointer(game::kUnitSystemGlobal);
     uint32_t mask = 0;

@@ -22,9 +22,18 @@ void setStop(uint32_t reason, bool on) {
     if (units) game::callThiscall<void>(game::kSetStopReasonFunction, units, reason, static_cast<uint32_t>(on));
 }
 
-void setScreenStops(bool on) {
-    setStop(game::kStopReasonScreen, on);
-    setStop(game::kStopReasonScreenMore, on);
+// Sets or clears every stop reason in `stops` (live_menu_rule::screenStops).
+void setScreenStops(uint32_t stops, bool on) {
+    for (uint32_t reason = 0; stops >> reason != 0; ++reason) {
+        if (stops >> reason & 1) setStop(reason, on);
+    }
+}
+
+bool anyStopped(uint32_t stops) {
+    for (uint32_t reason = 0; stops >> reason != 0; ++reason) {
+        if ((stops >> reason & 1) && game_state::unitsStopped(reason)) return true;
+    }
+    return false;
 }
 
 }  // namespace
@@ -41,8 +50,10 @@ void configure(bool on) {
 }
 
 Screen localScreen() {
-    return live_menu_rule::screenOf(game_state::roomPhase(), game_state::menuOpen(), game_state::paused(),
-                                    g_on && net_pad::active());
+    const int32_t phase = game_state::roomPhase();
+    const live_menu_rule::View view{phase, game_state::phaseBeneath(), game_state::menuOpen(), game_state::paused(),
+                                    game_state::scriptEventPaused()};
+    return live_menu_rule::screenOf(view, g_on && net_pad::active());
 }
 
 void onUnitUpdate() {
@@ -52,14 +63,14 @@ void onUnitUpdate() {
     const bool known = player && game::readMemory(player + game::kPlayerHpOffset, hp);
     g_hurt.update(known ? screen : Screen::None, hp);
     const bool release = g_hurt.releases();
+    const int32_t phase = game_state::roomPhase();
+    const uint32_t stops = live_menu_rule::screenStops(phase);
     if (release) {
-        if (!g_releasing) logger::write("live_menus: %s open, the world keeps running", room_phase::name(game_state::roomPhase()));
-        if (game_state::unitsStopped(game::kStopReasonScreen) || game_state::unitsStopped(game::kStopReasonScreenMore)) {
-            setScreenStops(false);
-        }
+        if (!g_releasing) logger::write("live_menus: %s open, the world keeps running", room_phase::name(phase));
+        if (anyStopped(stops)) setScreenStops(stops, false);
     } else if (g_releasing && screen == Screen::Live) {
-        setScreenStops(true);
-        logger::write("live_menus: hurt in the menu, the world waits until it closes");
+        setScreenStops(stops, true);
+        logger::write("live_menus: hurt in the %s, the world waits until it closes", room_phase::name(phase));
     }
     g_releasing = release;
 }

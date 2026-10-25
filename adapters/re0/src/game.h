@@ -171,6 +171,8 @@ constexpr uintptr_t kRoomControlGlobal = 0xdcbeb4;         // sRoomControl*
 constexpr uintptr_t kRoomPhaseCurrentOffset = 0xb8 + 0x14;  // phase manager +0x14: room_phase::Phase
 constexpr uintptr_t kRoomPhaseRequestedOffset = 0xb8 + 0x18;  // phase manager +0x18: the phase asked for, kNoRoomPhase when none
 constexpr uintptr_t kRoomPhaseDepthOffset = 0xb8 + 0x3c;      // phase manager +0x3c: depth of the stack of pushed phases
+constexpr uintptr_t kRoomPhaseStackOffset = 0xb8 + 0x1c;      // phase manager +0x1c: i32[kRoomPhaseStackSize], push 0x60a340 stores the phase it covers at [depth]
+constexpr int32_t kRoomPhaseStackSize = 8;                    // up to +0x3c, the depth
 constexpr int32_t kNoRoomPhase = -1;
 // sRoomControl::popPhase: thiscall, no arguments; `add ecx,0xb8; jmp` to the phase manager's pop (`dec [ecx+0x3c]`, then
 // requested = stack[depth]), which has no depth guard: a pop at depth 0 reads below the stack. The script op EventPhaseOut
@@ -530,8 +532,12 @@ constexpr uintptr_t kGameInfoModeFlagsOffset = 0x50;  // u32
 constexpr uint32_t kPlayerPauseBit = 0x2;
 constexpr uint32_t kTriggerPauseBit = 0x8;  // EventTrigPause 0x56cae0: the trigger scan (0x608ad0) does not run
 constexpr uint32_t kDemoPauseBit = 0x800;   // set and cleared with the other three by the cutscene ops (Demo_Start)
+constexpr uint32_t kControlPauseBit = 0x2000;  // ControlPause 0x574a00 (ControlContinue clears it)
 constexpr uint32_t kEventPhaseBit = 0x4000; // EventPhaseIn 0x56cbe0 sets it with kPlayerPauseBit, EventPhaseOut 0x56cd10 clears both
 constexpr uint32_t kCutscenePauseBits = kCharPauseBit | kPlayerPauseBit | kTriggerPauseBit | kDemoPauseBit;
+// The bits a scripted event (not an examine) holds: a message shown under one is part of that event (live_menus).
+// PlayerPause alone is left out: examine and door scripts set it too.
+constexpr uint32_t kScriptEventBits = kCharPauseBit | kTriggerPauseBit | kDemoPauseBit | kControlPauseBit | kEventPhaseBit;
 // Every motion request of a character ends in cAnimControl::set, a member of the character at kAnimControlOffset:
 // thiscall (layer < 8, motionNo, flags, f32 interp, f32 start), ret 0x14, no return value (0x4144d0).
 constexpr uintptr_t kAnimControlOffset = 0xff8;
@@ -598,15 +604,13 @@ constexpr uintptr_t kSetPartnerFunction = 0x4ece00;       // sPlayer::setPartner
 constexpr uintptr_t kUnitUpdateAllFunction = 0x727b50;
 // sUnit stop reasons (docs/RE0_NOTES.md "Live menus"): setStopReason 0x652ce0 (thiscall on [kUnitSystemGlobal]
 // (reason < 14, on), ret 8) keeps a reason mask at +0x33d8d0 and gives every group whose bit is in the union of the
-// reasons' masks (table 0xdb5ef0) the skip flag slot 9 tests (group +0x28 bit 1). The SubScreen and Map phases set
-// reasons 7 and 8 on entry and clear them on close; the pause menu (sGamePause) is reason 6.
+// reasons' masks (table 0xdb5ef0) the skip flag slot 9 tests (group +0x28 bit 1). The pause menu (sGamePause) is
+// reason 6; the screens' reasons are live_menu_rule::screenStops.
 constexpr uintptr_t kUnitSystemGlobal = 0xe2d434;
 constexpr uintptr_t kUnitStopMaskOffset = 0x33d8d0;
 constexpr uintptr_t kSetStopReasonFunction = 0x652ce0;
 constexpr std::array<uint8_t, 7> kSetStopReasonBytes = {0x56, 0x8B, 0xF1, 0x80, 0x7E, 0x1C, 0x00};
 constexpr uint32_t kStopReasonPause = 6;
-constexpr uint32_t kStopReasonScreen = 7;      // groups 0xbe00
-constexpr uint32_t kStopReasonScreenMore = 8;  // groups 0x13800000
 
 // state mode: phase 4 (puppet body fidelity; docs/RE0_NOTES.md "State mode: puppet body")
 // A character holds 7 sub-unit slots of 0x20 bytes from +0x67d8; slot 3 is the held weapon. A slot starts with the
