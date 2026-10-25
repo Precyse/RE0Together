@@ -224,6 +224,17 @@ void testStale() {
     check(rule::requestStale(0xfffffff0u, 0xfffffff0u + rule::kFollowTimeoutMs), "age counts across the clock wrap");
 }
 
+void testInLoadedRoom() {
+    constexpr uint32_t kOtherFloor = 1u << 3;  // scene 0x32: the controlled character on the other floor
+    constexpr uint32_t kScriptHidden = 1u << 1;
+    constexpr uint32_t kCameraPlane = 1u << 0;
+    check(rule::inLoadedRoom(true, 0), "a shown character in the loaded record is in the room");
+    check(rule::inLoadedRoom(true, kOtherFloor), "one hidden on the other floor is still in the room");
+    check(rule::inLoadedRoom(true, kScriptHidden | kCameraPlane), "one a script or the camera hides is still in the room");
+    check(!rule::inLoadedRoom(true, rule::kHiddenRoomNotLoaded | kOtherFloor), "one whose room is not loaded is not");
+    check(!rule::inLoadedRoom(false, 0), "one in another record is not, whatever its mask says");
+}
+
 }  // namespace
 
 int main() {
@@ -237,6 +248,7 @@ int main() {
     testTracker();
     testArrival();
     testStale();
+    testInLoadedRoom();
     if (g_failures == 0) std::printf("room_move_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

@@ -1,6 +1,7 @@
 #include "game_state.h"
 
 #include "door_phase.h"
+#include "room_move_rule.h"
 #include "room_phase.h"
 #include "game.h"
 
@@ -67,11 +68,11 @@ uint16_t currentRoom() {
 }
 
 bool inCurrentRoom(uintptr_t player) {
-    uint32_t flags = 0;
+    uint32_t hiddenReasons = 0;
     const uintptr_t sceneInfo = game::readPointer(game::kSceneInfoGlobal);
     const uintptr_t loaded = sceneInfo ? game::readPointer(sceneInfo + game::kSceneCurrentRecordOffset) : 0;
-    return player && loaded && game::readPointer(player + game::kPlayerSceneRecordOffset) == loaded &&
-           game::readMemory(player + game::kPlayerFlagsOffset, flags) && (flags & game::kPlayerInCurrentRoomFlag) != 0;
+    return player && loaded && game::readMemory(player + game::kPlayerHiddenReasonsOffset, hiddenReasons) &&
+           room_move_rule::inLoadedRoom(game::readPointer(player + game::kPlayerSceneRecordOffset) == loaded, hiddenReasons);
 }
 
 }  // namespace game_state

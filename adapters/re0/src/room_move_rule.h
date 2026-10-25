@@ -203,4 +203,14 @@ private:
 // A request that has waited kFollowTimeoutMs for a game tick is dropped: its runner gave up.
 constexpr bool requestStale(uint32_t arrivedMs, uint32_t nowMs) { return nowMs - arrivedMs >= kFollowTimeoutMs; }
 
+// A character is in the loaded room when its room record is the loaded one and the engine's hide mask (+0xfc8, written
+// by 0x6534f0) does not hold reason 2, "its room is not loaded" (0x61b0b0, refreshed each frame by uCharaBase slot 43
+// 0x529910). The other reasons only stop it being drawn (+0xc 0x4000): 3 is another floor than the controlled
+// character in scene 0x32 (y above 800, 0x51f750), 1 scripts and a parent's mask, 0 the camera's cull plane.
+constexpr uint32_t kHiddenRoomNotLoaded = 1u << 2;
+
+constexpr bool inLoadedRoom(bool recordLoaded, uint32_t hiddenReasons) {
+    return recordLoaded && (hiddenReasons & kHiddenRoomNotLoaded) == 0;
+}
+
 }  // namespace room_move_rule

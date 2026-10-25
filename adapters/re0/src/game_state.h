@@ -37,8 +37,9 @@ bool playing();
 constexpr uint16_t kRoomLoading = 0xffff;
 uint16_t currentRoom();
 
-// True when the character is in the loaded room: its room record is the loaded one and the game shows it there. The
-// in-room flag alone stays stale on a character moved into a dormant room (it does not update there).
+// True when the character is in the loaded room: its room record is the loaded one and the engine's hide mask does not
+// say its room is unloaded (room_move_rule::inLoadedRoom). Being drawn is not asked: the engine hides a character in
+// the room on another floor or behind a script, and a puppet held for that would never move back into view.
 bool inCurrentRoom(uintptr_t player);
 
 }  // namespace game_state

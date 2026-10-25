@@ -51,8 +51,7 @@ constexpr uintptr_t kBillyVtable = 0xccf5a0;     // uPlayerBilly
 constexpr uintptr_t kRebeccaVtable = 0xccfd10;   // uPlayerRebecca
 
 constexpr uintptr_t kPlayerHpOffset = 0x1030;  // i32
-constexpr uintptr_t kPlayerFlagsOffset = 0xc;  // u32 attribute flags
-constexpr uint32_t kPlayerInCurrentRoomFlag = 0x4000;
+constexpr uintptr_t kPlayerHiddenReasonsOffset = 0xfc8;  // u32 hide mask, one bit per reason (room_move_rule::inLoadedRoom)
 
 // sItem: one fixed inventory block per character (6 slots of {u32 itemId, u32 count} plus 0x10 of extras)
 constexpr uintptr_t kItemRebeccaBlockOffset = 0x24;
