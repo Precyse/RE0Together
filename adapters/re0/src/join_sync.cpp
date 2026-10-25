@@ -111,15 +111,29 @@ void apply(const JoinSnapshot& snapshot) {
     }
     g_applied = true;
     if (state_mode::on()) join_extras::onSnapshotApplied();
-    const CharacterPlace& own = placeOf(snapshot, character_owner::localCharacter());
-    if (own.scene == scene::of(character_owner::find(character_owner::localCharacter())) || !own.hasDoor) {
-        if (own.scene != scene::current()) logger::write("join_sync: own room 0x%02x unknown door, staying", own.scene);
+    const Character ownCharacter = character_owner::localCharacter();
+    const CharacterPlace& own = placeOf(snapshot, ownCharacter);
+    if (own.scene == scene::current()) {
         finish(snapshot);
         return;
     }
-    door_sync::queue(own.door, true);
     g_travelling = snapshot;
+    if (own.scene == scene::of(character_owner::find(ownCharacter)) || !own.hasDoor) {
+        // The save left the own character in its own room (the two were apart): the game's switch loads that room.
+        logger::write("join_sync: own character in scene 0x%02x, switching to it", own.scene);
+        return;
+    }
+    door_sync::queue(own.door, true);
     logger::write("join_sync: travelling to scene 0x%02x", own.scene);
+}
+
+// While the own character waits in another room than the loaded one, the game's switch is asked again until it takes
+// (it refuses until the game has settled after a load).
+void switchToOwnRoom(const JoinSnapshot& snapshot) {
+    const Character own = character_owner::localCharacter();
+    if (placeOf(snapshot, own).scene != scene::of(character_owner::find(own))) return;  // a door is bringing it
+    const character_owner::SwitchResult result = character_owner::switchTo(own);
+    if (result == character_owner::SwitchResult::Done) logger::write("join_sync: switching to the own character's room");
 }
 
 // The save may have left the own character in another room than the loaded one: the game's own switch brings the
@@ -151,10 +165,13 @@ void guestTick() {
         g_lastRequest = {};
         logger::write("join_sync: asking for a new snapshot");
     }
-    if (g_travelling &&
-        placeOf(*g_travelling, character_owner::localCharacter()).scene == scene::current()) {
-        finish(*g_travelling);
-        g_travelling.reset();
+    if (g_travelling) {
+        if (placeOf(*g_travelling, character_owner::localCharacter()).scene == scene::current()) {
+            finish(*g_travelling);
+            g_travelling.reset();
+        } else {
+            switchToOwnRoom(*g_travelling);
+        }
     }
     {
         std::lock_guard lock(g_mutex);

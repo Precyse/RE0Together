@@ -312,6 +312,15 @@ struct Sample {
     uint32_t flags6a0c = 0;
 };
 
+// +0x6a0c bits the weapon hit scan (0x52fd10, 0x52f520) tests before a ray: 1 skips the enemy for attack kinds 1..3 (the
+// guns), 2 for the others. The classes set and clear them all the time (0x4cbd90 / 0x4cbd20) as their own hits and states
+// come and go, and the stream shows the simulator's a render delay late, so a copy kept refusing shots the simulator
+// would take (live: shotgun pellets through a walking zombie). A living copy shows them clear: its shots go to the
+// simulator, whose own damage handler still refuses a hit the enemy is really immune to. A dead one keeps them (aim
+// and shots skip corpses).
+constexpr uint32_t kShotSkipBits = 0x3;
+constexpr uint32_t shownFlags6a0c(uint32_t flags6a0c, bool alive) { return alive ? flags6a0c & ~kShotSkipBits : flags6a0c; }
+
 inline Sample sampleOf(const Header& header, const PoseEntry& entry, uint32_t arrivalMs) {
     Sample sample;
     sample.senderMs = header.senderMs;

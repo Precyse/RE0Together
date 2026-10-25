@@ -839,6 +839,14 @@ The Esc menu is `uGUIPause` (vtable 0xcdfe68; owned by sGamePause [0xdcbea8], wh
 - **Live fix (Build 196 -> next).** The first build logged `Co-op page opening` and nothing after: the Options manager's unit only moves and draws while its `+0xc` bits 0x400 / 0x800 are on, which sSubMenu sets when its own Options open (0x5d8040) and clears on close, so the router never ran. The open now sets both and the close clears them. And the open / close checks ran on game_tick, which is driven by the player's move (`uPlayerBase::move`): stop reasons 7 and 8 stop the player, so the tick stopped with them and the hold was never released (the host stood frozen). They now run as a debug_overlay frame step (EndScene, the same thread as the game tick). The same stall stopped the host's once-a-second OWNERSHIP resend, so a guest whose game restarted while its launcher stayed in the session never learned its character (it played as "unknown", like a spectator): the resend now runs on the net tick (`character_owner::onSession`).
 - A fault in either detour gives the game's own two-row pause back for the session. Logs: `pause_coop: Co-op row added to the pause menu`, `Co-op page opening`, `Co-op page closed, back to the game`.
 
+## Join: own character in another room (live fix, 2026-10-25)
+
+A save that left the two characters apart (Rebecca in 0x24, Billy in 0x2c) loads on the guest with the camera on the saved focus. `join_sync::apply` compared the snapshot's room with the own character's room record, which right after the load still matched, logged `own room 0x2c unknown door, staying` and placed the guest in the wrong room: Billy never loaded, the guest sent no poses, the host refused SESSION_READY (`stale pose`) for good, and the guest looked like a spectator. Now any own room other than the loaded one keeps the snapshot pending (`g_travelling`) and asks `character_owner::switchTo` every tick until the game's own zap has loaded that room (`join_sync: own character in scene 0x.., switching to it`); a door from the snapshot still travels as before.
+
+## Shots through a living observed enemy (live fix, 2026-10-25)
+
+The weapon hit scans (0x52fd10, 0x52f520) skip an enemy whose `+0x6a0c` has bit 1 (guns) or 2 (other kinds); the classes set and clear them (0x4cbd90 / 0x4cbd20) for knock-downs, the critical kill, death falls and lying down, and the stream copied them onto the observer a render delay late, so shotgun pellets passed through a zombie that looked like it walked. A living copy now shows them clear (`enemy_observer_rule::shownFlags6a0c`): every shot that lands on the guest's screen goes to the simulator, whose damage handler still refuses a hit the enemy is immune to; a dead copy keeps them.
+
 ## Wait notices (2026-10-25; built and unit tested, not run live)
 
 The world hold (`menu_mirror`'s sUnit::updateAll detour) now has two reasons and says which on screen (`wait_notice`, drawn by the HUD: section "Co-op HUD").

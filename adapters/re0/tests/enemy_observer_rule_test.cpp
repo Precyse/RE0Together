@@ -347,6 +347,12 @@ void testMissingWatch() {
     check(!watch.missing(game::kSpawnRecordCount, 0), "a record past the table is ignored");
 }
 
+void testShotSkipBits() {
+    check(rule::shownFlags6a0c(0x4007, true) == 0x4004, "a living copy never refuses shots on the simulator's skip bits");
+    check(rule::shownFlags6a0c(0x4007, false) == 0x4007, "a dead copy keeps them (aim and shots skip corpses)");
+    check(rule::shownFlags6a0c(0x200, true) == 0x200, "other bits are shown as the simulator has them");
+}
+
 void testCreateWanted() {
     wire::PoseEntry entry{};
     entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Observer));
@@ -405,6 +411,7 @@ int main() {
     testHandOverStart();
     testHitRouting();
     testCreateWanted();
+    testShotSkipBits();
     testMissingWatch();
     testCreatePacer();
     if (g_failures == 0) std::printf("enemy_observer_rule_test: all checks passed\n");

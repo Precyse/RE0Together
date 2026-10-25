@@ -63,7 +63,8 @@ void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
     place(enemy, shown.pos, shown.quat, shown.hp);
     if (enemy_observer_rule::recordApplies(shown.record)) game::writeMemory(enemy + game::kEnemyActionOffset, shown.record);
     writeHitAttributes(enemy, shown.hitAttr);
-    game::writeMemory(enemy + game::kEnemyFlags6a0cOffset, shown.flags6a0c);
+    const bool alive = (shown.flags & enemy_observer_wire::kFlagAlive) != 0 && shown.hp > 0;
+    game::writeMemory(enemy + game::kEnemyFlags6a0cOffset, enemy_observer_rule::shownFlags6a0c(shown.flags6a0c, alive));
 }
 
 bool holdCharPause(CharPause& held) {
