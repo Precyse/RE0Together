@@ -14,6 +14,7 @@
 #include "game_tick.h"
 #include "join_sync.h"
 #include "protocol.h"
+#include "room_phase.h"
 #include "settled_copy.h"
 
 namespace {
@@ -32,8 +33,6 @@ enum class Origin : uint8_t { Owner = 0, MenuExchange = 1 };
 NetClient* g_net = nullptr;
 std::array<Block, kCharacterCount> g_blocks;  // game thread
 uint32_t g_frame = 0;
-uint32_t g_lastLocalChangeFrame = 0;
-bool g_localChanged = false;
 std::array<Block::Bytes, kCharacterCount> g_menuSnapshot{};  // game thread: blocks when the local menu opened
 bool g_menuWatch = false;                                     // game thread: a menu opened and has not been checked
 
@@ -78,11 +77,11 @@ void syncLocal(Character character) {
     Block& block = g_blocks[static_cast<size_t>(character)];
     Block::Bytes bytes;
     if (!game::readMemory(blockAddress(character), bytes)) return;
-    if (block.observe(bytes, g_frame)) {
-        g_lastLocalChangeFrame = g_frame;
-        g_localChanged = true;
-    }
-    if (join_sync::caughtUp() && block.due(g_frame, monotonicMs(), kResendMs)) send(character, block);
+    block.observe(bytes, g_frame);
+    // Not from the game over or the exit (live 2026-10-25): a block sent there reached a peer that had already loaded
+    // the next world and overwrote the save's inventory.
+    const bool inWorld = room_phase::isGameplay(game_state::roomPhase());
+    if (inWorld && join_sync::caughtUp() && block.due(g_frame, monotonicMs(), kResendMs)) send(character, block);
 }
 
 void applyRemote(Character character) {
@@ -160,7 +159,13 @@ void onMenuOpen() {
     g_menuWatch = true;
 }
 
-uint32_t framesSinceLocalChange() { return g_localChanged ? g_frame - g_lastLocalChangeFrame : UINT32_MAX; }
+void onLocalLoad() {
+    for (Block& block : g_blocks) block.reset();
+    g_menuWatch = false;
+    std::lock_guard lock(g_mutex);
+    for (std::optional<Block::Bytes>& pending : g_pending) pending.reset();
+}
+
 
 void enable(NetClient& net) {
     g_net = &net;

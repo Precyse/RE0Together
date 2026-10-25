@@ -23,9 +23,12 @@ host_exit_rule::AwayWatch g_away;  // game thread
 
 // Game thread: leaves once a character is controlled and the game is in plain gameplay (Main phase, no door, no menu),
 // the state the game over's own exit starts from. Writing the phase field directly crashes the game: only the request.
+// A request made while this game was leaving on its own (live 2026-10-25: the host's presence left play during the
+// shared game over) is spent there; kept, it took the guest out of the next world it loaded.
 void onTick() {
-    if (game::controlled() == 0) {
+    if (host_exit_rule::leavingOnItsOwn(game_state::roomPhase())) {
         g_away.clear();
+        g_pending = false;
         return;
     }
     const bool guest = character_owner::linked() && !character_owner::isHost();

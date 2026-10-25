@@ -26,8 +26,10 @@ bool readBlock(uint8_t characterId, InventoryBlock& block);
 // Game thread, as a submenu opens: remembers the blocks so an exchange made in the menu is found when it closes.
 void onMenuOpen();
 
-// Game frames since a locally owned character's inventory last changed (UINT32_MAX if it never has).
-uint32_t framesSinceLocalChange();
+// Game thread: this machine loaded a player save. The blocks received for the old world are dropped and the change
+// tracking starts over, so the save's inventories stand until the new world's owners send theirs (live 2026-10-25: the
+// partner's block of the world before a game over overwrote the reloaded save's).
+void onLocalLoad();
 
 // Registers the per-frame sender and applier. Call after character_owner::enable.
 void enable(NetClient& net);

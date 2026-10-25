@@ -15,6 +15,7 @@
 #include "game.h"
 #include "game_state.h"
 #include "hooks.h"
+#include "inventory_sync.h"
 #include "item_ledger.h"
 #include "log.h"
 #include "net_pad.h"
@@ -105,6 +106,7 @@ void onLoad(int32_t slot) {
     remember(slot);
     if (!isPlayerSlot(slot)) return;
     floor_items_sync::onLoad();
+    inventory_sync::onLocalLoad();
     item_ledger::resetTake();
     flag_sync::onLocalLoad();
     world_epoch::onLocalLoad();
