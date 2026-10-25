@@ -68,7 +68,10 @@ void testFinished() {
     const rule::VictimView holding{2, 6, 100};
     const rule::VictimView free{0, 0, 100};
     check(rule::finished(holding, granted, granted, 50, 1000) == rule::End::None, "same action, victim held: running");
-    check(rule::finished(holding, granted, granted, 0, 0) == rule::End::EnemyDead, "a dead enemy ends it at once");
+    check(rule::finished(holding, granted, granted, 0, 0) == rule::End::None, "a dead enemy with the victim still held keeps the lease");
+    check(rule::finished(holding, granted, granted, 0, 0, rule::kDeadReleaseMs - 1) == rule::End::None, "until the release cap");
+    check(rule::finished(holding, granted, granted, 0, 0, rule::kDeadReleaseMs) == rule::End::EnemyDead, "then it ends anyway");
+    check(rule::finished({2, 5, 100}, granted, granted, 0, 0) == rule::End::EnemyDead, "a dead enemy whose victim is free ends it");
     check(rule::finished({2, 19, 0}, granted, granted, 50, 0) == rule::End::VictimDied, "a death state ends it at once");
     check(rule::finished({0, 0, 0}, granted, granted, 50, 1000) == rule::End::VictimDied, "a victim without HP ends it");
     const Action moved{{1, 0x10, 0, 1}};

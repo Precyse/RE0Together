@@ -343,20 +343,30 @@ void startDueGrants(uint32_t nowMs) {
     }
 }
 
-// Why a lease this machine holds is over, with the enemy's state to send back.
-rule::End heldEnded(const table_rule::Lease& lease, uint32_t nowMs, PoseEntry& state) {
+// Why a lease this machine holds is over, with the enemy's state to send back. Notes the first frame the enemy is dead.
+rule::End heldEnded(table_rule::Lease& lease, uint32_t nowMs, PoseEntry& state) {
     uintptr_t enemy = 0;
     const uintptr_t victim = character_owner::find(static_cast<Character>(lease.victim));
     rule::VictimView view;
     if (!boundEnemy(lease.slot, lease.classIndex, lease.spawnId, enemy, state) || !victim || !contact_game::victimView(victim, view)) {
         return rule::End::Left;
     }
-    return rule::finished(view, actionOf(state.record), lease.granted, state.hp, nowMs - lease.startedMs);
+    if (state.hp <= 0 && !lease.deadSeen) {
+        lease.deadSeen = true;
+        lease.deadSinceMs = nowMs;
+    }
+    const uint32_t deadForMs = lease.deadSeen ? nowMs - lease.deadSinceMs : 0;
+    const rule::End end = rule::finished(view, actionOf(state.record), lease.granted, state.hp, nowMs - lease.startedMs, deadForMs);
+    if (end == rule::End::EnemyDead && rule::held(view.group, view.state)) {
+        logger::write("lease: token %u enemy dead %u ms and the victim still held (think %d/%d), handing it back", lease.token,
+                      deadForMs, view.group, view.state);
+    }
+    return end;
 }
 
 void watchHeld(uint32_t nowMs) {
     for (uint8_t slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
-        const table_rule::Lease* lease = g_table.find(slot);
+        table_rule::Lease* lease = g_table.findMutable(slot);
         if (!lease || lease->role != table_rule::Role::Held) continue;
         PoseEntry state{};
         const rule::End reason = heldEnded(*lease, nowMs, state);

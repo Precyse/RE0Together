@@ -29,6 +29,8 @@ struct Lease {
     float lastPos[3] = {};              // Away: the last accepted position. Held: the position of the grant.
     uint32_t quat = 0;                  // Held: the rotation of the grant (pose_wire::packQuat)
     uint32_t startedMs = 0;             // local clock: the grant was sent (Away) or started (Held)
+    uint32_t deadSinceMs = 0;           // Held: local clock of the first frame the enemy was dead
+    bool deadSeen = false;              // Held: deadSinceMs is set
     uint32_t heardMs = 0;               // Away: local clock of the last accepted pose
     bool heard = false;                 // Away: a pose was accepted
 };
@@ -78,6 +80,9 @@ public:
     const Lease* find(uint8_t slot) const {
         return slot < leases_.size() && leases_[slot] ? &*leases_[slot] : nullptr;
     }
+
+    // The lease on `slot` for its holder's own bookkeeping (the dead-since time), or nullptr.
+    Lease* findMutable(uint8_t slot) { return slot < leases_.size() && leases_[slot] ? &*leases_[slot] : nullptr; }
 
     Role roleOf(uint8_t slot) const {
         const Lease* lease = find(slot);

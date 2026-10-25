@@ -108,6 +108,9 @@ constexpr const char* name(End end) {
 constexpr uint32_t kGrantExpiryMs = 1500;    // a grant not started (holder) or not answered by a first sample (authority)
 constexpr uint32_t kHolderSilenceMs = 2500;  // the holder streamed once and then stopped
 constexpr uint32_t kSettleMs = 300;          // after the start the victim's think and the enemy's record settle before "released" counts
+// A grabber killed mid-hold ends its lease once its own dying update has let the victim go, or after this long. Handing it
+// back at the kill stopped that update with the victim still bound (2026-10-25 live: Rebecca frozen after a kill).
+constexpr uint32_t kDeadReleaseMs = 3000;
 
 // What the holder reads of the victim.
 struct VictimView {
@@ -120,10 +123,12 @@ struct VictimView {
 // ran, the holder is gone or silent) the enemy resumes from the state the authority itself last showed.
 constexpr bool carriesState(End end) { return end == End::Released || end == End::EnemyDead || end == End::VictimDied; }
 
-// Why a started lease is over on the holder, or None. `sinceStartMs` is how long ago it started.
+// Why a started lease is over on the holder, or None. `sinceStartMs` is how long ago it started; `deadForMs` how long the
+// enemy has been dead (0 while it lives).
 constexpr End finished(const VictimView& victim, const enemy_follow_rule::Action& record,
-                       const enemy_follow_rule::Action& granted, int32_t enemyHp, uint32_t sinceStartMs) {
-    if (enemyHp <= 0) return End::EnemyDead;
+                       const enemy_follow_rule::Action& granted, int32_t enemyHp, uint32_t sinceStartMs,
+                       uint32_t deadForMs = 0) {
+    if (enemyHp <= 0) return !held(victim.group, victim.state) || deadForMs >= kDeadReleaseMs ? End::EnemyDead : End::None;
     if (victim.hp <= 0 || (victim.group == kReactionGroup && isDeathState(victim.state))) return End::VictimDied;
     if (sinceStartMs < kSettleMs) return End::None;
     return enemy_follow_rule::atBoundary(record, granted) && !held(victim.group, victim.state) ? End::Released : End::None;
