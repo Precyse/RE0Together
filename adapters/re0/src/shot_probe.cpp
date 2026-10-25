@@ -31,6 +31,8 @@ constexpr uintptr_t kShapesOffset = 0x10a0;           // 20 hit shapes of 0x50 b
 constexpr size_t kShapeCount = 20;
 constexpr uintptr_t kShapeSize = 0x50;
 constexpr uintptr_t kShapeRadiusOffset = 0x30;
+constexpr uintptr_t kShapeStartOffset = 0x10;  // a capsule runs from here to kShapeEndOffset (the shape's own space)
+constexpr uintptr_t kShapeEndOffset = 0x20;
 constexpr uintptr_t kRayDirectionOffset = 0x20;
 constexpr uintptr_t kRayOriginOffset = 0x30;
 constexpr uintptr_t kUnitMatrixTranslationOffset = 0xe0;  // row 3 of the matrix at +0xb0 the shapes are placed with
@@ -87,6 +89,7 @@ struct Nearest {
     float gap = 0.0f;          // nearest shape surface to the ray
     float shapeFromBody = 0.0f;  // that shape's centre to the enemy's position
     float matrixFromBody = 0.0f; // the shapes' matrix translation to the enemy's position
+    float capsule = 0.0f;        // that shape's capsule length
     uint32_t shapes = 0;
 };
 
@@ -108,8 +111,8 @@ Nearest nearestEnemy() {
             const Vec center = shapeCenter(shape);
             const float gap = rayGap(center) - radius;
             if (best.enemy && gap >= best.gap) continue;
-            best = {slot, enemy, gap, length(minus(center, body)),
-                    length(minus(readVec(enemy + kUnitMatrixTranslationOffset), body)), 0};
+            best = {slot, enemy, gap, length(minus(center, body)), length(minus(readVec(enemy + kUnitMatrixTranslationOffset), body)),
+                    length(minus(readVec(shape + kShapeEndOffset), readVec(shape + kShapeStartOffset))), 0};
         }
         if (best.enemy == enemy) best.shapes = shapes;
     }
@@ -119,9 +122,9 @@ Nearest nearestEnemy() {
 void report() {
     const Nearest nearest = nearestEnemy();
     if (!nearest.enemy || nearest.gap > kNearRay || !g_budget.allow(pose_wire::clockMs())) return;
-    logger::write("shot_probe: wide scan missed; slot %d (%s) nearest shape %.0f from the ray, %u shapes, shape %.0f and matrix %.0f from its body; enemy shapes tested %u hit %u",
+    logger::write("shot_probe: wide scan missed; slot %d (%s) nearest shape base %.0f from the ray, %u shapes, capsule %.0f long, base %.0f and matrix %.0f from its body; enemy shapes tested %u hit %u",
                   nearest.slot, enemy_policy::nameOf(enemy_policy::classIndexOf(game::readPointer(nearest.enemy))), nearest.gap,
-                  nearest.shapes, nearest.shapeFromBody, nearest.matrixFromBody, g_enemyTests, g_enemyHits);
+                  nearest.shapes, nearest.capsule, nearest.shapeFromBody, nearest.matrixFromBody, g_enemyTests, g_enemyHits);
 }
 
 void __fastcall calcRayDetour(void* player, void* edx, uintptr_t out) {

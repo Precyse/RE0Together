@@ -607,6 +607,7 @@ void __fastcall unitMoveDetour(void* unit, void* edx) {
     enemy_observer_game::holdCharPause(held);
     g_originalUnitMove(unit, edx);
     enemy_observer_game::releaseCharPause(held);
+    enemy_observer_game::refreshHitShapes(enemy);
     if (slot.written) enemy_drift::afterMove(static_cast<size_t>(index), enemy, slot.local.classIndex, *slot.written);
 }
 

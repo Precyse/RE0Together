@@ -516,6 +516,10 @@ constexpr std::array<uintptr_t, 6> kBossRoomVtables = {kBossVtables[0], kBossVta
 // CharPause bit, script op 160; tested at 0x526c7d) is set it runs only slot 31 (motion), the root-motion cancel and
 // slots 18 and 19 (joints, hit shapes) and skips slot 41, the class's update (jump at 0x526d4e).
 constexpr uintptr_t kUnitMoveFunction = 0x526b30;
+// The zombie family's update (slot 41 of uEnemy10/11/12/14/15/16/17/19/1a/50/51/5a/5b/6a/6b) rebuilds the hit capsule
+// every frame from the joints (0x418710, thiscall, no arguments: collision spheres 0 and 1, hit point 0); the observer
+// skips slot 41, so it calls the rebuild itself after the move.
+constexpr uintptr_t kEnemyBaseHitShapeFunction = 0x418710;
 constexpr uint32_t kCharPauseBit = 0x1;
 constexpr uintptr_t kEnemyFlags6a0cOffset = 0x6a0c;  // u32, read by the player's aim filter and weapon hit path 0x52f520
 constexpr size_t kEnemyDamageSlot = 35;  // vtable slot (+0x8c): damage(attacker, HitPoint*, HitInfo*), thiscall ret 0xC

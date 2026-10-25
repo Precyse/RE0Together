@@ -1,6 +1,10 @@
 #include "enemy_observer_game.h"
 
+#include <windows.h>
+
 #include <cmath>
+
+#include "crash_dump.h"
 
 #include "player_damage.h"
 #include "pose_wire.h"
@@ -78,6 +82,15 @@ void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
 void reassert(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
     setHpWhenDifferent(enemy, shown.hp);
     writeShownFlags(enemy, shown);
+}
+
+void refreshHitShapes(uintptr_t enemy) {
+    const uintptr_t vtable = game::readPointer(enemy);
+    if (!vtable || game::readPointer(vtable + game::kEnemyUpdateSlot * sizeof(uint32_t)) != game::kEnemyBaseUpdateFunction) return;
+    __try {
+        game::callThiscall<void>(game::kEnemyBaseHitShapeFunction, reinterpret_cast<void*>(enemy));
+    } __except (crash_dump::reportCaught(GetExceptionInformation(), "enemy_observer: hit shapes")) {
+    }
 }
 
 bool holdCharPause(CharPause& held) {
