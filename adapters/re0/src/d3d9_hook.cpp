@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "crash_dump.h"
+#include "game_tick.h"
 #include "debug_stats.h"
 #include "hooks.h"
 #include "log.h"
@@ -41,7 +42,7 @@ bool hookOnce(const char* name, uintptr_t address, uintptr_t& hooked, void* deto
 }
 
 HRESULT STDMETHODCALLTYPE endSceneDetour(IDirect3DDevice9* device) {
-    crash_dump::heartbeat();
+    crash_dump::heartbeat(game_tick::gameThreadId());
     if (g_handlers.onEndScene) g_handlers.onEndScene(device);
     return g_originalEndScene(device);
 }

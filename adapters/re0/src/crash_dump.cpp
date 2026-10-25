@@ -10,11 +10,9 @@
 #include <cwchar>
 #include <string>
 
-#include "game_tick.h"
 #include "hang_rule.h"
 #include "log.h"
 #include "paths.h"
-#include "window_focus.h"
 
 namespace {
 
@@ -36,6 +34,7 @@ LPTOP_LEVEL_EXCEPTION_FILTER g_previous = nullptr;
 std::atomic<bool> g_writing{false};       // a crash inside the dump writer must not recurse
 std::atomic<bool> g_caughtDumped{false};  // one dump of a caught exception per session
 std::atomic<uint32_t> g_lastBeatMs{0};     // GetTickCount() of the last drawn frame, 0 before the first
+std::atomic<crash_dump::Foreground> g_foreground{nullptr};  // the adapter's "game window in front" test
 std::atomic<DWORD> g_frameThread{0};       // the thread of the last heartbeat
 std::atomic<bool> g_threadsLogged{false};
 
@@ -103,6 +102,23 @@ struct StalledThread {
     size_t stackWords;
 };
 
+// The stack and instruction pointers of a thread context (the DS2 adapter shares this file and builds x64).
+uintptr_t stackPointer(const CONTEXT& context) {
+#ifdef _WIN64
+    return context.Rsp;
+#else
+    return context.Esp;
+#endif
+}
+
+uintptr_t instructionPointer(const CONTEXT& context) {
+#ifdef _WIN64
+    return context.Rip;
+#else
+    return context.Eip;
+#endif
+}
+
 // Suspends `threadId` just long enough to read its registers and stack; resumed before anything logs or dumps, as the
 // suspended thread may hold the log's lock or the heap's.
 bool freeze(DWORD threadId, StalledThread& out) {
@@ -115,7 +131,7 @@ bool freeze(DWORD threadId, StalledThread& out) {
     if (SuspendThread(thread) != static_cast<DWORD>(-1)) {
         read = GetThreadContext(thread, &out.context) != 0;
         SIZE_T got = 0;
-        if (read && ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(out.context.Esp),
+        if (read && ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(stackPointer(out.context)),
                                       out.stack.data(), sizeof(out.stack), &got)) {
             out.stackWords = got / sizeof(DWORD);
         }
@@ -127,7 +143,7 @@ bool freeze(DWORD threadId, StalledThread& out) {
 
 void logStack(const StalledThread& stalled) {
     char line[kStackLineLength];
-    int length = snprintf(line, sizeof(line), "crash_dump: stack at 0x%08lx:", stalled.context.Esp);
+    int length = snprintf(line, sizeof(line), "crash_dump: stack at 0x%08zx:", stackPointer(stalled.context));
     for (size_t i = 0; i < stalled.stackWords && length > 0 && static_cast<size_t>(length) < sizeof(line); ++i) {
         length += snprintf(line + length, sizeof(line) - length, " %08lx", stalled.stack[i]);
     }
@@ -143,11 +159,11 @@ void dumpHang(DWORD threadId) {
     }
     EXCEPTION_RECORD record{};
     record.ExceptionCode = kHangCode;
-    record.ExceptionAddress = reinterpret_cast<PVOID>(stalled.context.Eip);
+    record.ExceptionAddress = reinterpret_cast<PVOID>(instructionPointer(stalled.context));
     EXCEPTION_POINTERS pointers{&record, &stalled.context};
     char what[kLineLength];
-    snprintf(what, sizeof(what), "no frame for %u s (thread %lu eip 0x%08lx = %s)", kHangSeconds, threadId,
-             stalled.context.Eip, moduleOffset(record.ExceptionAddress).c_str());
+    snprintf(what, sizeof(what), "no frame for %u s (thread %lu ip 0x%08zx = %s)", kHangSeconds, threadId,
+             instructionPointer(stalled.context), moduleOffset(record.ExceptionAddress).c_str());
     writeDump(&pointers, threadId, L"hang", what);
     logStack(stalled);
 }
@@ -162,15 +178,14 @@ DWORD WINAPI hangWatchThread(LPVOID) {
             seenBeat = beat;
             watch.beat(beat);
         }
-        if (watch.check(GetTickCount(), gameIsForeground()) == hang_rule::Verdict::Dump) {
+        if (watch.check(GetTickCount(), g_foreground.load(std::memory_order_relaxed)()) == hang_rule::Verdict::Dump) {
             dumpHang(g_frameThread.load(std::memory_order_relaxed));
         }
     }
 }
 
 // Once the game tick has a thread: names both, so the log shows whether the frame is drawn on the game thread.
-void logThreads(DWORD frameThread) {
-    const DWORD gameThread = game_tick::gameThreadId();
+void logThreads(DWORD frameThread, DWORD gameThread) {
     if (!gameThread || g_threadsLogged.exchange(true)) return;
     logger::write("crash_dump: frame thread %lu, game tick thread %lu", frameThread, gameThread);
 }
@@ -194,14 +209,15 @@ LONG reportCaught(EXCEPTION_POINTERS* info, const char* what) {
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-void heartbeat() {
+void heartbeat(DWORD gameThread) {
     const DWORD thread = GetCurrentThreadId();
     g_frameThread.store(thread, std::memory_order_relaxed);
     g_lastBeatMs.store(GetTickCount(), std::memory_order_relaxed);
-    if (!g_threadsLogged.load(std::memory_order_relaxed)) logThreads(thread);
+    if (!g_threadsLogged.load(std::memory_order_relaxed)) logThreads(thread, gameThread);
 }
 
-void startHangWatch() {
+void startHangWatch(Foreground foreground) {
+    g_foreground.store(foreground, std::memory_order_relaxed);
     HANDLE thread = CreateThread(nullptr, 0, hangWatchThread, nullptr, 0, nullptr);
     if (thread) CloseHandle(thread);
 }

@@ -10,6 +10,7 @@
 #include "command_input.h"
 #include "config.h"
 #include "crash_dump.h"
+#include "window_focus.h"
 #include "debug_overlay.h"
 #include "demo_skip.h"
 #include "dev_command.h"
@@ -129,7 +130,7 @@ void reportCloudWrite(const char* name) {
 void startSubsystems() {
     logger::write("adapter: starting");
     crash_dump::install();
-    crash_dump::startHangWatch();
+    crash_dump::startHangWatch(gameIsForeground);
     const Config config = loadConfig();
     // Before the decryption wait: the game creates its D3D device right after SteamStub finishes unpacking.
     if (config.overlay && !debug_overlay::install()) logger::write("adapter: overlay unavailable");

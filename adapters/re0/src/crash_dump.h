@@ -16,11 +16,14 @@ void install();
 // Returns EXCEPTION_EXECUTE_HANDLER.
 LONG reportCaught(EXCEPTION_POINTERS* info, const char* what);
 
-// Render thread, once per drawn frame: the hang watchdog's beat. Logs once, at the first beat after the game tick has
-// run, the frame thread and the game tick thread, so a log shows whether the frame is drawn on the game thread.
-void heartbeat();
+// Render thread, once per drawn frame: the hang watchdog's beat. Logs once, at the first beat with a known `gameThread`
+// (the game tick's thread, 0 until it has run), both threads, so a log shows whether the frame is drawn on the game thread.
+void heartbeat(DWORD gameThread);
+
+// True while the game window is in front: a stall only counts then.
+using Foreground = bool (*)();
 
 // Starts the watchdog thread (polls once a second). Call once; a hang is dumped in every partner mode.
-void startHangWatch();
+void startHangWatch(Foreground foreground);
 
 }  // namespace crash_dump
