@@ -14,6 +14,7 @@
 #include "command_input.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
+#include "dev_command.h"
 #include "door_sync.h"
 #include "door_travel.h"
 #include "enemy_net.h"
@@ -45,6 +46,7 @@
 #include "state_correction.h"
 #include "state_mode.h"
 #include "state_net_rule.h"
+#include "world_digest.h"
 
 namespace {
 
@@ -248,7 +250,11 @@ void tick(NetClient& net) {
     session_slot::onNetTick(net);
     auto_join::onNetTick();
     resync::onNetTick();
-    if (state_mode::on()) pose_capture::onNetTick();
+    dev_command::onNetTick();
+    if (state_mode::on()) {
+        pose_capture::onNetTick();
+        world_digest::onNetTick();
+    }
     const auto now = Clock::now();
     if (now - g_lastSend < kSendInterval) return;
     g_lastSend = now;

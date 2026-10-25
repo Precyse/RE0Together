@@ -12,6 +12,7 @@
 #include "crash_dump.h"
 #include "debug_overlay.h"
 #include "demo_skip.h"
+#include "dev_command.h"
 #include "door_sync.h"
 #include "door_travel.h"
 #include "enemy_damage_hook.h"
@@ -33,6 +34,7 @@
 #include "input_record.h"
 #include "input_redirect.h"
 #include "join_sync.h"
+#include "live_menus.h"
 #include "log.h"
 #include "menu_mirror.h"
 #include "net_client.h"
@@ -48,6 +50,7 @@
 #include "prop_sync.h"
 #include "protocol.h"
 #include "puppet.h"
+#include "rescue.h"
 #include "resync.h"
 #include "save_redirect.h"
 #include "session_slot.h"
@@ -95,6 +98,7 @@ void enableCoop(const Config& config) {
     enemy_net::enable(g_net);
     enemy_state::enable(g_net);
     command_input::enable();
+    rescue::enable();
     pad_commands::install();
     party_mode::enable(g_net);
     camera_parity::enable();
@@ -107,6 +111,7 @@ void enableCoop(const Config& config) {
     enemy_decision::install();
     enemy_spawn::install(config.trace);
     player_damage::install(g_net);
+    live_menus::configure(config.liveMenus && state_mode::on());
     menu_mirror::enable();
     if (!gui_text::enable()) logger::write("adapter: menu text hook unavailable");
     if (!options_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
@@ -124,6 +129,7 @@ void reportCloudWrite(const char* name) {
 void startSubsystems() {
     logger::write("adapter: starting");
     crash_dump::install();
+    crash_dump::startHangWatch();
     const Config config = loadConfig();
     // Before the decryption wait: the game creates its D3D device right after SteamStub finishes unpacking.
     if (config.overlay && !debug_overlay::install()) logger::write("adapter: overlay unavailable");
@@ -133,6 +139,7 @@ void startSubsystems() {
     }
     if (config.netTrace) net_trace::enable();
     if (config.autoJoin) auto_join::enable();
+    if (config.devCommands) dev_command::enable();
     if (config.coop) save_redirect::install(reportCloudWrite);
     if (config.coop) enableCoop(config);
     if (config.trace) vtable_tracer::install(config.traceVtables);

@@ -64,7 +64,8 @@ class Boss(Module):
 
     def _fits(self, member):
         seen = self.ctx.enemies.observed.get(member.slot)
-        return seen is not None and (seen.class_index, seen.spawn_id) == (member.class_index, member.spawn_id)
+        return seen is not None and (seen.class_index, seen.spawn_id, seen.spawn_record) == (
+            member.class_index, member.spawn_id, member.spawn_record)
 
     def _on_prepare(self, header, members):
         if self.answer == "none":
@@ -94,7 +95,7 @@ class Boss(Module):
     def _entry(self, member, dead=False):
         flags = wire.ENEMY_TERMINAL if dead else wire.ENEMY_ALIVE
         return dict(slot=member["slot"], class_index=member["class_index"], flags=flags, target=wire.NO_TARGET,
-                    spawn_id=member["spawn_id"], hp=member["hp"], pos=member["pos"], quat=member["quat"],
+                    spawn_id=member["spawn_id"], spawn_record=member["spawn_record"], hp=member["hp"], pos=member["pos"], quat=member["quat"],
                     motion0=wire.NO_MOTION, motion1=wire.NO_MOTION, record=member["record"])
 
     def _tick_new(self, now):
@@ -135,8 +136,9 @@ class Boss(Module):
         members = []
         for entry in self.ctx.enemies.replay_entries():
             if entry.class_index in self.classes and len(members) < wire.MAX_BOSS_MEMBERS:
-                members.append(dict(slot=entry.slot, class_index=entry.class_index, spawn_id=entry.spawn_id, hp=entry.hp,
-                                    pos=entry.pos, quat=entry.quat, record=entry.record))
+                members.append(dict(slot=entry.slot, class_index=entry.class_index, spawn_id=entry.spawn_id,
+                                    spawn_record=entry.spawn_record, hp=entry.hp, pos=entry.pos, quat=entry.quat,
+                                    record=entry.record))
         return members
 
     def _on_ready(self, header):

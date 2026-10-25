@@ -13,6 +13,11 @@ bool enable();
 
 void uninstall();
 
+// Game thread (the rescue): a demo plays (the scheduler updated in state 5 within the last 100 ms) and takes the engine's
+// skip branch at its next update, whoever leads it; nothing is sent to the peer. False, and nothing happens, when no demo
+// plays or the hook is not installed (it exists in state mode only).
+bool skipLocal();
+
 // Game thread: the thread with `serial` (`serialMine` as in event_sync) is about to run Demo_Start for demo `demoId`.
 void onDemoStart(uint16_t demoId, uint16_t serial, bool serialMine, bool leads);
 

@@ -1,5 +1,6 @@
 """Shared world state in both seats: the host item ledger (TAKE_REQUEST / TAKE_RESULT / FLOOR_PUT / FLOOR_TAKE), the story
-flag sequencer (FLAG_PROPOSE / FLAG_COMMIT) and the push block leases (PROP_LEASE / PROP_MOVE / PROP_COMMIT).
+flag sequencer (FLAG_PROPOSE / FLAG_COMMIT), the push block leases (PROP_LEASE / PROP_MOVE / PROP_COMMIT) and the world digest
+(WORLD_DIGEST) the fake sends from those mirrors.
 
 Each part keeps a mirror of the shared table (ledger, flag words, prop journal) fed by both sides' messages; the mirror is
 the fake's own state and an assertion source. Item keys, flag bits and box poses are never invented: they come from what the
@@ -7,6 +8,7 @@ game sent or the library."""
 import math
 import struct
 import time
+import zlib
 
 from fake_peer import wire
 from fake_peer.link import Module
@@ -22,6 +24,12 @@ LEASE_IDLE_S = 4.0
 PUSH_STEPS = 10
 PUSH_OFFSET = (60.0, 0.0, 0.0)
 LAPSE_S = 5.0
+DIGEST_PERIOD_S = 1.0
+MASK32 = 0xFFFFFFFF
+PRESENCE_FLAGS = (0x37, 0x93, 0x10D)  # event_rule::kPresenceFlags: each machine's own, left out of a digest
+ENEMY_FLAGS = range(0x312, 0x412)     # flag_family: the enemy family
+ACT_FLAGS = range(0x612, 0x712)       # flag_family: the act family
+FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
 
 
 # ---- items ------------------------------------------------------------------------------------------------------------
@@ -408,3 +416,80 @@ class Props(Module):
             self.ctx.link.send(Msg.PROP_LEASE, wire.PropLease.pack(scene=key[0], unit=key[1], op=wire.LEASE_RELEASE,
                                                                    holder=self.ctx.peer.slot))
             self._push = None
+
+
+# ---- world digest -----------------------------------------------------------------------------------------------------
+
+def flag_crcs(words):
+    """world_digest_rule::flagCrcs: CRC-32 of the story bits (every family but enemy and act), the enemy family and the act
+    family, with the presence flags cleared."""
+    story = list(words)
+    for bit in PRESENCE_FLAGS:
+        story[bit // 32] &= ~(1 << bit % 32) & MASK32
+    enemy, act = [0] * len(story), [0] * len(story)
+    for family, bits in ((enemy, ENEMY_FLAGS), (act, ACT_FLAGS)):
+        for bit in bits:
+            mask = 1 << bit % 32
+            family[bit // 32] |= story[bit // 32] & mask
+            story[bit // 32] &= ~mask & MASK32
+    return tuple(zlib.crc32(struct.pack(f"<{len(part)}I", *part)) for part in (story, enemy, act))
+
+
+def authority_hash(records):
+    """world_digest_rule::authorityHash: FNV-1a over (scene u16, owner u8, epoch u32) of every owned room in scene order."""
+    hashed = FNV_OFFSET
+    for record in sorted((r for r in records if r.owner != wire.NO_OWNER), key=lambda r: r.id):
+        for value, size in ((record.id, 2), (record.owner, 1), (record.epoch, 4)):
+            for byte in value.to_bytes(size, "little"):
+                hashed = ((hashed ^ byte) * FNV_PRIME) & MASK32
+    return hashed
+
+
+class Digest(Module):
+    """WORLD_DIGEST: once started, one per second built from the flag and authority mirrors. The fake keeps no floor journal or
+    load serial, so those two are the game's own newest values. `flip` toggles one flag bit in what is sent, not in the mirror."""
+
+    HANDLES = {Msg.WORLD_DIGEST: "on_digest"}
+
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self.sending = False
+        self.flip_bit = None
+        self.game = None  # the game's newest WorldDigest record
+        self.received = 0
+        self.sent = 0
+        self._next = 0.0
+
+    def start(self):
+        self.sending, self._next = True, 0.0
+
+    def stop(self):
+        self.sending, self.flip_bit = False, None
+
+    def flip(self, bit=ENEMY_FLAGS.start):
+        self.flip_bit = bit
+
+    def build(self):
+        flags = self.ctx.flags
+        words = list(flags.words)
+        if self.flip_bit is not None:
+            words[self.flip_bit // 32] ^= 1 << self.flip_bit % 32
+        story, enemy, act = flag_crcs(words)
+        game = self.game
+        return wire.WorldDigest.pack(
+            flag_serial=flags.serial, flag_crc=story, enemy_flag_crc=enemy, act_flag_crc=act,
+            authority_hash=authority_hash(self.ctx.authority.table.records.values()),
+            floor_journal=game.floor_journal if game else 0, load_serial=game.load_serial if game else 0,
+            pending_proposals=len(flags.proposed), flags=wire.DIGEST_CAUGHT_UP, scene=self.ctx.peer.place.scene,
+            sender_ms=self.ctx.peer.sender_ms())
+
+    def on_digest(self, frame):
+        self.game = wire.WorldDigest.unpack(frame.payload)
+        self.received += 1
+
+    def tick(self, now):
+        if not self.sending or now < self._next:
+            return
+        self._next = now + DIGEST_PERIOD_S
+        if self.ctx.link.send(Msg.WORLD_DIGEST, self.build(), flags=0):
+            self.sent += 1

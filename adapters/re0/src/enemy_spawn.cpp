@@ -25,18 +25,11 @@ CreateFunction g_originalCreate = nullptr;
 constexpr uint32_t kIndexMask = 0xffff;  // the create reads the record index from the low word of its argument
 constexpr uint32_t kSpawnIdMask = 0xffff;
 
-struct Created {
-    uintptr_t enemy;
-    enemy_spawn::Origin origin;
-};
-std::array<std::optional<Created>, game::kEnemyPoolSlots> g_created{};  // state mode, game thread only
-
 // A created enemy is not in sEnemy's pool when the create returns (every create of the 2026-10-22 runs): its class's
 // start (vtable slot 32) puts it in its class's table later, through one of game::kEnemyTableInserts, which are hooked.
 // Until then it waits here; the insert binds it.
 struct Pending {
     uintptr_t enemy;
-    std::optional<enemy_spawn::Origin> origin;  // state mode
     uint32_t ticks = 0;
 };
 constexpr uint32_t kMaxPendingTicks = 600;  // a created enemy that never takes a slot (an object, not an enemy) is dropped
@@ -49,7 +42,7 @@ std::array<InsertFunction, game::kEnemyTableInserts.size()> g_originalInsert{};
 // The random state this record's creation starts from on every machine, or false when the record is unreadable.
 bool seedFor(void* self, uint32_t index, spawn_seed::State& out) {
     const uint32_t record = index & kIndexMask;
-    if (record >= game::kSpawnRecordCount) return false;
+    if (record >= game::kSpawnTableEntries) return false;
     const uintptr_t address =
         reinterpret_cast<uintptr_t>(self) + game::kSpawnTableOffset + record * game::kSpawnRecordSize;
     uint32_t kind = 0;
@@ -72,35 +65,19 @@ void* createSeeded(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b
     return enemy;
 }
 
-// The spawn record a create was made from, or nothing when the record is unreadable.
-std::optional<enemy_spawn::Origin> originFor(void* self, uint32_t index) {
-    const uint32_t record = index & kIndexMask;
-    uint32_t spawnId = 0;
-    if (record >= game::kSpawnRecordCount ||
-        !game::readMemory(reinterpret_cast<uintptr_t>(self) + game::kSpawnTableOffset + record * game::kSpawnRecordSize +
-                              game::kSpawnRecordIdOffset,
-                          spawnId)) {
-        return std::nullopt;
-    }
-    return enemy_spawn::Origin{static_cast<uint16_t>(record), static_cast<uint16_t>(spawnId & kSpawnIdMask)};
-}
-
 // The enemy took pool slot `slot`. A new enemy in a slot (a room load, or a script spawn reusing a freed slot) starts
 // with nothing left over from the slot's previous enemy: no waiting decision, and it is aligned with the owner's on the
-// next snapshot. State mode: the slot remembers the spawn record its enemy was created from.
-void bind(int slot, const Pending& pending) {
+// next snapshot.
+void bind(int slot) {
     enemy_decision::forgetSlot(static_cast<uint8_t>(slot));
     enemy_state::forgetSlot(static_cast<uint8_t>(slot));
-    std::optional<Created>& created = g_created[static_cast<size_t>(slot)];
-    created.reset();
-    if (pending.origin) created = Created{pending.enemy, *pending.origin};
 }
 
 // Binds a pending enemy that has taken a pool slot; true when it is done waiting (bound, or waited too long).
 bool settle(Pending& pending) {
     const int slot = enemy_registry::slotOf(pending.enemy);
     if (slot != enemy_registry::kNoSlot) {
-        bind(slot, pending);
+        bind(slot);
         return true;
     }
     if (++pending.ticks < kMaxPendingTicks) return false;
@@ -126,7 +103,7 @@ void onInsert(size_t table, void* enemy, uint32_t index) {
                       addressable ? "" : ", not a pool slot here", pending != g_pending.end() ? ", created here" : "");
     }
     if (!addressable || pending == g_pending.end()) return;
-    bind(slot, *pending);
+    bind(slot);
     g_pending.erase(pending);
 }
 
@@ -146,10 +123,10 @@ bool installInserts(std::index_sequence<Tables...>) {
 
 // A create returned this enemy (new, or the one already standing for the record): bound now when it has a slot, else
 // on a later tick.
-void remember(void* enemy, std::optional<enemy_spawn::Origin> origin) {
+void remember(void* enemy) {
     const auto address = reinterpret_cast<uintptr_t>(enemy);
     std::erase_if(g_pending, [address](const Pending& pending) { return pending.enemy == address; });
-    Pending pending{address, origin};
+    Pending pending{address};
     if (!settle(pending)) g_pending.push_back(pending);
 }
 
@@ -165,7 +142,7 @@ Context g_context;
 void* createTracked(void* self, void* edx, uint32_t a, uint32_t index, uint32_t b) {
     void* const enemy = createSeeded(self, edx, a, index, b);
     if (!enemy) return enemy;
-    remember(enemy, state_mode::on() ? originFor(self, index) : std::nullopt);
+    remember(enemy);
     if (state_mode::on()) g_context = {self, a};
     return enemy;
 }
@@ -205,26 +182,12 @@ void* createGuarded(const Context& context, uint32_t index) {
     }
 }
 
-// True when an enemy of the pool was created from the record, or one is about to take its slot (the create would hand
-// that one back, and placing it again would add the room origin twice). A note counts only while its enemy still
-// stands in its slot: records are numbered across rooms, and the note of an enemy that left is never cleared.
-bool alreadyCreated(uint16_t record) {
-    for (size_t slot = 0; slot < g_created.size(); ++slot) {
-        const std::optional<Created>& created = g_created[slot];
-        if (created && created->origin.record == record && created->enemy == enemy_registry::enemyAt(static_cast<int>(slot))) {
-            return true;
-        }
-    }
-    return std::any_of(g_pending.begin(), g_pending.end(),
-                       [record](const Pending& pending) { return pending.origin && pending.origin->record == record; });
-}
-
-// The spawn id the record carries (low word), or false when the record is unreadable.
-bool spawnIdOf(const Context& context, uint16_t record, uint16_t& out) {
+// The spawn id record `record` of the spawn table `table` carries (low word), or false when the record is unreadable.
+bool spawnIdOf(uintptr_t table, uint32_t record, uint16_t& out) {
     uint32_t id = 0;
-    const uintptr_t address = reinterpret_cast<uintptr_t>(context.table) + game::kSpawnTableOffset +
-                              record * game::kSpawnRecordSize + game::kSpawnRecordIdOffset;
-    if (!game::readMemory(address, id)) return false;
+    if (!game::readMemory(table + game::kSpawnTableOffset + record * game::kSpawnRecordSize + game::kSpawnRecordIdOffset, id)) {
+        return false;
+    }
     out = static_cast<uint16_t>(id & kSpawnIdMask);
     return true;
 }
@@ -242,11 +205,15 @@ bool install(bool trace) {
     return create && inserts;
 }
 
-std::optional<Origin> originOf(int slot, uintptr_t enemy) {
-    if (slot < 0 || slot >= game::kEnemyPoolSlots) return std::nullopt;
-    const std::optional<Created>& created = g_created[static_cast<size_t>(slot)];
-    if (!created || created->enemy != enemy) return std::nullopt;
-    return created->origin;
+std::optional<Origin> originOf(uintptr_t enemy) {
+    int32_t record = 0;
+    uint16_t spawnId = 0;
+    if (!enemy || !game::readMemory(enemy + game::kUnitRecordOffset, record) || record < 0 ||
+        static_cast<uint32_t>(record) >= game::kSpawnRecordCount ||
+        !spawnIdOf(game::readPointer(game::kUnitRoomRegistryGlobal), static_cast<uint32_t>(record), spawnId)) {
+        return std::nullopt;
+    }
+    return Origin{static_cast<uint16_t>(record), spawnId};
 }
 
 bool createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId) {
@@ -256,11 +223,12 @@ bool createOnDemand(uint8_t streamSlot, uint16_t record, uint16_t spawnId) {
         return false;
     }
     uint16_t localSpawnId = 0;
-    if (record >= game::kSpawnRecordCount || !spawnIdOf(g_context, record, localSpawnId) || localSpawnId != spawnId) {
+    if (record >= game::kSpawnTableEntries ||
+        !spawnIdOf(reinterpret_cast<uintptr_t>(g_context.table), record, localSpawnId) || localSpawnId != spawnId) {
         logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (record %u is not spawn %u here)", streamSlot, record, spawnId);
         return false;
     }
-    if (alreadyCreated(record)) return false;
+    if (scene::unitObject(record)) return false;
     if (!createGuarded(g_context, record)) {
         logger::writeUnlessRepeated("enemy_spawn: slot %u not created on demand (record %u refused)", streamSlot, record);
         return false;

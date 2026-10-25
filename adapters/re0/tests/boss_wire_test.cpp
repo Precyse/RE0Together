@@ -129,7 +129,7 @@ void testMemberRefusals() {
     using M = wire::Message;
     check(refusedAfter(prepare(), [](M& m) { m.members[0].slot = game::kEnemyPoolSlots; }), "a slot past the pool");
     check(refusedAfter(prepare(), [](M& m) { m.members[0].classIndex = 0; }), "a class that is not a boss");
-    check(refusedAfter(prepare(), [](M& m) { m.members[0].pad = 1; }), "a member pad");
+    check(refusedAfter(prepare(), [](M& m) { m.members[0].spawnRecord = game::kSpawnRecordCount; }), "a spawn record past the table");
     check(refusedAfter(prepare(), [](M& m) { m.members[0].pos[1] = NAN; }), "a non-finite position");
     check(refusedAfter(prepare(), [](M& m) { m.members[0].record[0] = -1; }), "a record state below 0");
     check(refusedAfter(prepare(), [](M& m) { m.members[0].record[1] = 0x1000; }), "an action id past the bound");

@@ -99,6 +99,10 @@ Config loadConfig() {
             config.netTrace = value == "1";
         } else if (key == "auto_join") {
             config.autoJoin = value == "1";
+        } else if (key == "dev_commands") {
+            config.devCommands = value == "1";
+        } else if (key == "live_menus") {
+            config.liveMenus = value != "0";
         } else if (key == "partner_mode") {
             parsePartnerMode(value, config);
         } else if (key == "character") {
@@ -113,7 +117,8 @@ Config loadConfig() {
     }
     logger::write("config: port=%u trace=%d vtables=%zu coop=%d overlay=%d net_trace=%d auto_join=%d", config.port, config.trace,
                   config.traceVtables.size(), config.coop, config.overlay, config.netTrace, config.autoJoin);
-    logger::write("config: partner_mode=%s", partnerModeName(config.partnerMode));
+    logger::write("config: partner_mode=%s live_menus=%d dev_commands=%d", partnerModeName(config.partnerMode),
+                  config.liveMenus, config.devCommands);
     logger::write("config: character=%s outfit_rebecca=%02x outfit_billy=%02x", character_owner::name(config.hostCharacter),
                   config.outfit[static_cast<size_t>(character_owner::Character::Rebecca)],
                   config.outfit[static_cast<size_t>(character_owner::Character::Billy)]);

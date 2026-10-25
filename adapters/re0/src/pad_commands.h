@@ -9,6 +9,7 @@ namespace pad_commands {
 struct Buttons {
     bool change;
     bool trace;
+    bool rescue;  // both stick clicks (L3 and R3) held on one controller; the game still sees them
 };
 
 // Points the game's XInputGetState import at the filter. False when the slot is empty.
@@ -19,7 +20,7 @@ void uninstall();
 // While set, the game reads the command buttons as released.
 void setHidden(bool hidden);
 
-// The command buttons on any controller, as last read by the game (any thread).
+// The command buttons (and the rescue chord's two) on any controller, as last read by the game (any thread).
 Buttons pressed();
 
 }  // namespace pad_commands

@@ -4,13 +4,17 @@
 
 #include <dbghelp.h>
 
+#include <array>
 #include <atomic>
 #include <cstdio>
 #include <cwchar>
 #include <string>
 
+#include "game_tick.h"
+#include "hang_rule.h"
 #include "log.h"
 #include "paths.h"
+#include "window_focus.h"
 
 namespace {
 
@@ -21,10 +25,19 @@ constexpr size_t kNameLength = 64;
 constexpr size_t kLineLength = 160;
 constexpr ULONG_PTR kAccessWrite = 1;    // EXCEPTION_RECORD::ExceptionInformation[0] of an access violation
 constexpr ULONG_PTR kAccessExecute = 8;
+constexpr DWORD kHangCode = 0xE0484E47;  // "HNG" after the E0 prefix: the synthetic exception code of a hang dump
+constexpr DWORD kHangPollMs = 1000;
+constexpr uint32_t kMsPerSecond = 1000;
+constexpr uint32_t kHangSeconds = hang_rule::kHangMs / kMsPerSecond;
+constexpr size_t kStackWords = 16;        // logged from the hung thread's stack pointer
+constexpr size_t kStackLineLength = 256;
 
 LPTOP_LEVEL_EXCEPTION_FILTER g_previous = nullptr;
 std::atomic<bool> g_writing{false};       // a crash inside the dump writer must not recurse
 std::atomic<bool> g_caughtDumped{false};  // one dump of a caught exception per session
+std::atomic<uint32_t> g_lastBeatMs{0};     // GetTickCount() of the last drawn frame, 0 before the first
+std::atomic<DWORD> g_frameThread{0};       // the thread of the last heartbeat
+std::atomic<bool> g_threadsLogged{false};
 
 std::wstring dumpPath(const wchar_t* prefix) {
     SYSTEMTIME t;
@@ -35,12 +48,12 @@ std::wstring dumpPath(const wchar_t* prefix) {
     return coopDirectory() + name;
 }
 
-// Writes the dump and logs "<what> ... dump written to <path>".
-void writeDump(EXCEPTION_POINTERS* info, const wchar_t* prefix, const char* what) {
+// Writes the dump, naming `threadId` as the thread that raised `info`, and logs "<what>, dump written to <path>".
+void writeDump(EXCEPTION_POINTERS* info, DWORD threadId, const wchar_t* prefix, const char* what) {
     const std::wstring path = dumpPath(prefix);
     HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return;
-    MINIDUMP_EXCEPTION_INFORMATION exception{GetCurrentThreadId(), info, FALSE};
+    MINIDUMP_EXCEPTION_INFORMATION exception{threadId, info, FALSE};
     const BOOL written =
         MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file, kDumpType, &exception, nullptr, nullptr);
     CloseHandle(file);
@@ -78,9 +91,88 @@ LONG WINAPI onCrash(EXCEPTION_POINTERS* info) {
         char what[kLineLength];
         snprintf(what, sizeof(what), "exception 0x%08lx at 0x%p", info->ExceptionRecord->ExceptionCode,
                  info->ExceptionRecord->ExceptionAddress);
-        writeDump(info, L"crash", what);
+        writeDump(info, GetCurrentThreadId(), L"crash", what);
     }
     return g_previous ? g_previous(info) : EXCEPTION_CONTINUE_SEARCH;
+}
+
+// The registers of a thread caught mid-stall and the words on top of its stack.
+struct StalledThread {
+    CONTEXT context;
+    std::array<DWORD, kStackWords> stack;
+    size_t stackWords;
+};
+
+// Suspends `threadId` just long enough to read its registers and stack; resumed before anything logs or dumps, as the
+// suspended thread may hold the log's lock or the heap's.
+bool freeze(DWORD threadId, StalledThread& out) {
+    HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, threadId);
+    if (!thread) return false;
+    out.context = {};
+    out.context.ContextFlags = CONTEXT_FULL;
+    out.stackWords = 0;
+    bool read = false;
+    if (SuspendThread(thread) != static_cast<DWORD>(-1)) {
+        read = GetThreadContext(thread, &out.context) != 0;
+        SIZE_T got = 0;
+        if (read && ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(out.context.Esp),
+                                      out.stack.data(), sizeof(out.stack), &got)) {
+            out.stackWords = got / sizeof(DWORD);
+        }
+        ResumeThread(thread);
+    }
+    CloseHandle(thread);
+    return read;
+}
+
+void logStack(const StalledThread& stalled) {
+    char line[kStackLineLength];
+    int length = snprintf(line, sizeof(line), "crash_dump: stack at 0x%08lx:", stalled.context.Esp);
+    for (size_t i = 0; i < stalled.stackWords && length > 0 && static_cast<size_t>(length) < sizeof(line); ++i) {
+        length += snprintf(line + length, sizeof(line) - length, " %08lx", stalled.stack[i]);
+    }
+    logger::write("%s", line);
+}
+
+// The stall's minidump: the hung thread is the "exception" thread, stopped at its current instruction.
+void dumpHang(DWORD threadId) {
+    StalledThread stalled;
+    if (!freeze(threadId, stalled)) {
+        logger::write("crash_dump: no frame for %u s, thread %lu unreadable, no dump", kHangSeconds, threadId);
+        return;
+    }
+    EXCEPTION_RECORD record{};
+    record.ExceptionCode = kHangCode;
+    record.ExceptionAddress = reinterpret_cast<PVOID>(stalled.context.Eip);
+    EXCEPTION_POINTERS pointers{&record, &stalled.context};
+    char what[kLineLength];
+    snprintf(what, sizeof(what), "no frame for %u s (thread %lu eip 0x%08lx = %s)", kHangSeconds, threadId,
+             stalled.context.Eip, moduleOffset(record.ExceptionAddress).c_str());
+    writeDump(&pointers, threadId, L"hang", what);
+    logStack(stalled);
+}
+
+DWORD WINAPI hangWatchThread(LPVOID) {
+    hang_rule::HangWatch watch;
+    uint32_t seenBeat = 0;
+    for (;;) {
+        Sleep(kHangPollMs);
+        const uint32_t beat = g_lastBeatMs.load(std::memory_order_relaxed);
+        if (beat != 0 && beat != seenBeat) {
+            seenBeat = beat;
+            watch.beat(beat);
+        }
+        if (watch.check(GetTickCount(), gameIsForeground()) == hang_rule::Verdict::Dump) {
+            dumpHang(g_frameThread.load(std::memory_order_relaxed));
+        }
+    }
+}
+
+// Once the game tick has a thread: names both, so the log shows whether the frame is drawn on the game thread.
+void logThreads(DWORD frameThread) {
+    const DWORD gameThread = game_tick::gameThreadId();
+    if (!gameThread || g_threadsLogged.exchange(true)) return;
+    logger::write("crash_dump: frame thread %lu, game tick thread %lu", frameThread, gameThread);
 }
 
 }  // namespace
@@ -98,8 +190,20 @@ LONG reportCaught(EXCEPTION_POINTERS* info, const char* what) {
     const EXCEPTION_RECORD& record = *info->ExceptionRecord;
     logger::write("%s raised exception 0x%08lx at 0x%p (%s)%s", what, record.ExceptionCode, record.ExceptionAddress,
                   moduleOffset(record.ExceptionAddress).c_str(), accessDetail(record).c_str());
-    if (!g_caughtDumped.exchange(true)) writeDump(info, L"caught", "caught exception");
+    if (!g_caughtDumped.exchange(true)) writeDump(info, GetCurrentThreadId(), L"caught", "caught exception");
     return EXCEPTION_EXECUTE_HANDLER;
+}
+
+void heartbeat() {
+    const DWORD thread = GetCurrentThreadId();
+    g_frameThread.store(thread, std::memory_order_relaxed);
+    g_lastBeatMs.store(GetTickCount(), std::memory_order_relaxed);
+    if (!g_threadsLogged.load(std::memory_order_relaxed)) logThreads(thread);
+}
+
+void startHangWatch() {
+    HANDLE thread = CreateThread(nullptr, 0, hangWatchThread, nullptr, 0, nullptr);
+    if (thread) CloseHandle(thread);
 }
 
 }  // namespace crash_dump

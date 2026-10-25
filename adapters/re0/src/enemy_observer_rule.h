@@ -3,11 +3,13 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "enemy_follow_rule.h"
 #include "enemy_observer_wire.h"
 #include "enemy_policy.h"
+#include "enemy_spawn.h"
 #include "pose_timeline.h"
 #include "position_blend.h"
 #include "stream_clock.h"
@@ -72,13 +74,28 @@ constexpr Refusal refusalOf(const Header& header, uint8_t senderSlot, uint8_t ho
 struct LocalEnemy {
     uint8_t classIndex = 0;
     uint16_t spawnId = 0;
+    uint16_t record = 0;  // the spawn record it was created from: the engine's identity of the enemy on both machines
 
     bool operator==(const LocalEnemy&) const = default;
 };
 
-// A stream entry is applied to the local enemy only when both created the same spawn of the same class.
+constexpr int kNoPoolSlot = -1;
+
+// The pool slot of the enemy created from spawn record `record`, among the spawns of this machine's pool enemies (one per
+// pool slot, nothing for an empty slot): the stream entry's own pool slot plays no part, the two machines' pools need
+// not agree.
+template <size_t Slots>
+constexpr int slotOfRecord(const std::array<std::optional<enemy_spawn::Origin>, Slots>& origins, uint16_t record) {
+    for (size_t slot = 0; slot < Slots; ++slot) {
+        if (origins[slot] && origins[slot]->record == record) return static_cast<int>(slot);
+    }
+    return kNoPoolSlot;
+}
+
+// A stream entry is applied to the local enemy only when both were created from the same spawn record, of the same class
+// and spawn id. The pool slots of the two machines need not agree.
 constexpr bool bound(const LocalEnemy& local, const PoseEntry& entry) {
-    return local.classIndex == entry.classIndex && local.spawnId == entry.spawnId;
+    return local.classIndex == entry.classIndex && local.spawnId == entry.spawnId && local.record == entry.spawnRecord;
 }
 
 // The record words are written only once the simulator's enemy has left its setup state.
@@ -96,6 +113,7 @@ constexpr Life lifeOf(uint8_t flags) {
 // ---- Authority change --------------------------------------------------------------------------------------------
 
 constexpr uint32_t kHandOverWaitMs = 2000;  // the old simulator is gone but nobody has claimed the room yet: hold this long
+constexpr uint32_t kAdoptMaxAgeMs = 3000;   // a hand-over adopts the newest received sample of an enemy only when it is this fresh
 
 // How the loaded room stands for this machine: whose stream it shows, or that it runs the room itself.
 struct Role {
@@ -124,6 +142,9 @@ constexpr RoleChange roleChange(const Role& before, const Role& now, uint32_t wa
     }
     return RoleChange::Restart;
 }
+
+// True when a sample that arrived at `arrivalMs` is fresh enough for a hand-over to take over (wrap-safe).
+constexpr bool adoptable(uint32_t nowMs, uint32_t arrivalMs) { return nowMs - arrivalMs <= kAdoptMaxAgeMs; }
 
 enum class Start : uint8_t {
     Corpse,  // dead: its own update plays it out from the record the stream left
@@ -170,11 +191,12 @@ constexpr Fate fateOfRequest(const Simulator& simulator, bool alreadyForwarded) 
 constexpr size_t kMaxCreatesPerFrame = 4;
 constexpr uint32_t kCreateSlotIntervalMs = 1000;
 
-// A living Observer-class enemy of the stream whose pool slot holds no enemy here (a script spawn this machine has not
-// run, a late arrival) is created natively from its spawn record.
-inline bool createWanted(bool slotEmpty, const PoseEntry& entry) {
+// A living Observer-class enemy of the stream whose spawn record no enemy here was created from (a script spawn this
+// machine has not run, a late arrival) is created natively from that record, whichever pool slot the record's enemy
+// stands in on the other machine.
+inline bool createWanted(bool recordHere, const PoseEntry& entry) {
     constexpr uint8_t kLifeFlags = enemy_observer_wire::kFlagAlive | enemy_observer_wire::kFlagTerminal | enemy_observer_wire::kFlagRemoved;
-    return slotEmpty && (entry.flags & kLifeFlags) == enemy_observer_wire::kFlagAlive &&
+    return !recordHere && (entry.flags & kLifeFlags) == enemy_observer_wire::kFlagAlive &&
            enemy_policy::kClasses[entry.classIndex].policy == Policy::Observer;
 }
 
@@ -353,6 +375,12 @@ public:
         shown.reset = pending_;
         pending_ = Reset::None;
         return shown;
+    }
+
+    // The newest sample received, whatever has been shown: what a hand-over adopts. Nothing before the first push.
+    std::optional<Sample> newest() const {
+        if (samples_.empty()) return std::nullopt;
+        return samples_.back();
     }
 
     // The state at simulator time `target` between two samples.

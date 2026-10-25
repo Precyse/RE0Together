@@ -29,25 +29,28 @@ constexpr uint32_t nextToken(uint32_t previous, uint8_t slot) {
 
 // ---- Members against what this machine has -----------------------------------------------------------------------
 
-// The enemy standing in a member's pool slot here, as `enemy_observer::snapshot` reads it.
+// The enemy here that was created from a member's spawn record, as `enemy_observer::snapshot` reads it.
 struct Local {
     bool present = false;
     uint8_t classIndex = 0;
     uint16_t spawnId = 0;
     int16_t hp = 0;
+    uint16_t spawnRecord = 0;
 };
 
 // Ok: the same enemy, alive. Dead: the same enemy, already dead here (it died while the old authority was frozen).
-// Missing: the slot holds no replicated enemy. Mismatch: another class or spawn stands in the slot.
+// Missing: no replicated enemy was created from the record. Mismatch: it is another class or spawn.
 enum class Fit : uint8_t { Ok, Dead, Missing, Mismatch };
 
 constexpr Fit fitOf(const wire::Member& member, const Local& local) {
     if (!local.present) return Fit::Missing;
-    if (local.classIndex != member.classIndex || local.spawnId != member.spawnId) return Fit::Mismatch;
+    if (local.classIndex != member.classIndex || local.spawnId != member.spawnId || local.spawnRecord != member.spawnRecord) {
+        return Fit::Mismatch;
+    }
     return local.hp > 0 ? Fit::Ok : Fit::Dead;
 }
 
-// A prepare is confirmed when every member is the enemy standing in its slot here (or already dead).
+// A prepare is confirmed when every member is the enemy created from its record here (or already dead).
 inline bool acceptsPrepare(std::span<const wire::Member> members, std::span<const Local> locals) {
     if (members.size() != locals.size()) return false;
     for (size_t i = 0; i < members.size(); ++i) {

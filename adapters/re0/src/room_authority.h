@@ -25,6 +25,10 @@ void resendClaims();
 // Any thread: the rooms this machine owns, as the CLAIMs it would send (what JOIN_EXTRAS carries to a joiner).
 std::vector<room_authority_wire::AuthMessage> claims();
 
+// Any thread: a hash of the whole table, (scene, owner, epoch) of every owned room in scene order; equal on both machines
+// when their tables agree (what the world digest compares).
+uint32_t digest();
+
 // Any thread: claims `sender` made, handed over in a batch (JOIN_EXTRAS), judged by the table like the CLAIM messages.
 void applyClaims(uint8_t sender, const std::vector<room_authority_wire::AuthMessage>& batch);
 

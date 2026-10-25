@@ -66,13 +66,14 @@ struct Header {
 static_assert(sizeof(Header) == 16);
 static_assert(std::is_trivially_copyable_v<Header>);
 
-// One boss member of a prepare: the enemy in pool slot `slot` as the old authority froze it.
+// One boss member of a prepare: the enemy in pool slot `slot` as the old authority froze it. The other machine finds it
+// by `spawnRecord`, the spawn record the enemy was created from (its pool slot there may differ).
 struct Member {
     uint8_t slot;
     uint8_t classIndex;  // index into enemy_policy::kClasses, one of the boss classes
     uint16_t spawnId;
     int16_t hp;
-    uint16_t pad;        // zero
+    uint16_t spawnRecord;
     float pos[3];
     uint32_t quat;       // smallest three, pose_wire::packQuat
     int32_t record[4];   // behaviour record +0x67a4 {state, action id, a, b}
@@ -96,7 +97,8 @@ constexpr bool bossClass(uint8_t classIndex) {
 constexpr uint8_t maskOf(size_t count) { return static_cast<uint8_t>((1u << count) - 1u); }
 
 inline bool valid(const Member& member) {
-    return member.slot < game::kEnemyPoolSlots && bossClass(member.classIndex) && member.pad == 0 &&
+    return member.slot < game::kEnemyPoolSlots && bossClass(member.classIndex) &&
+           member.spawnRecord < game::kSpawnRecordCount &&
            enemy_lease_wire::finite(member.pos) && enemy_lease_wire::recordFits(member.record);
 }
 

@@ -18,6 +18,7 @@
 #include "room_authority_wire.h"
 #include "scene.h"
 #include "state_net.h"
+#include "world_digest_rule.h"
 
 namespace {
 
@@ -173,6 +174,17 @@ std::vector<room_authority_wire::AuthMessage> claims() {
 }
 
 void resendClaims() { sendClaims(claims()); }
+
+uint32_t digest() {
+    std::vector<world_digest_rule::AuthorityEntry> entries;
+    std::lock_guard lock(g_mutex);
+    for (uint8_t slot = 0; slot < room_authority_wire::kSlotLimit; ++slot) {
+        for (const AuthMessage& claim : g_table.claimsOf(slot)) {
+            entries.push_back({static_cast<uint16_t>(claim.id), claim.owner, claim.epoch});
+        }
+    }
+    return world_digest_rule::authorityHash(std::move(entries));
+}
 
 void applyClaims(uint8_t sender, const std::vector<room_authority_wire::AuthMessage>& batch) {
     for (const AuthMessage& claim : batch) apply(room_authority_wire::kMsgClaim, sender, claim);

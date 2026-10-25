@@ -52,6 +52,10 @@ void run(const DoorChange& change);
 // like a local door: a dormant room that holds only the partner's character is freed first so the door loads it fresh.
 void runFollow(const DoorChange& change);
 
+// Game thread, any mode (the rescue reload): starts `change` for this machine's own character like a local door, in the
+// room it already stands in, and tells nobody: the partner stays where it is and the door is not played on both machines.
+void runRescue(const DoorChange& change);
+
 // Any thread: the door running here is played on both machines (a TEAM door taken together: this machine's, sent while
 // together, or the peer's run here). A join teleport's door is not.
 bool sharedDoor();

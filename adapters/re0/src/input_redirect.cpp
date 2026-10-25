@@ -4,6 +4,7 @@
 #include "game.h"
 #include "game_tick.h"
 #include "hooks.h"
+#include "live_menus.h"
 #include "log.h"
 #include "net_pad.h"
 #include "puppet.h"
@@ -30,7 +31,7 @@ Route routeFor(uintptr_t player) {
     switch (character_owner::controlOf(character_owner::identify(player))) {
         case character_owner::Control::Remote: return Route::Remote;
         case character_owner::Control::Locked: return Route::Blocked;
-        default: return Route::Real;
+        default: return live_menus::inputHeld() ? Route::Blocked : Route::Real;  // its player is in a live menu
     }
 }
 

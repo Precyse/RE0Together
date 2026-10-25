@@ -29,7 +29,7 @@ from fake_peer.session import SessionFlows
 from fake_peer.shaper import OUT, Shaper
 from fake_peer.sources import Sources
 from fake_peer.story import Story
-from fake_peer.world import Flags, Items, Props
+from fake_peer.world import Digest, Flags, Items, Props
 
 TICK_S = 0.005
 SESSION_TIMEOUT_S = 60.0
@@ -37,6 +37,7 @@ GAME_START_TIMEOUT_S = 1800.0  # the stand-in is ready when the game starts, whi
 DEFAULT_WAIT_FRAME_S = 10.0
 RUN_FOLDER_FORMAT = "%Y%m%d-%H%M%S"
 ADAPTER_LOG = Path("coop") / "adapter.log"
+DEV_COMMAND_FILE = Path("coop") / "cmd.txt"
 FAKE_PEER_DIR = Path("coop") / "fake_peer"
 MODE_LINE = re.compile(r"^config: partner_mode=(input|state)")
 SEATS = ("guest", "host")
@@ -76,6 +77,7 @@ class Options:
         self.input_mode = values.get("input_mode", False)
         self.seconds = values.get("seconds")
         self.round = values.get("round")
+        self.dev_commands = values.get("dev_commands", False)  # the game runs with adapter.ini dev_commands=1
 
 
 def check_needs(scenario, options):
@@ -143,11 +145,12 @@ class Context:
         self.contact = Contact(self)
         self.items = Items(self)
         self.flags = Flags(self)
+        self.digest = Digest(self)
         self.props = Props(self)
         self.boss = Boss(self)
         self.story = Story(self)
         self.modules = [self.peer, self.remote, self.rooms, self.authority, self.sources, self.flows, self.enemies, self.contact,
-                        self.items, self.flags, self.props, self.boss, self.story]
+                        self.items, self.flags, self.digest, self.props, self.boss, self.story]
         for module in self.modules:
             self.dispatcher.register(module)
         self._ticker = threading.Thread(target=self._tick_loop, daemon=True)
@@ -351,6 +354,15 @@ class Context:
     def add_gates(self, gate_list):
         self.gates.extend(gate_list)
 
+    def dev_command(self, text):
+        """Writes one developer command into the game's coop\\cmd.txt (dev_command_rule.h) for the adapter to take within a
+        second. False, and nothing written, unless the run says the game polls it (--dev-commands) and has a game folder."""
+        game = None if self.options.no_game or not self.options.dev_commands else game_folder(self.options)
+        if game is None:
+            return False
+        (game / DEV_COMMAND_FILE).write_text(text + "\n", encoding="utf-8")
+        return True
+
     def skip(self, gate_id, reason):
         self.skipped[gate_id] = reason
 
@@ -379,8 +391,8 @@ class Context:
 
     def evidence(self):
         mirrors = {"authority": self.authority.table, "rooms": self.rooms, "enemies": self.enemies, "contact": self.contact,
-                   "flags": self.flags, "items": self.items, "props": self.props, "boss": self.boss, "flows": self.flows,
-                   "story": self.story, "remote": self.remote, "peer": self.peer}
+                   "flags": self.flags, "digest": self.digest, "items": self.items, "props": self.props, "boss": self.boss,
+                   "flows": self.flows, "story": self.story, "remote": self.remote, "peer": self.peer}
         return gate_engine.Evidence(self.store, self.journal, self.marks, mirrors,
                                     self.dumps.new() if self.dumps else ())
 

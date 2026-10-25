@@ -16,8 +16,11 @@ bool menuOpen();
 // Current room phase (room_phase.h), or room_phase::kUnreadable.
 int32_t roomPhase();
 
-// True while a local menu, map, message, save screen or cutscene holds the other player's world (room_phase.h).
-bool uiPausesWorld();
+// True while the pause menu (sGamePause, sUnit stop reason 6) is up.
+bool paused();
+
+// True while sUnit stop reason `reason` is set (game.h kStopReason*).
+bool unitsStopped(uint32_t reason);
 
 // True in plain gameplay: Main phase, no door running, no menu open. Peer doors, placements and the party commands
 // wait for it.

@@ -112,6 +112,8 @@ enum class Counter : size_t {
     SessionReadyEchoes,
     SessionReadyRefused,
     SaveWaits,
+    WorldDigestsSent,
+    WorldDigestsDiverged,
     Count
 };
 

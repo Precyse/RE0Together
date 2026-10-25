@@ -19,11 +19,6 @@ bool readLayer(uintptr_t enemy, size_t layer, uint16_t& motion, float& frame) {
     return game::readMemory(base + game::kMotionNumberOffset, motion) && game::readMemory(base + game::kMotionFrameOffset, frame);
 }
 
-uintptr_t modeFlagsAddress() {
-    const uintptr_t info = game::readPointer(game::kGameInfoGlobal);
-    return info ? info + game::kGameInfoModeFlagsOffset : 0;
-}
-
 void writeHitAttributes(uintptr_t enemy, uint16_t attributes) {
     uint32_t word = 0;
     if (!game::readMemory(enemy + game::kPlayerHitAttributesOffset, word)) return;
@@ -72,7 +67,7 @@ void write(uintptr_t enemy, const enemy_observer_rule::Sample& shown) {
 }
 
 bool holdCharPause(CharPause& held) {
-    const uintptr_t address = modeFlagsAddress();
+    const uintptr_t address = game::modeFlagsAddress();
     uint32_t flags = 0;
     if (!game::readMemory(address, flags)) return false;
     held.wasSet = (flags & game::kCharPauseBit) != 0;

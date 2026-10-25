@@ -3,7 +3,9 @@
 // delay, interpolation, hold, hard resets, stale), and the phase 8 rules: role changes and hand-over starts, hit routing and
 // request fate, creation on demand and its pacing. Exit 0 when every check passes.
 #include <cmath>
+#include <array>
 #include <cstdio>
+#include <optional>
 #include <string>
 
 #include "../src/enemy_observer_rule.h"
@@ -62,13 +64,36 @@ void testBinding() {
     wire::PoseEntry entry{};
     entry.classIndex = 4;
     entry.spawnId = 300;
-    check(rule::bound({4, 300}, entry), "the same class and spawn bind");
-    check(!rule::bound({5, 300}, entry), "another class does not bind");
-    check(!rule::bound({4, 301}, entry), "another spawn does not bind");
+    entry.spawnRecord = 77;
+    check(rule::bound({4, 300, 77}, entry), "the same class, spawn id and record bind");
+    check(!rule::bound({5, 300, 77}, entry), "another class does not bind");
+    check(!rule::bound({4, 301, 77}, entry), "another spawn id does not bind");
+    check(!rule::bound({4, 300, 78}, entry), "another record does not bind");
     const int32_t setup[4] = {0, 1, 0, 0};
     const int32_t running[4] = {2, 1, 0, 0};
     check(!rule::recordApplies(setup), "a record in setup is never written");
     check(rule::recordApplies(running), "a running record is written");
+}
+
+void testBindingByRecord() {
+    constexpr uint16_t kRecord = 77;
+    std::array<std::optional<enemy_spawn::Origin>, 12> origins{};
+    origins[9] = enemy_spawn::Origin{kRecord, 300};
+    origins[3] = enemy_spawn::Origin{kRecord + 1, 301};
+    wire::PoseEntry entry{};
+    entry.slot = 5;  // the simulator keeps this enemy in another pool slot than this machine does
+    entry.classIndex = 4;
+    entry.spawnId = 300;
+    entry.spawnRecord = kRecord;
+    const int local = rule::slotOfRecord(origins, entry.spawnRecord);
+    check(local == 9 && local != entry.slot, "an entry binds to the enemy of its record, not to the equal pool slot");
+    check(local != rule::kNoPoolSlot && rule::bound({4, 300, kRecord}, entry), "and applies to it");
+    entry.slot = 9;  // the equal pool slot holds another record
+    entry.spawnRecord = kRecord + 2;
+    check(rule::slotOfRecord(origins, entry.spawnRecord) == rule::kNoPoolSlot, "a record no local enemy was created from binds to nothing");
+    entry.spawnRecord = kRecord + 1;
+    check(rule::slotOfRecord(origins, entry.spawnRecord) == 3 && !rule::bound({4, 300, kRecord}, entry),
+          "another record in the same pool slot is refused");
 }
 
 void testLife() {
@@ -146,6 +171,29 @@ void testRenderDelayAndInterpolation() {
     check(past.valid && closeTo(past.sample.pos[0], 100.0f), "past the newest sample the last one is held");
     const rule::Shown held = timeline.render(clock, nowFor(1510));
     check(held.valid && closeTo(held.sample.pos[0], 100.0f) && held.sample.hp == 103, "and keeps being held");
+}
+
+void testNewestAndAdopt() {
+    rule::SlotTimeline timeline;
+    const stream_clock::StreamClock clock = readyClock();
+    check(!timeline.newest(), "a timeline with nothing pushed has no newest sample");
+    timeline.push(clock, sampleAt(1000, 1, 0.0f));
+    timeline.push(clock, sampleAt(1050, 2, 50.0f));
+    timeline.push(clock, sampleAt(1100, 3, 100.0f));
+    const rule::Shown shown = timeline.render(clock, nowFor(1060));
+    check(shown.valid && closeTo(shown.sample.pos[0], 60.0f), "the rendered sample lags behind");
+    const std::optional<rule::Sample> newest = timeline.newest();
+    check(newest && newest->seq == 3 && closeTo(newest->pos[0], 100.0f) && newest->hp == 103,
+          "newest is the last sample pushed, not the one rendered");
+    check(timeline.newest()->arrivalMs == 1100 + kArrivalDelayMs, "newest keeps its arrival time for the age check");
+    timeline.push(clock, sampleAt(1075, 4, 75.0f));
+    check(timeline.newest()->seq == 3, "a late sample does not become the newest");
+
+    const uint32_t arrival = 5000;
+    check(rule::adoptable(arrival, arrival), "a sample that just arrived is adopted");
+    check(rule::adoptable(arrival + rule::kAdoptMaxAgeMs, arrival), "one exactly kAdoptMaxAgeMs old is adopted");
+    check(!rule::adoptable(arrival + rule::kAdoptMaxAgeMs + 1, arrival), "an older one falls back to the enemy's own state");
+    check(rule::adoptable(10, 0xfffffff0u), "the age check survives the millisecond clock wrapping");
 }
 
 void testDuplicatesAndOrder() {
@@ -275,17 +323,17 @@ void testCreateWanted() {
     wire::PoseEntry entry{};
     entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Observer));
     entry.flags = wire::kFlagAlive;
-    check(rule::createWanted(true, entry), "a living Observer enemy in an empty slot is created");
-    check(!rule::createWanted(false, entry), "a slot with an enemy is not");
+    check(rule::createWanted(false, entry), "a living Observer enemy whose record no local enemy has is created");
+    check(!rule::createWanted(true, entry), "a record that exists in some pool slot is not created again");
     entry.flags = wire::kFlagAlive | wire::kFlagLeased;
-    check(rule::createWanted(true, entry), "a leased enemy is still living");
+    check(rule::createWanted(false, entry), "a leased enemy is still living");
     entry.flags = wire::kFlagTerminal;
-    check(!rule::createWanted(true, entry), "a corpse is not created");
+    check(!rule::createWanted(false, entry), "a corpse is not created");
     entry.flags = wire::kFlagRemoved;
-    check(!rule::createWanted(true, entry), "a removed enemy is not created");
+    check(!rule::createWanted(false, entry), "a removed enemy is not created");
     entry.flags = wire::kFlagAlive;
     entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Legacy));
-    check(!rule::createWanted(true, entry), "a Legacy class keeps its own spawn");
+    check(!rule::createWanted(false, entry), "a Legacy class keeps its own spawn");
 }
 
 void testCreatePacer() {
@@ -311,10 +359,12 @@ int main() {
     testObservedAndScoped();
     testStreamAcceptance();
     testBinding();
+    testBindingByRecord();
     testLife();
     testSequenceExtension();
     testSampleAndItemConversion();
     testRenderDelayAndInterpolation();
+    testNewestAndAdopt();
     testDuplicatesAndOrder();
     testHardResets();
     testDeadEnemyIsSampledRarely();

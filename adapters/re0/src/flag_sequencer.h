@@ -24,6 +24,14 @@ std::vector<flag_diff::Change> collect(const flag_diff::Words& words);
 // Game thread, host: the serial of the last commit issued, 0 before the first (what JOIN_EXTRAS tells a joiner).
 uint32_t issuedSerial();
 
+// Game thread: the serial of the last commit this machine's flags hold (the host's issued one, a guest's last applied
+// one), 0 before the first. What the world digest is stamped with.
+uint32_t appliedSerial();
+
+// Game thread: flag changes of this machine still in flight, 0 when the flags are settled: a host's proposals not yet
+// ordered, a guest's proposals not yet answered.
+uint32_t pendingCount();
+
 // Game thread, guest: the join snapshot just applied held every commit up to `serial`; the next one in order is
 // serial + 1 and older ones are duplicates. Call after `reset` (flag_sync::applySnapshot).
 void adoptSerial(uint32_t serial);

@@ -16,9 +16,15 @@ overlay=1
 
 `overlay=1` installs the D3D9 hooks and makes a status panel available in the top-left corner; it is hidden until F8 toggles it while the game window is focused. With a partner connected, a one-line status sits in the top-right corner: name, condition, same room or its room, in menu. `overlay=0` installs no D3D hooks.
 
+`live_menus=1` (default; `partner_mode=state` only) keeps the world running on both machines while a player has the inventory, files, an item pickup prompt or the map open with a partner connected: that player's character stands still and can be hit, and the first hit pauses that player's world until the menu closes. The pause menu and the save screen still pause, and hold the partner in the same room for up to 20 s. `live_menus=0` gives the vanilla pause for every menu (`docs/RE0_NOTES.md` "Live menus").
+
+`dev_commands=1` (default off, any `partner_mode`) lets live tests drive the adapter through `<game dir>\coop\cmd.txt`, read and deleted about once a second, one command per line: `stall <ms>` makes the game thread sleep once (1 to 60000 ms; what the 20 s hang watchdog is tested with), `lock` sets the pause bits an ended script leaves behind (the orphan lock the rescue frees after 4 s), `rescue` is one press of the rescue chord (`docs/RE0_NOTES.md` "Hang watchdog", "Rescue chord and orphan lock"). `python toolse0ake_peer run t9_rooms --dev-commands` presses it for the reload gate.
+
 `auto_join=1` drives a guest through the boot, title and load screens into the host's game; without it the guest still follows the host's Continue at game over.
 
 F9 in gameplay, or creating `<game dir>\coop\resync_now.txt`, on either machine makes the guest take a new join snapshot (rooms, inventories, flags, floor items); the file is deleted when taken. A room desync that lasts 10 s does the same by itself. A resync also restarts any sync that stopped on an exception (the "Sync stopped" toast).
+
+The rescue chord, in every partner mode: hold both stick clicks (L3 and R3) of a controller, or F7 on the keyboard, for 3 s. The first press in a room frees what holds the world (followed scripts, a stuck event, a cutscene, leftover pause bits, the other player's menu hold); the second reloads the room through the door that led into it, the partner stays where it is; later ones only show "Quit and rejoin". Pause bits that stay set for 4 s with no script running are freed without a press (`docs/RE0_NOTES.md` "Rescue chord and orphan lock").
 
 ## One-PC test with the echo peer
 

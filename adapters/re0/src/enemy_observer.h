@@ -31,6 +31,14 @@ bool replicates(uintptr_t enemy);
 // linked.
 enemy_observer_rule::Simulator simulatorOf(uint8_t slot);
 
+// Game thread: the simulator's pool slot of the enemy in this machine's pool slot `slot`, as the stream bound it (a stream
+// entry is bound to the local enemy by its spawn record, so the two pool slots may differ); what a HIT_REQUEST names.
+// Nothing while the enemy is not shown from a stream.
+std::optional<uint8_t> streamSlotOf(int slot);
+
+// Game thread: the pool slot here of the enemy created from spawn record `record`, or -1.
+int slotOfRecord(uint16_t record);
+
 // Game thread, for the boss hand-over (phase 15): holds the enemy in pool slot `slot` under the CharPause scope whoever
 // simulates it, so its class update stops while its motion, joints and hit shapes go on. False when the slot is empty.
 // The hold ends with `startAt`, or when the room's role changes.

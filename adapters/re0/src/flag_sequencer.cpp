@@ -145,6 +145,14 @@ std::vector<Change> collect(const Words& words) {
 
 uint32_t issuedSerial() { return g_hostOrder.serial(); }
 
+uint32_t appliedSerial() { return character_owner::isHost() ? g_hostOrder.serial() : g_guestOrder.appliedSerial(); }
+
+uint32_t pendingCount() {
+    if (!character_owner::isHost()) return static_cast<uint32_t>(g_guestOrder.unanswered());
+    std::lock_guard lock(g_mutex);
+    return static_cast<uint32_t>(g_proposals.size());
+}
+
 void adoptSerial(uint32_t serial) { g_guestOrder.adopt(serial); }
 
 void reset() { g_guestOrder.reset(); }

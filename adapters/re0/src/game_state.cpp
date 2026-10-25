@@ -35,7 +35,13 @@ int32_t roomPhase() {
     return control && game::readMemory(control + game::kRoomPhaseCurrentOffset, phase) ? phase : room_phase::kUnreadable;
 }
 
-bool uiPausesWorld() { return menuOpen() || room_phase::pausesWorld(roomPhase()); }
+bool unitsStopped(uint32_t reason) {
+    const uintptr_t units = game::readPointer(game::kUnitSystemGlobal);
+    uint32_t mask = 0;
+    return units && game::readMemory(units + game::kUnitStopMaskOffset, mask) && (mask >> reason & 1) != 0;
+}
+
+bool paused() { return unitsStopped(game::kStopReasonPause); }
 
 bool playing() { return roomPhase() == room_phase::Main && !doorActive() && !menuOpen(); }
 

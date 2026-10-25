@@ -53,9 +53,20 @@ bool leadsAny();
 // Game thread: this machine follows a room script thread the peer leads that is busy (same meaning).
 bool followsAny();
 
-// Any thread (the resync key): at the next script update, in plain gameplay with no busy thread and none at a cutscene
-// op, clears the cutscene pause bits left set (game::kCutscenePauseBits), so the trigger scan runs again.
-void releaseHeldPause();
+// Who asks for the held pause bits to be released: the resync key (cutscene bits) or the rescue chord and its orphan-lock
+// watchdog (the cutscene bits and the event phase bit, game::kEventPhaseBit).
+enum class PauseRelease : uint8_t { ResyncKey, Rescue };
+
+// Any thread: at the next script update, in plain gameplay with no busy thread and none at a cutscene op, clears the pause
+// bits `request` covers that are left set, so the trigger scan runs again. Works with or without a peer.
+void releaseHeldPause(PauseRelease request);
+
+// Game thread: stops following (and leading) every room script thread the way a lost peer does; the threads run on by
+// themselves. The number of followed threads that were ended.
+unsigned releaseFollowed();
+
+// Game thread: some room script thread is running (the engine's own, whoever started it).
+bool scriptThreadActive();
 
 // Hooks the trigger start, the opcode dispatch and the script update.
 bool enable(NetClient& net);

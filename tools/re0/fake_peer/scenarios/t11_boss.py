@@ -42,7 +42,7 @@ def gates(seat):
         gate("T11.1", "the old authority vanishing hands the room over alone",
              line(r"room_authority: scene 0x[0-9a-f]+ owner slot -1 epoch \d+ \(peer left\)",
                   "room_authority: scene 0x%02x owner slot %d epoch %u (%s)", after="vanish"),
-             line(r"enemy_observer: authority -> here", "enemy_observer: authority -> here (scene 0x%02x e%u), %u enemies resumed (%u at step 0)",
+             line(r"enemy_observer: authority -> here", "enemy_observer: authority -> here (scene 0x%02x e%u), %u enemies resumed (%u at step 0, adopted %u)",
                   after="vanish"),
              line(r"boss: token \d+ commit alone", WORD, after="vanish")),
     ]

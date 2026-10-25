@@ -10,9 +10,9 @@
 // A created enemy takes its sEnemy pool slot only in its class's start (vtable slot 32: its class table's insert,
 // game::kEnemyTableInserts), after the create returned; the hooked insert binds it then (a game tick also looks). Bound, it clears its pool slot's waiting decision and
 // follow state (enemy_decision, enemy_state), so a script spawn that reuses a freed slot never inherits the previous
-// enemy's, and the slot remembers which spawn record its enemy was created from: the identity both machines share, which
-// the enemy observers bind a stream entry to the local enemy by (until 2026-10-22 the binding ran at the create, found
-// no slot, and no machine ever streamed an enemy).
+// enemy's. The spawn record an enemy was created from is the engine's own: the create stores the record index in the
+// enemy (game::kUnitRecordOffset), the identity both machines share, which the enemy observers bind a stream entry to the
+// local enemy by.
 namespace enemy_spawn {
 
 // The spawn an enemy was created from.
@@ -25,9 +25,9 @@ struct Origin {
 // every insert with its table, index and pool slot. False when a hook failed.
 bool install(bool trace);
 
-// Game thread: the spawn the enemy `enemy` standing in pool slot `slot` was created from, or nothing when it was not
-// created through the hook (the slot may have been reused by a creation that bypassed it).
-std::optional<Origin> originOf(int slot, uintptr_t enemy);
+// Game thread: the spawn the enemy `enemy` was created from (the record index the create stored in it and that record's
+// spawn id), or nothing when it holds no record below game::kSpawnRecordCount.
+std::optional<Origin> originOf(uintptr_t enemy);
 
 // State mode, game thread: creates the enemy of spawn record `record` (spawn id `spawnId`) that the simulator has in pool
 // slot `streamSlot` and this machine lacks, the way the room load does: the seeded create, the room origin added to its

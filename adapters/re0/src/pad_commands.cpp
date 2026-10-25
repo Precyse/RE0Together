@@ -15,12 +15,14 @@ constexpr uintptr_t kGetStateImportSlot = 0xcb13b0;  // XINPUT1_3 ordinal 2
 constexpr WORD kChangeButton = XINPUT_GAMEPAD_Y;
 constexpr uint8_t kChangeBit = 1;
 constexpr uint8_t kTraceBit = 2;
+constexpr uint8_t kRescueBit = 4;
+constexpr WORD kRescueButtons = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_THUMB;  // both stick clicks, never hidden
 
 using GetStateFn = DWORD(WINAPI*)(DWORD index, XINPUT_STATE* state);
 
 GetStateFn g_original = nullptr;
 std::atomic<bool> g_hidden{false};
-std::array<std::atomic<uint8_t>, XUSER_MAX_COUNT> g_pressed{};  // per controller: kChangeBit | kTraceBit
+std::array<std::atomic<uint8_t>, XUSER_MAX_COUNT> g_pressed{};  // per controller: kChangeBit | kTraceBit | kRescueBit
 
 DWORD WINAPI getStateFilter(DWORD index, XINPUT_STATE* state) {
     const DWORD result = g_original(index, state);
@@ -32,7 +34,8 @@ DWORD WINAPI getStateFilter(DWORD index, XINPUT_STATE* state) {
     XINPUT_GAMEPAD& pad = state->Gamepad;
     const bool change = (pad.wButtons & kChangeButton) != 0;
     const bool trace = pad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
-    g_pressed[index] = static_cast<uint8_t>((change ? kChangeBit : 0) | (trace ? kTraceBit : 0));
+    const bool rescue = (pad.wButtons & kRescueButtons) == kRescueButtons;
+    g_pressed[index] = static_cast<uint8_t>((change ? kChangeBit : 0) | (trace ? kTraceBit : 0) | (rescue ? kRescueBit : 0));
     if (g_hidden) {
         pad.wButtons &= ~kChangeButton;
         pad.bLeftTrigger = 0;
@@ -65,7 +68,7 @@ void setHidden(bool hidden) { g_hidden = hidden; }
 Buttons pressed() {
     uint8_t any = 0;
     for (const auto& bits : g_pressed) any |= bits;
-    return {(any & kChangeBit) != 0, (any & kTraceBit) != 0};
+    return {(any & kChangeBit) != 0, (any & kTraceBit) != 0, (any & kRescueBit) != 0};
 }
 
 }  // namespace pad_commands

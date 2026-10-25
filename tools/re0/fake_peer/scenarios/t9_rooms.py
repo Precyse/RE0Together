@@ -1,15 +1,18 @@
 """T9 rooms: the fake answers the game's TEAM doors (commit), runs its own doors from the door library, races a door, moves into
 rooms the game has named (leave / enter), probes the self-heal and, as a replay authority, leaves a room mid-fight."""
+import re
+
 from fake_peer import wire
-from fake_peer.gates import MISSING, PASS, Latency, Result, Wire, forbid
-from fake_peer.library import OUT
+from fake_peer.gates import FAIL, MISSING, PASS, Latency, Result, Wire, forbid
+from fake_peer.library import IN, OUT
 from fake_peer.scenarios.common import enter_game_room, gate, line, newest_clip, run_room_by_replay
 
 ID = "t9_rooms"
-ROWS = "T9 R2, R2-busy, R3, self-heal, X5"
+ROWS = "T9 R2, R2-busy, R3, self-heal, X5, rescue"
 SEATS = ("guest",)
 SCRATCH_SEATS = ()
-SUMMARY = "doors committed and run from the library, a door race, leave / enter moves, self-heal probe, authority leaving a fight"
+SUMMARY = ("doors committed and run from the library, a door race, leave / enter moves, self-heal probe, authority leaving a fight, "
+           "the game's rescue reload (needs --dev-commands)")
 DOORS = 10
 DOORS_WAIT_S = 900.0
 OWN_DOORS_WAIT_S = 120.0
@@ -19,6 +22,9 @@ HEAL_WAIT_S = 3.0
 LEAVE_MAX_MS = 500.0
 LOAD_WAIT_S = 600.0
 HITS_TO_KILL = 3
+RESCUE_RELEASE_WAIT_S = 15.0
+RESCUE_RELOAD_WAIT_S = 30.0
+RELOAD_LINE = re.compile(r"rescue: reloading scene 0x([0-9a-f]+) through entry \d+")
 
 
 def move_latency_start(evidence):
@@ -34,6 +40,19 @@ def own_doors_ran(evidence):
 def game_doors_answered(evidence):
     rooms = evidence.mirrors["rooms"]
     return Result(PASS if rooms.answered else MISSING, f"{len(rooms.answered)} of the game's doors answered")
+
+
+def reload_sends_room_move(evidence):
+    """After the game's `rescue: reloading scene` line, a ROOM_MOVE from the game names the same scene."""
+    hits = evidence.store.search(RELOAD_LINE, "adapter", evidence.mark("rescue", 0.0))
+    if not hits:
+        return Result(MISSING, "no reload line")
+    line, found = hits[0]
+    scene = int(found.group(1), 16)
+    moves = [wire.RoomMove.unpack(entry.payload) for entry in evidence.journal.frames(wire.Msg.ROOM_MOVE, IN, line.t)]
+    if any(move.scene == scene for move in moves):
+        return Result(PASS, f"ROOM_MOVE to scene 0x{scene:02x} after the reload")
+    return Result(FAIL, f"no ROOM_MOVE to scene 0x{scene:02x} after the reload ({len(moves)} later moves)")
 
 
 def gates(seat):
@@ -61,7 +80,12 @@ def gates(seat):
              forbid=[forbid(r"room_move: Billy self-heal", "room_move: %s self-heal to scene 0x%02x", until="heal")]),
         gate("T9.X5", "the authority leaving a fight hands the enemies over",
              line(r"enemy_observer: authority -> here \(scene 0x[0-9a-f]+ e\d+\), \d+ enemies resumed",
-                  "enemy_observer: authority -> here (scene 0x%02x e%u), %u enemies resumed (%u at step 0)")),
+                  "enemy_observer: authority -> here (scene 0x%02x e%u), %u enemies resumed (%u at step 0, adopted %u)")),
+        gate("T9.rescue", "the second rescue press reloads the room and the game tells the peer it moved",
+             line(r"rescue: released \(", "rescue: released (followed %u", after="rescue"),
+             line(r"rescue: reloading scene 0x[0-9a-f]+ through entry \d+", "rescue: reloading scene 0x%02x through entry %u",
+                  after="rescue"),
+             Wire("ROOM_MOVE after the reload", reload_sends_room_move)),
     ]
 
 
@@ -79,6 +103,7 @@ def run(ctx):
     ctx.rooms.race = False
     move_through_rooms(ctx)
     replay_authority_leaves(ctx)
+    rescue_reload(ctx)
 
 
 def own_doors(ctx):
@@ -129,3 +154,16 @@ def replay_authority_leaves(ctx):
         if other is not None:
             ctx.rooms.move(other)
     ctx.wait(MOVE_GAP_S)
+
+
+def rescue_reload(ctx):
+    """Two presses of the game's rescue chord: the first releases, the second reloads the room through its last door."""
+    ctx.step("Stand in a room you entered through a door; the fake presses the game's rescue chord twice")
+    ctx.mark("rescue")
+    if not ctx.dev_command("rescue"):
+        ctx.skip("T9.rescue", "needs --dev-commands and adapter.ini dev_commands=1")
+        return
+    ctx.wait_log(r"rescue: released \(", RESCUE_RELEASE_WAIT_S, since=ctx.marks["rescue"])
+    ctx.dev_command("rescue")
+    ctx.wait_log(r"rescue: (reloading scene|reload refused)", RESCUE_RELOAD_WAIT_S, since=ctx.marks["rescue"])
+    ctx.wait(HEAL_WAIT_S)

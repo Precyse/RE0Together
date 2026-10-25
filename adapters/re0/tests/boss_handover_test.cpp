@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../src/boss_handover_rule.h"
+#include "../src/door_leave_rule.h"
 
 namespace {
 
@@ -65,6 +66,9 @@ void testPrepareAcceptance() {
     check(rule::acceptsPrepare(members, std::vector<rule::Local>{local(), local(0x40, -1)}), "a member already dead here is accepted");
     check(!rule::acceptsPrepare(members, std::vector<rule::Local>{local(), {}}), "a missing member is refused");
     check(!rule::acceptsPrepare(members, std::vector<rule::Local>{local(), local(0x41)}), "a mismatching member is refused");
+    rule::Local otherRecord = local(0x40);
+    otherRecord.spawnRecord = 9;
+    check(!rule::acceptsPrepare(members, std::vector<rule::Local>{local(), otherRecord}), "the same spawn id from another record is refused");
     check(!rule::acceptsPrepare(members, std::vector<rule::Local>{local()}), "a locals list of another length is refused");
 }
 
@@ -94,6 +98,17 @@ void testFlipPlan() {
     check(rule::resumeHp(600, 450) == 450, "damage dealt while frozen is kept");
     check(rule::resumeHp(300, 600) == 300, "the snapshot's HP never goes up");
     check(rule::resumeHp(0, 0) == 1, "a resumed member always has HP");
+}
+
+void testDeparture() {
+    door_leave_rule::Departure departure;
+    check(!departure.starts(false, true, true), "no door, no departure");
+    check(!departure.starts(true, false, true), "a door out of a room this machine does not run");
+    check(!departure.starts(true, true, false), "a door with the other player elsewhere");
+    check(departure.starts(true, true, true), "the first tick of the door out of a shared, run room");
+    check(!departure.starts(true, true, true), "the door is reported once");
+    check(!departure.starts(false, true, true), "the door ends");
+    check(departure.starts(true, true, true), "the next door is reported again");
 }
 
 void testHappyPath() {
@@ -227,6 +242,7 @@ int main() {
     testPrepareAcceptance();
     testAliveMask();
     testFlipPlan();
+    testDeparture();
     testHappyPath();
     testCancel();
     testTimeouts();

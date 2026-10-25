@@ -2,7 +2,9 @@
 #include <windows.h>
 
 // When the game crashes, writes a minidump to <game dir>\coop\crash-<date>-<time>.dmp and a line to adapter.log,
-// then hands the crash on to whatever filter was installed before (the game's or Steam's reporter).
+// then hands the crash on to whatever filter was installed before (the game's or Steam's reporter). A game that stops
+// drawing frames for hang_rule::kHangMs while its window is foreground gets coop\hang-<date>-<time>.dmp
+// (docs/RE0_NOTES.md "Hang watchdog").
 namespace crash_dump {
 
 // Safe to call again: the game may install its own filter after us, and a second call puts ours back in front.
@@ -13,5 +15,12 @@ void install();
 // The first caught exception of the session is also written to coop\caught-<date>-<time>.dmp.
 // Returns EXCEPTION_EXECUTE_HANDLER.
 LONG reportCaught(EXCEPTION_POINTERS* info, const char* what);
+
+// Render thread, once per drawn frame: the hang watchdog's beat. Logs once, at the first beat after the game tick has
+// run, the frame thread and the game tick thread, so a log shows whether the frame is drawn on the game thread.
+void heartbeat();
+
+// Starts the watchdog thread (polls once a second). Call once; a hang is dumped in every partner mode.
+void startHangWatch();
 
 }  // namespace crash_dump

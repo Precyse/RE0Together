@@ -349,7 +349,7 @@ class ContactAuthorityTests(unittest.TestCase):
 
 class BossTests(unittest.TestCase):
     def prepare(self, **header):
-        member = dict(slot=6, class_index=BOSS, spawn_id=9, hp=500, pos=(400.0, 0.0, 0.0), quat=wire.IDENTITY_PACKED_QUAT, record=(2, 5, 0, 0))
+        member = dict(slot=6, class_index=BOSS, spawn_id=9, spawn_record=2, hp=500, pos=(400.0, 0.0, 0.0), quat=wire.IDENTITY_PACKED_QUAT, record=(2, 5, 0, 0))
         fields = dict(token=(1 << 24) | 1, room_epoch=2, scene=SCENE, phase=wire.BOSS_PREPARE, alive=1)
         return wire.pack_boss(dict(fields, **header), [member])
 

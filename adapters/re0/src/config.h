@@ -24,6 +24,8 @@ struct Config {
     bool netTrace = false;  // record the partner's pad and state packets to coop/net_trace.bin
     bool autoJoin = false;  // guest: drive the menus into the host's game by itself (off: the guest loads any slot by hand)
     PartnerMode partnerMode = PartnerMode::Input;  // adapter.ini partner_mode=input|state
+    bool devCommands = false;  // coop\cmd.txt developer commands for live tests (dev_command.h)
+    bool liveMenus = true;  // live_menus: with a peer, the inventory and map keep the world running (state mode only)
     character_owner::Character hostCharacter = character_owner::Character::Rebecca;  // who the host plays, the guest gets the other
     std::array<uint8_t, character_owner::kCharacterCount> outfit{};  // per Character: chosen model byte, kNoOutfit keeps the save's
     std::vector<VtableTrace> traceVtables;

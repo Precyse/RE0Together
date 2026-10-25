@@ -696,9 +696,14 @@ void watchPeer(uintptr_t script) {
     }
 }
 
-void releaseAll() {
+// Ends every led and followed thread's tracking; the number of followed threads it ended.
+unsigned releaseAll() {
+    unsigned followed = 0;
     for (Slot& slot : g_slots) {
-        if (slot.role == Role::Follows) endFollow(slot, "released, the peer left; runs on by itself");
+        if (slot.role == Role::Follows) {
+            endFollow(slot, "released, the peer left; runs on by itself");
+            ++followed;
+        }
         slot = {};
     }
     g_outgoing.clear();
@@ -707,6 +712,7 @@ void releaseAll() {
     g_pendingStarts.clear();
     g_steps.clear();
     g_overflowed.clear();
+    return followed;
 }
 
 void flushSteps() {
@@ -726,7 +732,9 @@ bool anyState() {
     return !g_pendingStarts.empty() || !g_steps.empty();
 }
 
-std::atomic<bool> g_releasePause{false};  // the resync key asked for releaseHeldPause
+constexpr uint8_t kResyncRequest = 1;
+constexpr uint8_t kRescueRequest = 2;
+std::atomic<uint8_t> g_pauseRequests{0};  // releaseHeldPause asks, as kResyncRequest | kRescueRequest
 
 bool anyThreadAtCutscene(uintptr_t script) {
     for (size_t i = 0; i < game::kScriptThreadCount; ++i) {
@@ -737,18 +745,22 @@ bool anyThreadAtCutscene(uintptr_t script) {
 }
 
 // A cutscene op cut before its last call (event_rule::holdsPause) leaves the event pause set and no trigger fires again.
+// The resync key clears the cutscene bits; a rescue also clears the event phase bit.
 void releaseHeldPauseNow(uintptr_t script) {
-    if (!g_releasePause.exchange(false)) return;
+    const uint8_t requests = g_pauseRequests.exchange(0);
+    if (!requests) return;
+    const char* source = (requests & kRescueRequest) ? "rescue" : "resync key";
     if (!game_state::playing() || event_sync::leadsAny() || event_sync::followsAny() || anyThreadAtCutscene(script)) {
-        logger::write("event_sync: resync key: a script or screen is running, the event pause stays");
+        logger::write("event_sync: %s: a script or screen is running, the event pause stays", source);
         return;
     }
-    const uintptr_t info = game::readPointer(game::kGameInfoGlobal);
+    const uintptr_t address = game::modeFlagsAddress();
     uint32_t flags = 0;
-    if (!info || !game::readMemory(info + game::kGameInfoModeFlagsOffset, flags)) return;
-    const uint32_t held = flags & game::kCutscenePauseBits;
-    if (held) game::writeMemory(info + game::kGameInfoModeFlagsOffset, flags & ~held);
-    logger::write("event_sync: resync key: event pause bits 0x%x %s", held, held ? "cleared" : "were not set");
+    if (!game::readMemory(address, flags)) return;
+    const uint32_t releasable = game::kCutscenePauseBits | ((requests & kRescueRequest) ? game::kEventPhaseBit : 0);
+    const uint32_t held = flags & releasable;
+    if (held) game::writeMemory(address, flags & ~held);
+    logger::write("event_sync: %s: event pause bits 0x%x %s", source, held, held ? "cleared" : "were not set");
 }
 
 void __fastcall updateDetour(void* self, void* edx) {
@@ -757,10 +769,10 @@ void __fastcall updateDetour(void* self, void* edx) {
         checkSlots(script);
         watchPeer(script);
         applyStarts(script);
-        releaseHeldPauseNow(script);
     } else if (anyState()) {
         releaseAll();
     }
+    releaseHeldPauseNow(script);
     g_originalUpdate(self, edx);
     if (!g_outgoing.empty()) flushSteps();
 }
@@ -816,7 +828,13 @@ bool anyBusy(Role role) {
 
 bool leadsAny() { return anyBusy(Role::Leads); }
 
-void releaseHeldPause() { g_releasePause = true; }
+void releaseHeldPause(PauseRelease request) {
+    g_pauseRequests |= request == PauseRelease::Rescue ? kRescueRequest : kResyncRequest;
+}
+
+unsigned releaseFollowed() { return releaseAll(); }
+
+bool scriptThreadActive() { return activeMask(eventScript()) != 0; }
 
 bool followsAny() { return anyBusy(Role::Follows); }
 

@@ -146,7 +146,7 @@ TEAM door into a room with enemies, 5 times (either side).
 | R3: LEAVE_BEHIND, guest takes a door | host `room_move: Billy -> scene 0x.. (leave)` within one network delay, Billy vanishes then; guest walks back: `(enter)` with Billy at the door spot; doors into never-visited rooms without a hitch (no SLOW_FRAME over a frame) | late move, hitch |
 | split save | loads with each character in its room; self-heal line absent in normal play | self-heal line |
 | R1: scripted group door (sh1f, tr0f) with the slower PC 3 s later | thread continues on both; no `Waiting for partner`; no `room_gate:` hold line | hold line |
-| X5: authority leaves a room mid-fight (LEAVE_BEHIND) with zombies, dogs, Hunter-like 39 | other machine `authority -> here ... resumed (n at step 0)`; no snap or freeze | teleport / restart pose |
+| X5: authority leaves a room mid-fight (LEAVE_BEHIND) with zombies, dogs, Hunter-like 39 | other machine `authority -> here ... resumed (n at step 0, adopted m)` with m equal to n after the leaving machine's final round; no snap or freeze | teleport / restart pose |
 | hit from non-authority | its log `hit for slot N sent to slot 0`; authority `hit slot N applied`; HP drops once on both | twice |
 | script spawn not yet run | `created on demand` once for its slot | |
 

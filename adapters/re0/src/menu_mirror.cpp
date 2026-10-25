@@ -14,6 +14,7 @@
 #include "game_tick.h"
 #include "hooks.h"
 #include "inventory_sync.h"
+#include "live_menus.h"
 #include "log.h"
 #include "menu_hold_rule.h"
 #include "net_pad.h"
@@ -60,9 +61,12 @@ void setFrozen(bool frozen) {
 }
 
 // Replaces sUnit::updateAll. Runs once per frame even while frozen, so it also ends the freeze. A peer in another room
-// is not affected by this world, so it is held only while the two are together.
+// is not affected by this world, so it is held only while the two are together. A local screen that holds the world
+// already stops it.
 void __fastcall updateAllDetour(void* self, void* edx) {
-    const bool freeze = anyPeerMenu(menu_hold_rule::holds) && !split_rooms::apart() && !game_state::uiPausesWorld();
+    live_menus::onUnitUpdate();
+    const bool freeze = anyPeerMenu(menu_hold_rule::holds) && !split_rooms::apart() &&
+                        live_menus::localScreen() != live_menu_rule::Screen::Holding;
     if (freeze != g_frozen) setFrozen(freeze);
     if (freeze) return;
     g_originalUpdateAll(self, edx);
@@ -95,14 +99,25 @@ void onFrame(const GameFrame& frame) {
     MenuState state;
     std::memcpy(&state, frame.payload.data(), sizeof(state));
     std::lock_guard lock(g_mutex);
-    menu_hold_rule::observe(g_peerMenus[frame.slot], state.open != 0, state.phase, Clock::now());
+    menu_hold_rule::observe(g_peerMenus[frame.slot], static_cast<live_menu_rule::Screen>(state.open), state.phase, Clock::now());
 }
 
 bool peerMenuOpen() { return anyPeerMenu(menu_hold_rule::isOpen); }
 
+bool releasePeerHold() {
+    std::lock_guard lock(g_mutex);
+    bool dropped = false;
+    for (auto& [slot, menu] : g_peerMenus) {
+        dropped = dropped || menu.holding;
+        menu.holding = false;
+    }
+    return dropped;
+}
+
 void onNetTick(NetClient& net) {
-    const bool open = game_state::uiPausesWorld();
-    const MenuState state{open, static_cast<uint8_t>(open ? game_state::roomPhase() : 0)};
+    const live_menu_rule::Screen screen = live_menus::localScreen();
+    const bool open = screen != live_menu_rule::Screen::None;
+    const MenuState state{static_cast<uint8_t>(screen), static_cast<uint8_t>(open ? game_state::roomPhase() : 0)};
     const auto now = Clock::now();
     const bool changed = state.open != g_lastSent.open || state.phase != g_lastSent.phase;
     if (!changed && !(open && now - g_lastSend >= kResendInterval)) return;

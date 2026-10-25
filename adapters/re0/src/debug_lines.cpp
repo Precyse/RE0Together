@@ -93,6 +93,7 @@ void addStateLines(const Snapshot& s, std::vector<debug_lines::Line>& lines) {
     lines.push_back({L"prop commits", format(L"%u", total(s, Counter::PropCommits)), false});
     lines.push_back({L"session ready sent/echoed/refused", format(L"%u / %u / %u", total(s, Counter::SessionReadySent), total(s, Counter::SessionReadyEchoes), total(s, Counter::SessionReadyRefused)), false});
     lines.push_back({L"saves waited", format(L"%u", total(s, Counter::SaveWaits)), false});
+    lines.push_back({L"digest sent/diverged", format(L"%u / %u", total(s, Counter::WorldDigestsSent), total(s, Counter::WorldDigestsDiverged)), false});
 }
 
 }  // namespace

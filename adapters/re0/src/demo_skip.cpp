@@ -1,5 +1,6 @@
 #include "demo_skip.h"
 
+#include <atomic>
 #include <mutex>
 
 #include "crash_dump.h"
@@ -25,6 +26,11 @@ using SchedulerUpdate = void(__fastcall*)(void* self, void* edx);
 SchedulerUpdate g_original = nullptr;
 std::mutex g_mutex;
 demo_skip_rule::Tracker g_tracker;  // guarded by g_mutex
+
+constexpr uint32_t kPlayingFreshMs = 100;  // a demo counts as playing this long after the scheduler last updated in state 5
+std::atomic<bool> g_playingSeen{false};
+std::atomic<uint32_t> g_playingMs{0};      // the clock at the scheduler's last update in state 5
+std::atomic<bool> g_localSkip{false};      // the rescue asked for the skip branch at the next state-5 update
 
 uint32_t readU32(uintptr_t address) {
     uint32_t value = 0;
@@ -108,6 +114,16 @@ void reportPress() {
 void __fastcall schedulerDetour(void* self, void* edx) {
     const auto scheduler = reinterpret_cast<uintptr_t>(self);
     const uint32_t state = readU32(scheduler + game::kDemoStateOffset);
+    if (state == game::kDemoStatePlaying) {
+        g_playingMs = pose_wire::clockMs();
+        g_playingSeen = true;
+        if (g_localSkip.exchange(false) && takeSkipBranch(scheduler)) {
+            logger::write("demo_skip: skip applied by the rescue");
+            return;
+        }
+    } else {
+        g_localSkip = false;
+    }
     if (!net_pad::active() || state > game::kDemoStatePlaying) {
         std::lock_guard lock(g_mutex);
         g_tracker.end();
@@ -142,6 +158,12 @@ bool enable() {
 }
 
 void uninstall() { hooks::remove(game::kDemoSchedulerUpdateFunction); }
+
+bool skipLocal() {
+    if (!g_playingSeen || pose_wire::clockMs() - g_playingMs > kPlayingFreshMs) return false;
+    g_localSkip = true;
+    return true;
+}
 
 void onDemoStart(uint16_t demoId, uint16_t serial, bool serialMine, bool leads) {
     if (demoId >= demo_skip_wire::kDemoIdLimit) return;

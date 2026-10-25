@@ -14,14 +14,15 @@ CORPSE_PERIOD_S = 1.0
 DEAD_HP = -1
 RATE_TOLERANCE = 0.25
 SPAWN_ID_STEP = 1
-PROBES = ("binding", "epoch", "sender")
+PROBES = ("binding", "epoch", "sender", "slot")
+POOL_SLOTS = 37  # game.h kEnemyPoolSlots
 
 
 class ObservedSlot:
     """What the game's stream said about one pool slot."""
 
     def __init__(self, entry, now):
-        self.class_index, self.spawn_id, self.hp = entry.class_index, entry.spawn_id, entry.hp
+        self.class_index, self.spawn_id, self.spawn_record, self.hp = entry.class_index, entry.spawn_id, entry.spawn_record, entry.hp
         self.first_t = self.last_t = now
         self.poses = 1
         self.terminals = 0
@@ -104,7 +105,7 @@ class Enemies(Module):
 
     def _observe(self, entry, now, reliable):
         slot = self.observed.get(entry.slot)
-        if slot is None or (slot.class_index, slot.spawn_id) != (entry.class_index, entry.spawn_id):
+        if slot is None or (slot.class_index, slot.spawn_id, slot.spawn_record) != (entry.class_index, entry.spawn_id, entry.spawn_record):
             self.observed[entry.slot] = slot = ObservedSlot(entry, now)
             return
         slot.poses += 1
@@ -260,6 +261,17 @@ class Enemies(Module):
         """The last recorded entry of every replayed enemy, by slot."""
         return [self._replay_slots[slot].entry for slot in sorted(self._replay_slots)]
 
+    def send_final(self, scene):
+        """The simulator's last word before it leaves: one reliable round of every replayed enemy as it stands (alive or
+        terminal), which the game that takes the room over adopts. False with nothing replayed."""
+        entries = []
+        for slot in self._replay_slots.values():
+            held = slot.entry._replace(hp=slot.hp)
+            entries.append((held if slot.hp > 0 else held._replace(flags=wire.ENEMY_TERMINAL, hp=DEAD_HP))._asdict())
+        if entries:
+            self.send_batch(scene, entries, reliable=True)
+        return bool(entries)
+
     def tick(self, now):
         if self._replay and not self._paused and self.ctx.link.connected.is_set():
             self._play(now)
@@ -277,7 +289,8 @@ class Enemies(Module):
     # ---- wrong-binding probes ------------------------------------------------------------------------------------
 
     def probe(self, kind):
-        """One batch the game must refuse: another spawn id (entry refused), an old epoch, or a sender that holds nothing."""
+        """One batch the game must refuse: another spawn id (entry refused), an old epoch, or a sender that holds nothing.
+        'slot' is the one it must accept: the right spawn record under another pool slot."""
         if kind not in PROBES:
             raise ValueError(f"unknown probe {kind}")
         scene = self.ctx.peer.place.scene
@@ -292,6 +305,8 @@ class Enemies(Module):
             entry["spawn_id"] = (entry["spawn_id"] + SPAWN_ID_STEP) & 0xFFFF
         if kind == "epoch":
             epoch = (epoch - 1) & 0xFFFFFFFF
+        if kind == "slot":
+            entry["slot"] = (entry["slot"] + 1) % POOL_SLOTS
         fields = dict(sender_ms=self.ctx.peer.sender_ms(), seq=self.ctx.peer.next("enemy_batch"), room_epoch=epoch, scene=scene)
         self.ctx.link.send(Msg.ENEMY_POSE, wire.pack_enemy_batch(fields, wire.EnemyPoseEntry, [entry]), flags=0)
         return True

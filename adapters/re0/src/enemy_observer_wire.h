@@ -47,7 +47,7 @@ static_assert(std::is_trivially_copyable_v<Header>);
 
 // One enemy of ENEMY_POSE.
 struct PoseEntry {
-    uint8_t slot;        // sEnemy pool slot
+    uint8_t slot;        // the sender's sEnemy pool slot (hits name it; the receiver binds by spawnRecord)
     uint8_t classIndex;  // index into enemy_policy::kClasses
     uint8_t flags;
     uint8_t target;      // character the enemy chases, or kNoTarget
@@ -132,7 +132,7 @@ inline bool leaseTokenFits(const PoseEntry& entry) { return ((entry.flags & kFla
 inline bool valid(const PoseEntry& entry) {
     const bool targetOk = entry.target <= kLastTargetCharacter || entry.target == kNoTarget;
     return entry.slot < game::kEnemyPoolSlots && entry.classIndex < enemy_policy::kClassCount &&
-           (entry.flags & ~kKnownFlags) == 0 && targetOk && finite(entry.pos[0]) && finite(entry.pos[1]) &&
+           entry.spawnRecord < game::kSpawnRecordCount && (entry.flags & ~kKnownFlags) == 0 && targetOk && finite(entry.pos[0]) && finite(entry.pos[1]) &&
            finite(entry.pos[2]) && finite(entry.frame0) && leaseTokenFits(entry);
 }
 

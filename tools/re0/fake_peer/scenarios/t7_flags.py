@@ -1,7 +1,9 @@
 """T7 flags: as the guest the fake sends no-op proposals and a crossing proposal for every host commit; as the host it commits
-every proposal, corrects the next one (a lever pulled twice) and skips one serial (the guest must resync)."""
+every proposal, corrects the next one (a lever pulled twice) and skips one serial (the guest must resync). In both seats it
+then sends world digests built from its mirrors: equal ones (nothing may diverge), then one with an enemy flag bit flipped
+(the game must report it and ask for a resync)."""
 from fake_peer import wire
-from fake_peer.gates import FAIL, MISSING, PASS, Result, Wire, forbid
+from fake_peer.gates import FAIL, MISSING, PASS, SOURCE_ADAPTER, Result, Wire, forbid
 from fake_peer.library import IN
 from fake_peer.scenarios.common import enter_game_room, gate, line
 
@@ -9,13 +11,20 @@ ID = "t7_flags"
 ROWS = "T7 normal, F2"
 SEATS = ("guest", "host")
 SCRATCH_SEATS = ("host",)
-SUMMARY = "guest: no-op and crossing proposals; host: commits, a correction on the second lever pull, one skipped serial"
+SUMMARY = ("guest: no-op and crossing proposals; host: commits, a correction on the second lever pull, one skipped serial; "
+           "both: equal world digests, then one with a flipped enemy flag bit")
 PROPOSE_PERIOD_S = 10.0
 SNAPSHOT_WAIT_S = 60.0
 PLAY_S = 180.0
 LOAD_WAIT_S = 600.0
 STEP_WAIT_S = 300.0
 RESYNC_WAIT_S = 20.0
+DIGEST_EQUAL_S = 10.0
+DIGEST_FLIP_WAIT_S = 30.0
+REPAIR_WITHIN_S = 2.0
+MS = 1000.0
+DIVERGED_ENEMY_FLAGS = r"world_digest: diverged \(enemy flags\) at serial \d+"
+DIVERGED_FORMAT = "world_digest: diverged (%s) at serial %u"
 
 
 def empty_commits_answer_proposals(evidence):
@@ -42,7 +51,38 @@ def resync_requested_and_answered(evidence):
     return Result(PASS if answered else FAIL, "SNAPSHOT_REQUEST answered with a JOIN_SNAPSHOT")
 
 
-def gates(seat):
+def digests_exchanged(evidence):
+    digest = evidence.mirrors["digest"]
+    if not digest.sent or not digest.received:
+        return Result(MISSING, f"{digest.sent} digests sent, {digest.received} received")
+    return Result(PASS, f"{digest.sent} digests sent, {digest.received} received")
+
+
+def repair_asked(request):
+    """The game asks for the repair (`request`) within REPAIR_WITHIN_S of reporting the flipped bit."""
+    def judge(evidence):
+        reports = evidence.store.search(DIVERGED_ENEMY_FLAGS, SOURCE_ADAPTER, evidence.mark("digest_flip", 0.0))
+        if not reports:
+            return Result(MISSING, "no divergence line")
+        reported = reports[0][0].t
+        asked = evidence.journal.frames(request, IN, reported, reported + REPAIR_WITHIN_S * MS)
+        detail = f"{wire.type_name(request)} {'within' if asked else 'not within'} {REPAIR_WITHIN_S:.0f} s"
+        return Result(PASS if asked else FAIL, detail)
+    return judge
+
+
+def digest_gates(seat):
+    """The game is the guest when the fake is the host: a guest asks for a snapshot, a host sends RESYNC_REQUEST."""
+    request = wire.Msg.SNAPSHOT_REQUEST if seat == "host" else wire.Msg.RESYNC_REQUEST
+    return [
+        gate("T7.digest-equal", "equal digests never diverge", Wire("digests exchanged", digests_exchanged),
+             forbid=[forbid(r"world_digest: diverged", DIVERGED_FORMAT, since="digest_equal", until="digest_equal_end")]),
+        gate("T7.digest-flip", "a flipped enemy flag bit is reported and a resync asked for",
+             line(DIVERGED_ENEMY_FLAGS, DIVERGED_FORMAT, after="digest_flip"), Wire("repair request", repair_asked(request))),
+    ]
+
+
+def flag_gates(seat):
     if seat == "guest":
         return [
             gate("T7.normal", "the host's commits arrive in order",
@@ -60,6 +100,29 @@ def gates(seat):
     ]
 
 
+def gates(seat):
+    return flag_gates(seat) + digest_gates(seat)
+
+
+def run_digests(ctx):
+    """Both seats end with the digest steps: equal digests for DIGEST_EQUAL_S, then one flipped enemy flag bit."""
+    ctx.step("Stand still while the fake sends equal world digests")
+    ctx.mark("digest_equal")
+    with ctx.lock:
+        ctx.flags.cross = False
+        ctx.digest.start()
+    ctx.wait(DIGEST_EQUAL_S)
+    ctx.mark("digest_equal_end")
+    ctx.step("Stand still while the fake flips one enemy flag bit in its digest")
+    ctx.mark("digest_flip")
+    with ctx.lock:
+        ctx.digest.flip()
+    ctx.wait_log(r"world_digest: diverged", DIGEST_FLIP_WAIT_S, since=ctx.marks["digest_flip"])
+    ctx.wait(REPAIR_WITHIN_S + 1.0)
+    with ctx.lock:
+        ctx.digest.stop()
+
+
 def run_guest(ctx):
     ctx.step("Load a save; open a door, pick a key, pull a lever twice")
     if not enter_game_room(ctx):
@@ -72,6 +135,7 @@ def run_guest(ctx):
         with ctx.lock:
             ctx.flags.propose()
         ctx.wait(PROPOSE_PERIOD_S)
+    run_digests(ctx)
 
 
 def run_host(ctx):
@@ -88,6 +152,7 @@ def run_host(ctx):
     ctx.mark("gap")
     ctx.wait_log(r"flag_seq: gap", STEP_WAIT_S)
     ctx.wait(RESYNC_WAIT_S)
+    run_digests(ctx)
 
 
 def run(ctx):

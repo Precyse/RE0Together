@@ -303,6 +303,8 @@ bool locateItem(uint32_t itemId, const Vec3& around, float reach, Vec3& out) {
     return item && readPosition(item, out);
 }
 
+size_t journalSize() { return g_journal.total(); }
+
 void sendJournal() {
     const std::vector<floor_pending::RoomEvent> events = g_journal.all();
     if (events.empty()) return;

@@ -17,6 +17,7 @@ FIRST_STATE_TYPE = 0x0140
 LAST_STATE_TYPE = 0x017F
 MAX_FRAME_LEN = 1 << 20
 SCENE_LIMIT = 0xAF
+SPAWN_RECORD_LIMIT = 1000  # game.h kSpawnRecordCount: spawn records below this are saved ones, the only identities on the wire
 NO_SCENE = 0xFFFF
 NO_TARGET = 0xFF
 NO_MOTION = 0xFFFF
@@ -80,6 +81,7 @@ class Msg(enum.IntEnum):
     PROP_COMMIT = 0x0174
     FLAG_PROPOSE = 0x0175
     FLAG_COMMIT = 0x0176
+    WORLD_DIGEST = 0x0178
 
 
 # The C++ constant that carries each id: (header under adapters/re0/src or adapters/ds2/src, constant). Messages whose
@@ -124,6 +126,7 @@ CPP_IDS = {
     Msg.PROP_COMMIT: ("prop_wire.h", "kMsgCommit"),
     Msg.FLAG_PROPOSE: ("flag_sequencer_wire.h", "kMsgFlagPropose"),
     Msg.FLAG_COMMIT: ("flag_sequencer_wire.h", "kMsgFlagCommit"),
+    Msg.WORLD_DIGEST: ("world_digest_wire.h", "kMsgWorldDigest"),
 }
 
 
@@ -242,7 +245,7 @@ EnemyLeaseEnd = _layout("EnemyLeaseEnd", "enemy_lease_wire.h", "<IIHBBhH4i3fI",
 PlayerHit = _layout("PlayerHit", "enemy_lease_wire.h", "<IIIHBBHBBB3x3f",
                     "room_epoch sender_ms seq scene slot class_index spawn_id victim kind level point*3")
 BossHeader = _layout("Header", "boss_wire.h", "<IIHBBBBH", "token room_epoch scene phase count alive reason pad")
-BossMember = _layout("Member", "boss_wire.h", "<BBHhH3fI4i", "slot class_index spawn_id hp pad pos*3 quat record*4")
+BossMember = _layout("Member", "boss_wire.h", "<BBHhH3fI4i", "slot class_index spawn_id hp spawn_record pos*3 quat record*4")
 
 TakeRequest = _layout("TakeRequest", "item_wire.h", "<HHII3fHH", "seq scene item_id count pos*3 world_epoch reserved")
 TakeResult = _layout("TakeResult", "item_wire.h", "<IHHBBH", "serial seq scene requester answer reserved")
@@ -252,6 +255,9 @@ PropCommit = _layout("Commit", "prop_wire.h", "<IHBB3ffB3x", "serial scene kind 
 FlagChange = _layout("Change", "flag_diff.h", "<HHII", "word reserved set clear")
 FlagProposeHeader = _layout("ProposeHeader", "flag_sequencer_wire.h", "<HH", "count world_epoch")
 FlagCommitHeader = _layout("CommitHeader", "flag_sequencer_wire.h", "<IBBH", "serial origin reserved count")
+WorldDigest = _layout("WorldDigest", "world_digest_wire.h", "<IIIIIHHBBHI",
+                      "flag_serial flag_crc enemy_flag_crc act_flag_crc authority_hash floor_journal load_serial "
+                      "pending_proposals flags scene sender_ms")
 
 # Sizes the adapter fixes for payloads that carry no layout here.
 JOIN_SNAPSHOT_SIZE = 2 * 56 + 128 + FLAG_WORDS * 4
@@ -263,6 +269,7 @@ RESULT_COMMIT, RESULT_BUSY, RESULT_OTHER_ROOM = range(3)
 RESULT_TIMEOUT = len(DOOR_RESULTS) - 1
 REASON_TEAM = 0
 READY, ECHO = 0, 1
+DIGEST_CAUGHT_UP = 1  # WorldDigest.flags: the sender holds the world
 ANSWER_GRANTED, ANSWER_TAKEN, ANSWER_CLAIMED, ANSWER_STALE = 0, 1, 2, 3
 ANSWER_TIMED_OUT = 4  # the asking machine's own timeout: never on the wire
 

@@ -169,6 +169,17 @@ constexpr uintptr_t kDoorLoadRoomOffset = 0x20;  // u32 room (scene id) the runn
 constexpr uintptr_t kDoorFinishCheckFunction = 0x551c70;
 constexpr uintptr_t kRoomControlGlobal = 0xdcbeb4;         // sRoomControl*
 constexpr uintptr_t kRoomPhaseCurrentOffset = 0xb8 + 0x14;  // phase manager +0x14: room_phase::Phase
+constexpr uintptr_t kRoomPhaseRequestedOffset = 0xb8 + 0x18;  // phase manager +0x18: the phase asked for, kNoRoomPhase when none
+constexpr uintptr_t kRoomPhaseDepthOffset = 0xb8 + 0x3c;      // phase manager +0x3c: depth of the stack of pushed phases
+constexpr int32_t kNoRoomPhase = -1;
+// sRoomControl::popPhase: thiscall, no arguments; `add ecx,0xb8; jmp` to the phase manager's pop (`dec [ecx+0x3c]`, then
+// requested = stack[depth]), which has no depth guard: a pop at depth 0 reads below the stack. The script op EventPhaseOut
+// 0x56cd10 ends an event with it (after clearing sGameInfo +0x50 bits kPlayerPauseBit and kEventPhaseBit).
+constexpr uintptr_t kRoomPopPhaseFunction = 0x610df0;
+constexpr std::array<uint8_t, 7> kRoomPopPhaseBytes = {0x81, 0xc1, 0xb8, 0x00, 0x00, 0x00, 0xe9};
+constexpr uintptr_t kPhaseManagerPopFunction = 0x60a330;
+constexpr std::array<uint8_t, 14> kPhaseManagerPopBytes = {0xff, 0x49, 0x3c, 0x8b, 0x41, 0x3c, 0x8b,
+                                                           0x44, 0x81, 0x1c, 0x89, 0x41, 0x18, 0xc3};
 // sRoomControl::requestPhase: thiscall (phase), ret 4. The vanilla V requests Change (9), which zaps to the partner
 // and loads its room when the two are apart (player think 0x4fed48 / 0x50395e).
 constexpr uintptr_t kRequestRoomPhaseFunction = 0x610e00;
@@ -435,10 +446,15 @@ using RandomState = std::array<uint32_t, 4>;
 // sEnemy's create (thiscall (a, record index, b), ret 0xc, returns the enemy): builds an enemy from the room's spawn
 // record this + 0x30 + index * 0x5c (index below 0x4e8) and ends in the class's spawn init (vtable slot 36), which reads
 // the record (+0x4 kind, +0x10 spawn id, +0x40 first-spawn marker, +0x50 saved variant) and rolls the random state.
+// The table is the unit registry [kUnitRoomRegistryGlobal]. Records 0..999 are the spawns of the game's rooms, written
+// into the save; 1000 and up are a free list. The create stores its record index in the enemy (setter 0x5295c0, getter
+// 0x526510) at kUnitRecordOffset, -1 for every other sGameChara unit, and kUnitObjectFunction finds the unit of a record.
 constexpr uintptr_t kEnemyCreateFunction = 0x410bb0;
 constexpr uintptr_t kSpawnTableOffset = 0x30;
 constexpr uintptr_t kSpawnRecordSize = 0x5c;
-constexpr uint32_t kSpawnRecordCount = 0x4e8;
+constexpr uint32_t kSpawnTableEntries = 0x4e8;
+constexpr uint32_t kSpawnRecordCount = 1000;
+constexpr uintptr_t kUnitRecordOffset = 0xff0;
 constexpr uintptr_t kSpawnRecordKindOffset = 0x4;
 constexpr uintptr_t kSpawnRecordIdOffset = 0x10;
 
@@ -455,6 +471,10 @@ constexpr int32_t kGameOverCauseDeath = 0;
 // policy. Marcus (43) and the second Queen Leech form (47) stay Legacy until phase 18. Each has the engine's unit move at
 // slot 8 (0x526b30, the CharPause path), its own update at slot 41 and setAction at slot 63 (0x4cc670; 0x4bbc70 for 46).
 constexpr std::array<uintptr_t, 4> kBossVtables = {0xcbfe58, 0xcc08c0, 0xcc5ae8, 0xcc3248};
+// The boss classes of a room whose fight the rescue reload must not restart: kBossVtables plus Marcus (uEnemy43) and the
+// second Queen Leech form (uEnemy47), which stay Legacy.
+constexpr std::array<uintptr_t, 6> kBossRoomVtables = {kBossVtables[0], kBossVtables[1], kBossVtables[2],
+                                                       kBossVtables[3], 0xcc25d8, 0xcc3710};
 
 // state mode: phase 7 (enemy observers, docs/RE0_NOTES.md "State mode: enemy observers")
 // Slot 8 of all 38 enemy vtables and both players: fastcall(this), no stack arguments. When sGameInfo +0x50 bit 0 (the
@@ -506,6 +526,7 @@ constexpr uintptr_t kGameInfoModeFlagsOffset = 0x50;  // u32
 constexpr uint32_t kPlayerPauseBit = 0x2;
 constexpr uint32_t kTriggerPauseBit = 0x8;  // EventTrigPause 0x56cae0: the trigger scan (0x608ad0) does not run
 constexpr uint32_t kDemoPauseBit = 0x800;   // set and cleared with the other three by the cutscene ops (Demo_Start)
+constexpr uint32_t kEventPhaseBit = 0x4000; // EventPhaseIn 0x56cbe0 sets it with kPlayerPauseBit, EventPhaseOut 0x56cd10 clears both
 constexpr uint32_t kCutscenePauseBits = kCharPauseBit | kPlayerPauseBit | kTriggerPauseBit | kDemoPauseBit;
 // Every motion request of a character ends in cAnimControl::set, a member of the character at kAnimControlOffset:
 // thiscall (layer < 8, motionNo, flags, f32 interp, f32 start), ret 0x14, no return value (0x4144d0).
@@ -571,6 +592,17 @@ constexpr uintptr_t kSetPartnerFunction = 0x4ece00;       // sPlayer::setPartner
 // sUnit::updateAll (vtable slot 6, thiscall, no args, plain ret), once per frame: walks every unit group through
 // slot 9 (0x7279e0, thiscall, group index, ret 4), which calls each unit's vtable slot 8 (the move chain).
 constexpr uintptr_t kUnitUpdateAllFunction = 0x727b50;
+// sUnit stop reasons (docs/RE0_NOTES.md "Live menus"): setStopReason 0x652ce0 (thiscall on [kUnitSystemGlobal]
+// (reason < 14, on), ret 8) keeps a reason mask at +0x33d8d0 and gives every group whose bit is in the union of the
+// reasons' masks (table 0xdb5ef0) the skip flag slot 9 tests (group +0x28 bit 1). The SubScreen and Map phases set
+// reasons 7 and 8 on entry and clear them on close; the pause menu (sGamePause) is reason 6.
+constexpr uintptr_t kUnitSystemGlobal = 0xe2d434;
+constexpr uintptr_t kUnitStopMaskOffset = 0x33d8d0;
+constexpr uintptr_t kSetStopReasonFunction = 0x652ce0;
+constexpr std::array<uint8_t, 7> kSetStopReasonBytes = {0x56, 0x8B, 0xF1, 0x80, 0x7E, 0x1C, 0x00};
+constexpr uint32_t kStopReasonPause = 6;
+constexpr uint32_t kStopReasonScreen = 7;      // groups 0xbe00
+constexpr uint32_t kStopReasonScreenMore = 8;  // groups 0x13800000
 
 // state mode: phase 4 (puppet body fidelity; docs/RE0_NOTES.md "State mode: puppet body")
 // A character holds 7 sub-unit slots of 0x20 bytes from +0x67d8; slot 3 is the held weapon. A slot starts with the
@@ -729,6 +761,12 @@ inline bool codeDecrypted() { return bytesMatch(kDecryptProbeAddress, kDecryptPr
 inline uintptr_t playerField(uintptr_t offset) {
     const uintptr_t player = readPointer(kPlayerGlobal);
     return player ? readPointer(player + offset) : 0;
+}
+
+// Address of sGameInfo's mode flags word (kGameInfoModeFlagsOffset), or 0 before sGameInfo exists.
+inline uintptr_t modeFlagsAddress() {
+    const uintptr_t info = readPointer(kGameInfoGlobal);
+    return info ? info + kGameInfoModeFlagsOffset : 0;
 }
 
 inline uintptr_t controlled() { return playerField(kPlayerControlledOffset); }

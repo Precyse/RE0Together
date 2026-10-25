@@ -179,6 +179,11 @@ void runFollow(const DoorChange& change) {
     run(change);
 }
 
+void runRescue(const DoorChange& change) {
+    g_shared = false;  // the peer plays no door of its own for it
+    runFollow(change);
+}
+
 bool sharedDoor() { return g_shared; }
 
 void setScriptDoorAlone(bool alone) { g_scriptAlone = alone; }

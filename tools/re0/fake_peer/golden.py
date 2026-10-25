@@ -74,8 +74,8 @@ def enemy_batch(layout, entry):
 
 
 def boss_member(**fields):
-    base = dict(slot=ENEMY_SLOT, class_index=BOSS_CLASS, spawn_id=7, hp=500, pos=POS, quat=wire.IDENTITY_PACKED_QUAT,
-                record=(2, 5, 0, 0))
+    base = dict(slot=ENEMY_SLOT, class_index=BOSS_CLASS, spawn_id=7, spawn_record=2, hp=500, pos=POS,
+                quat=wire.IDENTITY_PACKED_QUAT, record=(2, 5, 0, 0))
     return dict(base, **fields)
 
 
@@ -106,6 +106,9 @@ def samples():
     follow = wire.DoorFollow.pack(serial=1, source_scene=SCENE, scene=0x2E, entry=1, character=wire.BILLY)
     snapshot_ready = wire.SessionReady.pack(scene=SCENE, load_serial=LOAD_SERIAL, snapshot_serial=1)
     prepare = wire.pack_boss(boss_header(), [boss_member()])
+    digest = wire.WorldDigest.pack(flag_serial=7, flag_crc=0x26B68855, enemy_flag_crc=0x390A7F35, act_flag_crc=0xE58EFF0C,
+                                   authority_hash=0xE99D86DE, floor_journal=2, load_serial=LOAD_SERIAL,
+                                   flags=wire.DIGEST_CAUGHT_UP, scene=SCENE, sender_ms=1000)
     return [
         accept(Msg.PLAYER_STATE, bytes(wire.PlayerState.size)),
         refuse(Msg.PLAYER_STATE, bytes(wire.PlayerState.size - 1)),
@@ -152,6 +155,8 @@ def samples():
         refuse(Msg.JOIN_EXTRAS, wire.pack_extras(1, 0, [], [], [], world_epoch=0)),
         accept(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose())),
         refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(slot=37))),
+        accept(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(spawn_record=wire.SPAWN_RECORD_LIMIT - 1))),
+        refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(spawn_record=wire.SPAWN_RECORD_LIMIT))),
         refuse(Msg.ENEMY_POSE, enemy_batch(wire.EnemyPoseEntry, enemy_pose(flags=wire.ENEMY_LEASED))),
         accept(Msg.ENEMY_MOTION, enemy_batch(wire.EnemyMotionEntry, dict(slot=ENEMY_SLOT, motion_no=0x10))),
         refuse(Msg.ENEMY_MOTION, enemy_batch(wire.EnemyMotionEntry, dict(slot=ENEMY_SLOT, layer=8))),
@@ -173,6 +178,7 @@ def samples():
         accept(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(phase=wire.BOSS_READY, alive=0), [])),
         refuse(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(phase=wire.BOSS_READY, alive=0), [boss_member()])),
         refuse(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(), [boss_member(class_index=ENEMY_CLASS)])),
+        refuse(Msg.BOSS_HANDOVER, wire.pack_boss(boss_header(), [boss_member(spawn_record=wire.SPAWN_RECORD_LIMIT)])),
         accept(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=1, scene=SCENE, item_id=0x10, count=1, pos=POS, world_epoch=EPOCH)),
         refuse(Msg.TAKE_REQUEST, wire.TakeRequest.pack(seq=1, scene=SCENE, item_id=0x100, count=1, pos=POS, world_epoch=EPOCH)),
         accept(Msg.TAKE_RESULT, wire.TakeResult.pack(serial=1, seq=1, scene=SCENE, requester=1, answer=wire.ANSWER_CLAIMED)),
@@ -189,6 +195,8 @@ def samples():
         accept(Msg.FLAG_COMMIT, wire.pack_flag_commit(1, 0, [FLAG_CHANGE])),
         accept(Msg.FLAG_COMMIT, wire.pack_flag_commit(2, 1, [])),
         refuse(Msg.FLAG_COMMIT, wire.pack_flag_commit(1, 0, [dict(FLAG_CHANGE, word=wire.FLAG_WORDS)])),
+        accept(Msg.WORLD_DIGEST, digest),
+        refuse(Msg.WORLD_DIGEST, truncated(digest)),
     ]
 
 

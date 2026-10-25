@@ -9,6 +9,7 @@
 #include "boss_wire.h"
 #include "character_owner.h"
 #include "debug_stats.h"
+#include "door_leave_rule.h"
 #include "door_travel.h"
 #include "enemy_lease.h"
 #include "enemy_observer.h"
@@ -64,7 +65,7 @@ uint16_t g_scene = scene::kNone;            // the transaction's room
 uint32_t g_epoch = 0;                       // the room authority's epoch for it when the transaction began
 uint8_t g_held = 0;                         // bit i = member i is frozen here (a slot that fits no member is never touched)
 uint32_t g_lastToken = 0;
-bool g_doorLatched = false;                 // a prepare was tried for the door that is running
+door_leave_rule::Departure g_departure;      // a prepare was tried for the door that is running
 Members g_watched;                          // the boss members seen in the room another machine runs
 uint32_t g_watchedMs = 0;
 uint16_t g_peerHeldScene = scene::kNone;    // the room another machine ran at the last tick
@@ -99,10 +100,13 @@ World readWorld() {
     return world;
 }
 
+// The pool slot here of the enemy created from the member's spawn record (the old authority's pool slot may differ).
+int localSlotOf(const wire::Member& member) { return enemy_observer::slotOfRecord(member.spawnRecord); }
+
 rule::Local localOf(const wire::Member& member) {
-    const std::optional<PoseEntry> entry = enemy_observer::snapshot(member.slot);
+    const std::optional<PoseEntry> entry = enemy_observer::snapshot(localSlotOf(member));
     if (!entry) return {};
-    return {true, entry->classIndex, entry->spawnId, entry->hp};
+    return {true, entry->classIndex, entry->spawnId, entry->hp, entry->spawnRecord};
 }
 
 std::vector<rule::Local> localsOf(const Members& members) {
@@ -117,6 +121,7 @@ wire::Member memberOf(const PoseEntry& entry) {
     member.slot = entry.slot;
     member.classIndex = entry.classIndex;
     member.spawnId = entry.spawnId;
+    member.spawnRecord = entry.spawnRecord;
     member.hp = entry.hp;
     for (int i = 0; i < 3; ++i) member.pos[i] = entry.pos[i];
     member.quat = entry.quat;
@@ -129,6 +134,7 @@ PoseEntry entryOf(const wire::Member& member, int16_t hp) {
     entry.slot = member.slot;
     entry.classIndex = member.classIndex;
     entry.spawnId = member.spawnId;
+    entry.spawnRecord = member.spawnRecord;
     entry.hp = hp;
     entry.flags = enemy_observer_wire::kFlagAlive;
     for (int i = 0; i < 3; ++i) entry.pos[i] = member.pos[i];
@@ -156,14 +162,14 @@ bool anyLeased(const Members& members) {
 
 void holdMembers() {
     for (size_t i = 0; i < g_members.size(); ++i) {
-        if (g_held & (1u << i)) enemy_observer::freeze(g_members[i].slot);
+        if (g_held & (1u << i)) enemy_observer::freeze(localSlotOf(g_members[i]));
     }
 }
 
 // The held members carry on from the snapshot's record at step 0 (the freeze ends).
 void restartMembers() {
     for (size_t i = 0; i < g_members.size(); ++i) {
-        if (g_held & (1u << i)) enemy_observer::startAt(g_members[i].slot, g_members[i].record);
+        if (g_held & (1u << i)) enemy_observer::startAt(localSlotOf(g_members[i]), g_members[i].record);
     }
 }
 
@@ -210,12 +216,8 @@ void cancelOld(wire::Reason reason, bool tellPeer) {
 // The local machine starts a door out of a room it runs, with the other player inside: prepare the hand-over of the
 // room's boss members.
 void startOnDoor(const World& world) {
-    if (!game_state::doorActive()) {
-        g_doorLatched = false;
-        return;
-    }
-    if (g_doorLatched || g_machine.inFlight() || !world.holder || !world.holder->here || !world.peerHere) return;
-    g_doorLatched = true;
+    const bool runsRoom = world.holder && world.holder->here && !g_machine.inFlight();
+    if (!g_departure.starts(game_state::doorActive(), runsRoom, world.peerHere)) return;
     Members members = collectMembers();
     if (members.empty()) return;
     if (anyLeased(members)) {
@@ -343,7 +345,7 @@ void watch(const World& world) {
 // and started at step 0 (this ends its freeze).
 void resumeMembers(const rule::Plan& plan, const std::vector<rule::Local>& locals) {
     for (size_t i = 0; i < g_members.size(); ++i) {
-        if (plan.resume & (1u << i)) enemy_observer::resume(g_members[i].slot, entryOf(g_members[i], rule::resumeHp(g_members[i].hp, locals[i].hp)));
+        if (plan.resume & (1u << i)) enemy_observer::resume(localSlotOf(g_members[i]), entryOf(g_members[i], rule::resumeHp(g_members[i].hp, locals[i].hp)));
     }
 }
 

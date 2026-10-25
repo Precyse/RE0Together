@@ -1,4 +1,5 @@
-"""Print the crashing thread's registers and the return addresses on its stack from a coop\\crash-*.dmp.
+"""Print the crashing (or hung) thread's registers and the return addresses on its stack from a coop\\crash-*.dmp or
+coop\\hang-*.dmp.
 
 usage: python dump_stack.py <crash.dmp> [stack_bytes]
 Needs `pip install minidump`. Addresses in re0hd.exe can then be read with disasm.py.
@@ -12,6 +13,7 @@ from minidump.minidumpfile import MinidumpFile
 
 DEFAULT_STACK_BYTES = 0x600
 CODE_MODULES = ("re0hd", "dinput8")
+HANG_CODE = 0xE0484E47  # the synthetic exception code of the adapter's hang dump (crash_dump.cpp)
 
 
 def main():
@@ -24,7 +26,9 @@ def main():
     record = dump.exception.exception_records[0]
     thread = next(t for t in dump.threads.threads if t.ThreadId == record.ThreadId)
     ctx = thread.ContextObject
-    print(f"exception {record.ExceptionRecord.ExceptionCode} at {record.ExceptionRecord.ExceptionAddress:#x}")
+    code = record.ExceptionRecord.ExceptionCode
+    kind = "hang" if int(code) & 0xFFFFFFFF == HANG_CODE else f"exception {code}"
+    print(f"{kind} at {record.ExceptionRecord.ExceptionAddress:#x}")
     print(f"eax {ctx.Eax:#x} ebx {ctx.Ebx:#x} ecx {ctx.Ecx:#x} edx {ctx.Edx:#x} esi {ctx.Esi:#x} edi {ctx.Edi:#x} "
           f"esp {ctx.Esp:#x} ebp {ctx.Ebp:#x}")
     modules = [(m.baseaddress, m.baseaddress + m.size, ntpath.basename(m.name)) for m in dump.modules.modules]

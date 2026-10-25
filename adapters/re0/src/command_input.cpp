@@ -12,6 +12,9 @@
 #include "net_pad.h"
 #include "pad_commands.h"
 #include "party_mode.h"
+#include "pose_wire.h"
+#include "rescue.h"
+#include "rescue_rule.h"
 #include "resync.h"
 #include "virtual_keys.h"
 
@@ -21,10 +24,12 @@ constexpr UINT kExtendedScanPrefix = 0xE000;
 constexpr uint8_t kDikExtendedBit = 0x80;
 constexpr UINT kScanCodeMask = 0xFF;
 constexpr int kResyncKey = VK_F9;  // the game binds no function keys, so it is not hidden from it
+constexpr int kRescueKey = VK_F7;  // held rescue_rule::kHoldMs: the rescue (also L3 and R3 of a controller); not hidden either
 
 key_config::CommandKeys g_keys{};
 bool g_traceWasDown = false;  // net thread only: keyboard or controller held at the last poll
 bool g_resyncWasDown = false;  // net thread only
+rescue_rule::Chord g_rescueChord;  // net thread only
 virtual_keys::HiddenKeys g_commandScancodes{};  // the switch (hidden only) and partner keys as DirectInput codes
 
 // DirectInput key code of a virtual key: its scan code, with the high bit for extended keys (arrows).
@@ -93,7 +98,12 @@ void onNetTick() {
     const bool resyncKey = pressedEdge(keyDown(kResyncKey), g_resyncWasDown);
     if (resyncKey && accept("resync", "keyboard", owned)) {
         resync::request("resync key");
-        event_sync::releaseHeldPause();
+        event_sync::releaseHeldPause(event_sync::PauseRelease::ResyncKey);
+    }
+    const bool rescueKey = keyDown(kRescueKey);
+    if (g_rescueChord.update(pose_wire::clockMs(), rescueKey || pad_commands::pressed().rescue)) {
+        command_log::press("rescue", rescueKey ? "keyboard" : "controller");
+        rescue::press();
     }
 }
 

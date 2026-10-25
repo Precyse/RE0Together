@@ -146,6 +146,8 @@ void testEntryRefusals() {
     check(wire::valid(poseEntry(36)), "slot 36 is the last pool slot");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.slot = 37; })), "slot 37 is refused");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.classIndex = 38; })), "class index 38 is refused");
+    check(wire::valid(mutated([](wire::PoseEntry& e) { e.spawnRecord = 999; })), "spawn record 999 is accepted");
+    check(!wire::valid(mutated([](wire::PoseEntry& e) { e.spawnRecord = 1000; })), "spawn record 1000 is refused");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.flags = 0x10; })), "an unknown flag is refused");
     check(!wire::valid(mutated([](wire::PoseEntry& e) { e.target = 2; })), "a target that is no character is refused");
     check(wire::valid(mutated([](wire::PoseEntry& e) { e.target = wire::kNoTarget; })), "no target is fine");

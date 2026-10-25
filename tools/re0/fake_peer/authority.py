@@ -213,6 +213,11 @@ class RoomAuthority(Module):
     def decline(self, scene):
         self._send(self.table.decline(scene))
 
+    def release_scene(self, scene):
+        """The fake gives up a room it owns (ROOM_STOP), as it does when it walks out of it."""
+        self._sync_session()
+        self._send(self.table.release(scene))
+
     def reconcile(self):
         """room_authority_rule::reconcile: release rooms the fake owns but left, claim the loaded room when unowned."""
         self._sync_session()

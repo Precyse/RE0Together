@@ -20,6 +20,9 @@ void rearmAfterResync();
 // Recorders that fill game-thread-only buffers from engine calls the engine also makes off-thread check it first.
 bool onGameThread();
 
+// Any thread: the id of the thread that ran the last tick, 0 before the first.
+uint32_t gameThreadId();
+
 // Called with true just before and false just after each player's own move runs. Scopes enter in registration order
 // and exit in reverse; at most kMaxMoveScopes. Safe to add while the hook is live (the game thread reads a published count).
 // `name` picks the SLOW_FRAME column the scope's time is added to (slow_frame_rule.h) and names it when it raises an

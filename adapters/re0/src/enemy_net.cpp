@@ -275,6 +275,8 @@ bool routeOwnHit(uintptr_t enemy, Character shooter, uintptr_t attackerObject, c
             applyAsOwner(enemy, static_cast<uint8_t>(shooter), attackerObject, point, info);
             return true;
         case enemy_observer_rule::Route::Send:
+            // The simulator names the enemy by its pool slot, which may differ from this machine's.
+            hit.slot = enemy_observer::streamSlotOf(hit.slot).value_or(hit.slot);
             if (!sendHitRequest(simulator.slot, hit)) return false;
             logger::write("enemy_net: hit for slot %u sent to slot %d", hit.slot, simulator.slot);
             return true;

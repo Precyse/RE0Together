@@ -28,6 +28,7 @@
 #include "../src/session_wire.h"
 #include "../src/state_sync.h"
 #include "../src/weapon_fx_wire.h"
+#include "../src/world_digest_wire.h"
 
 #ifndef FAKE_PEER_GOLDEN
 #error FAKE_PEER_GOLDEN must name the golden frames file
@@ -119,6 +120,7 @@ int judge(uint16_t type, Bytes p) {
         case prop_wire::kMsgCommit: return prop_wire::decodeCommit(p).has_value();
         case flag_sequencer_wire::kMsgFlagPropose: return flag_sequencer_wire::decodePropose(p).has_value();
         case flag_sequencer_wire::kMsgFlagCommit: return flag_sequencer_wire::decodeCommit(p).has_value();
+        case world_digest_wire::kMsgWorldDigest: return world_digest_wire::decode(p).has_value();
         default: return kNoDecoder;
     }
 }

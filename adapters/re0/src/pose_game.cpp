@@ -175,11 +175,6 @@ bool callSettle(uintptr_t player) {
     });
 }
 
-uintptr_t modeFlagsAddress() {
-    const uintptr_t info = game::readPointer(game::kGameInfoGlobal);
-    return info ? info + game::kGameInfoModeFlagsOffset : 0;
-}
-
 }  // namespace
 
 namespace pose_game {
@@ -273,12 +268,12 @@ bool resetPlayer(uintptr_t player) { return callReset(player); }
 
 uint32_t modeFlags() {
     uint32_t flags = 0;
-    game::readMemory(modeFlagsAddress(), flags);
+    game::readMemory(game::modeFlagsAddress(), flags);
     return flags;
 }
 
 void holdPause() {
-    const uintptr_t address = modeFlagsAddress();
+    const uintptr_t address = game::modeFlagsAddress();
     uint32_t flags = 0;
     if (!game::readMemory(address, flags)) return;
     g_pauseWasSet = (flags & game::kPlayerPauseBit) != 0;

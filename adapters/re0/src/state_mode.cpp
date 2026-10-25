@@ -30,6 +30,7 @@
 #include "state_net.h"
 #include "weapon_fx_capture.h"
 #include "weapon_fx_replay.h"
+#include "world_digest.h"
 
 namespace {
 
@@ -77,6 +78,7 @@ constexpr Module kModules[] = {
     {"prop sync", prop_sync::enable, false},
     {"boss hand-over", boss_handover::enable, false},
     {"join extras", join_extras::enable, false},
+    {"world digest", world_digest::enable, false},
     {"session ready", session_ready::enable, false},
 };
 

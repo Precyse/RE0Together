@@ -16,6 +16,7 @@ JOIN_SNAPSHOT_ASSERT = "static_assert(sizeof(JoinSnapshot) == 2 * 56 + 128 + fla
 
 # (header, regex with one numeric group, value in wire.py)
 LIMITS = (
+    ("game.h", r"kSpawnRecordCount = (\d+);", wire.SPAWN_RECORD_LIMIT),
     ("scene.h", r"kSceneIdLimit = (0x[0-9a-f]+|\d+);", wire.SCENE_LIMIT),
     ("flag_diff.h", r"kWords = (0x[0-9a-f]+|\d+);", wire.FLAG_WORDS),
     ("enemy_observer_wire.h", r"kMaxEntries = (\d+);", wire.MAX_ENEMY_ENTRIES),

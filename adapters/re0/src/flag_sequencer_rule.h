@@ -69,6 +69,9 @@ public:
         return take(serial, Verdict::Gap);
     }
     uint32_t expected() const { return last_ + 1; }
+
+    // The last commit taken in (or adopted from the snapshot), 0 before the first.
+    uint32_t applied() const { return hasLast_ ? last_ : 0; }
     void reset() { hasLast_ = false; }
 
     // The join snapshot held every commit up to `serial` (the host's last when it read the flags): the next one is serial + 1.
@@ -109,6 +112,7 @@ public:
         }
         return mask;
     }
+    size_t size() const { return pending_.size(); }
     void reset() { pending_.clear(); }
 
 private:
@@ -150,6 +154,10 @@ public:
 
     // The snapshot just applied held every commit up to `serial`.
     void adopt(uint32_t serial) { tracker_.adopt(serial); }
+
+    // The serial of the last commit taken in, 0 before the first; and the proposals the host has not answered yet.
+    uint32_t appliedSerial() const { return tracker_.applied(); }
+    size_t unanswered() const { return ledger_.size(); }
 
     void reset() {
         tracker_.reset();

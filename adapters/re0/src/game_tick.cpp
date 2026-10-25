@@ -169,6 +169,8 @@ void rearmAfterResync() { g_rearmRequested = true; }
 
 bool onGameThread() { return g_gameThreadId.load(std::memory_order_relaxed) == GetCurrentThreadId(); }
 
+uint32_t gameThreadId() { return g_gameThreadId.load(std::memory_order_relaxed); }
+
 bool install() {
     if (!hooks::install("uPlayerBase::move", game::kPlayerMove, reinterpret_cast<void*>(&moveDetour),
                         reinterpret_cast<void**>(&g_originalMove))) {
