@@ -24,7 +24,7 @@ struct WorldDigest {
     uint32_t enemyFlagCrc;   // flag family 0x312..0x411
     uint32_t actFlagCrc;     // flag family 0x612..0x711
     uint32_t authorityHash;  // room authority table: (scene, owner, epoch) of every owned room
-    uint16_t floorJournal;   // floor changes since the last save or load
+    uint16_t reserved;       // 0 (was the floor journal size, which differs between machines by design)
     uint16_t loadSerial;
     uint8_t pendingProposals;
     uint8_t flags;

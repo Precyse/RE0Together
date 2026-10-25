@@ -108,7 +108,7 @@ def samples():
     snapshot_ready = wire.SessionReady.pack(scene=SCENE, load_serial=LOAD_SERIAL, snapshot_serial=1)
     prepare = wire.pack_boss(boss_header(), [boss_member()])
     digest = wire.WorldDigest.pack(flag_serial=7, flag_crc=0x26B68855, enemy_flag_crc=0x390A7F35, act_flag_crc=0xE58EFF0C,
-                                   authority_hash=0xE99D86DE, floor_journal=2, load_serial=LOAD_SERIAL,
+                                   authority_hash=0xE99D86DE, load_serial=LOAD_SERIAL,
                                    flags=wire.DIGEST_CAUGHT_UP, scene=SCENE, sender_ms=1000)
     return [
         accept(Msg.PLAYER_STATE, bytes(wire.PlayerState.size)),

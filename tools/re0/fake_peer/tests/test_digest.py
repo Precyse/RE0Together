@@ -98,13 +98,13 @@ class DigestModuleTests(unittest.TestCase):
         self.assertEqual(digest.authority_hash, world.authority_hash([Room(SCENE, 1, 3)]))
         self.assertEqual(digest.pending_proposals, 1)
 
-    def test_the_floor_journal_and_load_serial_are_the_games_own(self):
-        deliver(self.ctx, Msg.WORLD_DIGEST, wire.WorldDigest.pack(floor_journal=4, load_serial=9, flags=wire.DIGEST_CAUGHT_UP))
+    def test_the_load_serial_is_the_games_own(self):
+        deliver(self.ctx, Msg.WORLD_DIGEST, wire.WorldDigest.pack(load_serial=9, flags=wire.DIGEST_CAUGHT_UP))
         self.assertEqual(self.digest.received, 1)
         self.digest.start()
         tick(self.ctx)
         (digest,) = self.sent()
-        self.assertEqual((digest.floor_journal, digest.load_serial), (4, 9))
+        self.assertEqual((digest.reserved, digest.load_serial), (0, 9))
 
     def test_a_flip_changes_the_enemy_crc_only_and_leaves_the_mirror_alone(self):
         self.digest.start()

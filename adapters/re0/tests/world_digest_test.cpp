@@ -39,7 +39,6 @@ wire::WorldDigest sample() {
     digest.enemyFlagCrc = 0x22222222;
     digest.actFlagCrc = 0x33333333;
     digest.authorityHash = 0x44444444;
-    digest.floorJournal = 3;
     digest.loadSerial = 9;
     digest.flags = wire::kCaughtUp;
     digest.scene = 0x0a05;
@@ -58,7 +57,7 @@ void testWire() {
     check(got->flagSerial == kSerial && got->flagCrc == sent.flagCrc && got->enemyFlagCrc == sent.enemyFlagCrc &&
               got->actFlagCrc == sent.actFlagCrc && got->authorityHash == sent.authorityHash,
           "the digests survive");
-    check(got->floorJournal == 3 && got->loadSerial == 9 && got->scene == 0x0a05 && got->senderMs == 123456, "the counters survive");
+    check(got->loadSerial == 9 && got->scene == 0x0a05 && got->senderMs == 123456, "the counters survive");
     check(wire::caughtUp(*got), "the caught up bit survives");
 }
 
@@ -195,16 +194,16 @@ void testScopesAreIndependent() {
     rule::Canary canary;
     wire::WorldDigest peer = sample();
     peer.actFlagCrc ^= 1;
-    peer.floorJournal = 4;
+    peer.enemyFlagCrc ^= 1;
     const auto verdicts = run(canary, sample(), peer, 0, rule::kDivergeMs);
     check(verdicts.size() == 2, "two stores that differ give two verdicts");
     bool act = false;
-    bool floor = false;
+    bool enemy = false;
     for (const rule::Verdict& verdict : verdicts) {
         act = act || verdict.scope == Scope::ActFlags;
-        floor = floor || verdict.scope == Scope::Floor;
+        enemy = enemy || verdict.scope == Scope::EnemyFlags;
     }
-    check(act && floor, "each names its own store");
+    check(act && enemy, "each names its own store");
     wire::WorldDigest authority = sample();
     authority.authorityHash ^= 1;
     rule::Canary other;

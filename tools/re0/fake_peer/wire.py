@@ -256,7 +256,7 @@ FlagChange = _layout("Change", "flag_diff.h", "<HHII", "word reserved set clear"
 FlagProposeHeader = _layout("ProposeHeader", "flag_sequencer_wire.h", "<HH", "count world_epoch")
 FlagCommitHeader = _layout("CommitHeader", "flag_sequencer_wire.h", "<IBBH", "serial origin reserved count")
 WorldDigest = _layout("WorldDigest", "world_digest_wire.h", "<IIIIIHHBBHI",
-                      "flag_serial flag_crc enemy_flag_crc act_flag_crc authority_hash floor_journal load_serial "
+                      "flag_serial flag_crc enemy_flag_crc act_flag_crc authority_hash reserved load_serial "
                       "pending_proposals flags scene sender_ms")
 
 # Sizes the adapter fixes for payloads that carry no layout here.

@@ -479,7 +479,7 @@ class Digest(Module):
         return wire.WorldDigest.pack(
             flag_serial=flags.serial, flag_crc=story, enemy_flag_crc=enemy, act_flag_crc=act,
             authority_hash=authority_hash(self.ctx.authority.table.records.values()),
-            floor_journal=game.floor_journal if game else 0, load_serial=game.load_serial if game else 0,
+            load_serial=game.load_serial if game else 0,
             pending_proposals=len(flags.proposed), flags=wire.DIGEST_CAUGHT_UP, scene=self.ctx.peer.place.scene,
             sender_ms=self.ctx.peer.sender_ms())
 

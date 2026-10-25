@@ -44,9 +44,6 @@ void onSave();
 // dropped.
 void onLoad();
 
-// Game thread: how many floor changes the journal holds (what the world digest compares between machines).
-size_t journalSize();
-
 // Game thread, host: sends the journal (floor changes since the last save or load, own and peer's) to the guests as
 // FLOOR_SNAPSHOT 0x0115, so a joiner finds items dropped after the save and misses items taken since.
 void sendJournal();

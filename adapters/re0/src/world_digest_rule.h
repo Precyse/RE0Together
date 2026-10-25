@@ -96,8 +96,10 @@ inline uint32_t authorityHash(std::vector<AuthorityEntry> entries) {
     return hash;
 }
 
-enum class Scope : uint8_t { Flags, EnemyFlags, ActFlags, Authority, Floor };
-constexpr size_t kScopeCount = 5;
+// Floor items are not a scope: each machine's floor journal is its own catch-up list for a joining guest, so its size
+// differs by design (2026-10-25 live: "diverged (floor items)" every 18 s, each resync moving the partner again).
+enum class Scope : uint8_t { Flags, EnemyFlags, ActFlags, Authority };
+constexpr size_t kScopeCount = 4;
 
 constexpr const char* name(Scope scope) {
     switch (scope) {
@@ -105,7 +107,6 @@ constexpr const char* name(Scope scope) {
         case Scope::EnemyFlags: return "enemy flags";
         case Scope::ActFlags: return "act flags";
         case Scope::Authority: return "authority";
-        case Scope::Floor: return "floor items";
     }
     return "unknown";
 }
@@ -123,7 +124,6 @@ constexpr bool equalIn(Scope scope, const WorldDigest& a, const WorldDigest& b) 
         case Scope::EnemyFlags: return a.enemyFlagCrc == b.enemyFlagCrc;
         case Scope::ActFlags: return a.actFlagCrc == b.actFlagCrc;
         case Scope::Authority: return a.authorityHash == b.authorityHash;
-        case Scope::Floor: return a.floorJournal == b.floorJournal;
     }
     return true;
 }

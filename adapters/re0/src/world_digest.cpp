@@ -13,7 +13,6 @@
 #include "flag_diff.h"
 #include "flag_sequencer.h"
 #include "flag_sync.h"
-#include "floor_items_sync.h"
 #include "frame_router.h"
 #include "game_tick.h"
 #include "join_sync.h"
@@ -55,7 +54,6 @@ bool read(wire::WorldDigest& out) {
     out.enemyFlagCrc = crcs.enemy;
     out.actFlagCrc = crcs.act;
     out.authorityHash = room_authority::digest();
-    out.floorJournal = saturate<uint16_t>(floor_items_sync::journalSize());
     out.loadSerial = scene::loadSerial();
     out.pendingProposals = saturate<uint8_t>(flag_sequencer::pendingCount());
     out.flags = join_sync::caughtUp() ? wire::kCaughtUp : 0;
