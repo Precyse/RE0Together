@@ -46,6 +46,7 @@ std::vector<Inbound> g_requests;          // guarded by g_mutex
 std::vector<DoorFollowResult> g_results;  // guarded by g_mutex
 
 // Game thread only.
+std::vector<Inbound> g_deferred;  // busy requests judged again next tick (room_move_rule::defers)
 uint32_t g_lastSerial = 0;
 FollowTracker g_tracker;
 room_move_rule::ArrivalWatch g_arrival;
@@ -125,7 +126,8 @@ void accept(const DoorFollow& request, Character own, uint32_t nowMs) {
     logger::write("door_follow: serial %u accepted", request.serial);
 }
 
-void judge(const Inbound& inbound, uint32_t nowMs) {
+// `first` is false for a deferred request judged again.
+void judge(const Inbound& inbound, uint32_t nowMs, bool first) {
     const DoorFollow& request = inbound.request;
     const Character own = character_owner::localCharacter();
     if (room_move_rule::requestStale(inbound.arrivedMs, nowMs)) {
@@ -133,6 +135,11 @@ void judge(const Inbound& inbound, uint32_t nowMs) {
         return;
     }
     const Result verdict = room_move_rule::judge(static_cast<Reason>(request.reason), contextFor(request));
+    if (room_move_rule::defers(verdict, inbound.arrivedMs, nowMs)) {
+        if (first) logger::write("door_follow: serial %u busy here, waiting to follow", request.serial);
+        g_deferred.push_back(inbound);
+        return;
+    }
     sendResult(request.serial, verdict, own);
     if (verdict == Result::Commit) {
         accept(request, own, nowMs);
@@ -165,6 +172,7 @@ void settle(const DoorFollowResult& answer) {
 }
 
 void forgetAll() {
+    g_deferred.clear();
     g_tracker.clear();
     g_arrival = {};
     drain(g_requests);
@@ -177,13 +185,17 @@ void onTick() {
         return;
     }
     const uint32_t now = pose_wire::clockMs();
+    // Answers first: the runner's own door load stops this tick, and an answer that came during it is not a timeout.
+    for (const DoorFollowResult& answer : drain(g_results)) settle(answer);
     if (const auto serial = g_tracker.expire(now)) {
         logger::write("door_follow: serial %u timed out", *serial);
         toastPartnerStayed();
     }
     if (g_arrival.expired(now)) logger::write("door_follow: serial %u never reached its room", g_followSerial);
-    for (const DoorFollowResult& answer : drain(g_results)) settle(answer);
-    for (const Inbound& inbound : drain(g_requests)) judge(inbound, now);
+    std::vector<Inbound> retry;
+    retry.swap(g_deferred);
+    for (const Inbound& inbound : retry) judge(inbound, now, false);
+    for (const Inbound& inbound : drain(g_requests)) judge(inbound, now, true);
 }
 
 bool partnerInRoom(Character runner) {

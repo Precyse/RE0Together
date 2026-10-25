@@ -190,19 +190,20 @@ void testTracker() {
     check(tracker.onResult(7, Result::OtherRoom) == rule::FollowTracker::Outcome::Rejected, "other room is a rejection");
 
     tracker.begin(8, 1000);
-    check(!tracker.expire(1000 + rule::kFollowTimeoutMs - 1), "an unanswered request waits");
-    const auto expired = tracker.expire(1000 + rule::kFollowTimeoutMs);
+    check(!tracker.expire(1000 + rule::kAnswerTimeoutMs - 1), "an unanswered request waits");
+    const auto expired = tracker.expire(1000 + rule::kAnswerTimeoutMs);
     check(expired && *expired == 8, "then it times out with its serial");
-    check(!tracker.expire(1000 + 2 * rule::kFollowTimeoutMs), "a timeout is reported once");
+    check(!tracker.expire(1000 + 2 * rule::kAnswerTimeoutMs), "a timeout is reported once");
     check(tracker.onResult(8, Result::Commit) == rule::FollowTracker::Outcome::Ignored, "a late answer is ignored");
 
     tracker.begin(9, 0xfffffff0u);
-    check(tracker.expire(0xfffffff0u + rule::kFollowTimeoutMs).has_value(), "the timeout counts across the clock wrap");
+    check(tracker.expire(0xfffffff0u + rule::kAnswerTimeoutMs).has_value(), "the timeout counts across the clock wrap");
     tracker.begin(10, 5);
     tracker.begin(11, 6);
     check(tracker.onResult(10, Result::Commit) == rule::FollowTracker::Outcome::Ignored, "a newer request replaces the older");
     tracker.clear();
-    check(!tracker.expire(6 + rule::kFollowTimeoutMs), "a cleared tracker has nothing to time out");
+    check(!tracker.expire(6 + rule::kAnswerTimeoutMs), "a cleared tracker has nothing to time out");
+    check(rule::kAnswerTimeoutMs > rule::kFollowDeferMs, "the runner outwaits a deferred answer");
 }
 
 void testArrival() {
@@ -216,6 +217,14 @@ void testArrival() {
     check(!watch.expired(100 + rule::kFollowTimeoutMs - 1), "a room change that is slow is still awaited");
     check(watch.expired(100 + rule::kFollowTimeoutMs), "one that never comes expires");
     check(!watch.expired(100 + 2 * rule::kFollowTimeoutMs) && !watch.arrived(kLab), "and is forgotten");
+}
+
+void testDefer() {
+    check(rule::defers(Result::Busy, 1000, 1000 + rule::kFollowDeferMs - 1), "a busy follower keeps the request a while");
+    check(!rule::defers(Result::Busy, 1000, 1000 + rule::kFollowDeferMs), "then refuses");
+    check(!rule::defers(Result::OtherRoom, 1000, 1000), "another room is refused at once");
+    check(!rule::defers(Result::Commit, 1000, 1000), "a commit is never deferred");
+    check(rule::kFollowDeferMs < rule::kFollowTimeoutMs, "a deferred request is judged before it goes stale");
 }
 
 void testStale() {
@@ -247,6 +256,7 @@ int main() {
     testSimultaneousDoors();
     testTracker();
     testArrival();
+    testDefer();
     testStale();
     testInLoadedRoom();
     if (g_failures == 0) std::printf("room_move_rule_test: all checks passed\n");

@@ -17,6 +17,12 @@ using room_move_wire::Result;
 
 constexpr uint32_t kSelfHealMs = 1000;       // a pose room that differs from the puppet's record this long, with no ROOM_MOVE
 constexpr uint32_t kFollowTimeoutMs = 8000;  // a request unanswered, or a follow door whose room never commits
+// A busy follower (an action, a menu, a script it leads) keeps a TEAM request and judges it again every tick for this
+// long before it refuses: 2026-10-25 live, a partner mid-action refused at once and stayed behind.
+constexpr uint32_t kFollowDeferMs = 5000;
+// The runner waits this long for the answer: the deferral plus the usual wait (its own door load stops its game tick, so
+// an answer that came during the load is read before the wait is judged).
+constexpr uint32_t kAnswerTimeoutMs = kFollowDeferMs + kFollowTimeoutMs;
 constexpr uint8_t kFollowThinkGroup = 0;     // plain gameplay think group (walking, standing, aiming)
 constexpr uint8_t kLastFollowThinkState = 6; // think group 0 states 0..6 are free movement; 7 and up are actions
 
@@ -139,6 +145,11 @@ constexpr Result judge(Reason reason, const FollowContext& context) {
     return Result::Commit;
 }
 
+// A busy verdict on a request that arrived `arrivedMs` is judged again next tick until kFollowDeferMs have passed.
+constexpr bool defers(Result verdict, uint32_t arrivedMs, uint32_t nowMs) {
+    return verdict == Result::Busy && nowMs - arrivedMs < kFollowDeferMs;
+}
+
 // The runner's one outstanding DOOR_FOLLOW.
 class FollowTracker {
 public:
@@ -156,9 +167,9 @@ public:
         return result == Result::Commit ? Outcome::Accepted : Outcome::Rejected;
     }
 
-    // The serial of the request that went unanswered for kFollowTimeoutMs (it is forgotten).
+    // The serial of the request that went unanswered for kAnswerTimeoutMs (it is forgotten).
     std::optional<uint32_t> expire(uint32_t nowMs) {
-        if (!pending_ || nowMs - sinceMs_ < kFollowTimeoutMs) return std::nullopt;
+        if (!pending_ || nowMs - sinceMs_ < kAnswerTimeoutMs) return std::nullopt;
         pending_ = false;
         return serial_;
     }
