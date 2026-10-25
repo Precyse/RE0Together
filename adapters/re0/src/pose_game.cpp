@@ -201,7 +201,7 @@ void uninstallAnimHook() {
 }
 
 bool readPose(uintptr_t player, pose_wire::Pose& out) {
-    if (!game::readTransform(player, out.pos, out.quat) || !readLayer(player, 0, out.layer[0]) ||
+    if (!game::readWorldTransform(player, out.pos, out.quat) || !readLayer(player, 0, out.layer[0]) ||
         !readLayer(player, 1, out.layer[1])) {
         return false;
     }

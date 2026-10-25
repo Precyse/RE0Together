@@ -85,11 +85,17 @@ void testOpRoles() {
 }
 
 void testFollow() {
-    check(rule::beforeOp(false, OpRole::Run) == Follow::WaitForLeader, "never ahead of the leader");
-    check(rule::beforeOp(false, OpRole::Wait) == Follow::WaitForLeader, "not even a wait");
-    check(rule::beforeOp(true, OpRole::Run) == Follow::Run, "a finished op runs here");
-    check(rule::beforeOp(true, OpRole::LeaderOnly) == Follow::Skip, "a leader-only op is skipped");
-    check(rule::beforeOp(true, OpRole::Wait) == Follow::Skip, "a wait the leader finished is skipped");
+    constexpr uint16_t kObjMove = 78;
+    check(rule::beforeOp(false, OpRole::Run, kObjMove) == Follow::WaitForLeader, "never ahead of the leader");
+    check(rule::beforeOp(false, OpRole::Wait, rule::op::kWait) == Follow::WaitForLeader, "not even a wait");
+    check(rule::beforeOp(true, OpRole::Run, kObjMove) == Follow::Run, "a finished op runs here");
+    check(rule::beforeOp(true, OpRole::LeaderOnly, rule::op::kMes) == Follow::Skip, "a leader-only op is skipped");
+    check(rule::beforeOp(true, OpRole::Wait, rule::op::kWait) == Follow::Skip, "a wait the leader finished is skipped");
+    for (const uint16_t cutscene : {rule::op::kDemoStart, rule::op::kPlayMovie, rule::op::kDmyDemoStart}) {
+        check(rule::beforeOp(false, OpRole::Run, cutscene) == Follow::Run,
+              "a cutscene op starts with the leader's, not after its end (the sh0e lift played one after the other)");
+        check(rule::beforeOp(true, OpRole::Run, cutscene) == Follow::Run, "and still runs once the leader ended it");
+    }
     check(rule::finished(0x31c, 0x320, rule::kResultNext), "moved on");
     check(rule::finished(0x31c, 0x31e, rule::kResultYield), "moved and yielded (frame)");
     check(rule::finished(0x31c, 0x31c, rule::kResultEnd), "exit");
@@ -104,6 +110,27 @@ void testFollow() {
               "a cutscene op is never cut (it would leave the trigger scan paused)");
     }
     check(!rule::holdsPause(kCamChangeNs), "a camera change is not a cutscene op");
+}
+
+// The sh0e lift (trigger 10): obj_move at 0x551, frame at 0x56d, `loop 0x551, 0xa5` at 0x56f, the exit at 0x575.
+void testTimeLoops() {
+    constexpr uint32_t kBody = 0x551, kExit = 0x575;
+    constexpr uint16_t kObjMove = 78;
+    check(rule::loopRunsOn(rule::op::kLoop, kExit, kBody, kExit),
+          "the leader left the loop while its count here runs on: it keeps looping here");
+    check(rule::loopRunsOn(rule::op::kLoopReg, kExit, kBody, kExit), "a register loop counts frame time too");
+    check(!rule::loopRunsOn(rule::op::kLoop, kExit, kBody, kBody), "both go round again: the leader's step");
+    check(!rule::loopRunsOn(rule::op::kLoop, kExit, kExit, kExit), "both left it: the leader's step");
+    check(!rule::loopRunsOn(rule::op::kLoop, kExit, kExit, kBody),
+          "done here first: the leader's pass back (the moves clamp at their targets)");
+    check(!rule::loopRunsOn(rule::op::kJe, kExit, kBody, kExit), "a branch is the leader's decision");
+    check(!rule::loopRunsOn(rule::op::kGosub, kExit, kBody, kExit), "so is a gosub");
+    check(rule::runsInLoopTail(rule::roleOf(kObjMove)) && rule::runsInLoopTail(rule::roleOf(rule::op::kFrame)),
+          "the lift's move and its frame run on here");
+    check(rule::runsInLoopTail(rule::roleOf(rule::op::kLoop)), "and the loop op itself");
+    check(!rule::runsInLoopTail(rule::roleOf(rule::op::kMes)), "a message waits for the leader");
+    check(!rule::runsInLoopTail(rule::roleOf(rule::op::kChPosSet)), "a Body op too");
+    check(!rule::runsInLoopTail(rule::roleOf(rule::op::kCharChange2)), "and a switch");
 }
 
 void testLead() {
@@ -167,7 +194,7 @@ void testBodyRoles() {
     for (const uint16_t code : {kDemoEntryPos, kCorrectPos2, kAfterDemo, kAfterDemo2, kAfterDemoNc, kPlayerPause, kControlPause}) {
         check(rule::roleOf(code) == OpRole::Run, "a two-target op and the pause families keep Run");
     }
-    check(rule::beforeOp(true, OpRole::Body) == Follow::Run, "a finished Body op runs on the follower");
+    check(rule::beforeOp(true, OpRole::Body, rule::op::kChPosSet) == Follow::Run, "a finished Body op runs on the follower");
 }
 
 void testSubjects() {
@@ -318,6 +345,7 @@ int main() {
     testMayFire();
     testOpRoles();
     testFollow();
+    testTimeLoops();
     testLead();
     testBodyRoles();
     testSubjects();

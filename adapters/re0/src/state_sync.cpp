@@ -108,7 +108,7 @@ void sendLocalState(NetClient& net) {
     const character_owner::Character owned = character_owner::localCharacter();
     const uintptr_t player = character_owner::find(owned);
     if (owned == character_owner::Character::Unknown || !join_sync::caughtUp() ||
-        !game::readTransform(player, state.pos, state.quat)) {
+        !game::readWorldTransform(player, state.pos, state.quat)) {
         return;
     }
     state.characterId = static_cast<uint8_t>(owned);

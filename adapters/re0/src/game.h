@@ -38,6 +38,7 @@ constexpr uintptr_t kGameCharaPartnerOffset = 0x149c;
 
 // uPlayerBase (uPlayerBilly / uPlayerRebecca)
 constexpr size_t kPlayerBaseSize = 0x6AD0;
+constexpr uintptr_t kCoordParentOffset = 0x30;        // uCoord*: the parent (readWorldTransform), 0 for none
 constexpr uintptr_t kPlayerPositionOffset = 0x40;     // vec3 + pad
 constexpr uintptr_t kPlayerRotationOffset = 0x50;     // quaternion xyzw
 constexpr uintptr_t kPlayerScaleOffset = 0x60;        // vec3
@@ -280,6 +281,8 @@ constexpr uintptr_t kThreadCodeOffset = 8;          // code base (offsets in the
 constexpr uintptr_t kThreadPcOffset = 0xc;          // u32 offset of the next opcode
 constexpr uintptr_t kThreadIndexOffset = 0x34;      // u16 trigger index, kForkThreadIndex for a forked thread
 constexpr uintptr_t kThreadSubStateOffset = 0x38;   // u32 progress of the current opcode, 0 when it starts
+constexpr uintptr_t kThreadLoopDepthOffset = 0x54;  // u32 index of the innermost loop (ScriptOp_loop 0x5766e0)
+constexpr uintptr_t kThreadLoopCountOffset = 0x58;  // float per loop depth: frames of its count left
 constexpr uint16_t kForkThreadIndex = 0xffff;
 // thiscall (key, trigger index, condition type) ret 0xc: starts the trigger's thread, or returns 0 when one of
 // (key, index) already runs or the script is not loaded.
@@ -1008,6 +1011,18 @@ inline void writeRandomState(const RandomState& state) { writeMemory(kRandomStat
 inline bool readTransform(uintptr_t player, float (&pos)[3], float (&quat)[4]) {
     return player && readMemory(player + kPlayerPositionOffset, pos) &&
            readMemory(player + kPlayerRotationOffset, quat);
+}
+
+// A character's transform with its position in room space. PlayerAddChild (0x56d510) makes a character the child of a
+// unit (the sh0e lift) through uCoord::setParent (vtable slot 17, 0x401820): its position is then relative to the
+// parent's, by translation only, the way the op converts it on attach and detach.
+inline bool readWorldTransform(uintptr_t object, float (&pos)[3], float (&quat)[4]) {
+    if (!readTransform(object, pos, quat)) return false;
+    const uintptr_t parent = readPointer(object + kCoordParentOffset);
+    float origin[3];
+    if (!parent || !readMemory(parent + kUnitPositionOffset, origin)) return true;
+    for (size_t axis = 0; axis < 3; ++axis) pos[axis] += origin[axis];
+    return true;
 }
 
 inline bool writeTransform(uintptr_t object, const float (&pos)[3], const float (&quat)[4]) {

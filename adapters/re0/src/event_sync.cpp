@@ -76,6 +76,9 @@ struct Slot {
     event_rule::Activity activity;        // when the thread last was at an op that does something (leadsAny / followsAny)
     uint32_t runningFrom = kNoPc;         // Follows: the op that began here and has not finished yet
     Clock::time_point runningSince;
+    uint32_t endedAheadFrom = kNoPc;      // Follows: a cutscene op that ended here before the leader's (runCutsceneAhead)
+    uint32_t loopTailFrom = kNoPc;        // Follows: a time loop the leader left that runs on here (runLoopTail)
+    Clock::time_point loopTailSince;
     uint32_t ran = 0, skipped = 0, waitsSkipped = 0, branches = 0, forced = 0, jumps = 0;
     int64_t maxLagMs = 0;
 };
@@ -109,7 +112,7 @@ int64_t msSince(Clock::time_point then) {
     return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - then).count();
 }
 
-enum class Line : uint8_t { Fired, Following, Ended, Dropped };
+enum class Line : uint8_t { Fired, Following, Ended, Dropped, LoopTail };
 
 std::map<uint32_t, Clock::time_point> g_lastLogged;  // game thread: per line kind, script key and trigger index
 
@@ -483,15 +486,81 @@ int takeLeadersStep(uintptr_t thread, Slot& slot, const QueuedStep& queued) {
     return queued.step.result;
 }
 
+void markRunning(Slot& slot, uint32_t pc) {
+    if (slot.runningFrom == pc) return;
+    slot.runningFrom = pc;
+    slot.runningSince = Clock::now();
+}
+
+// A cutscene op runs here from when the leader started it (event_rule::beforeOp), so both machines play it together.
+// Ended here first, the thread waits for the leader's end of it before its next op.
+int runCutsceneAhead(void* self, void* edx, uintptr_t thread, Slot& slot, uint16_t opcode) {
+    const uint32_t pc = pcOf(thread);
+    if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, false);
+    markRunning(slot, pc);
+    const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, true));
+    if (!event_rule::finished(pc, pcOf(thread), result) || result == event_rule::kResultEnd) return result;
+    slot.endedAheadFrom = pc;
+    return event_rule::kResultYield;
+}
+
+// Frames of the innermost loop's count left on this thread.
+float loopCountLeft(uintptr_t thread) {
+    const auto depth = threadField<uint32_t>(thread, game::kThreadLoopDepthOffset);
+    return threadField<float>(thread, game::kThreadLoopCountOffset + depth * sizeof(float));
+}
+
+void startLoopTail(uintptr_t thread, Slot& slot, uint32_t loopPc) {
+    slot.loopTailFrom = loopPc;
+    slot.loopTailSince = Clock::now();
+    if (!logDue(Line::LoopTail, slot.key, slot.index)) return;
+    logger::write("event_sync: followed serial %u loop at pc 0x%x runs on here, %.1f frames of its count left when the "
+                  "leader left it", slot.serial, loopPc, loopCountLeft(thread));
+}
+
+// A time loop the leader left while its count here runs on (event_rule::loopRunsOn): its ops run here with the
+// leader's exit step waiting at the front, until the loop leaves by itself. An op that waits for the leader, or
+// kStallMs, ends it at the leader's exit.
+int runLoopTail(void* self, void* edx, uintptr_t thread, Slot& slot, const QueuedStep& exit) {
+    const uint32_t pc = pcOf(thread);
+    const uint16_t opcode = opcodeAt(thread);
+    const bool runsOn = event_rule::runsInLoopTail(event_rule::roleOf(opcode)) &&
+                        msSince(slot.loopTailSince) < event_rule::kStallMs;
+    if (!runsOn) {
+        slot.loopTailFrom = kNoPc;
+        return takeLeadersStep(thread, slot, exit);
+    }
+    const int result = runAsSubject(self, edx, thread, slot.subject, opcode, true);
+    if (pc != slot.loopTailFrom || pcOf(thread) != exit.step.to) return result;
+    slot.loopTailFrom = kNoPc;
+    return takeLeadersStep(thread, slot, exit);
+}
+
 int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
     QueuedStep queued;
+    const uint16_t opcodeHere = opcodeAt(thread);
     // The pc stays on the op the leader is still running, so a long message of the leader's keeps this thread busy.
-    if (state_mode::on()) slot.activity.note(event_rule::roleOf(opcodeAt(thread)), pose_wire::clockMs());
-    if (!frontStep(queueId(slot), queued)) return event_rule::kResultYield;  // the leader has not finished this op yet
-    if (queued.step.result == event_rule::kResultKilled) {
+    if (state_mode::on()) slot.activity.note(event_rule::roleOf(opcodeHere), pose_wire::clockMs());
+    const bool leaderFinished = frontStep(queueId(slot), queued);
+    if (leaderFinished && queued.step.result == event_rule::kResultKilled) {
         popStep(queueId(slot));
         endFollow(slot, "ended with the leader's thread (room reset)");
         return event_rule::kResultEnd;
+    }
+    if (slot.endedAheadFrom != kNoPc) {
+        if (!leaderFinished) return event_rule::kResultYield;
+        const bool same = queued.step.from == slot.endedAheadFrom;
+        slot.endedAheadFrom = kNoPc;
+        if (same) {
+            ++slot.ran;
+            return takeLeadersStep(thread, slot, queued);
+        }
+    }
+    if (slot.loopTailFrom != kNoPc) return runLoopTail(self, edx, thread, slot, queued);
+    if (!leaderFinished) {
+        const auto before = event_rule::beforeOp(false, event_rule::roleOf(opcodeHere), opcodeHere);
+        if (before == event_rule::Follow::WaitForLeader) return event_rule::kResultYield;
+        return runCutsceneAhead(self, edx, thread, slot, opcodeHere);
     }
     const uint32_t pc = pcOf(thread);
     if (pc != queued.step.from) {
@@ -512,15 +581,12 @@ int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
         setPartnerFollows(slot, event_rule::followsAfter(opcode));
         return takeLeadersStep(thread, slot, queued);
     }
-    if (event_rule::beforeOp(true, role) == event_rule::Follow::Skip) {
+    if (event_rule::beforeOp(true, role, opcode) == event_rule::Follow::Skip) {
         ++(role == OpRole::Wait ? slot.waitsSkipped : slot.skipped);
         return takeLeadersStep(thread, slot, queued);
     }
     if (state_mode::on() && opcode == event_rule::op::kDemoStart) noteDemoStart(thread, slot, false);
-    if (slot.runningFrom != queued.step.from) {
-        slot.runningFrom = queued.step.from;
-        slot.runningSince = Clock::now();
-    }
+    markRunning(slot, queued.step.from);
     const auto result = static_cast<uint8_t>(runAsSubject(self, edx, thread, slot.subject, opcode, true));
     const uint32_t after = pcOf(thread);
     const int64_t stalledMs = std::min(msSince(queued.received), msSince(slot.runningSince));
@@ -534,6 +600,10 @@ int runFollowing(void* self, void* edx, uintptr_t thread, Slot& slot) {
             break;
         case event_rule::AfterRun::TakeLeadersBranch:
             ++slot.ran;
+            if (event_rule::loopRunsOn(opcode, queued.step.from + opSize(opcode), after, queued.step.to)) {
+                startLoopTail(thread, slot, queued.step.from);
+                return result;
+            }
             if (after != queued.step.to && result != event_rule::kResultEnd) {
                 ++slot.branches;
                 logger::write("event_sync: followed serial %u op %u at pc 0x%x went to 0x%x here, took the leader's "

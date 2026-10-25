@@ -316,17 +316,6 @@ constexpr bool finished(uint32_t pcBefore, uint32_t pcAfter, uint8_t result) {
     return pcAfter != pcBefore || result == kResultEnd;
 }
 
-enum class Follow : uint8_t { WaitForLeader, Skip, Run };
-
-// Before a follower's op: the leader has (not) finished the op at this pc yet. A Switch or Follow op is not run but
-// handled by the caller (Skip).
-constexpr Follow beforeOp(bool leaderFinished, OpRole role) {
-    if (!leaderFinished) return Follow::WaitForLeader;
-    return role == OpRole::Run || role == OpRole::Body ? Follow::Run : Follow::Skip;
-}
-
-enum class AfterRun : uint8_t { TakeLeadersBranch, KeepRunning, Force };
-
 // Cutscene ops hold the game's event pause (sGameInfo +0x50: 1 CharPause, 2 PlayerPause, 8 the trigger scan's pause,
 // 0x800) from their first call and clear it in their last: Demo_Start 0x571890, PlayMovie 0x56e180, DmyDemoStart
 // 0x56eb20. Ended early they leave it set, and with bit 8 no trigger fires again (no door, no examine; sh0e lift,
@@ -334,6 +323,36 @@ enum class AfterRun : uint8_t { TakeLeadersBranch, KeepRunning, Force };
 constexpr bool holdsPause(uint16_t opcode) {
     return opcode == op::kDemoStart || opcode == op::kPlayMovie || opcode == op::kDmyDemoStart;
 }
+
+enum class Follow : uint8_t { WaitForLeader, Skip, Run };
+
+// Before a follower's op: the leader has (not) finished the op at this pc yet. A Switch or Follow op is not run but
+// handled by the caller (Skip). A cutscene op runs from the moment the follower reaches it, which is when the leader
+// started it: the leader finishes it only when its cutscene ends, so waiting for that played the cutscene on one
+// machine after the other (sh0e lift, 2026-10-25). Ended here first, the thread waits for the leader's end of it.
+constexpr Follow beforeOp(bool leaderFinished, OpRole role, uint16_t opcode) {
+    if (!leaderFinished) return holdsPause(opcode) ? Follow::Run : Follow::WaitForLeader;
+    return role == OpRole::Run || role == OpRole::Body ? Follow::Run : Follow::Skip;
+}
+
+// Time loops: `loop` 0x5766e0 and `loopReg` 0x576790 count their frames down by this machine's frame time (sMain
+// [0xe2d904] +0x68; `loop` steps by 1 in scene 0x58 only), and the ops they repeat move by it too (obj_move 0x57a480:
+// speed x frame time, clamped at its target). A follower runs one pass per frame when the leader finished it, so with
+// shorter frames than the leader's its count is not done when the leader leaves the loop, and what the loop moves stops
+// short (the sh0e lift on the follower: Rebecca stuck at y 867.5 below the upper floor's 900, 2026-10-25). Such a loop
+// runs on here, the leader's exit step waiting, until it leaves by itself.
+constexpr bool isTimeLoop(uint16_t opcode) { return opcode == op::kLoop || opcode == op::kLoopReg; }
+
+// `fallThrough` is the pc after the loop op: the leader left the loop there while here it went back.
+constexpr bool loopRunsOn(uint16_t opcode, uint32_t fallThrough, uint32_t afterHere, uint32_t leadersTo) {
+    return isTimeLoop(opcode) && leadersTo == fallThrough && afterHere != fallThrough;
+}
+
+// The ops a loop runs on with: those both machines run anyway. Any other op (a message, door, Body op, switch) waits
+// for the leader, so the loop's tail ends at it and the thread takes the leader's exit.
+constexpr bool runsInLoopTail(OpRole role) { return role == OpRole::Run || role == OpRole::Wait; }
+
+enum class AfterRun : uint8_t { TakeLeadersBranch, KeepRunning, Force };
 
 // After running a followed op here: finished here, or still running `stalledMs` after both the leader finished it and
 // it began here (a follower that fell behind in one long op does not cut the next ones the moment they start).

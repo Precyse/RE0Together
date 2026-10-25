@@ -72,7 +72,7 @@ void answer() {
         const uintptr_t player = character_owner::find(character);
         place.scene = scene::of(player);
         place.hasDoor = door_sync::lastDoor(static_cast<uint8_t>(character), place.door);
-        game::readTransform(player, place.pos, place.quat);
+        game::readWorldTransform(player, place.pos, place.quat);  // a character riding the lift stores a position relative to it
         inventory_sync::readBlock(static_cast<uint8_t>(character), snapshot.inventories[static_cast<size_t>(character)]);
     }
     if (!flag_sync::read(snapshot.flags) || !sendValue(proto::kMsgJoinSnapshot, snapshot)) return;

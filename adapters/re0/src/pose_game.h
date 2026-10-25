@@ -37,8 +37,8 @@ std::optional<uint16_t> controlTarget(uintptr_t player, uintptr_t animControl);
 // True when the anim control `target` names has its unit: always for the body, for a sub-control once a weapon is attached.
 bool hasUnit(uintptr_t player, uint16_t target);
 
-// The character's current pose (position, rotation, both layers, think, weapon, status, +0x1034, hit attributes, aim
-// pitch and tier); the caller adds time, number, room and load serial.
+// The character's current pose (room-space position (game::readWorldTransform), rotation, both layers, think, weapon,
+// status, +0x1034, hit attributes, aim pitch and tier); the caller adds time, number, room and load serial.
 bool readPose(uintptr_t player, pose_wire::Pose& out);
 
 // The character's think group, state and phase into `out`; false unless its think is a cPlayerThink.
