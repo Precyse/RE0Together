@@ -92,7 +92,8 @@ const char* reason(SwitchResult result);
 bool isRemoteOwned(Character character);
 bool isLocalOwned(Character character);
 
-// Net thread: tracks slots and epoch; a new peer or epoch makes the host recompute ownership.
+// Net thread: tracks slots and epoch; a new peer or epoch makes the host recompute ownership. The host announces the
+// owners (OWNERSHIP) at once after deciding, then every second.
 void onSession(const SessionSnapshot& session);
 
 // Net thread: applies OWNERSHIP from the host.

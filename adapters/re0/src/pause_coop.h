@@ -6,8 +6,12 @@
 // status screen holds it, until the page closes.
 namespace pause_coop {
 
-// Patches uGUIPause's vtable slots 8 and 55 (each checked to hold the expected function first) and registers the tick
-// that opens and closes the page. False when the vtable is not the expected one (the vanilla pause stays).
+// Patches uGUIPause's vtable slots 8 and 55 (each checked to hold the expected function first). False when the vtable
+// is not the expected one (the vanilla pause stays).
 bool enable();
+
+// Game thread, once per rendered frame (a debug_overlay frame step, registered by enable): opens the page once the pause has closed and lets the
+// world go once the Options screen closed. Not the game tick: that runs from the player's move, which the hold stops.
+void onFrame();
 
 }  // namespace pause_coop

@@ -19,8 +19,9 @@ using character_owner::Character;
 using character_owner::Ownership;
 
 constexpr int kNoSlot = control_rule::kNoOwner;
-// The host repeats OWNERSHIP so a guest whose game starts after joining (the usual order) still receives it.
-constexpr uint32_t kResendFrames = 60;
+// The host repeats OWNERSHIP so a guest whose game starts after joining (the usual order), or restarts while its launcher
+// stays in the session, still receives it. Sent from the net tick: the game tick stops while a menu stops the player.
+constexpr auto kResendInterval = std::chrono::seconds(1);
 constexpr auto kZapSettle = std::chrono::seconds(2);
 
 NetClient* g_net = nullptr;
@@ -33,7 +34,8 @@ std::atomic<uint32_t> g_epoch{0};
 std::atomic<bool> g_peerPresent{false};
 std::atomic<bool> g_recompute{true};  // host: decide (and announce) the fixed owners again
 std::atomic<int> g_owner[character_owner::kCharacterCount] = {kNoSlot, kNoSlot};
-uint32_t g_framesSinceSend = 0;
+std::atomic<bool> g_sendNow{false};                 // host: decide() set new owners, the net tick announces them
+std::chrono::steady_clock::time_point g_lastSend;  // net thread
 std::chrono::steady_clock::time_point g_playingSince;  // game thread: start of the current stretch of plain gameplay
 bool g_wasPlaying = false;
 
@@ -50,11 +52,12 @@ void clearOwners() {
     debug_stats::set(debug_stats::Gauge::RebeccaOwner, debug_stats::kUnknownOwner);
 }
 
+// Net thread.
 void sendOwnership() {
     const Ownership owners{static_cast<uint8_t>(g_owner[static_cast<size_t>(Character::Billy)].load()),
                            static_cast<uint8_t>(g_owner[static_cast<size_t>(Character::Rebecca)].load())};
     g_net->send(character_owner::kMsgOwnership, true, proto::kSlotAll, proto::bytesOf(owners));
-    g_framesSinceSend = 0;
+    g_lastSend = std::chrono::steady_clock::now();
 }
 
 // The host owns its chosen character; the first peer owns the other one.
@@ -65,7 +68,7 @@ void decide() {
     setOwners(Ownership{hostIsBilly ? hostSlot : peerSlot, hostIsBilly ? peerSlot : hostSlot});
     g_recompute = false;
     logger::write("character_owner: billy=slot %d rebecca=slot %d", g_owner[0].load(), g_owner[1].load());
-    sendOwnership();
+    g_sendNow = true;
 }
 
 void trackGameplay() {
@@ -78,12 +81,7 @@ bool zapSettled() { return g_wasPlaying && std::chrono::steady_clock::now() - g_
 
 void onTick() {
     trackGameplay();
-    if (!character_owner::isHost() || !g_peerPresent) return;
-    if (g_recompute) {
-        decide();
-    } else if (++g_framesSinceSend >= kResendFrames) {
-        sendOwnership();
-    }
+    if (character_owner::isHost() && g_peerPresent && g_recompute) decide();
 }
 
 }  // namespace
@@ -179,6 +177,8 @@ void onSession(const SessionSnapshot& session) {
     g_hostSlot = session.hostSlot;
     if (!session.linked || !peerPresent) clearOwners();
     if (newEpoch || !peerPresent || peerChanged) g_recompute = true;
+    const bool due = g_sendNow.exchange(false) || std::chrono::steady_clock::now() - g_lastSend >= kResendInterval;
+    if (g_net && isHost() && peerPresent && !g_recompute && due) sendOwnership();
 }
 
 void onFrame(const GameFrame& frame) {

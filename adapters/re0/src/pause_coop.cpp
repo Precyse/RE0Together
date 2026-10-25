@@ -4,8 +4,8 @@
 
 #include "coop_menu_rule.h"
 #include "crash_dump.h"
+#include "debug_overlay.h"
 #include "game.h"
-#include "game_tick.h"
 #include "gui_input.h"
 #include "live_menu_rule.h"
 #include "log.h"
@@ -176,17 +176,22 @@ void setStop(uint32_t reason, bool on) {
     if (units) game::callThiscall<void>(game::kSetStopReasonFunction, units, reason, static_cast<uint32_t>(on));
 }
 
-void holdWorld(bool on) {
+// The world held the way the status screen holds it, and the Options manager's unit moving and drawn the way the status
+// screen switches it on for its Options (sSubMenu 0x5d8040).
+void holdWorld(uintptr_t manager, bool on) {
     setStop(live_menu_rule::kStopScreen, on);
     setStop(live_menu_rule::kStopScreenMore, on);
+    uint32_t flags = 0;
+    if (!game::readMemory(manager + game::kUnitFlagsOffset, flags)) return;
+    const uint32_t unitOn = game::kUnitMoveFlag | game::kUnitDrawFlag;
+    game::writeMemory(manager + game::kUnitFlagsOffset, on ? flags | unitOn : flags & ~unitOn);
 }
 
-// Opens the page once the pause is gone, and lets the world go once the Options screen closed again.
-void onTick() {
+void frame() {
     if (g_openManager) {
         if (game::callThiscall<bool>(game::kOptionTakeClosedFunction, reinterpret_cast<void*>(g_openManager))) {
+            holdWorld(g_openManager, false);
             g_openManager = 0;
-            holdWorld(false);
             logger::write("pause_coop: Co-op page closed, back to the game");
         }
         return;
@@ -201,7 +206,7 @@ void onTick() {
         logger::write("pause_coop: no in-game Options screen, Co-op page not opened");
         return;
     }
-    holdWorld(true);
+    holdWorld(manager, true);
     reinterpret_cast<GuiStep>(game::kOptionOpenFunction)(reinterpret_cast<void*>(manager), nullptr);
     g_openManager = manager;
     logger::write("pause_coop: Co-op page opening");
@@ -250,8 +255,18 @@ bool enable() {
         logger::write("pause_coop: uGUIPause's vtable is not the expected one, no Co-op row");
         return false;
     }
-    game_tick::addCallback("pause_coop", onTick);
-    return true;
+    return debug_overlay::addFrameStep(onFrame);
+}
+
+void onFrame() {
+    if (g_faulted) return;
+    __try {
+        frame();
+    } __except (crash_dump::reportCaught(GetExceptionInformation(), "pause_coop: frame")) {
+        g_faulted = true;
+        if (g_openManager) holdWorld(g_openManager, false);
+        g_openManager = 0;
+    }
 }
 
 }  // namespace pause_coop

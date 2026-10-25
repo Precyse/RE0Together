@@ -679,6 +679,8 @@ constexpr size_t kRowTouchObject = 2;
 constexpr uintptr_t kSubMenuOptionsOffset = 0x68;
 constexpr uintptr_t kOptionOpenFunction = 0x5cc350;         // fastcall(manager)
 constexpr uintptr_t kOptionTakeClosedFunction = 0x5cb320;   // thiscall(manager) -> bool, once after a close
+// sSubMenu switches the manager's unit on while its Options run (0x5d8040: +0xc |= 0x400 move, 0x800 draw; cleared on close)
+constexpr uint32_t kUnitMoveFlag = 0x400;
 
 // state mode: phase 4 (puppet body fidelity; docs/RE0_NOTES.md "State mode: puppet body")
 // A character holds 7 sub-unit slots of 0x20 bytes from +0x67d8; slot 3 is the held weapon. A slot starts with the

@@ -27,4 +27,9 @@ void setVisible(bool visible);
 // an important message (toast_queue::Style). Callable from any thread.
 void toast(const char* text, float seconds, toast_queue::Style style);
 
+// Runs `step` on the game thread once per rendered frame, before the overlay draws (also while menus stop the player, whose
+// move drives game_tick). Call during start-up; at most kMaxFrameSteps.
+constexpr size_t kMaxFrameSteps = 4;
+bool addFrameStep(void (*step)());
+
 }  // namespace debug_overlay

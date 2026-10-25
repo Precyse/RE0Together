@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <optional>
@@ -51,6 +52,9 @@ std::atomic<bool> g_disabled{false};
 std::atomic<bool> g_visible{false};
 bool g_keyWasDown = false;  // render thread only, like everything below
 float g_scroll = 0.0f;      // status panel scroll offset, clamped to the panel while drawing
+
+std::array<void (*)(), debug_overlay::kMaxFrameSteps> g_frameSteps{};
+std::atomic<size_t> g_frameStepCount{0};  // published after the step is stored
 
 IDirect3DDevice9* g_device = nullptr;  // the device the ImGui backend is bound to; null until first shown
 
@@ -236,6 +240,7 @@ void guarded(void (*step)(IDirect3DDevice9*), IDirect3DDevice9* device) {
 void onEndScene(IDirect3DDevice9* device) {
     ++g_frames;
     title_label::applyPending();
+    for (size_t i = 0; i < g_frameStepCount.load(); ++i) g_frameSteps[i]();
     guarded(frame, device);
 }
 
@@ -260,5 +265,13 @@ bool disabled() { return g_disabled.load(); }
 void setVisible(bool visible) { g_visible = visible; }
 
 void toast(const char* text, float seconds, toast_queue::Style style) { toast_queue::push(text, seconds, style); }
+
+bool addFrameStep(void (*step)()) {
+    const size_t count = g_frameStepCount.load();
+    if (count >= kMaxFrameSteps) return false;
+    g_frameSteps[count] = step;
+    g_frameStepCount.store(count + 1);
+    return true;
+}
 
 }  // namespace debug_overlay
