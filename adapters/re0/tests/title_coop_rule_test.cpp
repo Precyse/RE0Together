@@ -30,6 +30,13 @@ void testParkedState() {
           "the game's states are inside");
 }
 
+void testArrival() {
+    check(opensPageOnArrival(kStateMainMenuOpen, true), "back from play in a session: the Co-op page opens");
+    check(!opensPageOnArrival(kStateMainMenuOpen, false), "solo: the main menu stays");
+    check(!opensPageOnArrival(0, true), "the boot's title keeps its own way to the main menu");
+    check(kStateMainMenuInput != kStateMainMenuOpen && kStateMainMenuInput <= kLastGameState, "the input state is the game's own");
+}
+
 void testPlace() {
     check(placeOf(false, false) == Place::Title, "the title's own menus");
     check(placeOf(true, false) == Place::Page, "the Co-op page");
@@ -41,6 +48,7 @@ void testPlace() {
 int main() {
     testChoice();
     testParkedState();
+    testArrival();
     testPlace();
     if (g_failures == 0) std::printf("PASS\n");
     return g_failures == 0 ? 0 : 1;

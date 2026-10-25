@@ -24,6 +24,13 @@ constexpr uint8_t kFiveRows = 1;  // +0x27a: the main menu shows its fifth row
 // menu again (never the store).
 constexpr uint32_t afterCoopChoice(bool pageReady) { return pageReady ? kStateOptionsFadeOut : kStateMainMenuOpen; }
 
+constexpr uint32_t kStateMainMenuInput = 0x20;  // the main menu waits for input (its sequence and fade done)
+
+// A title that starts at its main menu came back from play (the game over's exit and host_exit set 0xdcc131, the boot
+// starts at 0 and a pause-menu quit at 6): in a co-op session it opens the Co-op page by itself, the way the Co-op row
+// does, so both players land on it after a game over.
+constexpr bool opensPageOnArrival(uint32_t firstState, bool inSession) { return inSession && firstState == kStateMainMenuOpen; }
+
 // Where this game is for the other players while it shows its title.
 constexpr lobby_wire::Place placeOf(bool pageActive, bool loading) {
     if (loading) return lobby_wire::Place::Loading;

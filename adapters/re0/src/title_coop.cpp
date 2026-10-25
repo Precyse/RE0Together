@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 
+#include "character_owner.h"
 #include "coop_menu_rule.h"
 #include "crash_dump.h"
 #include "game.h"
@@ -12,6 +13,7 @@
 #include "lobby.h"
 #include "log.h"
 #include "native_page.h"
+#include "net_pad.h"
 #include "title_coop_rule.h"
 #include "title_label.h"
 #include "title_load.h"
@@ -32,6 +34,8 @@ using FastcallFunction = void(__fastcall*)(void* self, void* edx);
 FastcallFunction g_originalMove = nullptr;
 bool g_faulted = false;    // game thread only: a fault in our step switched the entry off for the session
 uint32_t g_lastState = 0;  // the title's state on the previous frame
+uintptr_t g_title = 0;      // the title object seen last
+bool g_openPage = false;    // this title came back from play in a session: its main menu opens the Co-op page
 
 uint32_t stateOf(uintptr_t title) {
     uint32_t state = 0;
@@ -48,6 +52,15 @@ void prepareMenu(uintptr_t title) {
 }
 
 void beforeMove(uintptr_t title) {
+    if (title != g_title) {
+        g_title = title;
+        g_openPage = title_coop_rule::opensPageOnArrival(stateOf(title), character_owner::linked() && net_pad::active());
+        if (g_openPage) logger::write("title_coop: back from play in a session, the Co-op page opens");
+    }
+    if (g_openPage && stateOf(title) == title_coop_rule::kStateMainMenuInput && game::fadeDone() && !title_load::busy()) {
+        g_openPage = false;
+        setState(title, title_coop_rule::kStateStoreChosen);  // the Co-op row's own choice, handled below
+    }
     const uint32_t state = stateOf(title);
     if (state == title_coop_rule::kStateMainMenuOpen) prepareMenu(title);
     g_lastState = state;

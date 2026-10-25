@@ -53,6 +53,7 @@
 #include "protocol.h"
 #include "puppet.h"
 #include "host_exit.h"
+#include "load_flavor.h"
 #include "title_load.h"
 #include "rescue.h"
 #include "resync.h"
@@ -107,6 +108,7 @@ void enableCoop(const Config& config) {
     command_input::enable();
     rescue::enable();
     host_exit::enable();
+    load_flavor::install();
     pad_commands::install();
     party_mode::enable(g_net);
     camera_parity::enable();

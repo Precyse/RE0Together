@@ -38,4 +38,13 @@ struct Tag {
 
 Tag tag(const Input& input);
 
+// A PLAYER_STATE older than this is not the partner's condition any more (they send one 50 times a second).
+constexpr uint32_t kStateFreshMs = 2000;
+
+// The tag shows only while both games are in play and the partner's own state is fresh: not after a game over, a reload
+// or the partner closing its game while its launcher stays in the session.
+constexpr bool shows(bool localInPlay, bool partnerInPlay, bool hasState, uint32_t stateAgeMs) {
+    return localInPlay && partnerInPlay && hasState && stateAgeMs < kStateFreshMs;
+}
+
 }  // namespace partner_status

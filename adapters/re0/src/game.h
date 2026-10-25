@@ -646,6 +646,7 @@ constexpr uint32_t kStopReasonPause = 6;
 // 2 -> 3, 3 input (0x5ccc60: two rows, cursor +0x268), 4 quit dialog, 5 close, 6 closed. v55 (slot 55) caches the
 // layout's instances: +0x278 i_exit, +0x27c i_reset, +0x280 i_arrow, +0x284 iMes_message (help line).
 constexpr uintptr_t kGamePauseGlobal = 0xdcbea8;            // sGamePause*
+constexpr uintptr_t kShowCommonMessageFunction = 0x5d5060;  // sGameGUI::showCommonMessage(this, id, mode), thiscall
 constexpr uintptr_t kGamePauseStateOffset = 0x24;           // u32: 0 closed, 1 open, 2 closing
 constexpr uintptr_t kGamePauseResumeFunction = 0x6016f0;    // thiscall(sGamePause, u8 1) ret 4: Back's resume
 constexpr uintptr_t kPauseGuiVtable = 0xcdfe68;

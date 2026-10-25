@@ -216,15 +216,21 @@ bool partnerLoading() {
     return false;
 }
 
-bool hostInGame() {
+// The fresh presence of the first game in a slot that passes `match`, if any says In game.
+template <class Match>
+bool inGameWhere(Match match) {
     std::lock_guard lock(g_mutex);
     for (const Received& received : g_received) {
-        if (character_owner::isHostSlot(received.slot) && Clock::now() - received.at <= kPresenceStale) {
+        if (match(received.slot) && Clock::now() - received.at <= kPresenceStale) {
             return received.presence.place == static_cast<uint8_t>(Place::InGame);
         }
     }
     return false;
 }
+
+bool inGame(uint8_t slot) { return inGameWhere([slot](uint8_t other) { return other == slot; }); }
+
+bool hostInGame() { return inGameWhere(character_owner::isHostSlot); }
 
 std::string nameOf(uint8_t slot) {
     std::lock_guard lock(g_mutex);

@@ -62,7 +62,16 @@ void testTag() {
 
 }  // namespace
 
+void testShows() {
+    check(partner_status::shows(true, true, true, 0), "both in play with a fresh state: shown");
+    check(!partner_status::shows(false, true, true, 0), "not while this game is at its title");
+    check(!partner_status::shows(true, false, true, 0), "not while the partner's game is out of play");
+    check(!partner_status::shows(true, true, false, 0), "not before the partner's first state");
+    check(!partner_status::shows(true, true, true, partner_status::kStateFreshMs), "not on a stale state (an old Danger)");
+}
+
 int main() {
+    testShows();
     testCondition();
     testTag();
     if (g_failures == 0) std::printf("PASS\n");
