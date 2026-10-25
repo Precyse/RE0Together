@@ -222,8 +222,8 @@ bool readThink(uintptr_t player, pose_wire::Pose& out) {
            readThinkByte(think, game::kThinkStateOffset, out.state) && readThinkByte(think, game::kThinkPhaseOffset, out.phase);
 }
 
-bool readLayer0(uintptr_t player, puppet_rule::Layer0& out) {
-    const uintptr_t base = layerAddress(player, 0);
+bool readLayerFrame(uintptr_t player, size_t layer, puppet_rule::LayerFrame& out) {
+    const uintptr_t base = layerAddress(player, layer);
     return game::readMemory(base + game::kMotionNumberOffset, out.motion) &&
            game::readMemory(base + game::kMotionFrameOffset, out.frame) &&
            game::readMemory(base + game::kMotionFrameMaxOffset, out.frameMax);

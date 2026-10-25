@@ -237,13 +237,13 @@ EnemyPoseEntry = _layout("PoseEntry", "enemy_observer_wire.h", "<4BHHhH3fIHHfHH4
                          "slot class_index flags target spawn_id spawn_record hp hit_attr pos*3 quat motion0 motion1 "
                          "frame0 frame1 lease_token record*4 flags6a0c")
 EnemyMotionEntry = _layout("MotionEntry", "enemy_observer_wire.h", "<BBHIffHH", "slot layer motion_no flags interp start dt_ms seq_low")
-EnemyLease = _layout("EnemyLease", "enemy_lease_wire.h", "<IIIHBBHBBBBh4i3fI3f",
+EnemyLease = _layout("EnemyLease", "enemy_lease_wire.h", "<IIIHBBHBBBBh4i3fI3fHH",
                      "token room_epoch sender_ms scene slot class_index spawn_id victim kind level pad hp record*4 pos*3 "
-                     "quat point*3")
+                     "quat point*3 spawn_record reserved")
 EnemyLeaseEnd = _layout("EnemyLeaseEnd", "enemy_lease_wire.h", "<IIHBBhH4i3fI",
-                        "token room_epoch scene slot reason hp pad record*4 pos*3 quat")
-PlayerHit = _layout("PlayerHit", "enemy_lease_wire.h", "<IIIHBBHBBB3x3f",
-                    "room_epoch sender_ms seq scene slot class_index spawn_id victim kind level point*3")
+                        "token room_epoch scene slot reason hp spawn_record record*4 pos*3 quat")
+PlayerHit = _layout("PlayerHit", "enemy_lease_wire.h", "<IIIHBBHBBBxH3f",
+                    "room_epoch sender_ms seq scene slot class_index spawn_id victim kind level spawn_record point*3")
 BossHeader = _layout("Header", "boss_wire.h", "<IIHBBBBH", "token room_epoch scene phase count alive reason pad")
 BossMember = _layout("Member", "boss_wire.h", "<BBHhH3fI4i", "slot class_index spawn_id hp spawn_record pos*3 quat record*4")
 

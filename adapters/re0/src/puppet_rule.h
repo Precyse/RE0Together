@@ -15,6 +15,10 @@ namespace puppet_rule {
 constexpr uint32_t kKeepRootMotionFlag = 0x10;  // playMotion's "keep the motion's own displacement": the position is the network's
 constexpr float kSeekFrames = 6.0f;             // layer-0 frames apart on the same motion before the puppet seeks
 constexpr uint32_t kSeekHoldTicks = 6;          // consecutive moves a difference must last (a request lands a frame later)
+// Moves after a seek before frame drift alone may seek again (a second at 60 fps). Drift on the motion just sought means
+// the two copies play it at another rate; restarting it every hold replays the clip in steps (2026-10-25 live: an
+// observed zombie re-sought ~7 times a second through its death fall).
+constexpr uint32_t kDriftSeekCooldownTicks = 60;
 constexpr float kLoopHalf = 0.5f;
 constexpr uint32_t kWeaponRefreshMs = 1000;  // the held weapon differs from the owner's this long, with no re-equip pending
 
@@ -74,8 +78,8 @@ inline float frameDistance(float a, float b, float frameMax) {
     return frameMax > 0.0f && direct > frameMax * kLoopHalf ? std::max(0.0f, frameMax - direct) : direct;
 }
 
-// The puppet's layer 0 as the engine holds it.
-struct Layer0 {
+// One motion layer of a character as the engine holds it.
+struct LayerFrame {
     uint16_t motion;
     float frame;
     float frameMax;
@@ -83,27 +87,27 @@ struct Layer0 {
 
 enum class Verdict { Follow, Seek };
 
-// Compares the puppet's layer 0 with the owner's, once per puppet move. A timeline reset asks for a seek at once.
+// Compares one of the puppet's layers with the owner's, once per puppet move. A timeline reset asks for a seek at once. A
+// different motion seeks after the hold; frame drift on the same motion only when `driftAllowed` and no seek ran in the
+// last kDriftSeekCooldownTicks moves.
 class SeekTracker {
 public:
-    Verdict update(const Layer0& puppet, const pose_wire::Layer& owner) {
+    Verdict update(const LayerFrame& puppet, const pose_wire::Layer& owner, bool driftAllowed = true) {
+        if (sinceSeek_ < kDriftSeekCooldownTicks) ++sinceSeek_;
         if (owner.motion == pose_wire::kNoMotion) {
             ticks_ = 0;
             return Verdict::Follow;
         }
-        if (seekPending_) {
-            seekPending_ = false;
-            ticks_ = 0;
-            return Verdict::Seek;
-        }
-        const bool apart = puppet.motion != owner.motion || frameDistance(puppet.frame, owner.frame, puppet.frameMax) > kSeekFrames;
+        if (seekPending_) return seek();
+        const bool otherMotion = puppet.motion != owner.motion;
+        const bool drift = !otherMotion && frameDistance(puppet.frame, owner.frame, puppet.frameMax) > kSeekFrames;
+        const bool apart = otherMotion || (drift && driftAllowed && sinceSeek_ >= kDriftSeekCooldownTicks);
         if (!apart) {
             ticks_ = 0;
             return Verdict::Follow;
         }
         if (++ticks_ < kSeekHoldTicks) return Verdict::Follow;
-        ticks_ = 0;
-        return Verdict::Seek;
+        return seek();
     }
 
     // The next update seeks whatever the difference (the owner was placed, not blended).
@@ -112,11 +116,20 @@ public:
     void reset() {
         ticks_ = 0;
         seekPending_ = false;
+        sinceSeek_ = kDriftSeekCooldownTicks;
     }
 
 private:
+    Verdict seek() {
+        seekPending_ = false;
+        ticks_ = 0;
+        sinceSeek_ = 0;
+        return Verdict::Seek;
+    }
+
     uint32_t ticks_ = 0;
     bool seekPending_ = false;
+    uint32_t sinceSeek_ = kDriftSeekCooldownTicks;
 };
 
 // Times how long the puppet's weapon has differed from the owner's, once per puppet move.

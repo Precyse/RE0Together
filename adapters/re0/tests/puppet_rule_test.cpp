@@ -44,14 +44,15 @@ void testDistance() {
 }
 
 // Feeds the same state for `count` moves; true when a seek came out of the last one.
-bool seeksAfter(pr::SeekTracker& tracker, const pr::Layer0& puppet, const pw::Layer& owner, uint32_t count) {
+bool seeksAfter(pr::SeekTracker& tracker, const pr::LayerFrame& puppet, const pw::Layer& owner, uint32_t count,
+                bool driftAllowed = true) {
     pr::Verdict verdict = pr::Verdict::Follow;
-    for (uint32_t i = 0; i < count; ++i) verdict = tracker.update(puppet, owner);
+    for (uint32_t i = 0; i < count; ++i) verdict = tracker.update(puppet, owner, driftAllowed);
     return verdict == pr::Verdict::Seek;
 }
 
 void testSeek() {
-    const pr::Layer0 puppet{kWalk, 20.0f, kLoopLength};
+    const pr::LayerFrame puppet{kWalk, 20.0f, kLoopLength};
     pr::SeekTracker tracker;
     check(!seeksAfter(tracker, puppet, {kWalk, 22.0f}, 50), "close frames on the same motion never seek");
     check(!seeksAfter(tracker, puppet, {pw::kNoMotion, 0.0f}, 50), "an owner without a motion never seeks");
@@ -77,8 +78,19 @@ void testSeek() {
     check(!seeksAfter(placed, puppet, {kWalk, 20.0f}, 1), "a reset forgets a requested seek");
 
     pr::SeekTracker looping;
-    const pr::Layer0 wrapped{kWalk, 59.0f, kLoopLength};
+    const pr::LayerFrame wrapped{kWalk, 59.0f, kLoopLength};
     check(!seeksAfter(looping, wrapped, {kWalk, 2.0f}, 50), "a loop wrap is not drift");
+
+    pr::SeekTracker falling;
+    const pw::Layer ahead{kWalk, 20.0f + pr::kSeekFrames + 1.0f};
+    check(seeksAfter(falling, puppet, ahead, pr::kSeekHoldTicks), "setup: drift seeks once");
+    check(!seeksAfter(falling, puppet, ahead, pr::kDriftSeekCooldownTicks - 1), "drift right after a seek waits out the cooldown");
+    check(seeksAfter(falling, puppet, ahead, pr::kSeekHoldTicks), "drift seeks again once the cooldown is over");
+    check(seeksAfter(falling, puppet, {kRun, 5.0f}, pr::kSeekHoldTicks), "another motion seeks inside the cooldown");
+
+    pr::SeekTracker dead;
+    check(!seeksAfter(dead, puppet, ahead, 200, false), "with drift not allowed (a dead enemy) drift never seeks");
+    check(seeksAfter(dead, puppet, {kRun, 5.0f}, pr::kSeekHoldTicks, false), "but another motion still does");
 }
 
 const pr::ControlLayout kLayout{kBodyControl, kFirstSubControl, kSubStride};

@@ -22,6 +22,7 @@ struct Lease {
     uint8_t victim = 0;
     uint8_t classIndex = 0;
     uint16_t spawnId = 0;
+    uint16_t spawnRecord = 0;  // the enemy's identity on both machines (the pool slots differ)
     Role role = Role::None;
     enemy_follow_rule::Action granted;  // the record the holder started
     int16_t hp = 0;                     // the enemy's HP at the grant; a streamed pose may only be at or below it

@@ -44,8 +44,8 @@ bool readPose(uintptr_t player, pose_wire::Pose& out);
 // The character's think group, state and phase into `out`; false unless its think is a cPlayerThink.
 bool readThink(uintptr_t player, pose_wire::Pose& out);
 
-// The character's layer 0 as the puppet rule compares it.
-bool readLayer0(uintptr_t player, puppet_rule::Layer0& out);
+// Motion layer `layer` of the character (0 body, 1 overlay) as the puppet rule compares it.
+bool readLayerFrame(uintptr_t player, size_t layer, puppet_rule::LayerFrame& out);
 
 // True when the motion banks of the unit the anim control `target` names hold the motion (the engine's own check); false
 // for a sub-control without a unit.

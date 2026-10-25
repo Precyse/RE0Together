@@ -48,6 +48,7 @@ constexpr size_t kMaxPendingBatches = 64;  // batches waiting for the game threa
 constexpr uint32_t kLogIntervalMs = 1000;
 constexpr int kNoIndex = rule::kNoPoolSlot;
 constexpr float kNoSeekInterp = 0.0f;  // a seek restarts the motion at the simulator's frame without blending
+constexpr size_t kFollowedLayers = 2;  // the body (0) and the overlay (1), the two layers ENEMY_POSE carries
 
 using UnitMoveFunction = void(__fastcall*)(void* unit, void* edx);
 UnitMoveFunction g_originalUnitMove = nullptr;
@@ -116,8 +117,8 @@ struct Slot {
     uint32_t holdSinceMs = 0;
     rule::SlotTimeline timeline;
     timed_queue::TimedQueue<rule::MotionItem> motions;
-    puppet_rule::SeekTracker seek;
-    uint32_t layer0Flags = 0;  // flags of the last layer-0 request, reused by a seek
+    std::array<puppet_rule::SeekTracker, kFollowedLayers> seek{};
+    std::array<uint32_t, kFollowedLayers> layerFlags{};  // flags of the last request on each layer, reused by its seek
 };
 std::array<Slot, game::kEnemyPoolSlots> g_slots;
 uint32_t g_motionSeq = 0;  // newest request number seen on the stream
@@ -413,7 +414,7 @@ void takePose(const wire::Header& header, const wire::PoseEntry& entry, uint8_t 
         debug_stats::count(Counter::EnemyObserverRefused);
         return;
     }
-    if (!slot.clock || (leased && !enemy_lease::acceptPose(entry, sender, arrivalMs))) return;
+    if (!slot.clock || (leased && !enemy_lease::acceptPose(entry, static_cast<uint8_t>(local), sender, arrivalMs))) return;
     slot.bindingRefused = false;
     bindStream(slot, entry.slot);
     slot.timeline.push(*slot.clock, rule::sampleOf(header, entry, arrivalMs));
@@ -463,23 +464,25 @@ void replayMotion(size_t index, uintptr_t enemy, Slot& slot, const rule::MotionI
     }
     if (!pose_game::replay(enemy, pose_wire::kBodyTarget, {item.layer, item.motionNo, item.flags, item.interp, item.start})) return;
     debug_stats::count(Counter::EnemyObserverMotions);
-    if (item.layer == 0) slot.layer0Flags = item.flags;
+    if (item.layer < kFollowedLayers) slot.layerFlags[item.layer] = item.flags;
 }
 
-// The enemy's body motion has fallen away from the simulator's (a request lost, or one that bypasses cAnimControl::set):
-// request the simulator's again at the simulator's frame.
-void followBody(size_t index, uintptr_t enemy, Slot& slot, const rule::Sample& shown) {
-    puppet_rule::Layer0 own;
-    const pose_wire::Layer owner{shown.motion0, shown.frame0};
-    if (!pose_game::readLayer0(enemy, own) || slot.seek.update(own, owner) != puppet_rule::Verdict::Seek) return;
+// One of the enemy's motion layers has fallen away from the simulator's (a request lost, or one that bypasses
+// cAnimControl::set, as the overlay layer's hit reactions do): request the simulator's again at the simulator's frame.
+// A dead enemy follows a change of motion only: re-seeking its fall on drift replayed it in steps.
+void followLayer(size_t index, uintptr_t enemy, Slot& slot, size_t layer, const pose_wire::Layer& owner, bool alive) {
+    puppet_rule::LayerFrame own;
+    if (!pose_game::readLayerFrame(enemy, layer, own) || slot.seek[layer].update(own, owner, alive) != puppet_rule::Verdict::Seek) return;
     if (owner.motion != pose_wire::kNoMotion && !pose_game::motionAvailable(enemy, pose_wire::kBodyTarget, owner.motion)) {
         debug_stats::count(Counter::EnemyObserverMisses);
         logger::writeUnlessRepeated("enemy_observer: slot %zu has no motion 0x%04x loaded", index, owner.motion);
         return;
     }
-    if (pose_game::replay(enemy, pose_wire::kBodyTarget, {0, owner.motion, slot.layer0Flags, kNoSeekInterp, owner.frame})) {
-        debug_stats::count(Counter::EnemyObserverSeeks);
-    }
+    const auto request = pose_game::MotionRequest{static_cast<uint32_t>(layer), owner.motion, slot.layerFlags[layer], kNoSeekInterp, owner.frame};
+    if (!pose_game::replay(enemy, pose_wire::kBodyTarget, request)) return;
+    debug_stats::count(Counter::EnemyObserverSeeks);
+    logger::writeUnlessRepeated("enemy_observer: slot %zu layer %zu sought motion 0x%04x frame %.1f (was 0x%04x frame %.1f)", index,
+                                layer, owner.motion, owner.frame, own.motion, own.frame);
 }
 
 void announce(size_t index, Slot& slot) {
@@ -509,7 +512,7 @@ bool drive(size_t index, uintptr_t enemy, Slot& slot) {
     announce(index, slot);
     if (shown.reset != rule::Reset::None) {
         logger::write("enemy_observer: slot %zu timeline reset (%s)", index, rule::name(shown.reset));
-        slot.seek.requestSeek();
+        for (puppet_rule::SeekTracker& tracker : slot.seek) tracker.requestSeek();
     }
     const rule::Life life = rule::lifeOf(shown.sample.flags);
     if (life == rule::Life::Gone) {
@@ -525,7 +528,9 @@ bool drive(size_t index, uintptr_t enemy, Slot& slot) {
     g_due.clear();
     slot.motions.takeDue(slot.targetMs, g_due);
     for (const rule::MotionItem& item : g_due) replayMotion(index, enemy, slot, item);
-    followBody(index, enemy, slot, shown.sample);
+    const bool alive = life == rule::Life::Alive;
+    followLayer(index, enemy, slot, 0, {shown.sample.motion0, shown.sample.frame0}, alive);
+    followLayer(index, enemy, slot, 1, {shown.sample.motion1, shown.sample.frame1}, alive);
     return true;
 }
 
@@ -644,6 +649,13 @@ std::optional<uint8_t> streamSlotOf(int slot) {
 }
 
 int slotOfRecord(uint16_t record) { return slotOfRecordHere(record); }
+
+bool toLocalSlot(uint8_t& slot, uint16_t record) {
+    const int local = slotOfRecordHere(record);
+    if (local == kNoIndex) return false;
+    slot = static_cast<uint8_t>(local);
+    return true;
+}
 
 bool freeze(int slot) {
     if (slot < 0 || slot >= game::kEnemyPoolSlots || !g_world.pool[static_cast<size_t>(slot)]) return false;

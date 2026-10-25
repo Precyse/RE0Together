@@ -39,6 +39,11 @@ std::optional<uint8_t> streamSlotOf(int slot);
 // Game thread: the pool slot here of the enemy created from spawn record `record`, or -1.
 int slotOfRecord(uint16_t record);
 
+// Game thread: replaces `slot` (a pool slot on the machine that sent a message) with this machine's pool slot of the
+// enemy of spawn record `record`; false, `slot` untouched, when no enemy here was created from it. The machines' pools
+// are numbered apart, so a lease, its end and a player hit name the enemy by its record.
+bool toLocalSlot(uint8_t& slot, uint16_t record);
+
 // Game thread, for the boss hand-over (phase 15): holds the enemy in pool slot `slot` under the CharPause scope whoever
 // simulates it, so its class update stops while its motion, joints and hit shapes go on. False when the slot is empty.
 // The hold ends with `startAt`, or when the room's role changes.

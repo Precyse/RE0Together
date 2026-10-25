@@ -45,8 +45,10 @@ struct EnemyLease {
     float pos[3];
     uint32_t quat;  // smallest three, pose_wire::packQuat
     float point[3];
+    uint16_t spawnRecord;  // the enemy's spawn record: the receiver resolves its own pool slot from it (slots differ per machine)
+    uint16_t reserved;     // zero
 };
-static_assert(sizeof(EnemyLease) == 68);
+static_assert(sizeof(EnemyLease) == 72);
 static_assert(std::is_trivially_copyable_v<EnemyLease>);
 
 // ENEMY_LEASE_END: the lease is over; the authority resumes the enemy from this state at step 0. `reason` is a
@@ -58,7 +60,7 @@ struct EnemyLeaseEnd {
     uint8_t slot;
     uint8_t reason;
     int16_t hp;
-    uint16_t pad;  // zero
+    uint16_t spawnRecord;  // as EnemyLease
     int32_t record[4];
     float pos[3];
     uint32_t quat;
@@ -80,8 +82,9 @@ struct PlayerHit {
     uint8_t victim;
     uint8_t kind;
     uint8_t level;
-    uint8_t pad[3];  // zero
-    float point[3];  // relative to the enemy
+    uint8_t pad;           // zero
+    uint16_t spawnRecord;  // as EnemyLease
+    float point[3];        // relative to the enemy
 };
 static_assert(sizeof(PlayerHit) == 36);
 static_assert(std::is_trivially_copyable_v<PlayerHit>);
@@ -100,18 +103,19 @@ inline bool contactFits(uint16_t scene, uint8_t slot, uint8_t classIndex, uint8_
 
 inline bool valid(const EnemyLease& lease) {
     return (lease.token & 0xffff) != 0 && contactFits(lease.scene, lease.slot, lease.classIndex, lease.victim, lease.kind) &&
-           lease.pad == 0 && lease.hp > 0 && recordFits(lease.record) && finite(lease.pos) && finite(lease.point);
+           lease.pad == 0 && lease.reserved == 0 && lease.spawnRecord < game::kSpawnRecordCount && lease.hp > 0 &&
+           recordFits(lease.record) && finite(lease.pos) && finite(lease.point);
 }
 
 inline bool valid(const EnemyLeaseEnd& end) {
     return end.scene < room_authority_wire::kSceneIdLimit && end.slot < game::kEnemyPoolSlots &&
-           end.reason != static_cast<uint8_t>(contact_rule::End::None) && end.reason < contact_rule::kEndCount && end.pad == 0 &&
+           end.reason != static_cast<uint8_t>(contact_rule::End::None) && end.reason < contact_rule::kEndCount && end.spawnRecord < game::kSpawnRecordCount &&
            recordFits(end.record) && finite(end.pos);
 }
 
 inline bool valid(const PlayerHit& hit) {
-    return contactFits(hit.scene, hit.slot, hit.classIndex, hit.victim, hit.kind) && hit.pad[0] == 0 && hit.pad[1] == 0 &&
-           hit.pad[2] == 0 && finite(hit.point);
+    return contactFits(hit.scene, hit.slot, hit.classIndex, hit.victim, hit.kind) && hit.pad == 0 &&
+           hit.spawnRecord < game::kSpawnRecordCount && finite(hit.point);
 }
 
 // The payload as a message of exactly the right size whose fields are in range, or nothing.

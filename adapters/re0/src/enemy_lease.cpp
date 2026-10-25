@@ -122,6 +122,7 @@ void sendEnd(uint32_t token, uint8_t slot, rule::End reason, const PoseEntry& st
     end.slot = slot;
     end.reason = static_cast<uint8_t>(reason);
     end.hp = state.hp;
+    end.spawnRecord = state.spawnRecord;
     for (int i = 0; i < 4; ++i) end.record[i] = state.record[i];
     for (int i = 0; i < 3; ++i) end.pos[i] = state.pos[i];
     end.quat = state.quat;
@@ -133,6 +134,7 @@ PoseEntry grantState(const wire::EnemyLease& grant) {
     state.slot = grant.slot;
     state.classIndex = grant.classIndex;
     state.spawnId = grant.spawnId;
+    state.spawnRecord = grant.spawnRecord;
     state.hp = grant.hp;
     for (int i = 0; i < 4; ++i) state.record[i] = grant.record[i];
     for (int i = 0; i < 3; ++i) state.pos[i] = grant.pos[i];
@@ -146,6 +148,7 @@ PoseEntry grantedState(const table_rule::Lease& lease) {
     state.slot = lease.slot;
     state.classIndex = lease.classIndex;
     state.spawnId = lease.spawnId;
+    state.spawnRecord = lease.spawnRecord;
     state.hp = lease.hp;
     for (int i = 0; i < 4; ++i) state.record[i] = lease.granted.word[i];
     for (int i = 0; i < 3; ++i) state.pos[i] = lease.lastPos[i];
@@ -214,6 +217,7 @@ void grant(const PendingContact& pending, uint32_t nowMs) {
     message.slot = contact.slot;
     message.classIndex = enemy.classIndex;
     message.spawnId = enemy.spawnId;
+    message.spawnRecord = enemy.spawnRecord;
     message.victim = contact.victim;
     message.kind = contact.kind;
     message.level = contact.level;
@@ -232,6 +236,7 @@ void grant(const PendingContact& pending, uint32_t nowMs) {
     lease.victim = contact.victim;
     lease.classIndex = enemy.classIndex;
     lease.spawnId = enemy.spawnId;
+    lease.spawnRecord = enemy.spawnRecord;
     lease.role = table_rule::Role::Away;
     lease.granted = record;
     lease.hp = enemy.hp;
@@ -306,6 +311,7 @@ void startGrant(const LeaseArrival& arrival, uint32_t nowMs) {
     lease.victim = grant.victim;
     lease.classIndex = grant.classIndex;
     lease.spawnId = grant.spawnId;
+    lease.spawnRecord = grant.spawnRecord;
     lease.role = table_rule::Role::Held;
     lease.granted = actionOf(grant.record);
     lease.hp = grant.hp;
@@ -371,8 +377,21 @@ void drainInboxes() {
         leases.swap(g_leaseInbox);
         ends.swap(g_endInbox);
     }
-    for (const LeaseArrival& arrival : leases) takeGrant(arrival);
-    for (const EndArrival& arrival : ends) applyEnd(arrival);
+    for (LeaseArrival& arrival : leases) {
+        if (!enemy_observer::toLocalSlot(arrival.lease.slot, arrival.lease.spawnRecord)) {
+            decline(arrival.lease, "no enemy of its spawn record here");
+            continue;
+        }
+        takeGrant(arrival);
+    }
+    for (EndArrival& arrival : ends) {
+        if (!enemy_observer::toLocalSlot(arrival.end.slot, arrival.end.spawnRecord)) {
+            logger::writeUnlessRepeated("lease: end of token %u names record %u, no enemy of it here", arrival.end.token,
+                                        arrival.end.spawnRecord);
+            continue;
+        }
+        applyEnd(arrival);
+    }
 }
 
 void onTick() {
@@ -426,17 +445,17 @@ void request(const rule::Contact& contact, uintptr_t enemy, int32_t state) {
     if (contact.slot < g_contacts.size()) g_contacts[contact.slot] = PendingContact{contact, enemy, state};
 }
 
-bool acceptPose(const PoseEntry& entry, uint8_t sender, uint32_t nowMs) {
-    const table_rule::Lease* lease = g_table.find(entry.slot);
+bool acceptPose(const PoseEntry& entry, uint8_t localSlot, uint8_t sender, uint32_t nowMs) {
+    const table_rule::Lease* lease = g_table.find(localSlot);
     if (!lease || lease->role != Role::Away || lease->peer != sender) {
         debug_stats::count(Counter::LeasePosesRefused);
-        logger::writeUnlessRepeated("lease: pose for slot %u from slot %u refused (not the holder)", entry.slot, sender);
+        logger::writeUnlessRepeated("lease: pose for slot %u from slot %u refused (not the holder)", localSlot, sender);
         return false;
     }
-    const table_rule::PoseVerdict verdict = g_table.offerPose(entry.slot, entry.leaseToken, entry.pos, entry.hp, nowMs);
+    const table_rule::PoseVerdict verdict = g_table.offerPose(localSlot, entry.leaseToken, entry.pos, entry.hp, nowMs);
     if (verdict == table_rule::PoseVerdict::Accepted) return true;
     debug_stats::count(Counter::LeasePosesRefused);
-    logger::writeUnlessRepeated("lease: pose for slot %u refused (%s)", entry.slot, table_rule::name(verdict));
+    logger::writeUnlessRepeated("lease: pose for slot %u refused (%s)", localSlot, table_rule::name(verdict));
     return false;
 }
 

@@ -115,8 +115,8 @@ void replayEvent(uintptr_t player, Character character, const pose_wire::MotionE
 
 // The puppet's body motion has fallen away from the owner's: request the owner's again at the owner's frame.
 void followLayer0(uintptr_t player, Character character, const pose_wire::Pose& pose) {
-    puppet_rule::Layer0 own;
-    if (!pose_game::readLayer0(player, own) || g_seek.update(own, pose.layer[0]) != puppet_rule::Verdict::Seek) return;
+    puppet_rule::LayerFrame own;
+    if (!pose_game::readLayerFrame(player, 0, own) || g_seek.update(own, pose.layer[0]) != puppet_rule::Verdict::Seek) return;
     const pose_wire::Layer& owner = pose.layer[0];
     if (replayRequest(player, character, pose_wire::kBodyTarget, {0, owner.motion, g_layer0Flags, kNoSeekInterp, owner.frame})) {
         debug_stats::count(Counter::PuppetSeeks);
@@ -141,8 +141,8 @@ void logState(uintptr_t player, Character character, const pose_wire::Pose& pose
     if (g_logStarted && stream_clock::after(g_nextLogMs, now)) return;
     g_logStarted = true;
     g_nextLogMs = now + kLogIntervalMs;
-    puppet_rule::Layer0 own{};
-    pose_game::readLayer0(player, own);
+    puppet_rule::LayerFrame own{};
+    pose_game::readLayerFrame(player, 0, own);
     pose_wire::Pose body;
     pose_game::readPose(player, body);
     const debug_stats::Snapshot stats = debug_stats::snapshot();

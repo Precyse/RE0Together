@@ -45,7 +45,8 @@ void request(const contact_rule::Contact& contact, uintptr_t enemy, int32_t stat
 
 // Game thread: a streamed pose of the holder for an enemy this machine gave away. True when the pose may be shown; a
 // pose that names another token, comes from another machine, heals the enemy or moves it too far is counted and refused.
-bool acceptPose(const enemy_observer_wire::PoseEntry& entry, uint8_t sender, uint32_t nowMs);
+// `localSlot` is this machine's pool slot of the enemy (the entry's own slot is the holder's).
+bool acceptPose(const enemy_observer_wire::PoseEntry& entry, uint8_t localSlot, uint8_t sender, uint32_t nowMs);
 
 // Game thread: the room changed, the peer left or the session ended: every lease and queued grant is dropped. The
 // enemies given away are resumed by the caller (enemy_observer) before this runs.

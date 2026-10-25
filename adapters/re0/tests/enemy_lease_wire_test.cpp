@@ -84,7 +84,7 @@ bool refusedAfter(Message message, Change change) {
 }
 
 void testLayouts() {
-    check(sizeof(wire::EnemyLease) == 68, "lease is 68 bytes");
+    check(sizeof(wire::EnemyLease) == 72, "lease is 72 bytes");
     check(sizeof(wire::EnemyLeaseEnd) == 48, "lease end is 48 bytes");
     check(sizeof(wire::PlayerHit) == 36, "player hit is 36 bytes");
     check(wire::kMsgEnemyLease == 0x0163 && wire::kMsgEnemyLeaseEnd == 0x0164 && wire::kMsgPlayerHit == 0x0165, "message ids");
@@ -118,6 +118,8 @@ void testLeaseRefusals() {
     check(refusedAfter(lease(), [](L& m) { m.victim = 2; }), "a victim that is no character");
     check(refusedAfter(lease(), [](L& m) { m.kind = 0x1d; }), "a kind past the table");
     check(refusedAfter(lease(), [](L& m) { m.pad = 1; }), "a non-zero pad");
+    check(refusedAfter(lease(), [](L& m) { m.reserved = 1; }), "a non-zero reserved word");
+    check(refusedAfter(lease(), [](L& m) { m.spawnRecord = game::kSpawnRecordCount; }), "a lease past the spawn records");
     check(refusedAfter(lease(), [](L& m) { m.hp = 0; }), "a lease on a dead enemy");
     check(refusedAfter(lease(), [](L& m) { m.record[0] = -1; }), "a negative record state");
     check(refusedAfter(lease(), [](L& m) { m.record[1] = 0x1000; }), "an action id past the limit");
@@ -130,7 +132,7 @@ void testEndAndHitRefusals() {
     check(refusedAfter(leaseEnd(), [](E& m) { m.reason = 0; }), "reason None");
     check(refusedAfter(leaseEnd(), [](E& m) { m.reason = contact_rule::kEndCount; }), "a reason past the list");
     check(refusedAfter(leaseEnd(), [](E& m) { m.slot = game::kEnemyPoolSlots; }), "an end past the pool");
-    check(refusedAfter(leaseEnd(), [](E& m) { m.pad = 2; }), "an end with a pad");
+    check(refusedAfter(leaseEnd(), [](E& m) { m.spawnRecord = game::kSpawnRecordCount; }), "an end past the spawn records");
     check(refusedAfter(leaseEnd(), [](E& m) { m.pos[0] = NAN; }), "an end with a non-finite position");
     wire::EnemyLeaseEnd dead = leaseEnd();
     dead.hp = -1;
@@ -138,7 +140,8 @@ void testEndAndHitRefusals() {
     using H = wire::PlayerHit;
     check(refusedAfter(hit(), [](H& m) { m.kind = 0x1d; }), "a hit kind past the table");
     check(refusedAfter(hit(), [](H& m) { m.victim = 5; }), "a hit on no character");
-    check(refusedAfter(hit(), [](H& m) { m.pad[2] = 1; }), "a hit with a pad");
+    check(refusedAfter(hit(), [](H& m) { m.pad = 1; }), "a hit with a pad");
+    check(refusedAfter(hit(), [](H& m) { m.spawnRecord = game::kSpawnRecordCount; }), "a hit past the spawn records");
     check(refusedAfter(hit(), [](H& m) { m.point[1] = NAN; }), "a hit with a non-finite point");
     check(refusedAfter(hit(), [](H& m) { m.scene = 0xff; }), "a hit in a scene past the limit");
 }

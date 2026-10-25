@@ -127,7 +127,14 @@ void onTick() {
         std::lock_guard lock(g_mutex);
         arrivals.swap(g_inbox);
     }
-    for (const Arrival& arrival : arrivals) take(arrival);
+    for (Arrival& arrival : arrivals) {
+        if (!enemy_observer::toLocalSlot(arrival.hit.slot, arrival.hit.spawnRecord)) {
+            logger::writeUnlessRepeated("contact: hit names record %u, no enemy of it here", arrival.hit.spawnRecord);
+            debug_stats::count(Counter::ContactHitsDropped);
+            continue;
+        }
+        take(arrival);
+    }
     if (g_queueSender < 0) return;
     const std::optional<stream_clock::StreamClock> clock = puppet::clockFor(static_cast<uint8_t>(g_queueSender));
     if (!clock) return;
@@ -158,6 +165,7 @@ void sendHit(const contact_rule::Contact& contact, const enemy_observer_wire::Po
     hit.slot = contact.slot;
     hit.classIndex = enemy.classIndex;
     hit.spawnId = enemy.spawnId;
+    hit.spawnRecord = enemy.spawnRecord;
     hit.victim = contact.victim;
     hit.kind = contact.kind;
     hit.level = contact.level;
