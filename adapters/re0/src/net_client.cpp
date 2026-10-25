@@ -190,7 +190,7 @@ bool NetClient::handleFrame(uint16_t type, uint8_t flags, uint8_t slot, std::spa
     switch (type) {
         case proto::kWelcome:
             if (payload.size() < proto::kWelcomeSize) return true;
-            session_ = {};
+            session_ = SessionSnapshot{.lobbyState = session_.lobbyState, .lobbyRevision = session_.lobbyRevision};
             session_.linked = true;
             session_.localSlot = payload[0];
             session_.hostSlot = payload[1];
@@ -236,6 +236,10 @@ bool NetClient::handleFrame(uint16_t type, uint8_t flags, uint8_t slot, std::spa
             return true;
         case proto::kHeartbeat:
             return true;
+        case proto::kLobbyState:
+            session_.lobbyState = std::make_shared<const std::string>(reinterpret_cast<const char*>(payload.data()), payload.size());
+            ++session_.lobbyRevision;
+            return true;
         default:
             break;
     }
@@ -265,7 +269,7 @@ bool NetClient::flushOutbox(uintptr_t socket) {
 
 void NetClient::resetSession() {
     std::lock_guard lock(mutex_);
-    session_ = {};
+    session_ = SessionSnapshot{.lobbyRevision = session_.lobbyRevision};  // the count goes on, so a relinked launcher's text is new
     inbox_.clear();
     outbox_.clear();
 }

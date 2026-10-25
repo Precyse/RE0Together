@@ -188,7 +188,7 @@ void testPusherDeniedAndCancelled() {
 
 stream_clock::StreamClock readyClock() {
     stream_clock::StreamClock clock;
-    clock.observe(1000, 1000);  // zero transit time: the shown time is 100 ms behind the sender's
+    clock.observe(1000, 1000);  // zero transit time: the shown time is the render delay behind the sender's
     return clock;
 }
 
@@ -199,13 +199,14 @@ void testTrackInterpolates() {
     track.push(clock, {2000, at(0), false});
     track.push(clock, {2100, at(10), false});
     track.push(clock, {2100, at(99), false});
-    check(!track.render(clock, 2050).valid, "nothing before the first move's time");
-    rule::Shown shown = track.render(clock, 2200);
+    const uint32_t delay = clock.delayMs();
+    check(!track.render(clock, 2000 + delay - 1).valid, "nothing before the first move's time");
+    rule::Shown shown = track.render(clock, 2100 + delay);
     check(shown.valid && std::fabs(shown.pose.pos[0] - 10.0f) < 0.01f && !shown.finished, "the stream is shown one render delay late");
     track.push(clock, {2200, at(20), false});
-    shown = track.render(clock, 2250);
+    shown = track.render(clock, 2150 + delay);
     check(shown.valid && std::fabs(shown.pose.pos[0] - 15.0f) < 0.01f, "between two moves the box is between them");
-    check(track.render(clock, 2250).valid, "rendering twice is stable");
+    check(track.render(clock, 2150 + delay).valid, "rendering twice is stable");
 }
 
 void testTrackFinishes() {

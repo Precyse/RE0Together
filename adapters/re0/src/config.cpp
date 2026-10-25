@@ -11,6 +11,7 @@
 
 #include "appearance_rule.h"
 #include "log.h"
+#include "option_values.h"
 #include "paths.h"
 
 namespace {
@@ -52,10 +53,10 @@ void parsePartnerMode(const std::string& value, Config& config) {
 
 // world_pause=never (default): with a peer the inventory, the map and the player's own messages keep the world
 // running (live menus); menus: every screen pauses the world as the game does.
-constexpr const char* kWorldPauseNever = "never";
-constexpr const char* kWorldPauseMenus = "menus";
+using option_values::kWorldPauseMenus;
+using option_values::kWorldPauseNever;
 
-const char* worldPauseName(bool liveMenus) { return liveMenus ? kWorldPauseNever : kWorldPauseMenus; }
+const char* worldPauseName(bool liveMenus) { return (liveMenus ? kWorldPauseNever : kWorldPauseMenus).data(); }
 
 void parseWorldPause(const std::string& value, Config& config) {
     if (value == kWorldPauseNever) {
@@ -68,10 +69,8 @@ void parseWorldPause(const std::string& value, Config& config) {
 }
 
 void parseCharacter(const std::string& value, Config& config) {
-    if (value == "rebecca") {
-        config.hostCharacter = character_owner::Character::Rebecca;
-    } else if (value == "billy") {
-        config.hostCharacter = character_owner::Character::Billy;
+    if (const auto character = option_values::characterOf(value)) {
+        config.hostCharacter = *character;
     } else {
         logger::write("config: character=%s ignored (rebecca or billy)", value.c_str());
     }
@@ -133,17 +132,17 @@ Config loadConfig() {
             config.autoJoin = value == "1";
         } else if (key == "dev_commands") {
             config.devCommands = value == "1";
-        } else if (key == "world_pause") {
+        } else if (key == option_values::kWorldPauseKey) {
             parseWorldPause(value, config);
-        } else if (key == "partner_mode") {
+        } else if (key == option_values::kPartnerModeKey) {
             parsePartnerMode(value, config);
-        } else if (key == "character") {
+        } else if (key == option_values::kCharacterKey) {
             parseCharacter(value, config);
-        } else if (key == "outfit_rebecca") {
-            parseOutfit("outfit_rebecca", character_owner::Character::Rebecca, value, config);
-        } else if (key == "outfit_billy") {
-            parseOutfit("outfit_billy", character_owner::Character::Billy, value, config);
-        } else if (key == "load_slot") {
+        } else if (key == option_values::kOutfitRebeccaKey) {
+            parseOutfit(key.c_str(), character_owner::Character::Rebecca, value, config);
+        } else if (key == option_values::kOutfitBillyKey) {
+            parseOutfit(key.c_str(), character_owner::Character::Billy, value, config);
+        } else if (key == option_values::kLoadSlotKey) {
             loadSlot = value;
         } else if (key == "load_hash") {
             loadHash = value;

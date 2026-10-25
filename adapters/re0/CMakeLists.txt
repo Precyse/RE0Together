@@ -86,8 +86,12 @@ add_library(re0_adapter SHARED
     src/gui_text.cpp
     src/title_coop.cpp
     src/title_label.cpp
-    src/coop_page.cpp
-    src/coop_page_view.cpp
+    src/native_menu.cpp
+    src/native_page.cpp
+    src/coop_menu.cpp
+    src/lobby.cpp
+    src/save_blocks.cpp
+    src/title_load.cpp
     src/partner_status.cpp
     src/camera_parity.cpp
     src/command_input.cpp
@@ -107,6 +111,7 @@ add_library(re0_adapter SHARED
     src/player_contact.cpp
     src/contact_game.cpp
     src/contact_net.cpp
+    src/hit_fx.cpp
     src/enemy_lease.cpp
     src/boss_handover.cpp
     src/state_mode.cpp
@@ -159,7 +164,7 @@ add_executable(settled_copy_test tests/settled_copy_test.cpp)
 add_executable(floor_pending_test tests/floor_pending_test.cpp src/floor_pending.cpp)
 
 add_executable(overlay_test tests/overlay_test.cpp src/d3d9_hook.cpp
-    src/debug_lines.cpp src/debug_overlay.cpp src/toast_queue.cpp src/coop_page_view.cpp src/title_label.cpp src/hooks.cpp src/window_focus.cpp
+    src/debug_lines.cpp src/debug_overlay.cpp src/toast_queue.cpp src/title_label.cpp src/hooks.cpp src/window_focus.cpp
     src/crash_dump.cpp src/game_tick.cpp src/slow_frame.cpp ${NET_SOURCES})
 target_link_libraries(overlay_test PRIVATE minhook imgui d3d9 ws2_32 dbghelp)
 
@@ -200,7 +205,15 @@ add_executable(title_coop_rule_test tests/title_coop_rule_test.cpp)
 
 add_executable(title_label_rule_test tests/title_label_rule_test.cpp)
 
-add_executable(coop_page_rule_test tests/coop_page_rule_test.cpp)
+add_executable(native_menu_rule_test tests/native_menu_rule_test.cpp)
+
+add_executable(coop_menu_rule_test tests/coop_menu_rule_test.cpp)
+
+add_executable(lobby_wire_test tests/lobby_wire_test.cpp)
+
+add_executable(save_index_rule_test tests/save_index_rule_test.cpp)
+
+add_executable(title_load_rule_test tests/title_load_rule_test.cpp)
 
 add_executable(flag_diff_test tests/flag_diff_test.cpp)
 
@@ -275,6 +288,9 @@ add_executable(contact_rule_test tests/contact_rule_test.cpp)
 
 add_executable(enemy_lease_rule_test tests/enemy_lease_rule_test.cpp)
 
+add_executable(hit_fx_wire_test tests/hit_fx_wire_test.cpp)
+target_include_directories(hit_fx_wire_test PRIVATE src ${DS2_SRC_DIR})
+
 add_executable(enemy_lease_wire_test tests/enemy_lease_wire_test.cpp)
 target_include_directories(enemy_lease_wire_test PRIVATE src ${DS2_SRC_DIR})
 
@@ -302,12 +318,9 @@ add_executable(world_digest_test tests/world_digest_test.cpp)
 
 add_executable(rescue_rule_test tests/rescue_rule_test.cpp)
 
-add_executable(fake_peer_wire_test tests/fake_peer_wire_test.cpp)
-target_include_directories(fake_peer_wire_test PRIVATE src ${DS2_SRC_DIR})
-target_compile_definitions(fake_peer_wire_test PRIVATE FAKE_PEER_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/../../tools/re0/fake_peer/tests/golden_frames.bin")
 
 add_executable(trace_replay tools/trace_replay.cpp)
 
-foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test save_load_rule_test menu_hold_rule_test live_menu_rule_test partner_status_test gui_text_rule_test title_coop_rule_test title_label_rule_test coop_page_rule_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test world_epoch_rule_test flag_load_hold_rule_test room_authority_test weapon_fx_wire_test weapon_fx_sites_test weapon_fx_matrix_test enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test item_ledger_test item_wire_test prop_rule_test prop_wire_test room_move_wire_test room_move_rule_test slow_frame_test contact_rule_test enemy_lease_rule_test enemy_lease_wire_test demo_skip_test boss_wire_test boss_handover_test session_ready_test join_extras_test save_gate_rule_test hang_rule_test dev_command_rule_test world_digest_test rescue_rule_test fake_peer_wire_test trace_replay)
+foreach(target re0_adapter net_test proxy_test damage_thunk_test settled_copy_test floor_pending_test overlay_test command_rules_test position_blend_test enemy_follow_rule_test room_gate_rule_test spawn_seed_test equip_rule_test appearance_rule_test spot_rule_test door_phase_test session_rule_test save_load_rule_test menu_hold_rule_test live_menu_rule_test partner_status_test gui_text_rule_test title_coop_rule_test title_label_rule_test native_menu_rule_test coop_menu_rule_test lobby_wire_test save_index_rule_test title_load_rule_test flag_diff_test flag_family_test jitter_target_test pad_buffer_test enemy_hit_wire_test target_hysteresis_rule_test event_rule_test pose_wire_test pose_timeline_test puppet_rule_test state_net_rule_test frame_router_rule_test load_serial_test stream_clock_test timed_queue_test pose_capture_rule_test flag_sequencer_test world_epoch_rule_test flag_load_hold_rule_test room_authority_test weapon_fx_wire_test weapon_fx_sites_test weapon_fx_matrix_test enemy_policy_test enemy_observer_wire_test enemy_observer_rule_test enemy_observer_send_rule_test item_ledger_test item_wire_test prop_rule_test prop_wire_test room_move_wire_test room_move_rule_test slow_frame_test contact_rule_test enemy_lease_rule_test enemy_lease_wire_test hit_fx_wire_test demo_skip_test boss_wire_test boss_handover_test session_ready_test join_extras_test save_gate_rule_test hang_rule_test dev_command_rule_test world_digest_test rescue_rule_test trace_replay)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
 endforeach()

@@ -14,6 +14,10 @@ bool enable(NetClient& net, const Config& config);
 // The model byte of the character's current outfit, appearance_rule::kNoOutfit while the game is not ready. Game thread.
 uint8_t outfitOf(character_owner::Character character);
 
+// The local player's outfit choice for a character (the Co-op page, through the launcher's LOBBY_STATE): put on at the
+// next game start like the adapter.ini choice. appearance_rule::kNoOutfit keeps the save's outfit. Any thread.
+void setChoice(character_owner::Character character, uint8_t model);
+
 // Net thread: APPEARANCE from the owner of the character it names.
 void onFrame(const GameFrame& frame);
 

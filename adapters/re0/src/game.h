@@ -207,6 +207,25 @@ constexpr std::array<uint8_t, 12> kLoadRequestBytes = {0x83, 0x79, 0x04, 0x00, 0
 // slot n (registered by str_SYSTEMDATA 0x613640) at +0x23a7c8 + n * 0x1c850.
 constexpr uintptr_t kSaveSlotBlocksOffset = 0x23a7c8;
 constexpr size_t kSaveSlotBytes = 0x1c850;
+// Every load reads the whole file again (stepLoad 0x612e30: sSavedata::requestRead, then the parse fills the blocks), and
+// restoreSlotToGame copies block n into the working slot at +0xc8 + n * 0x1c850 (the slot the load list's Continue reads
+// its cleared and Wesker bytes from).
+constexpr uintptr_t kSaveWorkingSlotsOffset = 0xc8;
+constexpr uintptr_t kSaveManagerGlobal = 0xdcc018;       // sSaveManager*
+constexpr uintptr_t kSaveManagerRequestOffset = 0x20;    // the request object
+constexpr uintptr_t kSaveManagerLoadModeOffset = 0x28;   // u8: the title's Load Game writes 0 before it opens the list
+// sSaveManager (thiscall): requestLoad(slot) ret 4 -> false while another request runs (mov ecx,[ecx+0x20]; jmp 0x613390),
+// isBusy() -> op or step running, result() -> request +0xc, 0 ok
+constexpr uintptr_t kSaveManagerLoadFunction = 0x613c40;
+constexpr uintptr_t kSaveManagerBusyFunction = 0x613c30;
+constexpr uintptr_t kSaveManagerResultFunction = 0x613c10;
+// Starting a loaded save from the title (stateLoadGameWait 0x5eca90): sGameInfo::setStartMode +0x74 (thiscall(mode) ret 4),
+// sGameInfo::setWeskerMode +0x60 (thiscall(bool) ret 4), then the area switch: [0xe2d8c0]->vtbl[0x28](the aGame area)
+constexpr uintptr_t kGameInfoStartModeFunction = 0xa891f0;
+constexpr uintptr_t kGameInfoWeskerFunction = 0x59d530;
+constexpr uintptr_t kAreaManagerGlobal = 0xe2d8c0;
+constexpr uintptr_t kAreaSwitchSlot = 0x28;
+constexpr uintptr_t kGameArea = 0xdcbfe4;
 constexpr uintptr_t kSubMenuOpenFunction = 0x5d9030;  // thiscall, no args: opens the inventory for the focused character
 constexpr uint8_t kSubMenuClosed = 0x0d;
 // cPlayerThink vtable slot 28, reached from the lethal hit: kills the player (setHP 0) and enters the dead state.
@@ -696,6 +715,76 @@ constexpr uintptr_t kDrawTextureD3dOffset = 0x34;     // IDirect3DTexture9*
 constexpr uintptr_t kMenuTriggerFunction = 0x5ef420;
 constexpr uintptr_t kPadDecideMaskOffset = 0xb6c;         // sGamePad: the trigger bit mask of confirm
 constexpr uintptr_t kPadCancelMaskOffset = 0xb70;         // sGamePad: the trigger bit mask of cancel
+constexpr uintptr_t kMenuRepeatFunction = 0x5ef340;       // cdecl() -> the auto-repeat bits (cursor moves)
+constexpr uint32_t kRepeatUp = 0x10010;
+constexpr uint32_t kRepeatDown = 0x40040;
+constexpr uint32_t kRepeatLeft = 0x80080;
+constexpr uint32_t kRepeatRight = 0x20020;
+constexpr uintptr_t kMouseClickedFunction = 0x5ef9f0;     // cdecl() -> bool: the left button was pressed this frame
+constexpr uintptr_t kMousePositionFunction = 0x5ef170;    // cdecl(float out[4]) -> out: the cursor in screen units
+constexpr uintptr_t kPlayUiSoundFunction = 0x5eecc0;      // cdecl(sound id)
+constexpr int32_t kSoundDecide = 0x800;
+constexpr int32_t kSoundCancel = 0x801;
+constexpr int32_t kSoundMove = 0x802;
+constexpr uintptr_t kSubMenuCloseRequestOffset = 0x25;    // u8 sSubMenu: 1 while the in-game menu asks its pages to close
+
+// The Options screen (uOptionManager) and its PC Setup page (uGUIOptionPcSetup), which the native Co-op page borrows
+// (docs/RE0_NOTES.md "Menus: the native Co-op page")
+constexpr uintptr_t kOptionManagerMoveFunction = 0x5cb5a0;  // uOptionManager::v8, fastcall(manager): the screen router
+constexpr std::array<uint8_t, 10> kOptionManagerMoveBytes = {0x83, 0xec, 0x40, 0x53, 0x8b, 0xd9, 0x56, 0x8d, 0x73, 0x30};
+constexpr uintptr_t kOptionRouterJumpCheck = 0x5cba3d;      // dec eax; cmp eax, 0x15; ja default: states 1..0x16
+constexpr std::array<uint8_t, 6> kOptionRouterJumpBytes = {0x48, 0x83, 0xf8, 0x15, 0x0f, 0x87};
+constexpr uintptr_t kOptionKeyGuideFunction = 0x5cc1b0;     // thiscall(manager, bool top) ret 4: the button guide
+constexpr uintptr_t kOptionMouseInputFunction = 0x5cc570;   // thiscall(manager, u32* trigger, u32* repeat) ret 8: guide clicks
+constexpr uintptr_t kOptionCreatingOffset = 0x48;           // u8: 1 until the pages are built
+constexpr uintptr_t kOptionStateOffset = 0x54;              // u32 router state, 0 closed
+constexpr uint32_t kOptionStateOpening = 1;                 // waits for the fade, shows guide, backdrop and frame, opens the top
+constexpr uint32_t kOptionStateCloseAll = 0x15;             // kills every page, releases the arc, sets the closed flag
+constexpr uint32_t kOptionStateParked = 0x7f;               // above 0x16: the router's dispatch does nothing
+constexpr uintptr_t kOptionKeyGuideOffset = 0x150;          // uGUIKeyGuide*
+constexpr uintptr_t kOptionBlackOffset = 0x154;             // uGUICommonBG_Black* (title only, may be null)
+constexpr uintptr_t kOptionFrameOffset = 0x158;             // uGUIOptionBG_Frame*
+constexpr uintptr_t kOptionPcSetupOffset = 0x174;           // uGUIOptionPcSetup*
+constexpr uintptr_t kUnitFlagsOffset = 0xc;
+constexpr uint32_t kUnitDrawFlag = 0x800;
+// uGUIOptionPcSetup: move 0x5c6390 runs +0x264 (1 open and fade in, 2 wait, 3 input 0x5c6540, 4 fade out, 5 close to 0)
+constexpr uintptr_t kPcSetupInputFunction = 0x5c6540;       // thiscall(page): state 3
+constexpr std::array<uint8_t, 9> kPcSetupInputBytes = {0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf0, 0x83, 0xec, 0x24};
+constexpr uintptr_t kPcSetupRefreshFunction = 0x5c6fb0;     // thiscall(page): cursor and the eight values (state 1)
+constexpr std::array<uint8_t, 5> kPcSetupRefreshBytes = {0x56, 0x57, 0x8b, 0xf9, 0xe8};
+constexpr uintptr_t kGuiLoadedOffset = 0x254;               // u8 uGameGUI: the layout is set
+constexpr uintptr_t kPcSetupManagerOffset = 0x260;
+constexpr uintptr_t kPcSetupStateOffset = 0x264;
+constexpr uint32_t kPcSetupStateOpen = 1;
+constexpr uint32_t kPcSetupStateClosing = 4;
+constexpr uintptr_t kPcSetupDecidedOffset = 0x268;          // u8 apply on close, u8 at +0x269 pending display apply
+constexpr uintptr_t kPcSetupCursorOffset = 0x26c;
+constexpr uintptr_t kPcSetupTitleOffset = 0x294;            // the atlas header instance
+constexpr uintptr_t kPcSetupArrowsOffset = 0x298;           // the arrows' null, moved to the cursor row
+constexpr uintptr_t kPcSetupArrowLeftOffset = 0x29c;
+constexpr uintptr_t kPcSetupArrowRightOffset = 0x2a0;
+constexpr uintptr_t kPcSetupHelpOffset = 0x2a4;             // cGUIInstMessageGame: the help line
+constexpr uintptr_t kPcSetupRowsOffset = 0x2a8;             // 8 row instances
+constexpr uintptr_t kPcSetupValuesOffset = 0x2c8;           // 8 value instances
+constexpr uintptr_t kPcSetupLabelObjectsOffset = 0x2e8;     // 8 cGUIObjMessageGame: the row labels
+constexpr uintptr_t kPcSetupValueObjectsOffset = 0x308;     // 8 cGUIObjMessageGame: the values
+constexpr uintptr_t kPcSetupArrowLeftTouchOffset = 0x328;
+constexpr uintptr_t kPcSetupArrowRightTouchOffset = 0x32c;
+constexpr uintptr_t kPcSetupRowTouchOffset = 0x330;         // 8 touch polygons
+constexpr uintptr_t kPcSetupRowPitchGlobal = 0xcbfd98;      // f32 48: the arrows' Y per row
+// GUI calls (thiscall); the text setters take the sGameGUI lock themselves and keep the string's pointer
+constexpr uintptr_t kObjectSetStringFunction = 0x5f2e40;    // cGUIObjMessageGame::setString(utf8) ret 4
+constexpr uintptr_t kInstanceSetStringFunction = 0x5f21c0;  // cGUIInstMessageGame::setString(utf8) ret 4
+constexpr uintptr_t kInstanceSetVisibleFunction = 0x880d30; // cGUIInstance::setVisible(bool) ret 4
+constexpr uintptr_t kNullSetPositionYFunction = 0x880640;   // cGUIInstNull::setPositionY(float) ret 4
+constexpr uintptr_t kInstanceSetSequenceFunction = 0x880c70;  // cGUIInstAnimation::setSequenceId(id) ret 4
+constexpr uintptr_t kGuiSequenceDoneFunction = 0x5ef650;    // uGUI(inst, id) ret 8 -> bool: inst plays id and it ended
+constexpr uintptr_t kGuiHitTestFunction = 0x5ef730;         // uGUI(inst, object, float pos[4]*, 1) ret 0x10 -> bool
+constexpr uintptr_t kGuiSequenceFinishedFunction = 0x883bc0;  // uGUI::isSequenceFinished(i32) ret 4 -> bool (main menu input's guard)
+constexpr int32_t kSequenceNormal = 1;
+constexpr int32_t kSequenceHighlight = 5;                   // the cursor row, or an arrow just pressed
+constexpr uintptr_t kFadeDoneOffset = 0x280;                // u8 of the fade object: 1 once the fade finished
+constexpr float kMenuFadeSeconds = 0.5f;
 
 // MSVC cannot declare a free thiscall pointer; __fastcall with edx unused has the same register and stack layout.
 template <class R, class... Args>
@@ -782,6 +871,19 @@ inline uintptr_t playerField(uintptr_t offset) {
 inline uintptr_t modeFlagsAddress() {
     const uintptr_t info = readPointer(kGameInfoGlobal);
     return info ? info + kGameInfoModeFlagsOffset : 0;
+}
+
+// The screen fade object (+0x20 of [kDemoFadeHolderGlobal]; FadeStart 0x5aa410 fades out on it), or 0.
+inline uintptr_t fadeObject() {
+    const uintptr_t holder = readPointer(kDemoFadeHolderGlobal);
+    return holder ? readPointer(holder + kDemoFadeObjectOffset) : 0;
+}
+
+// True once the last fade in or out finished (what every menu waits for before its next state).
+inline bool fadeDone() {
+    uint8_t done = 0;
+    const uintptr_t fade = fadeObject();
+    return fade && readMemory(fade + kFadeDoneOffset, done) && done == 1;
 }
 
 inline uintptr_t controlled() { return playerField(kPlayerControlledOffset); }

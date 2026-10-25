@@ -8,7 +8,7 @@
 
 // Receiver side of partner_mode=state (docs/RE0_NOTES.md "Pose puppet"): the remote-owned character is a puppet. Its
 // brain is switched off with the engine's own script pause, held for the length of its own move; before the move the
-// owner's pose, delayed by `pose_timeline::kRenderDelayMs`, is written and the owner's motion requests are replayed
+// owner's pose, delayed by the clock's render delay, is written and the owner's motion requests are replayed
 // (body and weapon sub-controls); the steps the paused move skips (hand pose, light probe, spine bend, hand swaps,
 // area id) run around it.
 namespace puppet {

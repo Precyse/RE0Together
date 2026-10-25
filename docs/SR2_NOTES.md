@@ -2,6 +2,51 @@
 
 Full research plan (static, not in the repo): `coop-scratch\sr2\NATIVE_COOP_4P.md`. Addresses are for the installed `SR2_pc.exe` (Steam build 1076239 with the Juiced patch; PE time stamp 0x49904C37; image base 0x400000, x86, large address aware). The adapter (`adapters/sr2`) refuses to patch an exe that differs (see "Start-up check").
 
+## Contents
+
+Read only the section you need (grep `^## ` for its line).
+
+- Confirmed findings
+- Juiced (DFEngine.dll)
+- Adapter (milestone 1)
+- Co-op player pools (milestone 1b)
+- Replication (milestone 3)
+- Partner logic (milestone 4)
+- Player cap (milestone 5)
+- Join trace (milestone 5b)
+- Home network (milestone 5d)
+- Game port (milestone 5e)
+- Late joiners (milestone 5h)
+- Version gate (milestones 8 and 11 B3)
+- Looks (milestone 5i)
+- Member leave (milestone 5i, section 8)
+- Activities (milestone 7)
+- Players 3 and 4 (milestone 9)
+- Force join (milestone 6)
+- Player names (milestone 12)
+- Steam tunnel (milestone 10)
+- Outfits, items and weapon slots (M16 W1)
+- Kick and session admin (milestone 16 wave 1)
+- HUD and waypoints (milestone 16 wave 2)
+- Downed, revive and notoriety (M16 W2)
+- Store, clothing and activity level menus (milestone 16 wave 2)
+- Lua per-remote slots and LT1 (M16 wave 2)
+- Diversions and activities (milestone 16 wave 2)
+- Zombie Uprising for 3 to 4 players (milestone 17 wave 3)
+- Remote poses, world walks, garage door and client name (milestone 17 wave 3)
+- FUZZ (milestone 17 wave 3)
+- Crowd Control (milestone 17 wave 3)
+- Trail Blazing (milestone 17 wave 3)
+- Walks and the Mayhem counter (milestone 17 wave 3)
+- Duplicate constants and helpers (milestone 18 cleanup)
+- M18 static review fixes (coop-scratch/sr2/M18_REVIEW.md)
+- M18b static review fixes (coop-scratch/sr2/M18B_REVIEW.md)
+- Echo testing (one PC, milestone 19)
+- Watchdog and exits (2026-10-22)
+- Stalled peers and rejoins (2026-10-22)
+- Open questions for the live run
+- Live results 2026-10-13 (solo host, SR2 Juiced, build 1076239)
+
 ## Confirmed findings
 - All co-op netcode is in `SR2_pc.exe`: GameSpy SDK (redirected to OpenSpy by Juiced's `DFEngine.dll`), game port 4200. No Steam networking.
 - The session layer (`pc_multi_session`) is built for 12 players; co-op is the same machinery configured down to 2.

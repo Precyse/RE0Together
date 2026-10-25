@@ -70,13 +70,13 @@ Setup: `coop=1`, `overlay=1`, any `partner_mode`, delete `adapter.log`, start th
 |---|---|---|---|
 | a. hooks | start the game, open the log | `hooks: uGUITitle::v8 hooked`; on reaching the main menu `title_label: Co-op drawn into the <lang> title atlas` (German also logs `has no letters for Co-op, drawn with the system font`); no `title_coop:` or `title_label:` line about unexpected code or a lock failure, no `adapter: Co-op menu entry unavailable` | any of those lines |
 | b. entry | the main menu | five rows: Load Game, New Game, Options, Extras, Co-op; the menu panel and spacing fit five rows (the game's own five-row layout), also on the first menu after boot (the save check's opening); keyboard, pad, mouse wheel and mouse hover move over the new row and wrap from Co-op to Load Game | four rows, "Online Store" label, a garbled or clipped label, panel sized for four rows, cursor skips or sticks |
-| c. open | confirm on Co-op (pad confirm, Enter, left click on the row) | the decide sound, then the Co-op page centred over the title: title, the rows Partner / Connection / Ping / Mode / Character / Outfit / Host, a separator, Back highlighted; the Steam overlay store does not open; no game starts | the Steam store opens, a load list, a difficulty menu or a new game starts, nothing happens |
-| d. values | read the rows with no partner, then with one (T2 or a two-PC session) | no partner: Partner `none`, Connection `waiting for partner` (or `link down` without the launcher), Ping `none`, Mode = `partner_mode` of adapter.ini, Character / Outfit `none` or the planned character, Host `you` or `none`; with a partner: its name, `connected`, a ping that moves, the host's name or `you` | wrong mode or host, ping stuck |
-| e. back | on the page press confirm; reopen it and press cancel (pad B, Esc, right mouse button) | each press closes the page and the main menu takes input again with the cursor on Co-op; the log has one `coop_page: opened` and one `coop_page: closed` per visit; the closing press does not reopen the page or choose another row | stuck menu, cursor on another row, the page reopens at once, the title goes back to Press Start |
-| f. no input bleed | on the page press up, down, left, right, confirm and cancel in turn; after returning press nothing for 2 s | the page ignores directions; no row was chosen while it was open (no load list, difficulty menu, Options, Extras) and the menu cursor did not move | anything else opens, the cursor moved |
+| c. open | confirm on Co-op (pad confirm, Enter, left click on the row) | the decide sound, the title fades out and the Options screen's frame and key guide fade in with the Co-op page (T17); the log has `native_page: opening menu coop on the PC Setup page`; the Options list does not show first; the Steam overlay store does not open; no game starts | the Steam store opens, the Options list shows, a load list, a difficulty menu or a new game starts, nothing happens |
+| d. back | on the page press cancel (pad B, Esc, right mouse button, the key guide's Back) | the page fades out, `native_page: menu coop closed`, the main menu comes back with the cursor on Co-op and takes input; the closing press does not reopen the page or choose another row | stuck menu, cursor on another row, the page reopens at once, the title goes back to Press Start |
+| e. Options after | open Options, then PC Setup, change nothing and leave; open Options again | the Options list and PC Setup are vanilla (labels Resolution ... Texture Quality, their values, the gold header, arrows on every row); leaving applies nothing (no display reset) | a Co-op label or value on PC Setup, a missing row, the display resets |
+| f. no input bleed | on the page press every key the page does not use; after returning press nothing for 2 s | no title row was chosen while the page was open and the menu cursor did not move | anything else opens, the cursor moved |
 | g. repeat and leave | open and close the page 5 times; then Options, Extras and Load Game in turn and back; cancel to Press Start and return to the menu; start a new game, quit to the title | the entry and the page work every time; every other row works as vanilla; Co-op is there again after each return, with its label | row gone, "Online Store" back, crash |
 | h. language | change the language in Options (each of English, French, German, Italian, Spanish, Japanese), return to the main menu | the label reads Co-op in the same lettering as the other rows (Japanese CO-OP; German in a slightly different system font); the page still works | label lost, garbled, letters on different baselines or uneven spacing |
-| i. coop=0 / overlay=0 unchanged | set `coop=0`, start the game; then `coop=1` with `overlay=0` | vanilla four-row main menu, no `title_coop:` / `title_label:` / `coop_page:` lines (with `overlay=0` the log has `adapter: overlay off, no Co-op entry on the title`) | any difference from vanilla |
+| i. coop=0 / overlay=0 unchanged | set `coop=0`, start the game; then `coop=1` with `overlay=0` | vanilla four-row main menu, no `title_coop:` / `title_label:` / `native_page:` lines (with `overlay=0` the log has `adapter: overlay off, no Co-op entry on the title`) | any difference from vanilla |
 
 ### T16 Forced save load (one PC; coop=1, the launcher's host options in adapter.ini, no partner needed)
 
@@ -91,6 +91,34 @@ Setup: in `<game dir>\coop\adapter.ini` set `coop=1`, `load_slot=<N>` (a used sl
 | e. pass-through | boot with the order set, watch the log before the main menu | no `save_load:` line for the title's boot read of the system data (slot 0x15) | the system data redirected |
 | f. game over | die, wait for the title, Load Game, confirm any slot | `save_load: ... loading slot N` again (or the co-op slot 19 after a save: `loading slot 19`), no hash line | an old slot after a co-op save |
 | g. guest | a guest with the same keys joins the host already in game | the guest's confirm logs `session_slot: load of slot M turned into the host's slot K` once the host announced its slot; before that `save_load: ... (redirect)` | the guest loads its own slot |
+
+### T17 Native Co-op page and the host's start (one PC; coop=1, the launcher hosting, no partner needed)
+
+Setup: host a lobby in the launcher (no guest), pick a save on the hosting screen, start the game; back up the save first; delete `adapter.log` before the start. Send `adapter.log` and game-window screenshots of the page for every fail.
+
+| step | do | pass | fail |
+|---|---|---|---|
+| a. hooks | the log after the main menu | `hooks: uOptionManager::v8 hooked`, `uGUIOptionPcSetup input hooked`, `uGUIOptionPcSetup refresh hooked`; `lobby: launcher state, 1 members`; no `native_page: ... not the expected code` | a hook missing, no lobby line |
+| b. look | open the page (T15 c) | the frame, the key guide and "Co-op" in the game font where PC Setup has its help line; no gold header; 8 rows: your name (you) with Host / Ready, Open, Character, Outfit, World pause, Partner mode, Save, Start; the values in the value column, none clipped in a way that hides the slot number | the PC Setup labels or values, an empty row, overlapping text, the gold "PC Setup" header |
+| c. cursor | press up and down through the page, wrap at both ends; click rows with the mouse | the cursor skips the two player rows and Partner mode; the move sound plays; the arrows show only on Character, Outfit, World pause and Save; a click on another row moves the cursor there, a click on the cursor row acts like confirm | the cursor lands on an info row, arrows on Start, no sound |
+| d. options | on Character, Outfit and World pause press left and right (also click the arrows) | each change shows on the page within a moment and on the launcher's hosting screen, and the log has `lobby: option ... sent to the launcher` and the launcher log `Adapter option ...=... saved`; Outfit steps only through the outfits the launcher offers for the shown character (DLC ones only when installed); after a Character change the Outfit row follows the new character | the page and the launcher disagree, a refused line, a DLC outfit without its DLC |
+| e. save | on Save press left and right through every value | None, then each used slot labelled like the launcher's picker (`Slot 3 / Normal / 2:14:05 / Area 4`); the launcher's picker follows; at start the row showed the launcher's pick; Start is refused (cancel sound) on None | an empty slot offered, the label differs from the launcher's row, Start acts on None |
+| f. start | pick a slot, confirm on Start | the page fades out and the game loads that slot without the main menu showing again; the log has `title_load: host start of slot N`, `the title is parked for slot N (host start)`, `load of slot N requested (try 1)`, `slot N loaded (hash ...), start mode 1, wesker 0, switching to the game`, `lobby: start 1 of slot N ... announced`; the room, play time and outfits are that save's with the page's outfit | the main menu flashes, another slot loads, a black screen that stays, a crash |
+| g. cleared and Wesker | repeat f with a cleared save and with a Wesker save if the save file has them | `start mode 2` for the cleared save; `wesker 1` and Wesker mode for the Wesker save, as the game's own Continue starts them | start mode 1 for a cleared save |
+| h. game over | die, wait for the title, open the page, Start again | the Save row shows the slot the session plays (the co-op slot after a save in the session) and Start loads it | an older slot |
+| i. Continue still redirects | instead of the page take Load Game, confirm another slot | `save_load: slot M requested, loading slot N (redirect)` as in T16 b, N being the page's pick | the confirmed slot loads |
+
+### T18 Lobby page with a partner (two PCs; the launcher session as in TWO-PC setup)
+
+| step | do | pass | fail |
+|---|---|---|---|
+| a. both pages | both open the page | each shows the host's and the guest's names, (you) on its own row, Host / Ready and Guest / Ready once both pages are open; a player on its main menu reads In menu, a closed game Away within 6 s | wrong names, roles swapped, a state stuck |
+| b. read only | on the guest's page try Character, World pause and Save | they show the host's values and refuse a change (cancel sound); the guest's Outfit changes and shows on the host's launcher, the host's page does not show it (only the launcher's player cards do) | a guest changes a host option |
+| c. host changes | the host changes Character, World pause and Save | the guest's page follows within 2 s (character swaps to the other one, world pause label, the save label) | the guest's page keeps old values |
+| d. save differs | before the session, give the guest an older copy of the host's save (or edit nothing and skip) | the host's page reads Guest / Save differs while the guest's copy of the picked slot is another | Ready with a different copy |
+| e. start | the guest waits on its page; the host Starts | the guest's Start row reads Waiting for host, then its page closes and its game loads the same slot (`title_load: following the host's start 1 of slot N`, `slot N loaded (hash H)` with the host's hash); the join places the guest in the host's world | the guest stays, loads another slot, or starts with a different hash |
+| f. guest at the main menu | the guest leaves the page and waits on the main menu; the host Starts | the guest's title fades out and loads the slot the same way; no auto_join presses (`auto_join:` lines show no taps on the title) | the load list opens, Enter presses on the title |
+| g. staged save | in game the host saves (typewriter); both die; on the title the host Starts the co-op slot | the guest's log shows `save_redirect: data0.bin read` from the staged copy (the guest loads the save made in the session, hash equal) | `is not the host's ... waiting for a newer copy` until it gives up |
 
 ## TWO-PC
 
@@ -205,5 +233,19 @@ Wi-Fi state mode, 10 min.
 
 | result | line |
 |---|---|
-| pass | F8 `delay` near 100 ms; `timeline reset` count per minute no higher than T2c; alt-tab the game 1 s: `Fresh channel: N older frames replaced` in that machine's launcher log; a stall gives one `SLOW_FRAME` line in `adapter.log` naming the column |
+| pass | F8 `delay` near 50 ms on a clean link (adaptive 50..250); `timeline reset` count per minute no higher than T2c; alt-tab the game 1 s: `Fresh channel: N older frames replaced` in that machine's launcher log; a stall gives one `SLOW_FRAME` line in `adapter.log` naming the column |
 | fail | `delay` climbs, repeated resets |
+
+### T20 Enemies 1:1 (2026-10-25 changes; both machines on the same build)
+
+Scene 0x24 zombies, then the lift room 0x32 insects. The host enters a room the guest loaded first.
+
+| result | line |
+|---|---|
+| pass | host log `room_authority: scene 0x.. owner slot <host> epoch N (claimed)` on arrival (no boss alive); no `entry refused`; enemies visible on both, both floors of 0x32 |
+| pass | shots on an enemy the other machine runs: blood and the hit sound on both; F8 `hit fx sent/shown` counts on the two machines |
+| pass | a zombie headshot kill: the head bursts on both (`hit_fx: ... lost part 2, sent` / `(from its simulator)`); the head stays gone (PART_MASK) |
+| pass | flinches on the observer while the enemy lives; a falling death plays once (few `enemy_observer: slot N layer 0 sought` lines) |
+| pass | groans and grab cries heard on the machine that does not run the room |
+| pass | a grab plays on both; killing the grabber frees the victim (`lease: token N ended (enemy dead)` after the release) |
+| fail | any enemy invisible, frozen, double-hit, a stuck grab, a part shown wrong on the observer (PART_MASK word count) |

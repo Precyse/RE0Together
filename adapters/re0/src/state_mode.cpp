@@ -8,6 +8,7 @@
 
 #include "boss_handover.h"
 #include "contact_net.h"
+#include "hit_fx.h"
 #include "debug_overlay.h"
 #include "debug_stats.h"
 #include "demo_skip.h"
@@ -69,6 +70,7 @@ constexpr Module kModules[] = {
     {"weapon fx capture", weapon_fx_capture::enable, false},
     {"weapon fx replay", weapon_fx_replay::enable, false},
     {"contact net", contact_net::enable, false},
+    {"hit fx", hit_fx::enable, false},
     {"enemy lease", enemy_lease::enable, false},
     {"enemy observer", enemy_observer::enable, false},
     {"item ledger", item_ledger::enable, false},

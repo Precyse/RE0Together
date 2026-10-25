@@ -27,4 +27,17 @@ bool isEnemy(uintptr_t object) {
     return std::find(game::kEnemyVtables.begin(), game::kEnemyVtables.end(), vtable) != game::kEnemyVtables.end();
 }
 
+bool bossAlive() {
+    for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
+        const uintptr_t enemy = enemyAt(slot);
+        int32_t hp = 0;
+        if (!enemy || !game::readMemory(enemy + game::kEnemyHpOffset, hp) || hp <= 0) continue;
+        const uintptr_t vtable = game::readPointer(enemy);
+        if (std::find(game::kBossRoomVtables.begin(), game::kBossRoomVtables.end(), vtable) != game::kBossRoomVtables.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace enemy_registry

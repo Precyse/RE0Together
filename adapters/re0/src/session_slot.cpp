@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <mutex>
 #include <optional>
 
 #include "character_owner.h"
@@ -11,7 +12,6 @@
 #include "debug_stats.h"
 #include "flag_sync.h"
 #include "floor_items_sync.h"
-#include "fnv1a32.h"
 #include "game.h"
 #include "game_state.h"
 #include "hooks.h"
@@ -22,6 +22,7 @@
 #include "protocol.h"
 #include "room_phase.h"
 #include "save_gate.h"
+#include "save_blocks.h"
 #include "save_load_rule.h"
 #include "save_redirect.h"
 #include "session_rule.h"
@@ -36,8 +37,6 @@ using session_slot::kUnknown;
 constexpr auto kAnnounceInterval = std::chrono::seconds(2);
 constexpr float kRefusedToastSeconds = 3.0f;
 constexpr int32_t kCoopSlot = save_load_rule::kPlayerSlots - 1;  // every save made during a session goes here, never over a solo save
-constexpr size_t kHashChunkBytes = 2384;  // divides the slot block (49 chunks), so a read never leaves the block
-static_assert(game::kSaveSlotBytes % kHashChunkBytes == 0);
 
 using save_load_rule::isPlayerSlot;
 
@@ -47,7 +46,8 @@ using LoadRequestFn = bool(__fastcall*)(void* self, void* edx, int32_t slot);
 SaveRequestFn g_originalSave = nullptr;
 SaveRequestFn g_originalSaveCopy = nullptr;
 LoadRequestFn g_originalLoad = nullptr;
-save_load_rule::Order g_loadOrder;  // set once by enable(), read on the game thread
+std::mutex g_orderMutex;
+save_load_rule::Order g_loadOrder;  // guarded by g_orderMutex: the launcher's order, then the Co-op page's or the host's start
 
 struct Announcement {
     int32_t slot;
@@ -63,25 +63,12 @@ save_gate_rule::Patience g_patience;  // game thread: how long the save screen's
 
 bool guestInSession() { return net_pad::active() && !character_owner::isHost(); }
 
-// FNV-1a 32 of slot `slot`'s block in the save manager's request object (`request` is the `this` of the load request),
-// or nothing when the memory cannot be read.
-std::optional<uint32_t> slotBlockHash(void* request, int32_t slot) {
-    uintptr_t address = reinterpret_cast<uintptr_t>(request) + game::kSaveSlotBlocksOffset +
-                        static_cast<size_t>(slot) * game::kSaveSlotBytes;
-    uint32_t hash = fnv1a32::kOffsetBasis;
-    for (size_t done = 0; done < game::kSaveSlotBytes; done += kHashChunkBytes, address += kHashChunkBytes) {
-        std::array<uint8_t, kHashChunkBytes> chunk{};
-        if (!game::readMemory(address, chunk)) return std::nullopt;
-        hash = fnv1a32::hash(chunk, hash);
-    }
-    return hash;
-}
-
 // The slot a load request really loads: a guest the host's slot, and with a launcher order (docs/RE0_NOTES.md "Forced
 // save load") every player's confirm loads the session's slot, the first time the launcher's pick if it is the bytes
 // the launcher hashed.
 int32_t chooseSlot(void* request, int32_t requested) {
-    const save_load_rule::Pick pick = save_load_rule::pick(g_loadOrder, guestInSession(), requested, g_slot.load());
+    const save_load_rule::Order order = session_slot::order();
+    const save_load_rule::Pick pick = save_load_rule::pick(order, guestInSession(), requested, g_slot.load());
     switch (pick.reason) {
         case save_load_rule::Reason::None: break;
         case save_load_rule::Reason::HostSlot:
@@ -91,7 +78,7 @@ int32_t chooseSlot(void* request, int32_t requested) {
             logger::write("save_load: slot %d requested, loading slot %d (redirect)", requested, pick.slot);
             return pick.slot;
         case save_load_rule::Reason::Order:
-            if (!save_load_rule::hashAccepts(g_loadOrder, slotBlockHash(request, pick.slot))) {
+            if (!save_load_rule::hashAccepts(order, save_blocks::hash(pick.slot, reinterpret_cast<uintptr_t>(request)))) {
                 logger::write("save_load: slot %d hash differs, not redirected", pick.slot);
                 break;
             }
@@ -212,12 +199,33 @@ void onNetTick(NetClient& net) {
 
 int32_t current() { return g_slot.load(); }
 
+save_load_rule::Order order() {
+    std::lock_guard lock(g_orderMutex);
+    return g_loadOrder;
+}
+
+void setOrder(const save_load_rule::Order& next) {
+    {
+        std::lock_guard lock(g_orderMutex);
+        g_loadOrder = next;
+    }
+    if (!next.active()) {
+        logger::write("save_load: no slot picked, the load list decides");
+        return;
+    }
+    g_slot = next.slot;  // a pick replaces what earlier loads and saves left: later loads return to it
+    logger::write("save_load: the session plays slot %d", next.slot);
+}
+
 bool guestSession() { return save_redirect::servingSession() && !character_owner::isHost(); }
 
 bool hostInGame() { return room_phase::isGameplay(g_hostPhase.load()); }
 
 bool enable(const save_load_rule::Order& loadOrder) {
-    g_loadOrder = loadOrder;
+    {
+        std::lock_guard lock(g_orderMutex);
+        g_loadOrder = loadOrder;
+    }
     return hooks::install("save request", game::kSaveRequestFunction, reinterpret_cast<void*>(&saveDetour),
                           reinterpret_cast<void**>(&g_originalSave)) &&
            hooks::install("save request (copy)", game::kSaveCopyRequestFunction, reinterpret_cast<void*>(&saveCopyDetour),

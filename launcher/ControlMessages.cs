@@ -6,6 +6,12 @@ namespace CoopLauncher;
 /// <summary>Builders and parsers for launcher-owned control payloads (types below 0x0100).</summary>
 public static class ControlMessages
 {
+    private const int MaxOptionText = 32;
+    private const byte MaxAscii = 0x7F;
+    private const char FirstPrintable = ' ';
+    private const char LastPrintable = '~';
+    private const char OptionSeparator = '=';
+
     public static Frame Welcome(byte localSlot, byte hostSlot, byte maxPlayers, uint epoch, ulong localId)
     {
         var p = new byte[15];
@@ -54,6 +60,23 @@ public static class ControlMessages
 
     public static Frame Heartbeat() => Framing.Reliable(Msg.Heartbeat, []);
 
+    /// <summary>LOBBY_STATE: the lobby as text for the adapter's own co-op page (see <see cref="LobbyStateText"/>).</summary>
+    public static Frame LobbyState(string text) => Framing.Reliable(Msg.LobbyState, Encoding.UTF8.GetBytes(text));
+
+    /// <summary>OPTION_SET: ASCII <c>key=value</c>, a key of 1 to 32 characters of [a-z0-9_] and a value of 0 to 32 printable
+    /// characters without ';' or '='. False for anything else.</summary>
+    public static bool TryParseOptionSet(byte[] payload, out string key, out string value)
+    {
+        key = "";
+        value = "";
+        if (payload.Any(b => b > MaxAscii)) return false;
+        var parts = Encoding.ASCII.GetString(payload).Split(OptionSeparator, 2);
+        if (parts.Length != 2 || !IsOptionKey(parts[0]) || !IsOptionValue(parts[1])) return false;
+        key = parts[0];
+        value = parts[1];
+        return true;
+    }
+
     public static bool TryParseHello(byte[] payload, out ushort proto, out string gameId)
     {
         proto = 0;
@@ -73,6 +96,12 @@ public static class ControlMessages
         micros = BinaryPrimitives.ReadUInt64LittleEndian(payload);
         return true;
     }
+
+    private static bool IsOptionKey(string key) =>
+        key.Length is >= 1 and <= MaxOptionText && key.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_');
+
+    private static bool IsOptionValue(string value) =>
+        value.Length <= MaxOptionText && value.All(c => c is >= FirstPrintable and <= LastPrintable && c != ';' && c != OptionSeparator);
 
     private static Frame MakeTimestamp(ushort type, ulong micros)
     {

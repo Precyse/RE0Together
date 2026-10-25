@@ -8,6 +8,7 @@
 #include "net_pad.h"
 #include "session_rule.h"
 #include "session_slot.h"
+#include "title_load.h"
 #include "virtual_keys.h"
 
 namespace {
@@ -34,7 +35,7 @@ int g_confirms = 0;
 Mode modeNow() {
     const bool guest = net_pad::active() && session_slot::guestSession() && session_slot::current() != session_slot::kUnknown;
     return session_rule::joinMode(guest, g_fullJoin, game_state::roomPhase(), game::controlled() != 0,
-                                  session_slot::hostInGame());
+                                  session_slot::hostInGame(), title_load::followsHost());
 }
 
 const char* describe(Mode mode) {
@@ -67,7 +68,7 @@ void onNetTick() {
         virtual_keys::setRealKeyboardMuted(false);
         logger::write("auto_join: the host did not continue in %lld s, the keyboard is the guest's again", static_cast<long long>(kMaxWait.count()));
     }
-    if (mode != Mode::Confirming || g_confirms >= kMaxConfirms) return;
+    if (mode != Mode::Confirming || g_confirms >= kMaxConfirms || title_load::busy()) return;
     if (now - g_lastConfirm < kConfirmInterval) return;
     g_lastConfirm = now;
     virtual_keys::tap(virtual_keys::kEnter);

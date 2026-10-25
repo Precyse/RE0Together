@@ -38,6 +38,7 @@ public sealed partial class App
         var status = CurrentStatus(progress);
         ServeSwaps(status);
         PublishLobbyData(status);
+        PublishLobbyState(status);
         if (status == Status) return;
         Status = status;
         _avatars?.Want(AvatarIds(status));

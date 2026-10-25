@@ -29,13 +29,16 @@ void testSaveRoute() {
 }
 
 void testJoinMode() {
-    check(joinMode(false, true, phase::Dead, false, true) == JoinMode::Idle, "host never joins");
-    check(joinMode(true, false, phase::Dead, true, true) == JoinMode::Confirming, "game over follows the host without full join");
-    check(joinMode(true, false, phase::Dead, true, false) == JoinMode::Waiting, "game over waits for the host");
-    check(joinMode(true, false, phase::Main, false, true) == JoinMode::Idle, "title untouched without full join");
-    check(joinMode(true, true, phase::Init, false, true) == JoinMode::Confirming, "full join confirms the title");
-    check(joinMode(true, true, phase::Init, false, false) == JoinMode::Waiting, "full join waits for the host");
-    check(joinMode(true, true, phase::Main, true, true) == JoinMode::Idle, "in game is idle");
+    check(joinMode(false, true, phase::Dead, false, true, false) == JoinMode::Idle, "host never joins");
+    check(joinMode(true, false, phase::Dead, true, true, false) == JoinMode::Confirming, "game over follows the host without full join");
+    check(joinMode(true, false, phase::Dead, true, false, false) == JoinMode::Waiting, "game over waits for the host");
+    check(joinMode(true, false, phase::Main, false, true, false) == JoinMode::Idle, "title untouched without full join");
+    check(joinMode(true, true, phase::Init, false, true, false) == JoinMode::Confirming, "full join confirms the title");
+    check(joinMode(true, true, phase::Init, false, false, false) == JoinMode::Waiting, "full join waits for the host");
+    check(joinMode(true, true, phase::Main, true, true, false) == JoinMode::Idle, "in game is idle");
+    // The guard the Co-op page's start adds: a title that follows the host's starts is never pressed through.
+    check(joinMode(true, true, phase::Init, false, true, true) == JoinMode::Idle, "a title following the host's start is not pressed");
+    check(joinMode(true, true, phase::Dead, true, true, true) == JoinMode::Confirming, "game over still follows the host");
 }
 
 }  // namespace

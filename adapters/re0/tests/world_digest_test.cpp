@@ -120,7 +120,6 @@ void testFamiliesAreSeparate() {
     }
 }
 
-// The same bits and rooms give the same values in tools/re0/fake_peer (tests/test_digest.py), which builds the fake's digests.
 void testKnownAnswersMatchTheFakePeer() {
     Words words{};
     for (const uint32_t bit : {0x000u, 0x040u, 0x037u, 0x312u, 0x412u, 0x612u, 0x7e1u}) setBit(words, bit);

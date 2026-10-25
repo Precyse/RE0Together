@@ -340,7 +340,7 @@ struct Shown {
     Pose pose;
 };
 
-// One box's pose stream behind the pusher's shared clock, shown `stream_clock::kRenderDelayMs` late like everything else
+// One box's pose stream behind the pusher's shared clock, shown the clock's render delay late like everything else
 // of that peer: position interpolated, nothing extrapolated, the commit as the last sample.
 class Track {
 public:

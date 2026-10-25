@@ -26,10 +26,12 @@ enum class JoinMode {
 };
 
 // A guest at game over follows the host's Continue always; at boot, title and load list only with the full
-// automatic join (a character is controlled = in game).
-constexpr JoinMode joinMode(bool guestSession, bool fullJoin, int32_t phase, bool characterControlled, bool hostInGame) {
+// automatic join (a character is controlled = in game). `titleFollowsHost`: the host started this session from its
+// Co-op page, so the title follows the host's starts by itself (title_load) and is never pressed through.
+constexpr JoinMode joinMode(bool guestSession, bool fullJoin, int32_t phase, bool characterControlled, bool hostInGame,
+                            bool titleFollowsHost) {
     if (!guestSession) return JoinMode::Idle;
-    const bool outside = phase == room_phase::Dead || (fullJoin && !characterControlled);
+    const bool outside = phase == room_phase::Dead || (fullJoin && !titleFollowsHost && !characterControlled);
     if (!outside) return JoinMode::Idle;
     return hostInGame ? JoinMode::Confirming : JoinMode::Waiting;
 }

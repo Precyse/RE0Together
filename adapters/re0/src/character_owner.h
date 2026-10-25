@@ -43,6 +43,10 @@ uintptr_t localPlayer();
 // Like localCharacter, but a linked host without a peer yet already plays its chosen character.
 Character plannedLocalCharacter();
 
+// The host's character choice (adapter.ini character=, then the Co-op page through LOBBY_STATE); the owners are decided
+// again from it. Any thread; only before the game starts (the page lives on the title).
+void setHostCharacter(Character character);
+
 // True on the linked session's host.
 bool isHost();
 

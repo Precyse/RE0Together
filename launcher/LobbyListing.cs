@@ -48,7 +48,8 @@ public static class RosterCodec
         return roster;
     }
 
-    private static string Clean(string name) => name.Replace(FieldSeparator, Replacement).Replace(LineSeparator, Replacement).Replace('\r', Replacement);
+    /// <summary>Text for one field of a tab and line separated payload: tabs and line breaks become spaces.</summary>
+    internal static string Clean(string name) => name.Replace(FieldSeparator, Replacement).Replace(LineSeparator, Replacement).Replace('\r', Replacement);
 
     /// <summary>Only a step's exact name: not a number, not several names joined by commas.</summary>
     private static bool TryStep(string name, out SessionStep step) => Enum.TryParse(name, out step) && step.ToString() == name;

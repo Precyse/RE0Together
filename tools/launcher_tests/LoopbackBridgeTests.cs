@@ -80,6 +80,7 @@ public static class LoopbackBridgeTests
         PendingConnectionWithoutHelloIsClosed();
         FloodOfUnreliableFramesNeverBlocksSend();
         BackedUpReliableFramesDropTheLink();
+        OptionSetReachesTheEventAndLobbyStateTheAdapter();
     }
 
     private static void PumpUntil(LoopbackBridge bridge, Func<bool> done)
@@ -174,6 +175,28 @@ public static class LoopbackBridgeTests
         Check.That(elapsed < NeverBlockedMs, $"{FloodFrames} sends to a reader that does not read took {elapsed} ms: Send never blocks");
         Check.That(bridge.DroppedUnreliable > 0, "unreliable frames are dropped once the queue backs up");
         Check.That(bridge.IsReady, "dropping unreliable frames leaves the link up");
+    }
+
+    private static void OptionSetReachesTheEventAndLobbyStateTheAdapter()
+    {
+        using var bridge = new LoopbackBridge(Profile, 0);
+        var payloads = new List<byte[]>();
+        var gameFrames = 0;
+        bridge.OptionSet += payloads.Add;
+        bridge.GameFrame += _ => gameFrames++;
+        using var adapter = new Adapter(bridge.Port);
+        adapter.Hello(GameId);
+        PumpUntil(bridge, () => bridge.IsReady);
+
+        var set = Encoding.ASCII.GetBytes("outfit_rebecca=7d");
+        adapter.Send(Framing.Reliable(Msg.OptionSet, set));
+        PumpUntil(bridge, () => payloads.Count == 1);
+        Check.That(payloads.Count == 1 && payloads[0].SequenceEqual(set) && gameFrames == 0, "OPTION_SET from the adapter raises the event with its payload and is not a game frame");
+
+        const string text = "member\t0\t1\t1\trebecca\tRebecca\tWestern\tPrécis";
+        bridge.Send(ControlMessages.LobbyState(text));
+        var state = adapter.ReadOf(Msg.LobbyState);
+        Check.That(state is { } frame && (frame.Flags & Framing.FlagReliable) != 0 && Encoding.UTF8.GetString(frame.Payload) == text, "LOBBY_STATE reaches the adapter as a reliable UTF-8 frame");
     }
 
     private static void BackedUpReliableFramesDropTheLink()

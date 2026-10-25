@@ -2,6 +2,32 @@
 
 Roadmap and stages: `DS2_ROADMAP.md`.
 
+## Contents
+
+Read only the section you need (grep `^## ` for its line).
+
+- Target design: the host is the world server
+- Recon
+- Decima reflection (RTTI)
+- Script-exported functions
+- In-world remote body (2026-10-01)
+- Live findings (2026-10-01, game version v1.10.89.0)
+- Simulation focus (2026-10-06, static, not yet run live)
+- One-PC test
+- Traps
+- Guest restrictions (2026-10-01)
+- Cargo (2026-10-01, live)
+- Vehicles (2026-10-01, live)
+- Stage C map: world-state managers (static, 2026-10-01)
+- Vehicle seating (2026-10-01, in progress)
+- A second player entity (2026-10-01, in progress)
+- Findings since 2026-10-05
+- Native gives and guest orders (2026-10-13, built, not run live)
+- Shared locker (2026-10-13, built, not run live)
+- User markers and pings (2026-10-13, tier A built, not run live)
+- BT grab (2026-10-13, vetoes built, relay not built, not run live)
+- Live results and live-test rules (2026-10-13, ds2-live fb0978e, solo with fake_launcher)
+
 ## Target design: the host is the world server
 - **Initial world sync:** the guest starts from a full snapshot of the host's world: the host's save transferred to the guest's session folder and loaded there (RE0's launcher save sync and save_redirect). Strand content (other players' structures, signs, items) that is fetched online per account must be captured on the host and sent; the guest must not fetch its own during co-op. Open question: which strand content is in the save.
 - **Dynamic stream:** the host streams structures (built, damaged, destroyed), world cargo, enemies, BTs, weather and timefall, order and quest progress, facility connections. The guest's game never decides these: local authority is suppressed and the host's events are applied (RE0 guest enemies and flags).

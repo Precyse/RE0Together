@@ -39,6 +39,8 @@ public static class Program
         BlowfishTests.Run();
         SaveIndexTests.Run();
         OptionSourcesTests.Run();
+        AdapterOptionTests.Run();
+        LobbyStateTextTests.Run();
         LobbyCodeTests.Run();
         SessionProgressTests.Run();
         RefusalTests.Run();

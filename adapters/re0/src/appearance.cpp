@@ -50,7 +50,7 @@ struct Job {
 };
 
 NetClient* g_net = nullptr;
-std::array<uint8_t, kCount> g_ini{};                  // the local player's choice per character (config), read-only after enable
+std::array<std::atomic<uint8_t>, kCount> g_ini{};     // the local player's choice per character: config, then the Co-op page
 std::array<bool, kCount> g_iniApplied{};              // game thread: the ini choice was put on its character this game
 std::array<std::atomic<uint8_t>, kCount> g_reported;  // the owner's latest APPEARANCE per character (net thread writes)
 std::mutex g_pendingMutex;
@@ -343,7 +343,7 @@ namespace appearance {
 bool enable(NetClient& net, const Config& config) {
     g_net = &net;
     g_ownerSeen.fill(control_rule::kNoOwner);
-    g_ini = config.outfit;
+    for (size_t i = 0; i < kCount; ++i) g_ini[i] = config.outfit[i];
     game_tick::addCallback("appearance", onTick);
     return hooks::install("game start", game::kGameStartFunction, reinterpret_cast<void*>(&startDetour),
                           reinterpret_cast<void**>(&g_originalStart)) &&
@@ -354,6 +354,12 @@ bool enable(NetClient& net, const Config& config) {
 }
 
 uint8_t outfitOf(Character character) { return currentModel(character); }
+
+void setChoice(Character character, uint8_t model) {
+    const size_t i = indexOf(character);
+    if (i >= kCount || g_ini[i].exchange(model) == model) return;
+    logger::write("appearance: %s chose outfit 0x%02x for the next game start", character_owner::name(character), model);
+}
 
 void onFrame(const GameFrame& frame) {
     const std::optional<appearance_rule::Appearance> received = appearance_rule::decode(frame.payload);

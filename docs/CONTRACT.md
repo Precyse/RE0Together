@@ -47,6 +47,8 @@ Two halves per player: the **launcher** (owns Steam, game-agnostic) and the **ad
 | 0x0044 | FILE_MANIFEST | host launcher->guest launcher | u8 count, then per file u8 length + ascii name; sent before the files when the profile sends by `filePattern`; the guest then expects exactly these files |
 | 0x0013 | BUILD_INFO | host launcher->guest launcher | i32 launcher build number (the launcher component's version in installed.json; 0 = dev build), then i32 installed game build (Steam buildid; 0 = unknown; absent from older launchers), then u8[32] mod hash (SHA-256 over the profile's adapterFiles as installed: per file the lowercase dst name, 0x00, u64 LE length, bytes; zero = not installed; absent from older launchers); sent as a peer joins, before the save files; a guest on a different launcher build or game build refuses to start the game, and so does one with another hash (Mod files differ) or none (Mod not installed) when the host's is not zero; the first difference found counts, in the order launcher build, game build, mod; a dev build (build 0) is guarded by the hash alone |
 | 0x0060 | SAVE_CHANGED | adapter->own launcher | ascii name of a save file the game just wrote to the Steam cloud; the host launcher re-sends the profile's save files to every peer (same FILE_* transfer as at join) |
+| 0x0061 | OPTION_SET | adapter->own launcher | ascii `key=value` (key 1..32 chars of [a-z0-9_], value 0..32 printable chars without `;` or `=`): an option the player changed on the game's own Co-op page (an outfit; as host the character, world pause or the save slot `load_slot`). The launcher saves it like a choice made in its window (the profile has the option, it is not a derived one like `load_hash`, a host option only from the host, the value is offered in this game folder; not blocked by the selection lock), so the lobby and every screen get it the usual way; a refused one is logged |
+| 0x0062 | LOBBY_STATE | launcher->own adapter | UTF-8 text, lines by LF, fields by TAB (tabs and line breaks in a field become spaces), at most 8192 bytes of whole lines; sent when the link comes up and whenever the text changes. `member` slot (255 = none yet), host 0/1, local 0/1, character value, character label, outfit label, name (64 chars at most), host first; `option` key, value, label for each host option the page shows (not runtime, not `max_players`); `value` key, value, label for each value those options offer; `outfit` character value, outfit value, label for the outfits offered in this game folder in profile order; `own` key, value for this player's own options. An adapter skips lines it does not know |
 | 0x0050 | LOG_APPEND | guest launcher->host launcher | raw bytes newly appended to the guest's adapter log (≤ 32 KiB, every 2 s); the host appends them to the session's `peer_<steamid>_<stamp>.log` beside its own adapter log (the newest few per peer are kept) |
 
 - `epoch` increments every time the session membership resets (new lobby, host change). Adapters drop all game state on a new epoch.
@@ -111,13 +113,14 @@ Used only when the host's `transport` option is `steam`: the game's UDP datagram
 |---|---|---|---|---|
 | 0x0100 | GAME_DATAGRAM | adapter to adapter | no | u32 dst (IPv4 in host order; 0xFFFFFFFF = broadcast), then the game's UDP payload (1..1300 bytes). The sender's frame slot is the peer's current slot, or 0xFF for a broadcast; the receiver reads the source slot the launcher wrote. |
 
-## Game messages of the SR2 adapter (0x0100 and up, adapter-owned)
+## Game messages of the RE0 adapter (0x0100 and up, adapter-owned)
 
-Used only when the host's `transport` option is `steam`: the game's UDP datagrams travel through the launchers (`bridgeWhen` in `games/sr2.json`, port 27962). The launcher relays them as opaque bytes and overwrites the source slot, as for every game message. Integers little-endian.
+The launcher relays these as opaque bytes. The state-mode messages (0x0140..0x017f) and the older ones are listed with their wire headers in `docs/codemap/re0.md`; the lobby messages run in every partner mode:
 
 | type | name | dir | reliable | payload |
 |---|---|---|---|---|
-| 0x0100 | GAME_DATAGRAM | adapter to adapter | no | u32 dst (IPv4 in host order; 0xFFFFFFFF = broadcast), then the game's UDP payload (1..1300 bytes). The sender's frame slot is the peer's current slot, or 0xFF for a broadcast; the receiver reads the source slot the launcher wrote. |
+| 0x0117 | SESSION_LOAD | host to all | yes | i32 slot, u32 FNV-1a 32 of the slot's block, u32 serial (never 0): the host loaded that slot from its title; a guest at its title or Co-op page loads it when its copy hashes the same (`lobby_wire.h`) |
+| 0x0118 | LOBBY_PRESENCE | each game to all | yes | u8 place (title, page, loading, in game), u8 flags (1 host pick, 2 guest checked, 4 guest matches), u8 pick slot, u8 reserved, u32 pick hash (`lobby_wire.h`) |
 
 ## Game messages of the DS2 adapter (0x0100 and up, adapter-owned)
 

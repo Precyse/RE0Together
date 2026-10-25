@@ -259,7 +259,7 @@ void enqueue(uint16_t room, const Event& event, uint32_t delayMs = 0) {
 uint32_t takeDelayMs(uint8_t slot) {
     if (!state_mode::on()) return 0;
     const auto clock = puppet::clockFor(slot);
-    return clock && clock->ready() ? stream_clock::kRenderDelayMs : 0;
+    return clock && clock->ready() ? clock->delayMs() : 0;
 }
 
 }  // namespace

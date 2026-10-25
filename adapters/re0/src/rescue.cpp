@@ -40,20 +40,6 @@ uint32_t lockBits() {
     return flags & (game::kCutscenePauseBits | game::kEventPhaseBit);
 }
 
-// True when a living enemy of a boss class stands in the pool.
-bool bossAlive() {
-    for (int slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
-        const uintptr_t enemy = enemy_registry::enemyAt(slot);
-        int32_t hp = 0;
-        if (!enemy || !game::readMemory(enemy + game::kEnemyHpOffset, hp) || hp <= 0) continue;
-        const uintptr_t vtable = game::readPointer(enemy);
-        if (std::find(game::kBossRoomVtables.begin(), game::kBossRoomVtables.end(), vtable) != game::kBossRoomVtables.end()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // The own character's last door when it led into the loaded scene.
 std::optional<door_sync::DoorChange> doorIntoScene(uint16_t scene) {
     const character_owner::Character own = character_owner::identify(character_owner::localPlayer());
@@ -125,7 +111,7 @@ void onPress() {
     rule::Conditions conditions;
     conditions.doorActive = game_state::doorActive();
     conditions.menuOpen = game_state::menuOpen();
-    conditions.bossAlive = bossAlive();
+    conditions.bossAlive = enemy_registry::bossAlive();
     const std::optional<door_sync::DoorChange> door = doorIntoScene(scene);
     conditions.hasDoor = door.has_value();
     const rule::Decision decision = g_ladder.press(pose_wire::clockMs(), scene, conditions);

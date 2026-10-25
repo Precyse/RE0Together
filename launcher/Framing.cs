@@ -23,6 +23,8 @@ public static class Msg
     public const ushort FileManifest = 0x0044;
     public const ushort LogAppend = 0x0050;
     public const ushort SaveChanged = 0x0060;
+    public const ushort OptionSet = 0x0061;
+    public const ushort LobbyState = 0x0062;
     public const ushort FirstGameType = 0x0100;
 
     public static bool IsFileTransfer(ushort type) => type is >= FileBegin and <= FileManifest;

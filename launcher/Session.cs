@@ -47,6 +47,7 @@ public sealed class Session : IDisposable
         _bridge.GameFrame += OnAdapterFrame;
         _bridge.AdapterReady += OnAdapterReady;
         _bridge.SaveChanged += () => SaveChanged?.Invoke();
+        _bridge.OptionSet += payload => OptionSet?.Invoke(payload);
     }
 
     public bool Ended { get; private set; }
@@ -78,6 +79,9 @@ public sealed class Session : IDisposable
     /// <summary>The local adapter reports that the game wrote a save file (SAVE_CHANGED).</summary>
     public event Action? SaveChanged;
 
+    /// <summary>The local adapter reports an option the player changed on the game's own co-op page (OPTION_SET), with the payload.</summary>
+    public event Action<byte[]>? OptionSet;
+
     /// <summary>Transport ids of the other members in the slot map.</summary>
     public IReadOnlyList<ulong> PeerIds => _slots.Keys.Where(id => id != _transport.LocalId).ToList();
 
@@ -89,6 +93,9 @@ public sealed class Session : IDisposable
 
     /// <summary>True for another member of the slot map, also while it is held.</summary>
     public bool HasPeer(ulong id) => id != _transport.LocalId && _slots.ContainsKey(id);
+
+    /// <summary>A member's session slot (the local member's is the local slot), null while the slot map does not have it.</summary>
+    public byte? SlotOf(ulong memberId) => _slots.TryGetValue(memberId, out var slot) ? slot : null;
 
     /// <summary>A member's round-trip time, null before its first pong (and for the local member).</summary>
     public int? RttOf(ulong memberId) => PeerSlot(memberId) is { } slot ? _stats.RttOf(slot) : null;

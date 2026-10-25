@@ -2,6 +2,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string>
@@ -24,6 +25,8 @@ struct SessionSnapshot {
     uint32_t epoch = 0;
     uint64_t localSteamId = 0;  // 0 when the launcher did not send it
     std::vector<PeerInfo> peers;
+    std::shared_ptr<const std::string> lobbyState;  // the launcher's last LOBBY_STATE text on this link, null before one
+    uint32_t lobbyRevision = 0;                     // counts the LOBBY_STATEs received
 };
 
 // The first peer that is not the local player, the other player of a two-player session; null when there is none.

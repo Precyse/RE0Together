@@ -317,7 +317,7 @@ struct Shown {
     size_t buffered = 0;
 };
 
-// One enemy's samples behind the shared peer clock, shown `stream_clock::kRenderDelayMs` late (the same instant as the
+// One enemy's samples behind the shared peer clock, shown the clock's render delay late (the same instant as the
 // peer's puppet): position and rotation interpolated, every discrete field from the older bracketing sample, nothing
 // extrapolated. A gap, a jump or a restarted clock drops what was buffered and shows the newest sample at once.
 class SlotTimeline {

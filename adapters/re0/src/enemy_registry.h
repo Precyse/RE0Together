@@ -15,4 +15,7 @@ int slotOf(uintptr_t enemy);
 // True when the object's vptr is one of the enemy class vtables.
 bool isEnemy(uintptr_t object);
 
+// Game thread: true when a living enemy of a boss class (game::kBossRoomVtables) stands in the pool.
+bool bossAlive();
+
 }  // namespace enemy_registry

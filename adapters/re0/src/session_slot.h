@@ -26,6 +26,11 @@ int32_t current();
 // land in the copy that is deleted when the launcher exits.
 bool guestSession();
 
+// The one record of which slot this session plays (docs/RE0_NOTES.md "Forced save load"): the launcher's load_slot /
+// load_hash at start, changed by the host's Co-op page and by a guest following the host's start. Any thread.
+save_load_rule::Order order();
+void setOrder(const save_load_rule::Order& order);
+
 // Guest: the host is playing (its last announced phase is gameplay, not a title, game over or loading).
 bool hostInGame();
 

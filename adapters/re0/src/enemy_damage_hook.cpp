@@ -9,6 +9,7 @@
 #include "enemy_net.h"
 #include "enemy_protocol.h"
 #include "enemy_registry.h"
+#include "hit_fx.h"
 #include "log.h"
 #include "net_pad.h"
 #include "split_rooms.h"
@@ -110,8 +111,11 @@ bool runDamage(uintptr_t enemy, uintptr_t attacker, game::HitPoint& point, game:
     const uintptr_t original = originalFor(game::readPointer(enemy));
     if (!original) return false;
     g_runningDamage = true;
+    const bool recordFx = state_mode::on();
+    if (recordFx) hit_fx::beginHit(enemy);
     damage_thunk::callOriginal(original, reinterpret_cast<void*>(enemy), reinterpret_cast<void*>(attacker), &point,
                                &info);
+    if (recordFx) hit_fx::endHit();
     g_runningDamage = false;
     return true;
 }

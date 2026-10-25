@@ -84,6 +84,7 @@ void addStateLines(const Snapshot& s, std::vector<debug_lines::Line>& lines) {
     lines.push_back({L"enemy hits forwarded/unrouted", format(L"%u / %u", total(s, Counter::EnemyHitsForwarded), total(s, Counter::EnemyHitsUnrouted)), false});
     lines.push_back({L"room moves sent/applied/healed", format(L"%u / %u / %u", total(s, Counter::RoomMovesSent), total(s, Counter::RoomMovesApplied), total(s, Counter::RoomMoveHeals)), false});
     lines.push_back({L"door follows sent/accepted/rejected", format(L"%u / %u / %u", total(s, Counter::DoorFollowsSent), total(s, Counter::DoorFollowsAccepted), total(s, Counter::DoorFollowsRejected)), false});
+    lines.push_back({L"hit fx sent/shown", format(L"%u / %u", total(s, Counter::HitFxSent), total(s, Counter::HitFxShown)), false});
     lines.push_back({L"contact hits sent/applied/dropped", format(L"%u / %u / %u", total(s, Counter::ContactHitsSent), total(s, Counter::ContactHitsApplied), total(s, Counter::ContactHitsDropped)), false});
     lines.push_back({L"leases granted/started/ended/refused poses", format(L"%u / %u / %u / %u", total(s, Counter::LeasesGranted), total(s, Counter::LeasesStarted), total(s, Counter::LeasesEnded), total(s, Counter::LeasePosesRefused)), false});
     lines.push_back({L"boss hand-overs/cancelled/frozen", format(L"%u / %u / %u", total(s, Counter::BossHandOvers), total(s, Counter::BossCancels), total(s, Counter::BossFrozen)), false});

@@ -24,6 +24,7 @@
 #include "frame_router.h"
 #include "game.h"
 #include "game_state.h"
+#include "hit_fx.h"
 #include "game_tick.h"
 #include "hooks.h"
 #include "log.h"
@@ -557,13 +558,23 @@ int scopedSlot(uintptr_t unit) {
     return kNoIndex;
 }
 
+// A unit whose update is not replaced: an enemy this machine simulates has the sounds of its own code sent (hit_fx).
+void moveSimulatedOrOther(void* unit, void* edx) {
+    const uintptr_t enemy = reinterpret_cast<uintptr_t>(unit);
+    const int index = g_slotsLive ? poolIndexOf(enemy) : kNoIndex;
+    const bool simulatedHere = index != kNoIndex && enemy_observer::simulatorOf(static_cast<uint8_t>(index)).here;
+    if (simulatedHere) hit_fx::beginMove(enemy);
+    g_originalUnitMove(unit, edx);
+    if (simulatedHere) hit_fx::endMove();
+}
+
 // Slot 8 of every unit. A pass-through for players and for every enemy that is not observed or frozen; an observed
 // enemy gets the stream's state and then runs its move with the CharPause bit held, restored as found; a frozen one runs
 // its move with the bit held and nothing written.
 void __fastcall unitMoveDetour(void* unit, void* edx) {
     const uintptr_t enemy = reinterpret_cast<uintptr_t>(unit);
     const int index = scopedSlot(enemy);
-    if (index == kNoIndex) return g_originalUnitMove(unit, edx);
+    if (index == kNoIndex) return moveSimulatedOrOther(unit, edx);
     Slot& slot = g_slots[static_cast<size_t>(index)];
     if (slot.frozenEnemy != enemy && !drive(static_cast<size_t>(index), enemy, slot)) return g_originalUnitMove(unit, edx);
     enemy_observer_game::CharPause held;

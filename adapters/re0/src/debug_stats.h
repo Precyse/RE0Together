@@ -94,6 +94,8 @@ enum class Counter : size_t {
     ContactHitsSent,
     ContactHitsApplied,
     ContactHitsDropped,
+    HitFxSent,
+    HitFxShown,
     LeasesGranted,
     LeasesStarted,
     LeasesEnded,

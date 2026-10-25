@@ -370,6 +370,9 @@ public sealed partial class App
         }
         _session = new Session(_profile!, _lobby!, _transport!, _bridge);
         if (!_session.IsHost) _session.FileFrameReceived += OnFileFrame;
+        _session.OptionSet += OnAdapterOptionSet;
+        _session.PeerJoined += _ => OnSlotsChanged();
+        _bridge.AdapterReady += OnAdapterLinked;
         _buildCheck = BuildCheck.Create(_profile!, _gameDir, _session, _transport!);
         if (_gameDir == null) return true;
         try

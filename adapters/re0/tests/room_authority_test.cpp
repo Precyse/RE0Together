@@ -58,6 +58,14 @@ bool agree(const Machine& a, const Machine& b, uint16_t scene) {
 void testStepRule() {
     check(rule::stepFor(kRoomA, kRoomA, true, kNoOwner, kGuest) == Step::Claim, "an unowned loaded room is claimed");
     check(rule::stepFor(kRoomA, kRoomA, true, kHost, kGuest) == Step::None, "a room the peer owns is left to it");
+    check(rule::stepFor(kRoomA, kRoomA, true, kGuest, kHost, true) == Step::Claim, "the host takes over a room the guest runs once it is in it");
+    check(rule::stepFor(kRoomA, kRoomA, true, kGuest, kHost, false) == Step::None, "but not while a boss fight runs (no takeover)");
+    check(rule::stepFor(kRoomA, kRoomA, false, kGuest, kHost, true) == Step::None, "nor before its own character is in the room");
+    check(rule::stepFor(kRoomA, kRoomA, true, kHost, kHost, true) == Step::None, "a room the host already runs is kept");
+    check(rule::stepFor(kRoomA, kRoomA, true, kGuest, kHost, true) == Step::Claim, "the host takes over a room the guest runs once it is in it");
+    check(rule::stepFor(kRoomA, kRoomA, true, kGuest, kHost, false) == Step::None, "but not while a boss fight runs (no takeover)");
+    check(rule::stepFor(kRoomA, kRoomA, false, kGuest, kHost, true) == Step::None, "nor before its own character is in the room");
+    check(rule::stepFor(kRoomA, kRoomA, true, kHost, kHost, true) == Step::None, "a room the host already runs is kept");
     check(rule::stepFor(kRoomA, kRoomA, true, kGuest, kGuest) == Step::None, "an owned room in use is kept");
     check(rule::stepFor(kRoomA, kRoomA, false, kNoOwner, kGuest) == Step::None, "no claim without the own character");
     check(rule::stepFor(kRoomA, kRoomA, false, kGuest, kGuest) == Step::Release,

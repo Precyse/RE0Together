@@ -43,7 +43,7 @@ pw::MotionEvent eventAt(uint32_t senderMs, uint32_t seq, uint16_t motion = 0x209
 }
 
 // The local clock at which the owner's `senderMs` is shown.
-uint32_t shownAt(uint32_t senderMs) { return senderMs + kTransitMs + sc::kRenderDelayMs; }
+uint32_t shownAt(uint32_t senderMs) { return senderMs + kTransitMs + sc::kMinDelayMs; }
 
 // A timeline with the clock it reads.
 struct Rig {
@@ -158,7 +158,7 @@ void testClockTracking() {
     rig.timeline.addPose(rig.clock, poseAt(1000, 1, 0.0f), 1000 + 60);
     rig.timeline.addPose(rig.clock, poseAt(1033, 2, 10.0f), 1033 + 40);  // the faster path sets the transit time
     rig.timeline.addPose(rig.clock, poseAt(1066, 3, 20.0f), 1066 + 90);  // a slow packet does not move it
-    rig.render(shownAt(1033));
+    rig.render(1033 + 40 + rig.clock.delayMs());
     check(near(rig.out.pos[0], 10.0f), "the smallest transit time maps the clocks");
 }
 
@@ -167,11 +167,11 @@ void testSenderClockRestart() {
     rig.arrive(poseAt(500000, 1, 0.0f));
     rig.arrive(eventAt(500010, 1));
     rig.timeline.addPose(rig.clock, poseAt(100, 1, 7.0f), 800000 + 100 + kTransitMs);  // the peer's game restarted
-    const pt::Result result = rig.render(800000 + 100 + kTransitMs + sc::kRenderDelayMs);
+    const pt::Result result = rig.render(800000 + 100 + kTransitMs + sc::kMinDelayMs);
     check(result.valid && near(rig.out.pos[0], 7.0f) && rig.due.empty(), "a restarted sender clock starts the timeline over");
     check(result.reset == pt::Reset::Clock, "and says why");
     rig.timeline.addEvent(rig.clock, eventAt(110, 1), 800000 + 110 + kTransitMs);
-    rig.render(800000 + 110 + kTransitMs + sc::kRenderDelayMs);
+    rig.render(800000 + 110 + kTransitMs + sc::kMinDelayMs);
     check(rig.due.size() == 1, "its numbering starts over too");
 }
 
@@ -263,7 +263,7 @@ void testResetOnLead() {
     constexpr uint32_t kRelaxingSamples = 6000;  // other streams' slow packets relax the tracked transit time upward
     for (uint32_t i = 0; i < kRelaxingSamples; ++i) rig.clock.observe(100000 + i, 100000 + i + kLaterTransit);
     const pt::Result result = rig.render(kLastArrival);
-    check(result.valid && result.reset == pt::Reset::Lead, "a newest pose over kMaxLeadMs ahead of the shown time re-anchors");
+    check(result.valid && result.reset == pt::Reset::Lead, "a newest pose over the delay plus kMaxLeadPastDelayMs ahead of the shown time re-anchors");
     check(near(rig.out.pos[0], 0.0f) && result.buffered == 1, "only the newest pose is kept");
     check(rig.render(kLastArrival + 1).reset == pt::Reset::None, "and the reset is reported once");
 }
@@ -273,8 +273,8 @@ void testResetOnDepth() {
     constexpr uint32_t kBurst = 20;
     constexpr uint32_t kBurstGapMs = 10;
     for (uint32_t i = 0; i < kBurst; ++i) rig.arrive(poseAt(1000 + i * kBurstGapMs, i + 1, 0.0f));
-    const pt::Result result = rig.render(1000 + (kBurst - 1) * kBurstGapMs + kTransitMs);
-    check(result.valid && result.reset == pt::Reset::Depth, "more than kMaxPosesPastRender poses ahead of the shown time re-anchors");
+    const pt::Result result = rig.render(1000 + kTransitMs + rig.clock.delayMs());
+    check(result.valid && result.reset == pt::Reset::Depth, "more poses ahead of the shown time than the delay holds re-anchors");
     check(result.buffered == 1, "only the newest pose is kept");
 }
 
@@ -317,7 +317,7 @@ void testSharedClock() {
     late.addPose(used, poseAt(2000, 1, 0.0f), 2040);
     pw::Pose out;
     std::vector<pw::MotionEvent> due;
-    check(late.render(used, 2040 + sc::kRenderDelayMs, out, due).reset == pt::Reset::None, "a timeline joining a clock that has history is not reset");
+    check(late.render(used, 2040 + sc::kMinDelayMs, out, due).reset == pt::Reset::None, "a timeline joining a clock that has history is not reset");
 }
 
 void testClear() {

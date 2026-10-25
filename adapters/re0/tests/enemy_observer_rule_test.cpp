@@ -142,7 +142,7 @@ stream_clock::StreamClock readyClock() {
 }
 
 // The local time at which the clock shows `senderMs`.
-uint32_t nowFor(uint32_t senderMs) { return senderMs + kArrivalDelayMs + stream_clock::kRenderDelayMs; }
+uint32_t nowFor(uint32_t senderMs) { return senderMs + kArrivalDelayMs + stream_clock::kMinDelayMs; }
 
 rule::Sample sampleAt(uint32_t senderMs, uint32_t seq, float x, uint8_t flags = wire::kFlagAlive) {
     rule::Sample sample;

@@ -9,7 +9,7 @@
 #include "timed_queue.h"
 
 // The receiver's delayed timeline of the owner's poses and motion events (pure, unit tested). The owner's clock is
-// mapped to the local one by the peer's shared StreamClock; the timeline shows the owner's state `kRenderDelayMs`
+// mapped to the local one by the peer's shared StreamClock; the timeline shows the owner's state the clock's render delay
 // behind and hands out every motion event whose time has come, once, in order. A hard reset (room or load serial
 // change, a gap, a teleport, a clock re-anchor) drops what was buffered and shows the newest pose at once; nothing is
 // extrapolated: past the newest pose the last one is held.
@@ -17,9 +17,10 @@ namespace pose_timeline {
 
 constexpr size_t kMaxPoses = 64;
 constexpr uint32_t kGapResetMs = 500;          // a sender or arrival gap this long between poses is a hard reset
-constexpr int32_t kMaxLeadMs = 250;            // the newest pose this far ahead of the shown time: re-anchor the clock
+constexpr int32_t kMaxLeadPastDelayMs = 150;   // the newest pose this far past the render delay ahead of the shown time: re-anchor
 constexpr float kTeleportUnits = 2000.0f;      // a jump this long between two poses is a hard reset (probe E1)
-constexpr size_t kMaxPosesPastRender = 8;      // more buffered poses than this ahead of the shown time: re-anchor the clock
+constexpr size_t kMaxPosesPer100MsDelay = 8;   // more buffered poses ahead of the shown time than this per 100 ms of delay: re-anchor
+constexpr uint32_t kDepthDelayUnitMs = 100;
 constexpr uint32_t kStaleMs = 2000;            // no pose, held or not, for this long: the owner is lost, the puppet holds
 
 enum class Reset : uint8_t { None, Room, Serial, Gap, Lead, Teleport, Depth, Clock };
@@ -104,7 +105,7 @@ public:
         }
         if (!clock.ready() || poses_.empty()) return result;
         uint32_t target = clock.target(nowMs);
-        if (const Reset reason = pending_ == Reset::None ? clockTrouble(target) : Reset::None; reason != Reset::None) {
+        if (const Reset reason = pending_ == Reset::None ? clockTrouble(target, clock.delayMs()) : Reset::None; reason != Reset::None) {
             clock.reanchor(newestTransit_);
             generation_ = clock.generation();
             poses_.erase(poses_.begin(), poses_.end() - 1);
@@ -172,14 +173,15 @@ private:
         return Reset::None;
     }
 
-    // The mapped clock has drifted from the newest pose: it is ahead of the shown time by more than `kMaxLeadMs`, or
-    // more than `kMaxPosesPastRender` poses wait beyond it.
-    Reset clockTrouble(uint32_t target) const {
-        if (static_cast<int32_t>(poses_.back().senderMs - target) > kMaxLeadMs) return Reset::Lead;
+    // The mapped clock has drifted from the newest pose: it is ahead of the shown time by more than the render delay plus
+    // `kMaxLeadPastDelayMs`, or more poses wait beyond it than the delay should hold. Both scale with the adaptive delay.
+    Reset clockTrouble(uint32_t target, uint32_t delayMs) const {
+        if (static_cast<int32_t>(poses_.back().senderMs - target) > static_cast<int32_t>(delayMs) + kMaxLeadPastDelayMs) return Reset::Lead;
         const size_t ahead = static_cast<size_t>(std::count_if(poses_.begin(), poses_.end(), [&](const pose_wire::Pose& pose) {
             return stream_clock::after(pose.senderMs, target);
         }));
-        return ahead > kMaxPosesPastRender ? Reset::Depth : Reset::None;
+        const size_t allowed = kMaxPosesPer100MsDelay * std::max(delayMs, kDepthDelayUnitMs) / kDepthDelayUnitMs;
+        return ahead > allowed ? Reset::Depth : Reset::None;
     }
 
     std::vector<pose_wire::Pose> poses_;  // by owner time

@@ -9,6 +9,7 @@
 #include "authority.h"
 #include "character_owner.h"
 #include "debug_stats.h"
+#include "enemy_registry.h"
 #include "frame_router.h"
 #include "game_state.h"
 #include "game_tick.h"
@@ -37,6 +38,7 @@ bool g_assigning = false;                // guarded by g_mutex: the claim being 
 bool g_dropping = false;                 // guarded by g_mutex: a peer left and its rooms are being freed
 std::atomic<bool> g_linked{false};
 std::atomic<uint8_t> g_local{kNoOwner};  // written under g_mutex
+std::atomic<uint8_t> g_host{kNoOwner};   // written under g_mutex
 bool g_sessionKnown = false;             // guarded by g_mutex
 uint32_t g_sessionEpoch = 0;             // guarded by g_mutex
 std::map<uint8_t, uint32_t> g_peers;     // guarded by g_mutex: slot -> join serial of the peer last seen there
@@ -107,7 +109,8 @@ void onTick() {
     std::vector<Outgoing> messages;
     {
         std::lock_guard lock(g_mutex);
-        messages = room_authority_rule::reconcile(g_table, local, loaded, ownInLoadedRoom());
+        const bool takeOver = g_host == local && !enemy_registry::bossAlive();
+        messages = room_authority_rule::reconcile(g_table, local, loaded, ownInLoadedRoom(), takeOver);
     }
     sendAll(messages);
     const std::string text = overlayText(loaded, local);
@@ -121,6 +124,7 @@ void startSession(const SessionSnapshot& session) {
     g_table.clear();
     g_table.setSession(session.localSlot, session.hostSlot);
     g_local = session.localSlot;
+    g_host = session.hostSlot;
     g_sessionKnown = true;
     g_sessionEpoch = session.epoch;
     g_peers.clear();

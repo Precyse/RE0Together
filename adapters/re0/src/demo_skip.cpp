@@ -56,8 +56,7 @@ bool skipInputDown() {
 // demo's fade object, then the scheduler goes to state 6. False when the objects are not there.
 bool takeSkipBranch(uintptr_t scheduler) {
     const uintptr_t source = game::readPointer(game::kDemoFadeDurationGlobal);
-    const uintptr_t holder = game::readPointer(game::kDemoFadeHolderGlobal);
-    const uintptr_t fade = holder ? game::readPointer(holder + game::kDemoFadeObjectOffset) : 0;
+    const uintptr_t fade = game::fadeObject();
     float duration = 0.0f;
     if (!source || !fade || !game::readMemory(source + game::kDemoFadeDurationOffset, duration)) return false;
     __try {

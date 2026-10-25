@@ -12,6 +12,7 @@
 #include "log.h"
 #include "paths.h"
 #include "remote_storage_proxy.h"
+#include "save_redirect_rule.h"
 
 namespace {
 
@@ -50,17 +51,31 @@ std::atomic<ULONGLONG> g_lastLog[static_cast<size_t>(Op::Count)];
 
 std::wstring sessionDirectory() { return gameDirectory() + L"\\coop\\session"; }
 
+// Where the launcher puts a copy the host sent while this game runs (SaveReceiver writes it as .part, then moves it in,
+// so a file under the plain name is complete); it is newer than the session folder's. Reads and writes both use it.
+std::wstring stagingDirectory() { return sessionDirectory() + L"\\staging"; }
+
+bool exists(const std::wstring& path) { return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
+
 bool isPlainName(const char* name) {
     if (!name || !*name) return false;
     const std::string s(name);
     return s.find_first_of("\\/:") == std::string::npos && s != "." && s != "..";
 }
 
-// The session file for `name`, or empty when the name is not a plain file name or the session has no such file.
+// The session file the game sees for `name`: the staged copy when the host sent a newer one since the game started, else
+// the session folder's; empty when the name is not a plain file name or the session has no such file.
 std::wstring sessionFile(const char* name) {
     if (!isPlainName(name)) return L"";
-    const std::wstring path = sessionDirectory() + L"\\" + std::wstring(name, name + std::strlen(name));
-    return GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES ? L"" : path;
+    const std::wstring file = L"\\" + std::wstring(name, name + std::strlen(name));
+    const std::wstring path = sessionDirectory() + file;
+    const std::wstring staged = stagingDirectory() + file;
+    switch (save_redirect_rule::source(exists(path), exists(staged))) {
+        case save_redirect_rule::Source::Staged: return staged;
+        case save_redirect_rule::Source::Session: return path;
+        case save_redirect_rule::Source::Steam: break;
+    }
+    return L"";
 }
 
 void logCall(const char* name, Op op, long long size) {

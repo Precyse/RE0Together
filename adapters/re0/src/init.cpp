@@ -30,6 +30,7 @@
 #include "floor_items_sync.h"
 #include "game.h"
 #include "game_tick.h"
+#include "coop_menu.h"
 #include "gui_text.h"
 #include "inventory_sync.h"
 #include "input_record.h"
@@ -58,6 +59,7 @@
 #include "state_correction.h"
 #include "state_mode.h"
 #include "state_sync.h"
+#include "native_page.h"
 #include "title_coop.h"
 #include "vtable_tracer.h"
 
@@ -115,7 +117,9 @@ void enableCoop(const Config& config) {
     live_menus::configure(config.liveMenus && state_mode::on());
     menu_mirror::enable();
     if (!gui_text::enable()) logger::write("adapter: menu text hook unavailable");
+    coop_menu::enable();
     if (!config.overlay) logger::write("adapter: overlay off, no Co-op entry on the title");
+    else if (!native_page::enable()) logger::write("adapter: native Co-op page unavailable, no Co-op entry on the title");
     else if (!title_coop::enable()) logger::write("adapter: Co-op menu entry unavailable");
     if (state_mode::on()) state_mode::enableAll(g_net);
 }
@@ -172,6 +176,7 @@ void shutdownAdapter() {
     player_damage::uninstall();
     menu_mirror::uninstall();
     title_coop::uninstall();
+    native_page::uninstall();
     gui_text::uninstall();
     appearance::uninstall();
     floor_items_sync::uninstall();

@@ -41,6 +41,7 @@
 #include "pose_capture.h"
 #include "resync.h"
 #include "room_authority.h"
+#include "lobby.h"
 #include "session_slot.h"
 #include "scene.h"
 #include "state_correction.h"
@@ -184,6 +185,10 @@ void onFrame(const GameFrame& frame) {
         session_slot::onFrame(frame);
         return;
     }
+    if (frame.type == lobby_wire::kMsgLobbyPresence || frame.type == lobby_wire::kMsgSessionLoad) {
+        lobby::onFrame(frame);
+        return;
+    }
     if (frame.type == proto::kMsgSnapshotRequest || frame.type == proto::kMsgJoinSnapshot) {
         join_sync::onFrame(frame);
         return;
@@ -248,6 +253,7 @@ void tick(NetClient& net) {
     door_travel::onNetTick();
     phase_watch::onNetTick();
     session_slot::onNetTick(net);
+    lobby::onNetTick(net, session);
     auto_join::onNetTick();
     resync::onNetTick();
     dev_command::onNetTick();

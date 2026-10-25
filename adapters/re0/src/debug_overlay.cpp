@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "backends/imgui_impl_dx9.h"
-#include "coop_page_view.h"
 #include "d3d9_hook.h"
 #include "game.h"
 #include "debug_lines.h"
@@ -34,9 +33,6 @@ constexpr ImVec4 kBadColor{0.88f, 0.31f, 0.31f, 1.0f};
 constexpr ImVec4 kSelectedColor{0.34f, 0.34f, 0.34f, 0.85f};  // the selected row of the Co-op page, gray like the rest
 constexpr char kModTitle[] = "RE0 Together";
 constexpr float kTitleScale = 2.0f;
-constexpr float kPageScale = 1.5f;  // the Co-op page reads from further away than the panel
-constexpr size_t kPageLabelChars = 12;
-constexpr size_t kPageValueChars = 24;
 constexpr ImGuiWindowFlags kPanelFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                          ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
@@ -150,23 +146,6 @@ void drawLines() {
     ImGui::EndTable();
 }
 
-// The Co-op page of the Options screen: centred, its one row (Back) selected.
-void drawCoopPage(const std::vector<coop_page_rule::Row>& rows, const ImVec2& display) {
-    ImGui::SetNextWindowPos(ImVec2(display.x * 0.5f, display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    if (ImGui::Begin("coop_page", nullptr, kPanelFlags)) {
-        ImGui::SetWindowFontScale(kPageScale);
-        ImGui::TextUnformatted(coop_page_view::kTitle);
-        ImGui::Separator();
-        if (beginRows("coop_rows", kPageLabelChars, kPageValueChars)) {
-            for (const auto& row : rows) drawRow(row.label, row.value, row.bad);
-            ImGui::EndTable();
-        }
-        ImGui::Separator();
-        ImGui::Selectable(coop_page_view::kBackLabel, true);
-    }
-    ImGui::End();
-}
-
 // Stacked top-center boxes; a fading toast dims through the style alpha.
 void drawToasts(const std::vector<toast_queue::Visible>& toasts, float displayWidth) {
     float y = kMargin;
@@ -199,8 +178,7 @@ void drawTitleMark(const ImVec2& display) {
     ImGui::End();
 }
 
-void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>& toasts, const std::string& partnerLine,
-               const std::vector<coop_page_rule::Row>& pageRows, bool showTitle) {
+void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>& toasts, const std::string& partnerLine, bool showTitle) {
     ImVec2 size;
     if (!backbufferSize(device, size) || !ensureImGui(device)) return;
     ImGuiIO& io = ImGui::GetIO();
@@ -220,7 +198,6 @@ void drawFrame(IDirect3DDevice9* device, const std::vector<toast_queue::Visible>
     }
     if (showTitle) drawTitleMark(size);
     if (!partnerLine.empty()) drawPartnerLine(partnerLine, size.x);
-    if (!pageRows.empty()) drawCoopPage(pageRows, size);
     drawToasts(toasts, size.x);
     ImGui::Render();
     ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
@@ -232,10 +209,9 @@ void frame(IDirect3DDevice9* device) {
     pollScroll();
     const auto toasts = toast_queue::visible();
     const std::string partnerLine = debug_stats::partnerLine();
-    const auto pageRows = coop_page_view::current();
     const bool showTitle = game::controlled() == 0;
-    if (g_visible || showTitle || !toasts.empty() || !partnerLine.empty() || !pageRows.empty()) {
-        drawFrame(device, toasts, partnerLine, pageRows, showTitle);
+    if (g_visible || showTitle || !toasts.empty() || !partnerLine.empty()) {
+        drawFrame(device, toasts, partnerLine, showTitle);
     }
 }
 
