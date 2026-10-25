@@ -202,15 +202,20 @@ public static class SessionScreensTests
             HostOptions = new Dictionary<string, string> { ["partner_mode"] = "state", ["character"] = "rebecca" },
         };
         var model = Host(status, events: ["a", "b", "c"]);
-        Check.That(!model.Hosting && model.Layout == CardLayout.Tall && model.Counter == "", "lobby: tall cards and no PLAYERS caption");
+        Check.That(!model.Hosting && model.Layout == CardLayout.Wide && model.Counter == "", "lobby: two seats keep the wide field cards of the hosting screen, no PLAYERS caption");
+        Check.That(Host(Sr2Status(SessionStep.InGame, HostSlot(), GuestSlot(SessionStep.InGame, local: true, id: 3)), Sr2).Layout == CardLayout.Tall, "lobby: four seats are tall cards");
         Check.That(model.State is { Kind: LobbyStateKind.InGame, Words: "In game", Timer: "1:02:05" }, "lobby: in game with the session timer");
         Check.That(model.Options.Count == 1 && model.Options[0] == ("Partner mode", "State"), "lobby: the host's options, not the character");
         Check.That(model.Events.SequenceEqual(["b", "c"]), "lobby: the last two events");
         Check.That(!model.Relaunch && !model.StartEnabled, "lobby: no relaunch while the game runs");
         Check.That(Host(status with { SessionStartedUnix = 0 }).State!.Timer == "", "lobby: no timer before the start of play is known");
 
-        var hostLocal = Host(Re0Status(SessionStep.InGame, HostSlot(SessionStep.InGame, local: true), GuestSlot(SessionStep.InGame)));
+        var hostLocal = Host(Re0Status(SessionStep.InGame, HostSlot(SessionStep.InGame, local: true), GuestSlot(SessionStep.StartingGame, rtt: 84)));
         Check.That(!hostLocal.Hosting, "lobby: the host in game is in the lobby");
+        Check.That(hostLocal.Seats[0] is { Corner: "Host", Words: "In game", Unit: "S.T.A.R.S. Bravo Team", Kickable: false }
+                   && hostLocal.Seats[1] is { Corner: "84 ms", Words: "Starting game", Unit: "U.S. Marine Corps", Kickable: true },
+            "lobby: in game the host's view is the field file of the hosting screen: P1 Host, P2 ping, a status line, the partner can be removed");
+        Check.That(model.Seats.All(card => !card.Kickable), "lobby: a guest cannot remove anyone");
 
         var rejoining = Host(new AppStatus(AppState.Rejoining, LobbyId) { GameId = "re0", SecondsLeft = 67 });
         Check.That(rejoining.State is { Kind: LobbyStateKind.Reconnecting, Words: "Reconnecting", Timer: "1:07" } && rejoining.Seats.Count == 0, "lobby: reconnecting counts the seconds left");
@@ -248,6 +253,12 @@ public static class SessionScreensTests
         var lobby = Host(Re0Status(SessionStep.InGame, HostSlot(options: "outfit_rebecca=02"), GuestSlot(SessionStep.InGame, local: true, options: "outfit_billy=a5"))).Seats;
         Check.That(lobby[0].Corner == "18 ms" && lobby[0].Footer == "Host" && !lobby[0].Local, "seats: a remote host shows its ping and Host in the footer");
         Check.That(lobby[1].Corner == "You" && lobby[1].Local && lobby[1].Words == "In game" && lobby[1].State == CardState.InGame, "seats: the local card reads You");
+
+        var refused = Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true), GuestSlot(SessionStep.Refused) with { Refusal = RefusalKind.LauncherBuild })).Seats[1];
+        Check.That(refused is { State: CardState.Problem, Words: "Launcher build differs", Unit: "U.S. Marine Corps", Agent: "Billy Coen", Name: "Amy" },
+            "seats: a guest refused for its build is one filled card in the problem state with the refusal's own words");
+        Check.That(Host(Re0Status(SessionStep.Ready, HostSlot(SessionStep.Ready, local: true), GuestSlot(SessionStep.Refused))).Seats[1].Words == "Refused",
+            "seats: a refused guest that published no reason reads Refused");
 
         var held = Host(Re0Status(SessionStep.InGame, HostSlot(local: true), GuestSlot(SessionStep.InGame, held: true, hold: 7))).Seats[1];
         Check.That(held.Corner == "0:07" && held.Countdown == "0:07" && held.State == CardState.Problem && held.Words == "Reconnecting", "seats: a held partner shows the countdown");

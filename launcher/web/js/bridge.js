@@ -24,6 +24,7 @@ export const COMMANDS = [
   'session.cancel',
   'session.start',
   'session.leave',
+  'session.kick',
   'session.copyCode',
   'session.relaunch',
   'session.mini',

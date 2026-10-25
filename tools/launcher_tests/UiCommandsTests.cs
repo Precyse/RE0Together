@@ -32,6 +32,7 @@ public static class UiCommandsTests
         [Cmd.SessionCancel] = """{"type":"session.cancel"}""",
         [Cmd.SessionStart] = """{"type":"session.start"}""",
         [Cmd.SessionLeave] = """{"type":"session.leave"}""",
+        [Cmd.SessionKick] = """{"type":"session.kick","memberId":"76561198000000001"}""",
         [Cmd.SessionCopyCode] = """{"type":"session.copyCode"}""",
         [Cmd.SessionRelaunch] = """{"type":"session.relaunch"}""",
         [Cmd.SessionMini] = """{"type":"session.mini"}""",
@@ -68,6 +69,8 @@ public static class UiCommandsTests
         ("""{"type":"join.friend","lobbyId":"12a"}""", "a lobby id that is not digits"),
         ("""{"type":"join.friend","lobbyId":123}""", "a lobby id as a number"),
         ("""{"type":"join.friend","lobbyId":"123456789012345678901"}""", "a lobby id of 21 digits"),
+        ("""{"type":"session.kick","memberId":"amy"}""", "a member id that is not digits"),
+        ("""{"type":"session.kick"}""", "a kick without a member"),
         ("""{"type":"join.friend","lobbyId":"99999999999999999999"}""", "a lobby id beyond ulong"),
         ("""{"type":"select.step","half":2,"direction":1}""", "a half out of range"),
         ("""{"type":"select.step","half":0,"direction":0}""", "a direction of zero"),
@@ -119,6 +122,8 @@ public static class UiCommandsTests
         Check.That(option!.Text("gameId") == "sr2" && option.Text("key") == "transport" && option.Text("value") == "steam", "commands: option.set keeps its three texts");
         UiCommands.Parse(Valid[Cmd.JoinFriend], out var friend, out _, out _);
         Check.That(friend!.LobbyId() == 109775243712345678UL, "commands: a lobby id is read from its digits");
+        UiCommands.Parse(Valid[Cmd.SessionKick], out var kick, out _, out _);
+        Check.That(kick!.MemberId() == 76561198000000001UL, "commands: a member id is read from its digits");
         UiCommands.Parse(Valid[Cmd.SelectStep], out var step, out _, out _);
         Check.That(step!.Number("half") == 1 && step.Number("direction") == -1, "commands: select.step keeps half and direction");
         UiCommands.Parse(Valid[Cmd.LobbiesGame], out var game, out _, out _);

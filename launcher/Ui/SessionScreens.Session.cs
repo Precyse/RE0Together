@@ -22,7 +22,7 @@ internal static partial class SessionScreens
         var isHost = local is { IsHost: true };
         var preGame = local != null && s.State is not (AppState.Rejoining or AppState.WaitingForHost)
             && s.Step is not (SessionStep.InGame or SessionStep.GameClosed);
-        var seats = Seats(s, g, gameDir, preGame);
+        var seats = Seats(s, g, gameDir, wide: SeatCount(s, g, gameDir) <= TwoSeats);
         var state = preGame ? null : LobbyStateOf(s, c, unixNow ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         return new SessionModel(
             preGame, isHost, s.LobbyId != 0 ? s.LobbyId.ToString(CultureInfo.InvariantCulture) : string.Empty,
@@ -30,28 +30,30 @@ internal static partial class SessionScreens
             preGame && isHost && StartEnabled(s, local!), state,
             preGame ? [] : HostOptions(s, g), preGame ? [] : events.TakeLast(RecentEvents).ToList(),
             preGame ? !isHost && LaunchStalled(s, c, nowMs) : state?.Kind == LobbyStateKind.GameClosed, preGame ? $"{s.Players.Count}/{seats.Count}" : string.Empty,
-            seats, preGame && seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
+            seats, seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
     }
 
     /// <summary>One card per seat: the host first, then the other members, then open seats up to the seat count.</summary>
-    public static IReadOnlyList<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir) => Seats(s, g, gameDir, preGame: false);
+    public static IReadOnlyList<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir) => Seats(s, g, gameDir, wide: false);
 
     /// <summary>The character a card is for (the part of its detail line before the outfit); empty for a game without characters.</summary>
     public static string CharacterOf(PlayerCard card) => card.Detail.Split(DetailGap)[0];
 
-    /// <summary>The cards of the screen: in the hosting screen (<paramref name="preGame"/>) the local host's corner says Host (the
-    /// card is the host's own); another joining player's card carries its step list on the large cards of a two-seat game without a
-    /// character select (the local player's steps are the screen's own, a game with characters shows its field file instead).</summary>
-    private static List<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir, bool preGame, bool compact = false)
+    /// <summary>The cards of the screen: on the wide cards (<paramref name="wide"/>, two seats) the local host's corner says Host (the
+    /// card is the host's own); another joining player's card carries its step list on the large cards of a game without a
+    /// character select (the local player's steps are the screen's own, a game with characters shows its field file instead). The
+    /// local host may remove each other member except on the compact cards.</summary>
+    private static List<PlayerCard> Seats(AppStatus s, GameProfile g, string? gameDir, bool wide, bool compact = false)
     {
         var members = Ordered(s);
         var count = SeatCount(s, g, gameDir);
         var withSteps = !compact && count <= TwoSeats && !g.HasCharacterSelect;
+        var hostView = !compact && s.Players.Any(player => player is { IsLocal: true, IsHost: true });
         var cards = new List<PlayerCard>();
         for (var seat = 0; seat < count; seat++)
         {
             var character = seat < s.SeatCharacters.Count ? s.SeatCharacters[seat] : string.Empty;
-            cards.Add(seat < members.Count ? Taken(members[seat], character, g, gameDir, preGame, withSteps && !members[seat].IsLocal) : OpenCard(character));
+            cards.Add(seat < members.Count ? Taken(members[seat], character, g, gameDir, wide, withSteps && !members[seat].IsLocal, hostView && !members[seat].IsLocal) : OpenCard(character));
         }
         return cards;
     }
@@ -67,10 +69,10 @@ internal static partial class SessionScreens
     private static PlayerCard OpenCard(string character) =>
         new(0, OpenName, string.Empty, character, string.Empty, string.Empty, CardState.Open, false, null, [], null, string.Empty);
 
-    private static PlayerCard Taken(PlayerSlot player, string character, GameProfile g, string? gameDir, bool preGame, bool withSteps)
+    private static PlayerCard Taken(PlayerSlot player, string character, GameProfile g, string? gameDir, bool wide, bool withSteps, bool kickable)
     {
         var corner = Corner(player);
-        var hostCorner = player.IsHost && (corner.Length == 0 || (preGame && player.IsLocal));
+        var hostCorner = player.IsHost && (corner.Length == 0 || (wide && player.IsLocal));
         var outfit = OutfitValue(player, character, g, gameDir);
         var entry = g.HasCharacterSelect ? GameOptions.CharacterEntry(g, character) : null;
         return new PlayerCard(
@@ -78,7 +80,7 @@ internal static partial class SessionScreens
             player.IsHost && !hostCorner ? HostWord : string.Empty, CardStates.Of(player), player.IsLocal, FigureOf(character, outfit, g),
             withSteps ? JoinerSteps(player, g) : [], player.Step == SessionStep.ReceivingSave ? player.Percent / PercentScale : null,
             player.Held ? MinutesSeconds(player.HoldSecondsLeft) : string.Empty,
-            entry?.Unit ?? string.Empty, entry?.FullName ?? string.Empty, OutfitLabel(character, outfit, g) ?? string.Empty, CardStates.IsReady(player));
+            entry?.Unit ?? string.Empty, entry?.FullName ?? string.Empty, OutfitLabel(character, outfit, g) ?? string.Empty, CardStates.IsReady(player), kickable);
     }
 
     /// <summary>You on the local card, else the hold countdown while held, else the ping.</summary>

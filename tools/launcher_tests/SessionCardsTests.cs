@@ -62,7 +62,7 @@ public static class SessionCardsTests
             Check.That(Fix(kind) == NoticeFix.None, $"fix: {kind} has no fix without a lobby");
         }
         foreach (var kind in new[] { RefusalKind.GameBuild, RefusalKind.GameUnsupported, RefusalKind.RequirementMissing, RefusalKind.SaveFolderMissing,
-                     RefusalKind.HostLeft, RefusalKind.PortInUse, RefusalKind.LaunchFailed })
+                     RefusalKind.HostLeft, RefusalKind.Removed, RefusalKind.PortInUse, RefusalKind.LaunchFailed })
             Check.That(Fix(kind, LobbyId, NewerBuild) == NoticeFix.None, $"fix: {kind} has none");
     }
 

@@ -16,6 +16,7 @@ public sealed class MemberGrace
 
     private readonly Dictionary<ulong, long> _missingSince = new();
     private readonly HashSet<ulong> _released = new();
+    private readonly HashSet<ulong> _departed = new();
 
     /// <summary>The members currently held (missing, grace not over).</summary>
     public IReadOnlyCollection<ulong> HeldIds => _missingSince.Keys;
@@ -26,16 +27,18 @@ public sealed class MemberGrace
     {
         var members = slotMembers.ToList();
         foreach (var id in _missingSince.Keys.Except(members).ToList()) Forget(id);
+        _departed.IntersectWith(members);
         List<ulong> held = [], returned = [], expired = [];
         foreach (var id in members)
         {
             if (present.Contains(id))
             {
-                if (Forget(id)) returned.Add(id);
+                _released.Remove(id);
+                if (_missingSince.Remove(id)) returned.Add(id);
                 continue;
             }
             var since = _missingSince.TryAdd(id, nowMs) ? nowMs : _missingSince[id];
-            if (_released.Contains(id) || nowMs - since >= graceFor(id))
+            if (_released.Contains(id) || _departed.Contains(id) || nowMs - since >= graceFor(id))
             {
                 Forget(id);
                 expired.Add(id);
@@ -56,17 +59,23 @@ public sealed class MemberGrace
     public long MsLeft(ulong id, long nowMs, Func<ulong, long> graceFor) =>
         _missingSince.TryGetValue(id, out var since) && !_released.Contains(id) ? Math.Max(0, graceFor(id) - (nowMs - since)) : 0;
 
+    /// <summary>A member that said it is leaving: it is expired at once when it is missing from the lobby, with no grace (a
+    /// deliberate leave is not a lost connection). Until it is missing it counts as present.</summary>
+    public void Depart(ulong id) => _departed.Add(id);
+
     /// <summary>Forgets every hold (the lobby was replaced).</summary>
     public void Clear()
     {
         _missingSince.Clear();
         _released.Clear();
+        _departed.Clear();
     }
 
-    /// <summary>Drops a member's hold; true when it was held.</summary>
+    /// <summary>Drops a member's hold and its departure; true when it was held.</summary>
     private bool Forget(ulong id)
     {
         _released.Remove(id);
+        _departed.Remove(id);
         return _missingSince.Remove(id);
     }
 }

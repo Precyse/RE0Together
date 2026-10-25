@@ -38,7 +38,8 @@ export default {
      "unit": "S.T.A.R.S. Bravo Team",
      "agent": "Rebecca Chambers",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     },
     {
      "key": "1",
@@ -65,7 +66,8 @@ export default {
      "unit": "U.S. Marine Corps",
      "agent": "Billy Coen",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     }
    ],
    "alert": null,

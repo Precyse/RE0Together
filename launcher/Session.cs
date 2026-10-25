@@ -20,6 +20,7 @@ public sealed class Session : IDisposable
     private readonly PeerBudget _budget = new();
     private readonly FreshQueue? _fresh;
     private readonly Dictionary<ulong, string> _names = new();
+    private readonly HashSet<ulong> _kicked = new();
 
     private ILobby _lobby;
     private ulong _lobbyId;
@@ -51,6 +52,10 @@ public sealed class Session : IDisposable
     }
 
     public bool Ended { get; private set; }
+
+    /// <summary>Why the host ended this guest's session on purpose (<see cref="RefusalKind.HostLeft"/> when it left,
+    /// <see cref="RefusalKind.Removed"/> when it removed the guest); null while the session ran on or ended otherwise.</summary>
+    public RefusalKind? EndedBy { get; private set; }
 
     /// <summary>The guest's lobby object failed: membership is frozen and every peer is held until a lobby is rebound.</summary>
     public bool Held { get; private set; }
@@ -142,6 +147,28 @@ public sealed class Session : IDisposable
         return true;
     }
 
+    /// <summary>Tells every peer this launcher is leaving on purpose, so a host drops its guest and a guest ends its session at once.</summary>
+    public void AnnounceLeaving()
+    {
+        if (!_active || Ended) return;
+        foreach (var id in PeerIds) _transport.Send(id, ControlMessages.Leaving());
+    }
+
+    /// <summary>The host removes a guest: it is told to leave, dropped from the slots at once and kept out of the lobby's players for
+    /// the rest of the session. False for anyone but a guest of this session, and for a guest.</summary>
+    public bool Kick(ulong memberId)
+    {
+        if (!IsHost || !_active || Ended || !HasPeer(memberId) || !_kicked.Add(memberId)) return false;
+        Log.Event($"{NameOf(memberId)} removed");
+        _transport.Send(memberId, ControlMessages.Kick());
+        _grace.Depart(memberId);
+        _recheck = true;
+        return true;
+    }
+
+    /// <summary>True for a member the host removed from this session.</summary>
+    public bool IsKicked(ulong memberId) => _kicked.Contains(memberId);
+
     /// <summary>Gives up every held partner now (the host plays on alone): the next pump sends them PEER_DOWN.</summary>
     public void ReleaseHeld()
     {
@@ -178,9 +205,12 @@ public sealed class Session : IDisposable
 
     private void ApplyMembership(long nowMs)
     {
-        var present = Held ? new HashSet<ulong>() : _lobby.Members.Select(m => m.Id).ToHashSet();
+        var present = Held ? new HashSet<ulong>() : _lobby.Members.Select(m => m.Id).Where(id => !_kicked.Contains(id)).ToHashSet();
         if (!Held)
+        {
             foreach (var member in _lobby.Members) _names[member.Id] = member.Name;
+            foreach (var member in _lobby.Members.Where(member => _kicked.Contains(member.Id))) _transport.Send(member.Id, ControlMessages.Kick());
+        }
         if (!_active)
         {
             Activate(present);
@@ -342,6 +372,24 @@ public sealed class Session : IDisposable
         else if (TryGetPeerId(frame.Slot, out var id)) RouteToPeer(id, frame);
     }
 
+    /// <summary>LEAVING from the host ends a guest's session, from a guest it ends that guest's grace; KICK from the host ends the
+    /// guest's session. Anyone else's is ignored.</summary>
+    private void OnLeaveFrame(ulong senderId, ushort type)
+    {
+        if (!_active || Ended) return;
+        if (senderId == _hostId && !IsHost)
+        {
+            var removed = type == Msg.Kick;
+            EndedBy = removed ? RefusalKind.Removed : RefusalKind.HostLeft;
+            End(removed ? "removed by the host" : "host left");
+        }
+        else if (type == Msg.Leaving && IsHost && HasPeer(senderId))
+        {
+            _grace.Depart(senderId);
+            _recheck = true;
+        }
+    }
+
     private void OnPeerFrame(ulong senderId, Frame frame)
     {
         if (Msg.IsFileTransfer(frame.Type))
@@ -357,6 +405,11 @@ public sealed class Session : IDisposable
         if (frame.Type == Msg.LogAppend)
         {
             DiagnosticsFrameReceived?.Invoke(senderId, frame);
+            return;
+        }
+        if (frame.Type is Msg.Leaving or Msg.Kick)
+        {
+            OnLeaveFrame(senderId, frame.Type);
             return;
         }
         if (!_active || !_slots.TryGetValue(senderId, out var slot)) return;

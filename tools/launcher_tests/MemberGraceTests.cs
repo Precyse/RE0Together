@@ -24,6 +24,38 @@ public static class MemberGraceTests
         HostAndTracking();
         HostGrace();
         ExpireAllAndMsLeft();
+        Departed();
+    }
+
+    private static void Departed()
+    {
+        var grace = new MemberGrace();
+        grace.Update(Both, Present(Host, Guest), 0, Peers);
+        grace.Depart(Guest);
+        var stillIn = grace.Update(Both, Present(Host, Guest), 1, Peers);
+        Check.That(stillIn.Held.Count + stillIn.Expired.Count + stillIn.Returned.Count == 0, "a member that said it left counts as present while the lobby lists it");
+        var gone = grace.Update(Both, Present(Host), 2, Peers);
+        Check.That(gone.Expired.SequenceEqual([Guest]) && gone.Held.Count == 0 && grace.HeldIds.Count == 0, "and expires at once, with no grace, when the lobby drops it");
+
+        var lost = new MemberGrace();
+        lost.Update(Both, Present(Host), 0, Peers);
+        Check.That(lost.Update(Both, Present(Host), 1, Peers).Held.SequenceEqual([Guest]), "a member that vanished without saying so is held");
+
+        var early = new MemberGrace();
+        early.Update(Both, Present(Host), 0, Peers);
+        early.Depart(Guest);
+        Check.That(early.Update(Both, Present(Host), 1, Peers).Expired.SequenceEqual([Guest]), "a held member that then says it left expires at once");
+
+        var left = new MemberGrace();
+        left.Depart(Guest);
+        left.Update([Host], Present(Host, Guest), 0, Peers);
+        Check.That(left.Update(Both, Present(Host), 1, Peers).Held.SequenceEqual([Guest]), "a departure of someone who is not a slot member is forgotten");
+
+        var cleared = new MemberGrace();
+        cleared.Depart(Guest);
+        cleared.Clear();
+        cleared.Update(Both, Present(Host, Guest), 0, Peers);
+        Check.That(cleared.Update(Both, Present(Host), 1, Peers).Held.SequenceEqual([Guest]), "Clear forgets a departure too");
     }
 
     private static void ExpireAllAndMsLeft()

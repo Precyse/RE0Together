@@ -35,7 +35,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     },
     {
      "key": "1",
@@ -59,7 +60,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     },
     {
      "key": "2",
@@ -83,7 +85,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     },
     {
      "key": "3",
@@ -107,7 +110,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     }
    ],
    "alert": null,

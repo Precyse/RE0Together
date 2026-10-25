@@ -22,10 +22,11 @@ internal sealed record Figure(string Character, string OptionKey, string? Value,
 /// Steps is the mini step list of a joining player, Progress the save transfer (0..1) while this seat receives it, Countdown
 /// the hold countdown of the compact layouts. An open seat is a card in the Open state. Figure is the outfit cutout, shown
 /// instead of the Steam avatar. The field file of a game with characters: Unit the character's unit, Agent its full name, Outfit
-/// the outfit's label, Ready that the player is ready to start (<see cref="CardStates.IsReady"/>).</summary>
+/// the outfit's label, Ready that the player is ready to start (<see cref="CardStates.IsReady"/>). Kickable: the local host may
+/// remove this player.</summary>
 internal sealed record PlayerCard(ulong AvatarId, string Name, string Corner, string Detail, string Words, string Footer,
     CardState State, bool Local, Figure? Figure, IReadOnlyList<StepRow> Steps, double? Progress, string Countdown,
-    string Unit = "", string Agent = "", string Outfit = "", bool Ready = false)
+    string Unit = "", string Agent = "", string Outfit = "", bool Ready = false, bool Kickable = false)
 {
     private const int PercentOfFull = 100;
 

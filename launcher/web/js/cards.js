@@ -99,15 +99,15 @@ function showsFile(card, layout) {
 }
 
 /** The field file of a card, built the first time the card needs it (in front of the ring, so a local card's edge stays on top). */
-function fileOf(el) {
+function fileOf(el, ctx) {
   if (!el.refs.file) {
-    el.refs.file = createFile();
+    el.refs.file = createFile(ctx);
     el.querySelector('.ring').before(el.refs.file.el);
   }
   return el.refs.file;
 }
 
-function renderCard(el, card, layout) {
+function renderCard(el, card, layout, ctx) {
   const { bloom, portrait, name, corner, right, detail, spinner, words, foot, state, steps, bar, fill, body } = el.refs;
   const created = wasCreated(el);
   const previous = el.dataset.state;
@@ -116,7 +116,8 @@ function renderCard(el, card, layout) {
     if (card.state === STATE_PROBLEM) shake(el);
     else if (card.state === STATE_INGAME) play(bloom, 'bloom');
   }
-  const file = showsFile(card, layout) ? fileOf(el) : null;
+  const file = showsFile(card, layout) ? fileOf(el, ctx) : null;
+  if (el.refs.file) el.refs.file.el.hidden = file === null;
   setAttr(el, 'data-file', file !== null);
   if (!created && el.dataset.occupant !== card.occupant) play(file ? file.el : body, 'content-in');
   el.dataset.occupant = card.occupant;
@@ -176,7 +177,7 @@ export function createCards(ctx, layout) {
     setAttr(el, 'data-count', cards.length > PAIR_SEATS ? 'many' : 'pair');
     setAttr(el, 'data-file', cards.some((card) => showsFile(card, current)));
     keyed(el, cards, (card) => card.key, build, (card, data) => {
-      renderCard(card, data, current);
+      renderCard(card, data, current, ctx);
       setAttr(card, 'data-character', data.character);
       card.toggleAttribute('data-clickable', clickable && data.local);
       setAttr(card, 'tabindex', clickable && data.local ? '0' : null);

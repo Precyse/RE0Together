@@ -30,6 +30,7 @@ internal static class Cmd
     public const string SessionCancel = "session.cancel";
     public const string SessionStart = "session.start";
     public const string SessionLeave = "session.leave";
+    public const string SessionKick = "session.kick";
     public const string SessionCopyCode = "session.copyCode";
     public const string SessionRelaunch = "session.relaunch";
     public const string SessionMini = "session.mini";
@@ -73,6 +74,9 @@ internal sealed record UiCommand(string Type, IReadOnlyDictionary<string, object
 
     /// <summary>A lobby id, from the digits the page sent.</summary>
     public ulong LobbyId() => ulong.Parse(Text("lobbyId"), System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>A lobby member's id, from the digits the page sent.</summary>
+    public ulong MemberId() => ulong.Parse(Text("memberId"), System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>Parsing and validating what the page sends (SPEC 3.3): a message under 4 KB, an object at most 3 levels deep, a known
@@ -87,6 +91,7 @@ internal static class UiCommands
 
     private static readonly Field GameId = new("gameId", FieldKind.Text, Min: 1);
     private static readonly Field LobbyId = new("lobbyId", FieldKind.Digits);
+    private static readonly Field MemberId = new("memberId", FieldKind.Digits);
     private static readonly string[] Tabs = ["play", "lobbies"];
     private static readonly string[] Filters = ["all", "friends"];
     private static readonly string[] Views = ["settings", "select"];
@@ -118,6 +123,7 @@ internal static class UiCommands
         [Cmd.SessionCancel] = [],
         [Cmd.SessionStart] = [],
         [Cmd.SessionLeave] = [],
+        [Cmd.SessionKick] = [MemberId],
         [Cmd.SessionCopyCode] = [],
         [Cmd.SessionRelaunch] = [],
         [Cmd.SessionMini] = [],

@@ -76,6 +76,8 @@ internal sealed partial class UiController
             case Cmd.SessionLeave when !free:
                 _app.Leave();
                 return null;
+            case Cmd.SessionKick when CurrentSession() is { IsHost: true }:
+                return status.Players.Any(player => player.Id == command.MemberId() && !player.IsLocal) ? Do(() => _app.Kick(command.MemberId())) : UnknownTarget;
             case Cmd.SessionCopyCode when status.LobbyId != 0:
                 if (LauncherActions.CopyLobbyCode(status.LobbyId)) PageEvent?.Invoke("copied");
                 return null;

@@ -32,8 +32,8 @@ public static class CardStates
         _ => CardState.Idle,
     };
 
-    /// <summary>The state line of a card: held, silent, the game's own line when it has one, then the step's words, or
-    /// "Connected" for a ping without a step; empty for a player nothing is known about.</summary>
+    /// <summary>The state line of a card: held, silent, the game's own line when it has one, then the step's words (a refused
+    /// player's own reason, as the refusal says it), or "Connected" for a ping without a step; empty for a player nothing is known about.</summary>
     public static string Words(PlayerSlot player)
     {
         if (player.Held) return HeldWords;
@@ -48,7 +48,7 @@ public static class CardStates
             SessionStep.StartingGame => "Starting game",
             SessionStep.InGame => "In game",
             SessionStep.GameClosed => "Game closed",
-            SessionStep.Refused => "Refused",
+            SessionStep.Refused => player.Refusal is { } kind ? StatusText.Refusal(new Refusal(kind)) : "Refused",
             _ => player.RttMs != null ? ConnectedWords : string.Empty,
         };
     }

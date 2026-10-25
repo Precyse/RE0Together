@@ -85,10 +85,11 @@ internal sealed record JoiningDto(string Title, string Sub, ImgDto Host, StepDto
 
 internal sealed record LobbyStateDto(LobbyStateKind Kind, string Words, string Timer);
 
-/// <summary>A player card. Seat counts from 1; Unit, Agent, Outfit and Ready are the field file of a game with characters (empty without one).</summary>
+/// <summary>A player card. Seat counts from 1; Unit, Agent, Outfit and Ready are the field file of a game with characters (empty without one);
+/// Kickable: the local host may remove this player (Occupant is its id).</summary>
 internal sealed record CardDto(
     string Key, string Occupant, ImgDto Avatar, ImgDto? Figure, string Name, string Corner, string Detail, string Words, string Footer,
-    string State, bool Local, StepDto[] Steps, string Right, double? Progress, int Seat, string Unit, string Agent, string Outfit, bool Ready);
+    string State, bool Local, StepDto[] Steps, string Right, double? Progress, int Seat, string Unit, string Agent, string Outfit, bool Ready, bool Kickable);
 
 internal sealed record SessionDto(
     bool Hosting, bool IsHost, string Code, StepDto[] Steps, bool StartEnabled, LobbyStateDto? State, string[][] Options, string[] Events, bool Relaunch,

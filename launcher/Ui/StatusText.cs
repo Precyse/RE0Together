@@ -23,6 +23,7 @@ public static class StatusText
         RefusalKind.SaveFolderMissing => "Save folder not found",
         RefusalKind.SaveDiffers => "Save differs from host's",
         RefusalKind.HostLeft => "Host left",
+        RefusalKind.Removed => "Removed from the lobby",
         RefusalKind.RejoinGaveUp => "Could not rejoin",
         RefusalKind.PortInUse => $"Port {refusal.Detail} in use",
         RefusalKind.LaunchFailed => "Game did not start",

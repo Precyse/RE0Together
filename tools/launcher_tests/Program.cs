@@ -33,6 +33,7 @@ public static class Program
         ContentHashTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
+        SessionLeaveTests.Run();
         PeerBudgetTests.Run();
         FreshQueueTests.Run();
         GameOptionsTests.Run();

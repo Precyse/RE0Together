@@ -198,15 +198,16 @@ public sealed partial class App
     {
         var hostId = _hostId != 0 ? _hostId : lobby.OwnerId;
         return lobby.Members
+            .Where(member => _session?.IsKicked(member.Id) != true)
             .OrderByDescending(member => member.Id == hostId)
             .Select(member =>
             {
                 var isLocal = member.Id == _transport!.LocalId;
-                var (step, percent) = isLocal ? local : PublishedStep(lobby, member);
+                var (step, percent, refusal) = isLocal ? (local.Step, local.Percent, _refusal?.Kind) : PublishedStep(lobby, member);
                 return new PlayerSlot(
                     member.Id, member.Name, member.Id == hostId, isLocal, NativeJoin.Readable(lobby.MemberData(member, MemberKey.GameStatus)),
                     step, percent, isLocal ? null : MeasuredRtt(member.Id, step, local.Step), _session?.IsHeld(member.Id) ?? false, _session?.IsSilent(member.Id, nowMs) ?? false,
-                    lobby.MemberData(member, MemberKey.Options), HoldSecondsLeft(member.Id, nowMs));
+                    lobby.MemberData(member, MemberKey.Options), HoldSecondsLeft(member.Id, nowMs), refusal);
             })
             .ToList();
     }
@@ -225,8 +226,9 @@ public sealed partial class App
     private int HoldSecondsLeft(ulong memberId, long nowMs) =>
         _session is { } session ? (int)Math.Ceiling(session.HoldMsLeft(memberId, nowMs) / (double)MillisPerSecond) : 0;
 
-    private static (SessionStep Step, int Percent) PublishedStep(ILobby lobby, LobbyMember member) =>
-        StepCodec.TryDecode(lobby.MemberData(member, MemberKey.Step), out var step, out var percent, out _) ? (step, percent) : (SessionStep.None, 0);
+    private static (SessionStep Step, int Percent, RefusalKind? Refusal) PublishedStep(ILobby lobby, LobbyMember member) =>
+        StepCodec.TryDecode(lobby.MemberData(member, MemberKey.Step), out var step, out var percent, out var refusal)
+            ? (step, percent, refusal) : (SessionStep.None, 0, null);
 
     /// <summary>Every other slot of the session is a member in its game (its published step) or, from a launcher that publishes
     /// none, one that answers pings, and none is held (missing from the lobby) or silent.</summary>

@@ -106,6 +106,9 @@ public sealed partial class App
         if (_startHeld && _hostId == _transport!.LocalId) _startRequested = true;
     });
 
+    /// <summary>The host removes a guest from the session: it is told to leave and does not count among the lobby's players again.</summary>
+    public void Kick(ulong memberId) => _commands.Enqueue(() => _session?.Kick(memberId));
+
     /// <summary>The host plays on without the partners it is holding for a reconnect.</summary>
     public void PlaySolo() => _commands.Enqueue(() =>
     {
@@ -263,7 +266,7 @@ public sealed partial class App
                 if (!_interactive) return 1;
                 EndSession();
             }
-            if (_interactive && _session?.Ended == true) EndSession();
+            if (_interactive && _session?.Ended == true) EndEndedSession(_session);
             PollWhileIdle();
             PublishStatus();
             Thread.Sleep(PumpIntervalMs);
@@ -503,9 +506,18 @@ public sealed partial class App
         PublishStep(LocalProgress());
     }
 
-    /// <summary>Drops the lobby and everything built on it, leaving the app idle.</summary>
+    /// <summary>The window's session ended: when the host ended it on purpose the player is told why, then the app goes idle.</summary>
+    private void EndEndedSession(Session session)
+    {
+        if (session.EndedBy is { } kind) Refuse(kind);
+        EndSession();
+    }
+
+    /// <summary>Drops the lobby and everything built on it, leaving the app idle. The other players are told this one left on
+    /// purpose.</summary>
     private void EndSession()
     {
+        _session?.AnnounceLeaving();
         DropSession();
         DisposeLobby();
         _view = null;

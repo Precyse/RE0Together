@@ -10,11 +10,11 @@ public enum OfflineReason { None, SteamNotRunning }
 /// <summary>One lobby member as the window shows it. Status is what its game reports (rendezvous games), else empty; Step
 /// and Percent are what its launcher published (<see cref="SessionStep"/>); RttMs, Held and Silent come from the session;
 /// Options is the encoded option values its launcher published (<see cref="GameOptions.Decode"/>); HoldSecondsLeft is the
-/// whole seconds before a held member is given up (0 when it is not held).</summary>
+/// whole seconds before a held member is given up (0 when it is not held); Refusal is the reason a refused member published.</summary>
 public sealed record PlayerSlot(
     ulong Id, string Name, bool IsHost, bool IsLocal, string Status = "",
     SessionStep Step = SessionStep.None, int Percent = 0, int? RttMs = null, bool Held = false, bool Silent = false,
-    string Options = "", int HoldSecondsLeft = 0);
+    string Options = "", int HoldSecondsLeft = 0, RefusalKind? Refusal = null);
 
 /// <summary>A friend hosting a lobby of a game this launcher knows, with the lobby's data once Steam delivered it.</summary>
 public sealed record FriendLobby(ulong FriendId, string Name, ulong LobbyId, string GameId, LobbyListing? Listing = null);

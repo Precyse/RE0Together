@@ -13,8 +13,9 @@ public static class CardStateTests
         Ready();
     }
 
-    private static PlayerSlot Player(SessionStep step = SessionStep.None, int? rtt = null, bool held = false, bool silent = false, string status = "") =>
-        new(1, "Amy", false, false, status, step, 0, rtt, held, silent);
+    private static PlayerSlot Player(SessionStep step = SessionStep.None, int? rtt = null, bool held = false, bool silent = false, string status = "",
+        RefusalKind? refusal = null) =>
+        new(1, "Amy", false, false, status, step, 0, rtt, held, silent, Refusal: refusal);
 
     private static void States()
     {
@@ -52,6 +53,8 @@ public static class CardStateTests
             (SessionStep.GameClosed, "Game closed"), (SessionStep.Refused, "Refused"),
         };
         foreach (var (step, words) in expected) Check.That(CardStates.Words(Player(step)) == words, $"{step} reads {words}");
+        Check.That(CardStates.Words(Player(SessionStep.Refused, refusal: RefusalKind.GameBuild)) == "Game version differs", "a refused player reads its own reason");
+        Check.That(CardStates.Words(Player(SessionStep.InGame, refusal: RefusalKind.GameBuild)) == "In game", "a reason only counts on the Refused step");
         Check.That(CardStates.Words(Player(rtt: 12)) == "Connected", "a ping without a step reads Connected");
         Check.That(CardStates.Words(Player()) == "", "nothing known reads nothing");
     }

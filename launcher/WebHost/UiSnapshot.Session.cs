@@ -77,7 +77,7 @@ internal static partial class UiSnapshot
             seat.ToString(System.Globalization.CultureInfo.InvariantCulture), card.AvatarId == 0 ? string.Empty : UiJson.Id(card.AvatarId),
             Avatar(i, card.AvatarId, open ? string.Empty : card.Name), card.Figure == null ? null : new ImgDto(ImageRoutes.FigureUrl(gameId, card.Figure), card.Figure.Initial),
             card.Name, card.Corner, card.Detail, card.Words, card.Footer, Names.Of(card.State), card.Local, Steps(card.Steps), card.RightText, card.Progress,
-            seat + 1, card.Unit, card.Agent, card.Outfit, card.Ready);
+            seat + 1, card.Unit, card.Agent, card.Outfit, card.Ready, card.Kickable);
     }
 
     private static SelectDto Select(SnapshotInput i, GameEntry game)

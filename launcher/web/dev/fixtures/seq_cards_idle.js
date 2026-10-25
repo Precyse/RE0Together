@@ -99,7 +99,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": true
+     "ready": true,
+     "kickable": false
     },
     {
      "key": "1",
@@ -123,7 +124,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": true
+     "ready": true,
+     "kickable": false
     },
     {
      "key": "2",
@@ -147,7 +149,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": true
+     "ready": true,
+     "kickable": false
     },
     {
      "key": "3",
@@ -171,7 +174,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": true
+     "ready": true,
+     "kickable": false
     },
     {
      "key": "4",
@@ -195,7 +199,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": false
+     "ready": false,
+     "kickable": false
     },
     {
      "key": "5",
@@ -219,7 +224,8 @@ export default {
      "unit": "",
      "agent": "",
      "outfit": "",
-     "ready": true
+     "ready": true,
+     "kickable": false
     }
    ],
    "save": null,

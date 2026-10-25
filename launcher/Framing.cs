@@ -15,6 +15,8 @@ public static class Msg
     public const ushort Pong = 0x0011;
     public const ushort PeerStats = 0x0012;
     public const ushort BuildInfo = 0x0013;
+    public const ushort Leaving = 0x0014;
+    public const ushort Kick = 0x0015;
     public const ushort Heartbeat = 0x0020;
     public const ushort FileBegin = 0x0040;
     public const ushort FileChunk = 0x0041;

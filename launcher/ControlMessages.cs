@@ -58,6 +58,12 @@ public static class ControlMessages
         return Framing.Reliable(Msg.PeerStats, p);
     }
 
+    /// <summary>LEAVING: this launcher is leaving the session on purpose; the other side drops it at once instead of holding it for a lost connection.</summary>
+    public static Frame Leaving() => Framing.Reliable(Msg.Leaving, []);
+
+    /// <summary>KICK: the host removes the receiver from the session; the receiver goes back to idle.</summary>
+    public static Frame Kick() => Framing.Reliable(Msg.Kick, []);
+
     public static Frame Heartbeat() => Framing.Reliable(Msg.Heartbeat, []);
 
     /// <summary>LOBBY_STATE: the lobby as text for the adapter's own co-op page (see <see cref="LobbyStateText"/>).</summary>

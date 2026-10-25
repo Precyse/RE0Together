@@ -30,6 +30,7 @@ public static class UiSnapshotTests
             GuestHosting();
             RefusedJoin();
             Lobby();
+            LobbyIdCards();
             MiniAlert();
             GuestSelect();
             Home();
@@ -149,6 +150,23 @@ public static class UiSnapshotTests
         Check.That(session.Options.Length >= 1 && session.Options.All(pair => pair.Length == 2), "L2: the host's options come as label and value pairs");
         Check.That(state.Top.Mode == TopMode.Session && state.Games[1].Selected && state.Games[1].Sub == "Running",
             "L2: the rail selects the lobby's game");
+    }
+
+    private static void LobbyIdCards()
+    {
+        var mismatched = Guest(SessionStep.Refused) with { Refusal = RefusalKind.LauncherBuild };
+        var status = Re0Status(AppState.PeerConnected, SessionStep.InGame, Host(local: true), mismatched);
+        var session = UiSnapshot.MainPage(Input(status), null).Session!;
+        Check.That(session.Layout == CardLayout.Wide && !session.Hosting, "L3: in game the two seats keep the field file layout of the hosting screen");
+        Check.That(session.Seats[0] is { Corner: "Host", Seat: 1, Unit: "S.T.A.R.S. Bravo Team", Kickable: false, Local: true },
+            "L3: the host's own card is P1 Host and cannot be removed");
+        Check.That(session.Seats[1] is { State: "problem", Words: "Launcher build differs", Name: "Amy", Unit: "U.S. Marine Corps", Kickable: true, Occupant: "1" },
+            "L3: a partner with another build is one filled card, red, with the refusal's words, and the host can remove it (Occupant is its id)");
+        var open = UiSnapshot.MainPage(Input(Re0Status(AppState.PeerConnected, SessionStep.InGame, Host(local: true))), null).Session!.Seats[1];
+        Check.That(open is { State: "open", Name: "Open", Unit: "", Agent: "", Outfit: "", Kickable: false }, "L3: an open seat carries nothing of the player that left it");
+        var guestView = UiSnapshot.MainPage(Input(Re0Status(AppState.PeerConnected, SessionStep.InGame, Host(), Guest(SessionStep.InGame, local: true))), null).Session!;
+        Check.That(guestView.Seats.All(seat => !seat.Kickable), "L3: a guest sees no Remove");
+        Check.That(UiSnapshot.MiniPage(Input(status)).Mini.Seats.All(seat => !seat.Kickable), "L3: the mini window has no Remove");
     }
 
     private static void MiniAlert()

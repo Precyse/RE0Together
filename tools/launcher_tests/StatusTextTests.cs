@@ -26,6 +26,7 @@ public static class StatusTextTests
         [RefusalKind.SaveFolderMissing] = "Save folder not found",
         [RefusalKind.SaveDiffers] = "Save differs from host's",
         [RefusalKind.HostLeft] = "Host left",
+        [RefusalKind.Removed] = "Removed from the lobby",
         [RefusalKind.RejoinGaveUp] = "Could not rejoin",
         [RefusalKind.PortInUse] = "Port 27960 in use",
         [RefusalKind.LaunchFailed] = "Game did not start",
