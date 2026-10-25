@@ -31,7 +31,7 @@ struct Tag {
     std::string name;
     bool hasCondition = false;  // false until a PLAYER_STATE arrived
     Condition condition = Condition::Fine;
-    std::string detail;         // "Room 0x24", "In menu" or both; empty while together
+    std::string detail;         // "Hall", "In menu" or both ("Room 0xNN" for a room with no known name); empty while together
 
     bool operator==(const Tag&) const = default;
 };

@@ -48,9 +48,12 @@ void testTag() {
     input.room = 0x24;
     input.hp = 30;
     check(tag(input).condition == Condition::Danger, "low health is danger");
-    checkDetail(input, "Room 0x24", "apart names the room");
+    checkDetail(input, "Hall", "apart names the room");
+    input.room = 0x2e;
+    checkDetail(input, "Room 0x2e", "a room with no known name shows its scene id");
+    input.room = 0x24;
     input.inMenu = true;
-    checkDetail(input, "Room 0x24 / In menu", "apart in a menu");
+    checkDetail(input, "Hall / In menu", "apart in a menu");
     input.room = partner_status::kNoRoom;
     checkDetail(input, "In menu", "an unknown room is left out");
     input.inMenu = false;

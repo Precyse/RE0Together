@@ -2,6 +2,8 @@
 
 #include <cstdio>
 
+#include "room_names.h"
+
 namespace partner_status {
 
 namespace {
@@ -9,8 +11,10 @@ namespace {
 constexpr const char kSeparator[] = " / ";
 constexpr size_t kRoomTextCapacity = 16;
 
+// The room's name, or its scene id for a room with no known name.
 std::string roomText(const Input& input) {
     if (input.sameRoom || input.room == kNoRoom) return "";
+    if (const char* name = room_names::nameOf(input.room)) return name;
     char text[kRoomTextCapacity];
     std::snprintf(text, sizeof(text), "Room 0x%02x", input.room);
     return text;
