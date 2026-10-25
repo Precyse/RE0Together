@@ -20,9 +20,9 @@ concurrency:
 env:
   CHANNEL: ${{ github.ref_name == 'main' && 'latest' || 'preview' }}
 
-# The adapters and the launcher tests run as parallel jobs; packaging waits for all of them. An adapter whose sources match a
-# run that already built and tested them (the cache key is the hash of its sources) skips its build: the package ships the
-# committed DLL either way, so the build is a gate, not an input. DS2 is left out of the release for now: no build, no profile,
+# The adapters and the launcher tests run as parallel jobs; packaging waits for all of them and takes each adapter's DLL from
+# its job. An adapter whose sources match a run that already built and tested them (the cache key is the hash of its
+# sources) restores that run's DLL from the cache instead of building again; /Brepro makes the bytes the same either way. DS2 is left out of the release for now: no build, no profile,
 # no mod-ds2.zip (installed launchers keep the DS2 files they have; a component missing from the manifest is never touched).
 jobs:
   re0:
@@ -32,8 +32,8 @@ jobs:
       - id: tested
         uses: actions/cache/restore@v4
         with:
-          path: .ci/tested
-          key: re0-tested-${{ hashFiles('adapters/re0/CMakeLists.txt', 'adapters/re0/src/**', 'adapters/re0/tests/**', 'adapters/re0/third_party/**') }}
+          path: adapters/re0/dinput8.dll
+          key: re0-dll-${{ hashFiles('adapters/re0/CMakeLists.txt', 'adapters/re0/src/**', 'adapters/re0/tests/**', 'adapters/re0/third_party/**') }}
       - if: steps.tested.outputs.cache-hit != 'true'
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -46,12 +46,16 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
           Get-ChildItem build/*_test.exe -Exclude net_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
-          New-Item -ItemType File -Force ../../.ci/tested | Out-Null
       - if: steps.tested.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: .ci/tested
+          path: adapters/re0/dinput8.dll
           key: ${{ steps.tested.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: re0-dll
+          path: adapters/re0/dinput8.dll
+          if-no-files-found: error
 
   sr2:
     runs-on: windows-latest
@@ -60,8 +64,8 @@ jobs:
       - id: tested
         uses: actions/cache/restore@v4
         with:
-          path: .ci/tested
-          key: sr2-tested-${{ hashFiles('adapters/sr2/CMakeLists.txt', 'adapters/sr2/src/**', 'adapters/sr2/tests/**', 'adapters/re0/src/**', 'adapters/re0/third_party/**') }}
+          path: adapters/sr2/dinput8.dll
+          key: sr2-dll-${{ hashFiles('adapters/sr2/CMakeLists.txt', 'adapters/sr2/src/**', 'adapters/sr2/tests/**', 'adapters/re0/src/**', 'adapters/re0/third_party/**') }}
       - if: steps.tested.outputs.cache-hit != 'true'
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -74,12 +78,16 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
           Get-ChildItem build/*_test.exe | ForEach-Object { & $_.FullName; if ($LASTEXITCODE -ne 0) { throw "$($_.Name) failed" } }
-          New-Item -ItemType File -Force ../../.ci/tested | Out-Null
       - if: steps.tested.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: .ci/tested
+          path: adapters/sr2/dinput8.dll
           key: ${{ steps.tested.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sr2-dll
+          path: adapters/sr2/dinput8.dll
+          if-no-files-found: error
 
   launcher:
     runs-on: windows-latest
@@ -102,6 +110,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: re0-dll
+          path: adapters/re0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sr2-dll
+          path: adapters/sr2
 
       - name: Publish check
         run: python tools/publish_check.py
