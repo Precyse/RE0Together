@@ -75,6 +75,18 @@ void testBinding() {
     check(rule::recordApplies(running), "a running record is written");
 }
 
+void testSameRecordTwice() {
+    std::array<std::optional<enemy_spawn::Origin>, 12> origins{};
+    origins[2] = enemy_spawn::Origin{77, 300};
+    origins[5] = enemy_spawn::Origin{78, 301};
+    origins[8] = enemy_spawn::Origin{77, 300};
+    check(rule::duplicateOf(origins, 8) == 2, "the second enemy of a record names the first");
+    check(rule::duplicateOf(origins, 2) == rule::kNoPoolSlot, "the first is no duplicate");
+    check(rule::duplicateOf(origins, 5) == rule::kNoPoolSlot, "another record is no duplicate");
+    check(rule::duplicateOf(origins, 0) == rule::kNoPoolSlot && rule::duplicateOf(origins, 40) == rule::kNoPoolSlot,
+          "an empty slot or one past the pool is none");
+}
+
 void testBindingByRecord() {
     constexpr uint16_t kRecord = 77;
     std::array<std::optional<enemy_spawn::Origin>, 12> origins{};
@@ -319,6 +331,22 @@ size_t classWithPolicy(Policy policy) {
     return enemy_policy::kClassCount;
 }
 
+void testMissingWatch() {
+    rule::MissingWatch watch;
+    constexpr uint32_t kStepMs = 50;  // a pose round
+    check(!watch.missing(41, 1000), "a first sighting is not reported");
+    bool early = false;
+    for (uint32_t t = 1000 + kStepMs; t < 1000 + rule::kMissingReportMs; t += kStepMs) early = early || watch.missing(41, t);
+    check(!early, "nor before the report time");
+    check(watch.missing(41, 1000 + rule::kMissingReportMs), "a record missing the report time is reported");
+    check(!watch.missing(41, 1000 + rule::kMissingReportMs + 100), "once");
+    check(watch.missingForMs(41) == rule::kMissingReportMs + 100, "the missing time is kept");
+    watch.present(41);
+    check(watch.missingForMs(41) == 0 && !watch.missing(41, 9000), "a record that appears here starts over");
+    check(!watch.missing(41, 9000 + rule::kMissingGapMs + 1 + rule::kMissingReportMs - 1), "a gap in sightings starts over");
+    check(!watch.missing(game::kSpawnRecordCount, 0), "a record past the table is ignored");
+}
+
 void testCreateWanted() {
     wire::PoseEntry entry{};
     entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Observer));
@@ -334,6 +362,8 @@ void testCreateWanted() {
     entry.flags = wire::kFlagAlive;
     entry.classIndex = static_cast<uint8_t>(classWithPolicy(Policy::Legacy));
     check(!rule::createWanted(false, entry), "a Legacy class keeps its own spawn");
+    entry.classIndex = static_cast<uint8_t>(enemy_policy::classIndexOf(game::kBossVtables[0]));
+    check(!rule::createWanted(false, entry), "a boss is never built from the stream");
 }
 
 void testCreatePacer() {
@@ -360,6 +390,7 @@ int main() {
     testStreamAcceptance();
     testBinding();
     testBindingByRecord();
+    testSameRecordTwice();
     testLife();
     testSequenceExtension();
     testSampleAndItemConversion();
@@ -374,6 +405,7 @@ int main() {
     testHandOverStart();
     testHitRouting();
     testCreateWanted();
+    testMissingWatch();
     testCreatePacer();
     if (g_failures == 0) std::printf("enemy_observer_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;

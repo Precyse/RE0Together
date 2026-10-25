@@ -86,18 +86,10 @@ struct Message {
     std::vector<Member> members;
 };
 
-// True for the classes the hand-over covers (game::kBossVtables).
-constexpr bool bossClass(uint8_t classIndex) {
-    for (const uintptr_t vtable : game::kBossVtables) {
-        if (enemy_policy::classIndexOf(vtable) == classIndex) return true;
-    }
-    return false;
-}
-
 constexpr uint8_t maskOf(size_t count) { return static_cast<uint8_t>((1u << count) - 1u); }
 
 inline bool valid(const Member& member) {
-    return member.slot < game::kEnemyPoolSlots && bossClass(member.classIndex) &&
+    return member.slot < game::kEnemyPoolSlots && enemy_policy::bossClass(member.classIndex) &&
            member.spawnRecord < game::kSpawnRecordCount &&
            enemy_lease_wire::finite(member.pos) && enemy_lease_wire::recordFits(member.record);
 }

@@ -10,6 +10,7 @@
 #include "debug_stats.h"
 #include "game.h"
 #include "game_tick.h"
+#include "hit_fx.h"
 #include "hooks.h"
 #include "join_sync.h"
 #include "log.h"
@@ -259,6 +260,7 @@ uint32_t* __fastcall effectCreateDetour(void* effects, void* edx, uint32_t* out,
     Scope scope;
     uint32_t* const result = g_originalEffectCreate(effects, edx, out, owner, set, index, attach, joint, pos, rot, flags, extra);
     if (scope.outermost()) recordEffect(caller, owner, index, attach, joint, pos, rot, extra);
+    hit_fx::effectCreated(caller, owner, index, attach, joint, pos, rot, flags, extra);
     return result;
 }
 

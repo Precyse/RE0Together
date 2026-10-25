@@ -83,6 +83,7 @@ enum class Counter : size_t {
     EnemyObserverSent,
     EnemyHandOvers,
     EnemyCreatedOnDemand,
+    EnemyMissing,
     EnemyHitsForwarded,
     EnemyHitsUnrouted,
     RoomMovesSent,

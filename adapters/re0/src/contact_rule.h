@@ -77,6 +77,18 @@ constexpr bool grantable(int32_t enemyHp, const enemy_follow_rule::Action& recor
     return enemyHp > 0 && enemy_follow_rule::seedable(record);
 }
 
+// ---- A hit from the simulator ----------------------------------------------------------------------------------
+
+// The victim's machine refuses a hit whose contact point (rebuilt around its copy of the enemy) lies farther than this
+// from where the victim really stands: on the simulator the enemy struck a copy of the victim that was elsewhere
+// (RE1-Coop refuses the same way). A guess with room for the render delay and a lunge; the refusal is logged with the
+// distance to tune it from a live run.
+constexpr float kMaxHitReachUnits = 600.0f;
+
+inline bool hitReaches(const float (&point)[3], const float (&victimPos)[3]) {
+    return position_blend::distance(point, victimPos) <= kMaxHitReachUnits;
+}
+
 // ---- End of a lease ----------------------------------------------------------------------------------------------
 
 enum class End : uint8_t {
@@ -88,8 +100,9 @@ enum class End : uint8_t {
     Expired,     // the holder never answered the grant
     Silent,      // the holder stopped streaming
     Left,        // the enemy is gone from its slot on the holder
+    Stuck,       // the hold ran past kStuckGrabMs: the holder frees the victim
 };
-constexpr uint8_t kEndCount = 8;
+constexpr uint8_t kEndCount = 9;
 
 constexpr const char* name(End end) {
     switch (end) {
@@ -100,6 +113,7 @@ constexpr const char* name(End end) {
         case End::Expired: return "expired";
         case End::Silent: return "silent";
         case End::Left: return "enemy gone";
+        case End::Stuck: return "stuck";
         case End::None: break;
     }
     return "none";
@@ -111,6 +125,8 @@ constexpr uint32_t kSettleMs = 300;          // after the start the victim's thi
 // A grabber killed mid-hold ends its lease once its own dying update has let the victim go, or after this long. Handing it
 // back at the kill stopped that update with the victim still bound (2026-10-25 live: Rebecca frozen after a kill).
 constexpr uint32_t kDeadReleaseMs = 3000;
+// No grab of the game holds this long; one that does is stuck (RE1-Coop's stuck-grab watchdog uses the same limit).
+constexpr uint32_t kStuckGrabMs = 15000;
 
 // What the holder reads of the victim.
 struct VictimView {
@@ -121,7 +137,9 @@ struct VictimView {
 
 // The holder's final state decides how the authority resumes the enemy for these reasons; for the others (the grant never
 // ran, the holder is gone or silent) the enemy resumes from the state the authority itself last showed.
-constexpr bool carriesState(End end) { return end == End::Released || end == End::EnemyDead || end == End::VictimDied; }
+constexpr bool carriesState(End end) {
+    return end == End::Released || end == End::EnemyDead || end == End::VictimDied || end == End::Stuck;
+}
 
 // Why a started lease is over on the holder, or None. `sinceStartMs` is how long ago it started; `deadForMs` how long the
 // enemy has been dead (0 while it lives).
@@ -130,6 +148,7 @@ constexpr End finished(const VictimView& victim, const enemy_follow_rule::Action
                        uint32_t deadForMs = 0) {
     if (enemyHp <= 0) return !held(victim.group, victim.state) || deadForMs >= kDeadReleaseMs ? End::EnemyDead : End::None;
     if (victim.hp <= 0 || (victim.group == kReactionGroup && isDeathState(victim.state))) return End::VictimDied;
+    if (sinceStartMs >= kStuckGrabMs) return End::Stuck;
     if (sinceStartMs < kSettleMs) return End::None;
     return enemy_follow_rule::atBoundary(record, granted) && !held(victim.group, victim.state) ? End::Released : End::None;
 }

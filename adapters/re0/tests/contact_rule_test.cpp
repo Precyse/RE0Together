@@ -81,6 +81,17 @@ void testFinished() {
     check(rule::finished(free, moved, granted, 50, rule::kSettleMs - 1) == rule::End::None, "released waits for the settle time");
     check(rule::finished(free, moved, granted, 50, rule::kSettleMs) == rule::End::Released, "released counts after the settle time");
     check(rule::finished({2, 5, 100}, moved, granted, 50, 1000) == rule::End::Released, "knock-down after the hold is free");
+    check(rule::finished(holding, granted, granted, 50, rule::kStuckGrabMs - 1) == rule::End::None, "a long hold runs until the stuck limit");
+    check(rule::finished(holding, granted, granted, 50, rule::kStuckGrabMs) == rule::End::Stuck, "then it is stuck");
+    check(rule::carriesState(rule::End::Stuck), "a stuck hold carries the holder's state back");
+}
+
+void testHitReach() {
+    const float victim[3] = {100.0f, 0.0f, 100.0f};
+    const float close[3] = {100.0f, 120.0f, 100.0f + rule::kMaxHitReachUnits - 200.0f};
+    const float far[3] = {100.0f + rule::kMaxHitReachUnits + 1.0f, 0.0f, 100.0f};
+    check(rule::hitReaches(close, victim), "a hit landing on the victim reaches it");
+    check(!rule::hitReaches(far, victim), "a hit landing past the reach is refused");
 }
 
 void testCarriesState() {
@@ -124,6 +135,7 @@ int main() {
     testCarriesState();
     testLapse();
     testHolderPose();
+    testHitReach();
     if (g_failures == 0) std::printf("contact_rule_test: all checks passed\n");
     return g_failures == 0 ? 0 : 1;
 }

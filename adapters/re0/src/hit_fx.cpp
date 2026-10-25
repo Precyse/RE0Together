@@ -5,8 +5,10 @@
 #include <array>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <vector>
 
+#include "character_owner.h"
 #include "debug_stats.h"
 #include "enemy_observer.h"
 #include "enemy_registry.h"
@@ -23,6 +25,7 @@
 #include "scene.h"
 #include "state_net.h"
 #include "timed_queue.h"
+#include "weapon_fx_game.h"
 
 namespace {
 
@@ -35,6 +38,7 @@ constexpr std::array<uint8_t, 8> kSpawnHitEffectBytes = {0x8b, 0x44, 0x24, 0x0c,
 constexpr std::array<uint8_t, 6> kPlaySeBytes = {0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf0};  // push ebp; mov ebp,esp; and esp,-16
 constexpr std::array<uint8_t, 9> kPartBurstBytes = {0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf0, 0x83, 0xec, 0x68};  // ... sub esp,0x68
 constexpr size_t kMaxInbox = 64;
+constexpr size_t kEffectHandleWords = 2;  // sEffect::create's out handle
 
 using SpawnHitEffect = void(__fastcall*)(void* enemy, void* edx, game::HitPoint* point, int32_t zone, int32_t attackType);
 using PlaySe = int(__stdcall*)(float* pos, uint32_t bank, uint32_t id, uint8_t flag);
@@ -44,39 +48,81 @@ SpawnHitEffect g_originalSpawn = nullptr;
 PlaySe g_originalPlaySe = nullptr;
 PartBurst g_originalBurst = nullptr;
 
+// Messages from the room's simulator: received on the net thread, shown on the game thread at the sender's time to show.
+template <typename Message>
+class Channel {
+public:
+    void receive(uint8_t sender, const Message& message) {
+        std::lock_guard lock(mutex_);
+        if (inbox_.size() >= kMaxInbox) inbox_.erase(inbox_.begin());
+        inbox_.push_back({sender, message});
+    }
+
+    // Game thread: queues the arrivals and shows the messages that are due; a new sender starts the queue over.
+    template <typename Show>
+    void tick(Show show) {
+        std::vector<Arrival> arrivals;
+        {
+            std::lock_guard lock(mutex_);
+            arrivals.swap(inbox_);
+        }
+        for (const Arrival& arrival : arrivals) {
+            if (sender_ != arrival.sender) {
+                queue_.clear();
+                sender_ = arrival.sender;
+            }
+            queue_.push(arrival.message);
+        }
+        if (sender_ < 0) return;
+        const std::optional<stream_clock::StreamClock> clock = puppet::clockFor(static_cast<uint8_t>(sender_));
+        if (!clock || !clock->ready()) return;
+        due_.clear();
+        queue_.takeDue(clock->target(pose_wire::clockMs()), due_);
+        for (const Message& message : due_) show(message);
+    }
+
+private:
+    struct Arrival {
+        uint8_t sender;
+        Message message;
+    };
+    std::mutex mutex_;
+    std::vector<Arrival> inbox_;  // guarded by mutex_
+    timed_queue::TimedQueue<Message> queue_;
+    int sender_ = -1;
+    std::vector<Message> due_;
+};
+
+Channel<wire::HitFx> g_hits;
+Channel<wire::PartBurst> g_bursts;
+Channel<wire::EnemySoundBatch> g_sounds;
+Channel<wire::EnemyEffectBatch> g_effects;
+Channel<wire::PartMask> g_masks;
+
+template <typename Message>
+void receive(Channel<Message>& channel, const GameFrame& frame, std::optional<Message> (*decode)(std::span<const uint8_t>), const char* what) {
+    const std::optional<Message> message = decode(frame.payload);
+    if (!message) {
+        logger::writeUnlessRepeated("hit_fx: malformed %s from slot %u refused", what, frame.slot);
+        return;
+    }
+    channel.receive(frame.slot, *message);
+}
+
 // Game thread only.
 wire::Recorder g_recorder;
 uintptr_t g_recordedEnemy = 0;
-uint32_t g_sendSeq = 0;
-timed_queue::TimedQueue<wire::HitFx> g_queue;
-int g_queueSender = -1;
-std::vector<wire::HitFx> g_due;
+uint32_t g_hitSeq = 0;
 uint32_t g_burstSeq = 0;
-timed_queue::TimedQueue<wire::PartBurst> g_burstQueue;
-int g_burstSender = -1;
-std::vector<wire::PartBurst> g_burstsDue;
-bool g_showingBurst = false;  // game thread: showBurst is making the call, which must not be sent back
-uint16_t g_movingRecord = 0;    // the spawn record of the enemy whose move runs now
-bool g_moving = false;
-std::vector<wire::EnemySoundEntry> g_tickSounds;  // this tick's sounds of simulated enemies
+bool g_inBurst = false;          // the simulator's own burst runs: its effects travel as PART_BURST
+uintptr_t g_movingEnemy = 0;     // the enemy simulated here whose move runs now, or 0
+uint16_t g_movingRecord = 0;
+std::vector<wire::EnemySoundEntry> g_tickSounds;    // this tick's sounds of simulated enemies
+std::vector<wire::EnemyEffectEntry> g_tickEffects;  // this tick's effects of simulated enemies
 uint32_t g_soundSeq = 0;
-wire::MaskTracker<game::kEnemyPoolSlots> g_masks;  // game thread: the part masks of the enemies simulated here
+uint32_t g_effectSeq = 0;
+wire::MaskTracker<game::kEnemyPoolSlots> g_sentMasks;  // the part masks of the enemies simulated here
 uint32_t g_maskSeq = 0;
-timed_queue::TimedQueue<wire::PartMask> g_maskQueue;
-int g_maskSender = -1;
-std::vector<wire::PartMask> g_masksDue;
-
-struct Arrival {
-    uint8_t sender;
-    wire::HitFx fx;
-};
-std::mutex g_mutex;
-std::vector<Arrival> g_inbox;  // guarded by g_mutex: net thread to game thread
-struct BurstArrival {
-    uint8_t sender;
-    wire::PartBurst burst;
-};
-std::vector<BurstArrival> g_burstInbox;  // guarded by g_mutex
 
 void __fastcall spawnDetour(void* enemy, void* edx, game::HitPoint* point, int32_t zone, int32_t attackType) {
     if (g_recorder.recording() && reinterpret_cast<uintptr_t>(enemy) == g_recordedEnemy && point) {
@@ -89,17 +135,18 @@ int __stdcall playSeDetour(float* pos, uint32_t bank, uint32_t id, uint8_t flag)
     if (pos && g_recorder.recording()) {
         const float at[3] = {pos[0], pos[1], pos[2]};
         g_recorder.addSound(at, bank, id, flag);
-    } else if (pos && g_moving && wire::fromEnemyCode(reinterpret_cast<uintptr_t>(_ReturnAddress())) &&
+    } else if (pos && g_movingEnemy && wire::fromEnemyCode(reinterpret_cast<uintptr_t>(_ReturnAddress())) &&
                g_tickSounds.size() < wire::kMaxBatchSounds) {
         g_tickSounds.push_back({g_movingRecord, flag, 0, {pos[0], pos[1], pos[2]}, bank, id});
     }
     return g_originalPlaySe(pos, bank, id, flag);
 }
 
-// The simulator of an enemy sends each part it loses; a copy shown from a stream makes the call only through showBurst.
+// The simulator of an enemy sends each part it loses; the other machines call the original through showBurst.
 void __fastcall burstDetour(void* enemy, void* edx, int32_t part, int32_t arg) {
+    g_inBurst = true;
     g_originalBurst(enemy, edx, part, arg);
-    if (g_showingBurst) return;
+    g_inBurst = false;
     const auto address = reinterpret_cast<uintptr_t>(enemy);
     const int slot = enemy_registry::slotOf(address);
     const uint16_t loaded = scene::current();
@@ -112,53 +159,6 @@ void __fastcall burstDetour(void* enemy, void* edx, int32_t part, int32_t arg) {
     if (state_net::send(wire::kMsgPartBurst, true, proto::bytesOf(burst))) {
         logger::write("hit_fx: slot %d record %u lost part %d, sent", slot, origin->record, part);
     }
-}
-
-struct SoundArrival {
-    uint8_t sender;
-    wire::EnemySoundBatch batch;
-};
-std::vector<SoundArrival> g_soundInbox;  // guarded by g_mutex
-struct MaskArrival {
-    uint8_t sender;
-    wire::PartMask mask;
-};
-std::vector<MaskArrival> g_maskInbox;  // guarded by g_mutex
-
-void onMaskFrame(const GameFrame& frame) {
-    const std::optional<wire::PartMask> mask = wire::decodeMask(frame.payload);
-    if (!mask) {
-        logger::writeUnlessRepeated("hit_fx: malformed part mask from slot %u refused", frame.slot);
-        return;
-    }
-    std::lock_guard lock(g_mutex);
-    if (g_maskInbox.size() >= kMaxInbox) g_maskInbox.erase(g_maskInbox.begin());
-    g_maskInbox.push_back({frame.slot, *mask});
-}
-timed_queue::TimedQueue<wire::EnemySoundBatch> g_soundQueue;
-int g_soundSender = -1;
-std::vector<wire::EnemySoundBatch> g_soundsDue;
-
-void onSoundFrame(const GameFrame& frame) {
-    const std::optional<wire::EnemySoundBatch> batch = wire::decodeSounds(frame.payload);
-    if (!batch) {
-        logger::writeUnlessRepeated("hit_fx: malformed enemy sounds from slot %u refused", frame.slot);
-        return;
-    }
-    std::lock_guard lock(g_mutex);
-    if (g_soundInbox.size() >= kMaxInbox) g_soundInbox.erase(g_soundInbox.begin());
-    g_soundInbox.push_back({frame.slot, *batch});
-}
-
-void onBurstFrame(const GameFrame& frame) {
-    const std::optional<wire::PartBurst> burst = wire::decodeBurst(frame.payload);
-    if (!burst) {
-        logger::writeUnlessRepeated("hit_fx: malformed part burst from slot %u refused", frame.slot);
-        return;
-    }
-    std::lock_guard lock(g_mutex);
-    if (g_burstInbox.size() >= kMaxInbox) g_burstInbox.erase(g_burstInbox.begin());
-    g_burstInbox.push_back({frame.slot, *burst});
 }
 
 // The local copy of the enemy a message names, in the loaded room and the table's epoch, or 0.
@@ -177,25 +177,12 @@ uintptr_t localEnemy(uint16_t scene, uint32_t roomEpoch, uint16_t spawnRecord) {
 void showBurst(const wire::PartBurst& burst) {
     const uintptr_t enemy = localEnemy(burst.scene, burst.roomEpoch, burst.spawnRecord);
     if (!enemy) return;
-    g_showingBurst = true;
     g_originalBurst(reinterpret_cast<void*>(enemy), nullptr, burst.part, burst.arg);
-    g_showingBurst = false;
     logger::write("hit_fx: record %u lost part %d (from its simulator)", burst.spawnRecord, burst.part);
 }
 
-void onFrame(const GameFrame& frame) {
-    const std::optional<wire::HitFx> fx = wire::decode(frame.payload);
-    if (!fx) {
-        logger::writeUnlessRepeated("hit_fx: malformed message from slot %u refused", frame.slot);
-        return;
-    }
-    std::lock_guard lock(g_mutex);
-    if (g_inbox.size() >= kMaxInbox) g_inbox.erase(g_inbox.begin());
-    g_inbox.push_back({frame.slot, *fx});
-}
-
 // The calls the simulator's damage function made, on this machine's copy of the enemy.
-void show(const wire::HitFx& fx) {
+void showHit(const wire::HitFx& fx) {
     const uintptr_t enemy = localEnemy(fx.scene, fx.roomEpoch, fx.spawnRecord);
     if (!enemy) return;
     for (uint8_t i = 0; i < fx.effects; ++i) {
@@ -220,10 +207,10 @@ void sendChangedMasks() {
         uint32_t words[wire::kPartMaskWords] = {};
         if (!origin || !holder || !enemy_observer::simulatorOf(static_cast<uint8_t>(slot)).here ||
             !game::readMemory(enemy + wire::kPartMaskOffset, words)) {
-            g_masks.forget(slot);
+            g_sentMasks.forget(slot);
             continue;
         }
-        if (!g_masks.changed(slot, origin->record, words)) continue;
+        if (!g_sentMasks.changed(slot, origin->record, words)) continue;
         const wire::PartMask mask{pose_wire::clockMs(), ++g_maskSeq, holder->epoch, loaded, origin->record, {words[0], words[1]}};
         state_net::send(wire::kMsgPartMask, true, proto::bytesOf(mask));
     }
@@ -236,43 +223,37 @@ void showMask(const wire::PartMask& mask) {
     game::writeMemory(enemy + wire::kPartMaskOffset, words);
 }
 
-void tickMasks() {
-    std::vector<MaskArrival> arrivals;
-    {
-        std::lock_guard lock(g_mutex);
-        arrivals.swap(g_maskInbox);
-    }
-    for (const MaskArrival& arrival : arrivals) {
-        if (g_maskSender != arrival.sender) {
-            g_maskQueue.clear();
-            g_maskSender = arrival.sender;
-        }
-        g_maskQueue.push(arrival.mask);
-    }
-    if (g_maskSender < 0) return;
-    const std::optional<stream_clock::StreamClock> clock = puppet::clockFor(static_cast<uint8_t>(g_maskSender));
-    if (!clock || !clock->ready()) return;
-    g_masksDue.clear();
-    g_maskQueue.takeDue(clock->target(pose_wire::clockMs()), g_masksDue);
-    for (const wire::PartMask& mask : g_masksDue) showMask(mask);
+// The loaded room's holder for a batch of this tick, or nothing.
+std::optional<room_authority::Holder> loadedHolder() {
+    const uint16_t loaded = scene::current();
+    return loaded == scene::kNone ? std::nullopt : room_authority::holderOf(loaded);
 }
 
-// The tick's sounds of the enemies this machine simulates, in one batch.
-void sendTickSounds() {
-    if (g_tickSounds.empty()) return;
-    const uint16_t loaded = scene::current();
-    const std::optional<room_authority::Holder> holder = loaded == scene::kNone ? std::nullopt : room_authority::holderOf(loaded);
-    if (holder) {
+// The tick's sounds and effects of the enemies this machine simulates, one batch each.
+void sendTickBatches() {
+    const std::optional<room_authority::Holder> holder = loadedHolder();
+    if (holder && !g_tickSounds.empty()) {
         wire::EnemySoundBatch batch{};
         batch.senderMs = pose_wire::clockMs();
         batch.seq = ++g_soundSeq;
         batch.roomEpoch = holder->epoch;
-        batch.scene = loaded;
+        batch.scene = scene::current();
         batch.count = static_cast<uint8_t>(g_tickSounds.size());
         std::copy(g_tickSounds.begin(), g_tickSounds.end(), batch.entry);
         state_net::send(wire::kMsgEnemySound, false, proto::bytesOf(batch));
     }
+    if (holder && !g_tickEffects.empty()) {
+        wire::EnemyEffectBatch batch{};
+        batch.senderMs = pose_wire::clockMs();
+        batch.seq = ++g_effectSeq;
+        batch.roomEpoch = holder->epoch;
+        batch.scene = scene::current();
+        batch.count = static_cast<uint8_t>(g_tickEffects.size());
+        std::copy(g_tickEffects.begin(), g_tickEffects.end(), batch.entry);
+        state_net::send(wire::kMsgEnemyEffect, true, proto::bytesOf(batch));
+    }
     g_tickSounds.clear();
+    g_tickEffects.clear();
 }
 
 void showSounds(const wire::EnemySoundBatch& batch) {
@@ -284,73 +265,46 @@ void showSounds(const wire::EnemySoundBatch& batch) {
     }
 }
 
-void tickSounds() {
-    std::vector<SoundArrival> arrivals;
-    {
-        std::lock_guard lock(g_mutex);
-        arrivals.swap(g_soundInbox);
-    }
-    for (const SoundArrival& arrival : arrivals) {
-        if (g_soundSender != arrival.sender) {
-            g_soundQueue.clear();
-            g_soundSender = arrival.sender;
+// The local unit an entry's attachment names, or nothing when it names one that is not here.
+std::optional<uintptr_t> attachmentOf(wire::Attach attach, uintptr_t enemy) {
+    switch (attach) {
+        case wire::Attach::None: return 0;
+        case wire::Attach::Enemy: return enemy;
+        case wire::Attach::Billy:
+        case wire::Attach::Rebecca: {
+            const uintptr_t player = character_owner::find(attach == wire::Attach::Billy ? character_owner::Character::Billy
+                                                                                          : character_owner::Character::Rebecca);
+            return player ? std::optional<uintptr_t>(player) : std::nullopt;
         }
-        g_soundQueue.push(arrival.batch);
     }
-    if (g_soundSender < 0) return;
-    const std::optional<stream_clock::StreamClock> clock = puppet::clockFor(static_cast<uint8_t>(g_soundSender));
-    if (!clock || !clock->ready()) return;
-    g_soundsDue.clear();
-    g_soundQueue.takeDue(clock->target(pose_wire::clockMs()), g_soundsDue);
-    for (const wire::EnemySoundBatch& batch : g_soundsDue) showSounds(batch);
+    return std::nullopt;
 }
 
-// Hands out the bursts due by the sender's shown time.
-void tickBursts() {
-    std::vector<BurstArrival> arrivals;
-    {
-        std::lock_guard lock(g_mutex);
-        arrivals.swap(g_burstInbox);
+void showEffects(const wire::EnemyEffectBatch& batch) {
+    void* effects = reinterpret_cast<void*>(game::readPointer(game::kEffectGlobal));
+    if (!effects) return;
+    for (uint8_t i = 0; i < batch.count; ++i) {
+        const wire::EnemyEffectEntry& e = batch.entry[i];
+        const uintptr_t enemy = localEnemy(batch.scene, batch.roomEpoch, e.spawnRecord);
+        const std::optional<uintptr_t> attach = enemy ? attachmentOf(static_cast<wire::Attach>(e.attach), enemy) : std::nullopt;
+        const uintptr_t set = enemy ? game::readPointer(enemy + game::kEffectSetOffset) : 0;
+        if (!attach || !set) continue;
+        uint32_t flags[2] = {0, e.flags};
+        game::readMemory(game::kEffectFlagsGlobal, flags[0]);
+        uint32_t handle[kEffectHandleWords] = {};
+        reinterpret_cast<weapon_fx_game::EffectCreateFunction>(game::kEffectCreateFunction)(
+            effects, nullptr, handle, enemy, set, e.index, *attach, e.joint, e.pos, e.rot, flags, e.extra);
     }
-    for (const BurstArrival& arrival : arrivals) {
-        if (g_burstSender != arrival.sender) {
-            g_burstQueue.clear();
-            g_burstSender = arrival.sender;
-        }
-        g_burstQueue.push(arrival.burst);
-    }
-    if (g_burstSender < 0) return;
-    const std::optional<stream_clock::StreamClock> clock = puppet::clockFor(static_cast<uint8_t>(g_burstSender));
-    if (!clock || !clock->ready()) return;
-    g_burstsDue.clear();
-    g_burstQueue.takeDue(clock->target(pose_wire::clockMs()), g_burstsDue);
-    for (const wire::PartBurst& burst : g_burstsDue) showBurst(burst);
 }
 
 void onTick() {
     sendChangedMasks();
-    tickMasks();
-    sendTickSounds();
-    tickSounds();
-    tickBursts();
-    std::vector<Arrival> arrivals;
-    {
-        std::lock_guard lock(g_mutex);
-        arrivals.swap(g_inbox);
-    }
-    for (const Arrival& arrival : arrivals) {
-        if (g_queueSender != arrival.sender) {
-            g_queue.clear();
-            g_queueSender = arrival.sender;
-        }
-        g_queue.push(arrival.fx);
-    }
-    if (g_queueSender < 0) return;
-    const std::optional<stream_clock::StreamClock> clock = puppet::clockFor(static_cast<uint8_t>(g_queueSender));
-    if (!clock || !clock->ready()) return;
-    g_due.clear();
-    g_queue.takeDue(clock->target(pose_wire::clockMs()), g_due);
-    for (const wire::HitFx& fx : g_due) show(fx);
+    sendTickBatches();
+    g_masks.tick(showMask);
+    g_sounds.tick(showSounds);
+    g_effects.tick(showEffects);
+    g_bursts.tick(showBurst);
+    g_hits.tick(showHit);
 }
 
 }  // namespace
@@ -370,39 +324,63 @@ bool enable() {
         !hooks::install("part burst", kPartBurstFunction, reinterpret_cast<void*>(burstDetour), reinterpret_cast<void**>(&g_originalBurst))) {
         return false;
     }
-    if (!frame_router::add(wire::kMsgHitFx, frame_router::SenderPolicy::Any, onFrame) ||
-        !frame_router::add(wire::kMsgPartBurst, frame_router::SenderPolicy::Any, onBurstFrame) ||
-        !frame_router::add(wire::kMsgEnemySound, frame_router::SenderPolicy::Any, onSoundFrame) ||
-        !frame_router::add(wire::kMsgPartMask, frame_router::SenderPolicy::Any, onMaskFrame)) {
-        return false;
-    }
+    const bool routed =
+        frame_router::add(wire::kMsgHitFx, frame_router::SenderPolicy::Any,
+                          [](const GameFrame& f) { receive(g_hits, f, &wire::decode, "hit"); }) &&
+        frame_router::add(wire::kMsgPartBurst, frame_router::SenderPolicy::Any,
+                          [](const GameFrame& f) { receive(g_bursts, f, &wire::decodeBurst, "part burst"); }) &&
+        frame_router::add(wire::kMsgEnemySound, frame_router::SenderPolicy::Any,
+                          [](const GameFrame& f) { receive(g_sounds, f, &wire::decodeSounds, "enemy sounds"); }) &&
+        frame_router::add(wire::kMsgEnemyEffect, frame_router::SenderPolicy::Any,
+                          [](const GameFrame& f) { receive(g_effects, f, &wire::decodeEffects, "enemy effects"); }) &&
+        frame_router::add(wire::kMsgPartMask, frame_router::SenderPolicy::Any,
+                          [](const GameFrame& f) { receive(g_masks, f, &wire::decodeMask, "part mask"); });
+    if (!routed) return false;
     game_tick::addCallback("hit_fx", onTick);
     return true;
 }
 
 void beginHit(uintptr_t enemy) {
-    const uint16_t loaded = scene::current();
     const std::optional<enemy_spawn::Origin> origin = enemy_spawn::originOf(enemy);
-    const std::optional<room_authority::Holder> holder = loaded == scene::kNone ? std::nullopt : room_authority::holderOf(loaded);
+    const std::optional<room_authority::Holder> holder = loadedHolder();
     if (!g_originalSpawn || !origin || !holder) return;
     g_recordedEnemy = enemy;
-    g_recorder.start(pose_wire::clockMs(), ++g_sendSeq, loaded, origin->record, holder->epoch);
+    g_recorder.start(pose_wire::clockMs(), ++g_hitSeq, scene::current(), origin->record, holder->epoch);
 }
-
-void beginMove(uintptr_t enemy) {
-    const std::optional<enemy_spawn::Origin> origin = enemy_spawn::originOf(enemy);
-    if (!g_originalPlaySe || !origin) return;
-    g_movingRecord = origin->record;
-    g_moving = true;
-}
-
-void endMove() { g_moving = false; }
 
 void endHit() {
     if (!g_recorder.recording()) return;
     const std::optional<wire::HitFx> fx = g_recorder.finish();
     g_recordedEnemy = 0;
     if (fx && state_net::send(wire::kMsgHitFx, true, proto::bytesOf(*fx))) debug_stats::count(debug_stats::Counter::HitFxSent);
+}
+
+void beginMove(uintptr_t enemy) {
+    const std::optional<enemy_spawn::Origin> origin = enemy_spawn::originOf(enemy);
+    if (!g_originalPlaySe || !origin) return;
+    g_movingEnemy = enemy;
+    g_movingRecord = origin->record;
+}
+
+void endMove() { g_movingEnemy = 0; }
+
+void effectCreated(uintptr_t caller, uintptr_t owner, uint32_t index, uintptr_t attach, int32_t joint, const float* pos,
+                   const float* rot, const uint32_t* flags, uint32_t extra) {
+    if (!game_tick::onGameThread() || !g_movingEnemy || owner != g_movingEnemy || g_inBurst || g_recorder.recording() ||
+        !wire::fromEnemyCode(caller) || !pos || !rot || !flags || joint < wire::kMinJoint || joint > wire::kMaxJoint ||
+        index > UINT16_MAX || g_tickEffects.size() >= wire::kMaxBatchEffects) {
+        return;
+    }
+    wire::Attach named = wire::Attach::None;
+    if (attach == owner) {
+        named = wire::Attach::Enemy;
+    } else if (attach) {
+        const character_owner::Character character = character_owner::identify(attach);
+        if (character == character_owner::Character::Unknown) return;
+        named = character == character_owner::Character::Billy ? wire::Attach::Billy : wire::Attach::Rebecca;
+    }
+    g_tickEffects.push_back({g_movingRecord, static_cast<uint16_t>(index), static_cast<uint8_t>(named), static_cast<int8_t>(joint), 0,
+                             flags[1], extra, {pos[0], pos[1], pos[2]}, {rot[0], rot[1], rot[2]}});
 }
 
 }  // namespace hit_fx

@@ -364,6 +364,13 @@ rule::End heldEnded(table_rule::Lease& lease, uint32_t nowMs, PoseEntry& state) 
     return end;
 }
 
+// A hold past the stuck limit: the victim is put back to neutral before the enemy goes back to its simulator.
+void freeStuckVictim(const table_rule::Lease& lease) {
+    const uintptr_t victim = character_owner::find(static_cast<Character>(lease.victim));
+    const bool freed = victim && contact_game::freeVictim(victim);
+    logger::write("lease: token %u held %u s, victim %s", lease.token, rule::kStuckGrabMs / 1000, freed ? "freed" : "not freed (call failed)");
+}
+
 void watchHeld(uint32_t nowMs) {
     for (uint8_t slot = 0; slot < game::kEnemyPoolSlots; ++slot) {
         table_rule::Lease* lease = g_table.findMutable(slot);
@@ -372,6 +379,7 @@ void watchHeld(uint32_t nowMs) {
         const rule::End reason = heldEnded(*lease, nowMs, state);
         if (reason == rule::End::None) continue;
         if (reason == rule::End::Left) state = grantedState(*lease);
+        if (reason == rule::End::Stuck) freeStuckVictim(*lease);
         sendEnd(lease->token, slot, reason, state);
         debug_stats::count(Counter::LeasesEnded);
         logger::write("lease: token %u ended (%s) hp %d", lease->token, rule::name(reason), state.hp);

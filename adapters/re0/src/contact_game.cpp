@@ -1,5 +1,6 @@
 #include "contact_game.h"
 
+#include "equip_steps.h"
 #include "game.h"
 
 namespace contact_game {
@@ -25,6 +26,10 @@ bool victimView(uintptr_t victim, contact_rule::VictimView& out) {
     const uintptr_t think = game::readPointer(victim + game::kPlayerThinkOffset);
     return think && game::readMemory(think + game::kThinkGroupOffset, out.group) &&
            game::readMemory(think + game::kThinkStateOffset, out.state) && game::readMemory(victim + game::kPlayerHpOffset, out.hp);
+}
+
+bool freeVictim(uintptr_t victim) {
+    return equip_steps::guarded([&] { game::callThiscall<void>(game::kPlayerResetFunction, reinterpret_cast<void*>(victim)); });
 }
 
 }  // namespace contact_game

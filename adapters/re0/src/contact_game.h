@@ -17,4 +17,8 @@ bool relativePoint(uintptr_t enemy, uintptr_t pointAddress, float (&out)[3]);
 // The victim's think group and state and its HP.
 bool victimView(uintptr_t victim, contact_rule::VictimView& out);
 
+// Game thread: puts the victim back to neutral through the script's Player_Reset (0x516440), the way a stuck hold is
+// ended. False when the call faulted.
+bool freeVictim(uintptr_t victim);
+
 }  // namespace contact_game

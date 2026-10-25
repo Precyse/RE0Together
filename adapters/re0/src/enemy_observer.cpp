@@ -128,6 +128,7 @@ uint32_t g_nextLogMs = 0;
 bool g_logStarted = false;
 std::vector<rule::MotionItem> g_due;
 rule::CreatePacer g_pacer;
+rule::MissingWatch g_missing;
 door_leave_rule::Departure g_departure;  // the final pose round goes out at the first tick of this machine's door out of its room
 bool g_slotsLive = false;  // the pool slots below describe this frame (a stream shows some enemy of the room)
 bool g_waiting = false;  // the observed room lost its simulator and nobody holds it yet
@@ -180,6 +181,7 @@ void resetStreams() {
     for (Slot& slot : g_slots) slot = Slot{};
     g_motionSeqKnown = false;
     g_pacer.clear();
+    g_missing.clear();
     dropPending();
 }
 
@@ -290,8 +292,19 @@ World heldWorld(World next) {
     return next;
 }
 
+// The same enemy built twice here: the stream drives the first, the second stays held (RE1-Coop parks it the same way).
+void reportDuplicates(const World& world) {
+    for (size_t slot = 0; slot < world.origin.size(); ++slot) {
+        const int first = rule::duplicateOf(world.origin, slot);
+        if (first == rule::kNoPoolSlot) continue;
+        logger::writeUnlessRepeated("enemy_observer: slot %zu is record %u again (first in slot %d), held", slot,
+                                    world.origin[slot]->record, first);
+    }
+}
+
 void refreshWorld() {
     World next = readWorld();
+    if (next.observing) reportDuplicates(next);
     const uint32_t waitedMs = g_waiting ? next.nowMs - g_waitSinceMs : 0;
     switch (rule::roleChange(roleOf(g_world), roleOf(next), waitedMs)) {
         case rule::RoleChange::None:
@@ -391,12 +404,17 @@ void takePose(const wire::Header& header, const wire::PoseEntry& entry, uint8_t 
     if (local == kNoIndex) {
         // No enemy here was created from the record: the pool slot of the same number holds another enemy (or none), so
         // its lease role says nothing about this one; only the room's sender, scene and epoch decide.
-        if (!leased && rule::refusalOf(header, sender, g_world.holderSlot, g_world.epoch, g_world.scene) == rule::Refusal::None &&
-            rule::createWanted(false, entry)) {
-            createOnDemand(entry);
+        if (leased || rule::refusalOf(header, sender, g_world.holderSlot, g_world.epoch, g_world.scene) != rule::Refusal::None) return;
+        if (rule::createWanted(false, entry)) createOnDemand(entry);
+        if (rule::livingObserver(entry) && g_missing.missing(entry.spawnRecord, arrivalMs)) {
+            debug_stats::count(Counter::EnemyMissing);
+            logger::write("enemy_observer: record %u (%s) alive on the simulator, no enemy here for %u ms%s", entry.spawnRecord,
+                          enemy_policy::nameOf(entry.classIndex), g_missing.missingForMs(entry.spawnRecord),
+                          enemy_policy::bossClass(entry.classIndex) ? " (a boss: its room's script builds it)" : ", still creating");
         }
         return;
     }
+    g_missing.present(entry.spawnRecord);
     Slot& slot = g_slots[static_cast<size_t>(local)];
     if (slot.role == enemy_lease::Role::Held) return;  // this machine simulates it; a pose of the authority sent before the grant is stale
     if (leased != (slot.role == enemy_lease::Role::Away)) {

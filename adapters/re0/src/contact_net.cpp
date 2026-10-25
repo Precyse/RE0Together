@@ -16,6 +16,7 @@
 #include "game_tick.h"
 #include "log.h"
 #include "player_contact.h"
+#include "position_blend.h"
 #include "pose_wire.h"
 #include "puppet.h"
 #include "room_authority.h"
@@ -113,6 +114,14 @@ void apply(const wire::PlayerHit& hit) {
     float enemyPos[3];
     if (!game::readMemory(*enemy + game::kUnitPositionOffset, enemyPos)) return;
     const float point[3] = {enemyPos[0] + hit.point[0], enemyPos[1] + hit.point[1], enemyPos[2] + hit.point[2]};
+    float victimPos[3];
+    if (!game::readMemory(victim + game::kUnitPositionOffset, victimPos)) return;
+    if (!contact_rule::hitReaches(point, victimPos)) {
+        debug_stats::count(Counter::ContactHitsDropped);
+        logger::write("contact: hit on %s from local slot %u refused, it landed %.0f units from where %s stands",
+                      character_owner::name(victimId), hit.slot, position_blend::distance(point, victimPos), character_owner::name(victimId));
+        return;
+    }
     if (!player_contact::applyToLocal(victim, *enemy, point, hit.kind, hit.level)) {
         debug_stats::count(Counter::ContactHitsDropped);
         return;

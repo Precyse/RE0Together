@@ -81,6 +81,7 @@ void addStateLines(const Snapshot& s, std::vector<debug_lines::Line>& lines) {
     lines.push_back({L"enemy observer stale/refused", format(L"%u / %u", total(s, Counter::EnemyObserverStale), total(s, Counter::EnemyObserverRefused)), false});
     lines.push_back({L"enemy observer sent", format(L"%u", total(s, Counter::EnemyObserverSent)), false});
     lines.push_back({L"enemy hand-overs/created on demand", format(L"%u / %u", total(s, Counter::EnemyHandOvers), total(s, Counter::EnemyCreatedOnDemand)), false});
+    lines.push_back({L"enemies missing here", format(L"%u", total(s, Counter::EnemyMissing)), false});
     lines.push_back({L"enemy hits forwarded/unrouted", format(L"%u / %u", total(s, Counter::EnemyHitsForwarded), total(s, Counter::EnemyHitsUnrouted)), false});
     lines.push_back({L"room moves sent/applied/healed", format(L"%u / %u / %u", total(s, Counter::RoomMovesSent), total(s, Counter::RoomMovesApplied), total(s, Counter::RoomMoveHeals)), false});
     lines.push_back({L"door follows sent/accepted/rejected", format(L"%u / %u / %u", total(s, Counter::DoorFollowsSent), total(s, Counter::DoorFollowsAccepted), total(s, Counter::DoorFollowsRejected)), false});

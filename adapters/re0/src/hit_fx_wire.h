@@ -210,6 +210,62 @@ private:
     std::array<Seen, Slots> seen_{};
 };
 
+// ENEMY_EFFECT: the effects an enemy's own code made during its update on its simulator (sEffect::create 0x55a6d0
+// called from the classes' code: a death's blood, an attack's or a hold's effects). Like ENEMY_SOUND, that code never
+// runs on a copy shown from a stream. The burst's effects travel as PART_BURST and a hit's as HIT_FX, so neither is
+// sent here. One batch per game tick of the effects of that tick, every enemy of the room.
+constexpr uint16_t kMsgEnemyEffect = proto::kFirstGameType + 0x6d;  // 0x016d, the enemies' simulator to all, reliable
+constexpr uint8_t kMaxBatchEffects = 8;
+
+// What an effect is attached to, as both machines can name it.
+enum class Attach : uint8_t { None = 0, Enemy = 1, Billy = 2, Rebecca = 3 };
+constexpr uint8_t kAttachLimit = 4;
+constexpr int32_t kMinJoint = -1;  // -1: no joint
+constexpr int32_t kMaxJoint = 0x7f;
+
+struct EnemyEffectEntry {
+    uint16_t spawnRecord;  // the effect's owner
+    uint16_t index;        // the effect in the owner's effect set (+0x6790)
+    uint8_t attach;        // Attach
+    int8_t joint;
+    uint16_t pad;          // zero
+    uint32_t flags;        // the second word of the call's flags pair (the first is this machine's 0xdc20dc)
+    uint32_t extra;
+    float pos[3];          // relative to the attached joint, or in the room
+    float rot[3];
+};
+static_assert(sizeof(EnemyEffectEntry) == 40);
+
+struct EnemyEffectBatch {
+    uint32_t senderMs;
+    uint32_t seq;
+    uint32_t roomEpoch;
+    uint16_t scene;
+    uint8_t count;
+    uint8_t pad;  // zero
+    EnemyEffectEntry entry[kMaxBatchEffects];
+};
+static_assert(sizeof(EnemyEffectBatch) == 336);
+
+inline bool valid(const EnemyEffectBatch& batch) {
+    if (batch.scene >= room_authority_wire::kSceneIdLimit || batch.count == 0 || batch.count > kMaxBatchEffects || batch.pad != 0) return false;
+    for (uint8_t i = 0; i < batch.count; ++i) {
+        const EnemyEffectEntry& e = batch.entry[i];
+        if (e.spawnRecord >= game::kSpawnRecordCount || e.attach >= kAttachLimit || e.joint < kMinJoint || e.pad != 0 ||
+            !finite(e.pos, 3) || !finite(e.rot, 3)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline std::optional<EnemyEffectBatch> decodeEffects(std::span<const uint8_t> payload) {
+    if (payload.size() != sizeof(EnemyEffectBatch)) return std::nullopt;
+    EnemyEffectBatch batch{};
+    std::memcpy(&batch, payload.data(), sizeof(batch));
+    return valid(batch) ? std::optional<EnemyEffectBatch>(batch) : std::nullopt;
+}
+
 // A playSeAtPosition call returning into the enemy classes' code (sEnemy and the uEnemy classes sit between these
 // addresses; the player's and the sound system's own callers lie above): the class's own sound, not an animation's.
 constexpr uintptr_t kEnemyCodeBegin = 0x415000;

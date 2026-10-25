@@ -75,13 +75,13 @@ void testLayouts() {
 }
 
 void testBossClasses() {
-    check(wire::bossClass(bossClassIndex()), "uEnemy31 is a boss class");
+    check(enemy_policy::bossClass(bossClassIndex()), "uEnemy31 is a boss class");
     int bosses = 0;
-    for (size_t i = 0; i < enemy_policy::kClassCount; ++i) bosses += wire::bossClass(static_cast<uint8_t>(i)) ? 1 : 0;
+    for (size_t i = 0; i < enemy_policy::kClassCount; ++i) bosses += enemy_policy::bossClass(static_cast<uint8_t>(i)) ? 1 : 0;
     check(bosses == 4, "four boss classes");
-    check(!wire::bossClass(0), "uEnemy10 is not a boss class");
-    check(!wire::bossClass(static_cast<uint8_t>(enemy_policy::classIndexOf(0xcc25d8))), "Marcus (Legacy) is not a boss class");
-    check(!wire::bossClass(255), "a class past the table is not a boss class");
+    check(!enemy_policy::bossClass(0), "uEnemy10 is not a boss class");
+    check(!enemy_policy::bossClass(static_cast<uint8_t>(enemy_policy::classIndexOf(0xcc25d8))), "Marcus (Legacy) is not a boss class");
+    check(!enemy_policy::bossClass(255), "a class past the table is not a boss class");
 }
 
 void testRoundTrips() {

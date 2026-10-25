@@ -97,6 +97,15 @@ constexpr bool hasSetAction(uintptr_t vtable) {
     return index == kNoClass || kClasses[static_cast<size_t>(index)].hasSetAction;
 }
 
+// True for the boss classes (game::kBossVtables): the boss hand-over covers them and the other machine never builds one
+// from a stream (RE1-Coop: "a factory-built boss crashes"; a boss is built by its room's own script).
+constexpr bool bossClass(uint8_t classIndex) {
+    for (const uintptr_t vtable : game::kBossVtables) {
+        if (classIndexOf(vtable) == classIndex) return true;
+    }
+    return false;
+}
+
 // Name of the class at a wire index; "?" past the table.
 constexpr const char* nameOf(size_t classIndex) { return classIndex < kClassCount ? kClasses[classIndex].name : "?"; }
 

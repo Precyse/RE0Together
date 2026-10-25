@@ -113,13 +113,13 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/puppet.cpp | receiver side (state mode): `onFrame` feeds the timeline and the sender's `StreamClock` (net thread, from the driving peer only) | `puppet::enable`, `active`, `inMoveScope`, `onFrame`, `clockFor`, `uninstall`, ... |
 | src/player_contact.cpp | MinHook on the player damage and grab entry 0x512570 (vtable slot 34, five stack dwords) | `player_contact::enable`, `uninstall`, `applyToLocal` |
 | src/contact_rule.h | pure rules of the contact router and the lease (unit tested) | `contact_rule::classify`, `route`, `finished`, `acceptHolderPose` |
-| src/contact_game.cpp | engine reads of the router and the lease | `contact_game::entryState`, `relativePoint`, `victimView` |
+| src/contact_game.cpp | engine reads of the router and the lease; frees a stuck victim | `contact_game::entryState`, `relativePoint`, `victimView`, `freeVictim` |
 | src/contact_net.cpp | PLAYER_HIT 0x0165 (state mode): `sendHit` from the machine that simulates the enemy, the net handler queues, a game tick callback checks room, epoch, simulator and victim | `contact_net::enable`, `sendHit` |
-| src/hit_fx.cpp, src/hit_fx_wire.h | state mode: HIT_FX 0x0162, PART_BURST 0x016a, ENEMY_SOUND 0x016b and PART_MASK 0x016c (docs/RE0_NOTES.md "State mode: hit effects and part bursts") | `hit_fx::enable`, `beginHit`, `endHit`, `hit_fx_wire::decode`, `decodeBurst`, `Recorder` |
+| src/hit_fx.cpp, src/hit_fx_wire.h | state mode: HIT_FX 0x0162, PART_BURST 0x016a, ENEMY_SOUND 0x016b, ENEMY_EFFECT 0x016d and PART_MASK 0x016c (docs/RE0_NOTES.md "State mode: hit effects and part bursts") | `hit_fx::enable`, `beginHit`, `beginMove`, `effectCreated`, `Channel`, `Recorder` |
 | src/enemy_lease_wire.h | pure wire of the contact router and the lease (unit tested) | `enemy_lease_wire::decode`, `valid` |
 | src/enemy_lease_rule.h | pure lease table (unit tested): one lease per enemy with its role (Away = given to the victim's machine, Held = simulated here for the authority), `nextToken` (low 16 bits never 0), `streams` | `enemy_lease_rule::LeaseTable`, `nextToken`, `streams` |
 | src/enemy_lease.cpp | the grab lease (state mode, STATE_PLAN 1.4): authority | `enemy_lease::enable`, `roleOf`, `peerOf`, `tokenOf`, `busy`, `request`, ... |
-| src/boss_wire.h | pure wire of the boss hand-over (unit tested) | `boss_wire::decode`, `encode`, `bossClass`, `valid` |
+| src/boss_wire.h | pure wire of the boss hand-over (unit tested) | `boss_wire::decode`, `encode`, `valid` |
 | src/boss_handover_rule.h | pure rules of the boss hand-over (unit tested) | `boss_handover_rule::Machine`, `planFlip`, `fitOf`, `nextToken` |
 | src/boss_handover.cpp, src/boss_handover.h | the boss authority hand-over (state mode, STATE_PLAN 1.9; enabled last by `state_mode::enableAll`, its tick `enemy_boss_handover` runs after the enemy observer's) | `boss_handover::enable` |
 | src/session_wire.h | wire of the session messages (state mode, phase 16; pure, unit tested) | `session_wire::decodeReady`, `encode`, `decode`, `keyOf`, `takeOf` |
@@ -162,7 +162,7 @@ Build (from a VsDevCmd x86 shell): `cmake -S . -B build -G Ninja -DCMAKE_BUILD_T
 | src/enemy_decision.cpp | one decision maker per enemy, the room's enemy owner | `enemy_decision::install`, `offer`, `seed`, `reset`, `onOwnerOutcome`, `startAction` |
 | src/enemy_spawn.cpp, src/spawn_seed.h | enemy creation the same on both machines | `enemy_spawn::install`, `spawn_seed::stateFor`, `enemy_spawn::originOf`, `createOnDemand` |
 | src/enemy_target.cpp | the classes' own nearest-player selectors (game::kTargetSelectors: base family, uEnemy31, 37/38, 43, 46) and uEnemy2b's 0x439e90 | `enemy_target::install`, `read`, `noteAttacker` |
-| src/enemy_policy.h | pure (unit tested): how state mode replicates each of the 38 enemy classes, in the order of `game::kEnemyVtables` (the wire class index) | `enemy_policy::kClasses`, `classIndexOf`, `policyOf`, `hasSetAction`, `nameOf` |
+| src/enemy_policy.h | pure (unit tested): how state mode replicates each of the 38 enemy classes, in the order of `game::kEnemyVtables` (the wire class index) | `enemy_policy::kClasses`, `classIndexOf`, `policyOf`, `hasSetAction`, `bossClass`, `nameOf` |
 | src/enemy_observer_wire.h | pure wire of the enemy observers (unit tested) | `enemy_observer_wire::encode`, `decode`, `valid`, `clampHp` |
 | src/enemy_observer_rule.h | pure rules of the enemy observers (unit tested) | `enemy_observer_rule::SlotTimeline::push`, `render`, `ConstructionGate`, `scoped`, `bound`, `extendSeq`, ... |
 | src/enemy_observer_send_rule.h | pure (unit tested): what the simulator sends per pool slot and 20 Hz round | `enemy_observer_send_rule::SendPlanner`, `kPoseIntervalMs` |

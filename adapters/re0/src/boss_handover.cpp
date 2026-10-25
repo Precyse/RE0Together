@@ -148,7 +148,7 @@ Members collectMembers() {
     Members members;
     for (int slot = 0; slot < game::kEnemyPoolSlots && members.size() < wire::kMaxMembers; ++slot) {
         const std::optional<PoseEntry> entry = enemy_observer::snapshot(slot);
-        if (entry && wire::bossClass(entry->classIndex) && entry->hp > 0) members.push_back(memberOf(*entry));
+        if (entry && enemy_policy::bossClass(entry->classIndex) && entry->hp > 0) members.push_back(memberOf(*entry));
     }
     return members;
 }

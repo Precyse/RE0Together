@@ -247,5 +247,9 @@ Scene 0x24 zombies, then the lift room 0x32 insects. The host enters a room the 
 | pass | a zombie headshot kill: the head bursts on both (`hit_fx: ... lost part 2, sent` / `(from its simulator)`); the head stays gone (PART_MASK) |
 | pass | flinches on the observer while the enemy lives; a falling death plays once (few `enemy_observer: slot N layer 0 sought` lines) |
 | pass | groans and grab cries heard on the machine that does not run the room |
+| pass | a dying enemy's blood and attack or hold effects show on the machine that does not run the room (ENEMY_EFFECT) |
 | pass | a grab plays on both; killing the grabber frees the victim (`lease: token N ended (enemy dead)` after the release) |
+| pass | no `lease: token N held 15 s` in a normal run; if one shows, the victim moves again right after |
+| pass | `contact: hit ... refused, it landed D units` lines are rare and D is far over 600 (a hit that looked fair was not refused) |
+| pass | F8 `enemies missing here` stays 0 (an `alive on the simulator, no enemy here` line names a record to check) |
 | fail | any enemy invisible, frozen, double-hit, a stuck grab, a part shown wrong on the observer (PART_MASK word count) |

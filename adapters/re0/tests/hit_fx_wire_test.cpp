@@ -1,4 +1,4 @@
-// Checks the HIT_FX and PART_BURST wire formats and the recorder (no game): size, round trip, refusals, the recorder's capacity and its
+// Checks the HIT_FX, PART_BURST, ENEMY_SOUND, ENEMY_EFFECT and PART_MASK wire formats and the recorder (no game): size, round trip, refusals, the recorder's capacity and its
 // silence when a hit made no effect and no sound. Exit 0 when every check passes.
 #include <cmath>
 #include <cstdio>
@@ -128,6 +128,32 @@ void testEnemySounds() {
     check(!wire::fromEnemyCode(0x4f0c4b) && !wire::fromEnemyCode(0x6447e5), "the player's and the sound system's do not");
 }
 
+void testEnemyEffects() {
+    check(wire::kMsgEnemyEffect == 0x016d, "ENEMY_EFFECT is 0x016d");
+    wire::EnemyEffectBatch batch{};
+    batch.senderMs = 10;
+    batch.seq = 1;
+    batch.scene = 0x24;
+    batch.count = 1;
+    batch.entry[0] = {41, 6, static_cast<uint8_t>(wire::Attach::Enemy), 3, 0, 0x10, 0, {1.0f, 2.0f, 3.0f}, {0.0f, 0.5f, 0.0f}};
+    const auto* begin = reinterpret_cast<const uint8_t*>(&batch);
+    const auto got = wire::decodeEffects(std::vector<uint8_t>(begin, begin + sizeof(batch)));
+    check(got && got->count == 1 && got->entry[0].index == 6 && got->entry[0].joint == 3 && got->entry[0].rot[1] == 0.5f,
+          "an effect batch round-trips");
+    wire::EnemyEffectBatch bad = batch;
+    bad.count = wire::kMaxBatchEffects + 1;
+    check(!wire::valid(bad), "an overfull effect batch is refused");
+    bad = batch;
+    bad.entry[0].attach = wire::kAttachLimit;
+    check(!wire::valid(bad), "an unknown attachment is refused");
+    bad = batch;
+    bad.entry[0].joint = -2;
+    check(!wire::valid(bad), "a joint below -1 is refused");
+    bad = batch;
+    bad.entry[0].pos[0] = std::nanf("");
+    check(!wire::valid(bad), "a position that is not a number is refused");
+}
+
 void testPartMask() {
     check(wire::kMsgPartMask == 0x016c, "PART_MASK is 0x016c");
     const wire::PartMask sent{1, 1, 1, 0x24, 41, {0xffff0000u, 3}};
@@ -157,6 +183,7 @@ void testPartMask() {
 int main() {
     testPartMask();
     testEnemySounds();
+    testEnemyEffects();
     testPartBurst();
     testRoundTrip();
     testRefusals();

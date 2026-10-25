@@ -92,6 +92,15 @@ constexpr int slotOfRecord(const std::array<std::optional<enemy_spawn::Origin>, 
     return kNoPoolSlot;
 }
 
+// The earlier pool slot whose enemy was created from the same spawn record as the one in `slot` (the same enemy built
+// twice), or kNoPoolSlot. The stream binds the earlier one (slotOfRecord); the later one gets no data and stays held.
+template <size_t Slots>
+constexpr int duplicateOf(const std::array<std::optional<enemy_spawn::Origin>, Slots>& origins, size_t slot) {
+    if (slot >= Slots || !origins[slot]) return kNoPoolSlot;
+    const int first = slotOfRecord(origins, origins[slot]->record);
+    return first != kNoPoolSlot && static_cast<size_t>(first) < slot ? first : kNoPoolSlot;
+}
+
 // A stream entry is applied to the local enemy only when both were created from the same spawn record, of the same class
 // and spawn id. The pool slots of the two machines need not agree.
 constexpr bool bound(const LocalEnemy& local, const PoseEntry& entry) {
@@ -193,11 +202,15 @@ constexpr uint32_t kCreateSlotIntervalMs = 1000;
 
 // A living Observer-class enemy of the stream whose spawn record no enemy here was created from (a script spawn this
 // machine has not run, a late arrival) is created natively from that record, whichever pool slot the record's enemy
-// stands in on the other machine.
-inline bool createWanted(bool recordHere, const PoseEntry& entry) {
+// stands in on the other machine. A boss is never built this way: its room's script builds it on both machines.
+// A living enemy of an Observer class.
+inline bool livingObserver(const PoseEntry& entry) {
     constexpr uint8_t kLifeFlags = enemy_observer_wire::kFlagAlive | enemy_observer_wire::kFlagTerminal | enemy_observer_wire::kFlagRemoved;
-    return !recordHere && (entry.flags & kLifeFlags) == enemy_observer_wire::kFlagAlive &&
-           enemy_policy::kClasses[entry.classIndex].policy == Policy::Observer;
+    return (entry.flags & kLifeFlags) == enemy_observer_wire::kFlagAlive && enemy_policy::kClasses[entry.classIndex].policy == Policy::Observer;
+}
+
+inline bool createWanted(bool recordHere, const PoseEntry& entry) {
+    return !recordHere && livingObserver(entry) && !enemy_policy::bossClass(entry.classIndex);
 }
 
 // At most kMaxCreatesPerFrame creations a frame and one a second per slot.
@@ -221,6 +234,46 @@ private:
     std::array<uint32_t, kSlots> lastMs_{};
     std::array<bool, kSlots> seen_{};
     size_t used_ = 0;
+};
+
+// The enemies the simulator streams alive that have no enemy here (RE1-Coop's parity watch): each record is reported once
+// when it has been missing kMissingReportMs without a gap of kMissingGapMs in its sightings; the create keeps retrying.
+constexpr uint32_t kMissingReportMs = 3000;
+constexpr uint32_t kMissingGapMs = 1000;
+
+class MissingWatch {
+public:
+    // An alive entry of `record` with no enemy here. True once, when the record has been missing kMissingReportMs.
+    bool missing(uint16_t record, uint32_t nowMs) {
+        if (record >= since_.size()) return false;
+        Seen& seen = since_[record];
+        if (!seen.known || nowMs - seen.lastMs > kMissingGapMs) seen = {true, false, nowMs, nowMs};
+        seen.lastMs = nowMs;
+        if (seen.reported || nowMs - seen.firstMs < kMissingReportMs) return false;
+        seen.reported = true;
+        return true;
+    }
+
+    // How long `record` has been missing (0 when it is not).
+    uint32_t missingForMs(uint16_t record) const {
+        return record < since_.size() && since_[record].known ? since_[record].lastMs - since_[record].firstMs : 0;
+    }
+
+    // `record` has an enemy here: its watch starts over.
+    void present(uint16_t record) {
+        if (record < since_.size()) since_[record] = {};
+    }
+
+    void clear() { since_.fill({}); }
+
+private:
+    struct Seen {
+        bool known = false;
+        bool reported = false;
+        uint32_t firstMs = 0;
+        uint32_t lastMs = 0;
+    };
+    std::array<Seen, game::kSpawnRecordCount> since_{};
 };
 
 // ---- Sequences ---------------------------------------------------------------------------------------------------
