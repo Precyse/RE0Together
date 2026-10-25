@@ -89,7 +89,8 @@ void onNetTick() {
     pose_wire::Pose pose;
     {
         std::lock_guard lock(g_mutex);
-        if (!g_hasPose || !g_heldResend.due(now)) return;
+        // Unplaced (a new load still catching up), the last pose belongs to the previous game: never resent.
+        if (!g_hasPose || !join_sync::placed() || !g_heldResend.due(now)) return;
         pose = g_lastPose;
     }
     pose.senderMs = now;

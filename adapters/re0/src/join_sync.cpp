@@ -44,6 +44,7 @@ std::atomic<bool> g_resyncRequested{false};  // guest: take a new snapshot even 
 Clock::time_point g_lastRequest;
 std::optional<JoinSnapshot> g_snapshot;    // received, not yet applied
 std::optional<JoinSnapshot> g_travelling;  // applied; waiting for the own character's door to arrive
+bool g_bySwitch = false;                   // g_travelling waits for the game's switch, not a door
 
 bool inGame() { return game::controlled() && game::partner() && game_state::playing(); }
 
@@ -92,12 +93,13 @@ void placeHostCharacter(const JoinSnapshot& snapshot) {
     }
 }
 
-// The own character stands in its room: the host's character joins its room, the own one takes the host's position.
-void finish(const JoinSnapshot& snapshot) {
+// The own character stands in its room: the host's character joins its room, the own one takes the host's position
+// when it stands in the room the snapshot names (`atSnapshotRoom`), or keeps its own in the room the game put it in.
+void finish(const JoinSnapshot& snapshot, bool atSnapshotRoom = true) {
     if (!state_mode::on()) placeHostCharacter(snapshot);
     const Character own = character_owner::localCharacter();
     const CharacterPlace& ownPlace = placeOf(snapshot, own);
-    game::writeTransform(character_owner::find(own), ownPlace.pos, ownPlace.quat);
+    if (atSnapshotRoom) game::writeTransform(character_owner::find(own), ownPlace.pos, ownPlace.quat);
     g_placed = true;
     game_tick::rearmAfterResync();
     if (state_mode::on()) room_authority::resendClaims();
@@ -118,7 +120,8 @@ void apply(const JoinSnapshot& snapshot) {
         return;
     }
     g_travelling = snapshot;
-    if (own.scene == scene::of(character_owner::find(ownCharacter)) || !own.hasDoor) {
+    g_bySwitch = own.scene == scene::of(character_owner::find(ownCharacter)) || !own.hasDoor;
+    if (g_bySwitch) {
         // The save left the own character in its own room (the two were apart): the game's switch loads that room.
         logger::write("join_sync: own character in scene 0x%02x, switching to it", own.scene);
         return;
@@ -128,12 +131,22 @@ void apply(const JoinSnapshot& snapshot) {
 }
 
 // While the own character waits in another room than the loaded one, the game's switch is asked again until it takes
-// (it refuses until the game has settled after a load).
-void switchToOwnRoom(const JoinSnapshot& snapshot) {
+// (it refuses until the game has settled after a load). An own character the game already put in the loaded room
+// (2026-10-25 live: a second save loaded from the Co-op page, Billy in 0x24 here while the host's save view had him in
+// 0x40) is placed where it stands: waiting for a switch that never comes left the guest unplaced, its poses unsent.
+// True once placed.
+bool switchToOwnRoom(const JoinSnapshot& snapshot) {
     const Character own = character_owner::localCharacter();
-    if (placeOf(snapshot, own).scene != scene::of(character_owner::find(own))) return;  // a door is bringing it
+    const uint16_t ownRoom = scene::of(character_owner::find(own));
+    if (ownRoom == scene::current() && !game_state::doorActive()) {
+        logger::write("join_sync: own character already in the loaded scene 0x%02x, placed there", ownRoom);
+        finish(snapshot, false);
+        return true;
+    }
+    if (placeOf(snapshot, own).scene != ownRoom) return false;  // a door is bringing it
     const character_owner::SwitchResult result = character_owner::switchTo(own);
     if (result == character_owner::SwitchResult::Done) logger::write("join_sync: switching to the own character's room");
+    return false;
 }
 
 // The save may have left the own character in another room than the loaded one: the game's own switch brings the
@@ -169,8 +182,8 @@ void guestTick() {
         if (placeOf(*g_travelling, character_owner::localCharacter()).scene == scene::current()) {
             finish(*g_travelling);
             g_travelling.reset();
-        } else {
-            switchToOwnRoom(*g_travelling);
+        } else if (g_bySwitch && switchToOwnRoom(*g_travelling)) {
+            g_travelling.reset();
         }
     }
     {
