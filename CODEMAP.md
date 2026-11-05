@@ -8,13 +8,15 @@ Spec: `docs/CONTRACT.md`. This file is the index: which file holds the table of 
 | RE0 | `docs/codemap/re0.md` | `adapters/re0/`, `tools/re0/` (research tools and rows of its tests) |
 | DS2 | `docs/codemap/ds2.md` | `adapters/ds2/`, `tools/ds2/` rows |
 | SR2 | `docs/codemap/sr2.md` | `adapters/sr2/`, `tools/sr2/` rows |
+| CD | `docs/codemap/cd.md` | `adapters/cd/` (Crimson Desert), `adapters/common/`, `tools/cd/` |
+| DD2 | `docs/codemap/dd2.md` | `adapters/dd2/` (Dragon's Dogma 2 REFramework plugin) |
 | tools | `docs/codemap/tools.md` | overview of the root test tools, the research tools of each game and `tools/publish_check.py` (the rows of each tool are in the file of its game) |
 
 ## release/ (repo root)
 
 | file | owns |
 |---|---|
-| .github/workflows/release.yml | push to `main` (channel `latest`) or `next` (prerelease): parallel jobs `re0`, `sr2` (x86 build + unit tests, DLL cached by a source hash, uploaded as an artifact) and `launcher`; then `package`: `publish_check.py`, assemble (DS2 left out), `tools/release_manifest.py` (unchanged components ship the previous zip), update the channel's release in place, manifest last, move the tag |
+| .github/workflows/release.yml | push to `main` (channel `latest`) or `next` (prerelease): parallel jobs `re0`, `sr2` (x86 build + unit tests), `dd2` (x64 build + unit tests; each DLL cached by a source hash, uploaded as an artifact) and `launcher`; then `package`: `publish_check.py`, assemble (DS2 and CD left out), `tools/release_manifest.py` (unchanged components ship the previous zip), update the channel's release in place, manifest last, move the tag |
 e0\dinput8.dll`, `adapters\sr2\dinput8.dll` + `scripts.delta.json` (fails when missing), `README.txt`; DS2 is left out of releases for now, installed launchers keep their DS2 files), download the channel's current `manifest.json` and component zips (before the release is replaced; none yet = everything new), run `tools/release_manifest.py` (a component whose built files have the previous release's paths and SHA-256 ships the previous zip unchanged with its version, any other is the new build with previous version + 1; writes `update.json` {repo, channel} and `installed.json` {build, channel, commit, components}, zips `Coop.zip`, `launcher.zip`, `mod-<id>.zip`, `manifest.json`; on `latest` also `RE0-Coop.zip` for launchers released before the manifest), update the release tagged with the channel in place (assets uploaded with `--clobber`, assets no longer produced deleted, title `Build <run number>` and notes updated, created when missing; never deleted, so a failed step cannot leave the channel without a release), manifest uploaded last, then the tag moved to the build commit (a failure to move it is only a warning) |
 | launcher/package/README.txt | player README shipped in the package |
 | launcher/update.json | `{ "repo": "Precyse/RE0Together", "channel": "preview" }` copied next to the exe; a missing file or the `OWNER/REPO` placeholder disables updating (the release build writes the real repo and channel into the package) |
@@ -30,7 +32,7 @@ e0\dinput8.dll`, `adapters\sr2\dinput8.dll` + `scripts.delta.json` (fails when m
 - Slot / epoch rules: `Session.cs`, `SlotAssigner.cs`
 - Session start, refusals, held-session rejoin, host left / re-host, the status and step the loop publishes, the options written to the adapter ini on launch: `App.cs` (`StartSession`, `Refuse`, `AdapterOptions`), `App.Reconnect.cs`, `App.Status.cs`; the start checks: `StartChecks.cs`; a rendezvous game's join: `NativeJoin.cs`
 - Adapter link behaviour: `LoopbackBridge.cs`
-- Add a game: new `launcher/games/<id>.json` (DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`, stages `docs/DS2_ROADMAP.md`; SR2: `sr2.json`, a native session, adapter `adapters/sr2`, notes `docs/SR2_NOTES.md`)
+- Add a game: new `launcher/games/<id>.json` (Crimson Desert: `cd.json`, adapter `adapters/cd`, design `coop-scratch\cd\design`; Dragon's Dogma 2: `dd2.json`, plugin `adapters/dd2`, design `coop-scratch\dd2\design`, released as `mod-dd2.zip` (Crimson Desert still kept out of releases in `.github/workflows/release.yml`); DS2: `ds2.json`, adapter `adapters/ds2`, notes `docs/DS2_NOTES.md`, stages `docs/DS2_ROADMAP.md`; SR2: `sr2.json`, a native session, adapter `adapters/sr2`, notes `docs/SR2_NOTES.md`)
 - Native `steam_api64.dll` (Valve-signed redistributable from the Steamworks.NET 2024.8.0 standalone release, SDK 1.60): `launcher/native/`
 - Items (inventory blocks): `inventory_sync.cpp`; floor items: `floor_items_sync.cpp`; layouts in `docs/RE0_NOTES.md` Items
 - RE0 floor-item takes in state mode (who may take a herb, why `pickup_guard: take refused` appeared, the host's grant log): `src/item_ledger.cpp` and `src/item_ledger_rule.h`; the held engine step is `src/pickup_guard.cpp`; notes `docs/RE0_NOTES.md` "State mode: item ledger"

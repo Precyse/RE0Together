@@ -1,0 +1,10 @@
+{ "id": "dd2", "name": "Dragon's Dogma 2", "steamAppId": 2054970, "exe": "DD2.exe",
+  "maxPlayers": 3, "port": 27985, "supportedBuilds": [26256634],
+  "requires": [ { "file": "dinput8.dll", "name": "REFramework" } ],
+  "adapterFiles": [ { "src": "adapters/dd2/dd2coop.dll", "dst": "reframework/plugins/dd2coop.dll" } ],
+  "adapterIni": "coop/adapter.ini",
+  "adapterLog": "coop/adapter.log",
+  "saveSync": { "steamRemoteFiles": ["data000.bin"], "sessionDir": "coop/session/win64_save",
+    "hostSaveDir": "{steamuserdata}/{steamaccountid}/2054970/remote/win64_save", "guestOwnFiles": ["data00-1.bin"] },
+  "saveBackup": { "dir": "{steamuserdata}/{steamaccountid}/2054970/remote/win64_save", "into": "coop/archive/real", "keep": 10 },
+  "crashFiles": ["coop/crash-*.dmp", "coop/hang-*.dmp", "coop/caught-*.dmp", "reframework_crash.dmp"] }

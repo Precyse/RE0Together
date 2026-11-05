@@ -1,0 +1,7 @@
+{ "id": "cd", "name": "Crimson Desert", "steamAppId": 3321460, "exe": "bin64/CrimsonDesert.exe",
+  "maxPlayers": 2, "port": 27990, "supportedBuilds": [26448710],
+  "adapterFiles": [ { "src": "adapters/cd/winmm.dll", "dst": "bin64/winmm.dll" } ],
+  "adapterIni": "bin64/coop/adapter.ini",
+  "adapterLog": "bin64/coop/adapter.log",
+  "saveBackup": { "dir": "{localappdata}/Pearl Abyss/CD/save/{steamaccountid}", "into": "bin64/coop/save_backups", "keep": 10 },
+  "crashFiles": ["bin64/coop/crash-*.dmp", "bin64/coop/hang-*.dmp", "bin64/coop/caught-*.dmp"] }

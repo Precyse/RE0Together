@@ -22,8 +22,9 @@ env:
 
 # The adapters and the launcher tests run as parallel jobs; packaging waits for all of them and takes each adapter's DLL from
 # its job. An adapter whose sources match a run that already built and tested them (the cache key is the hash of its
-# sources) restores that run's DLL from the cache instead of building again; /Brepro makes the bytes the same either way. DS2 is left out of the release for now: no build, no profile,
-# no mod-ds2.zip (installed launchers keep the DS2 files they have; a component missing from the manifest is never touched).
+# sources) restores that run's DLL from the cache instead of building again; /Brepro makes the bytes the same either way. DS2 and
+# Crimson Desert (cd) are left out of the release for now: no build, no profile, no mod zip (installed launchers keep the files
+# they have; a component missing from the manifest is never touched).
 jobs:
   re0:
     runs-on: windows-latest
@@ -89,6 +90,39 @@ jobs:
           path: adapters/sr2/dinput8.dll
           if-no-files-found: error
 
+  dd2:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: tested
+        uses: actions/cache/restore@v4
+        with:
+          path: adapters/dd2/dd2coop.dll
+          key: dd2-dll-${{ hashFiles('adapters/dd2/CMakeLists.txt', 'adapters/dd2/src/**', 'adapters/dd2/tests/**', 'adapters/re0/src/**', 'adapters/common/**') }}
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build and test DD2 plugin
+        if: steps.tested.outputs.cache-hit != 'true'
+        shell: pwsh
+        working-directory: adapters/dd2
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "DD2 tests failed" }
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: adapters/dd2/dd2coop.dll
+          key: ${{ steps.tested.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dd2-dll
+          path: adapters/dd2/dd2coop.dll
+          if-no-files-found: error
+
   launcher:
     runs-on: windows-latest
     steps:
@@ -106,7 +140,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "diagnostics_test failed" }
 
   package:
-    needs: [re0, sr2, launcher]
+    needs: [re0, sr2, dd2, launcher]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -120,6 +154,11 @@ jobs:
         with:
           name: sr2-dll
           path: adapters/sr2
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dd2-dll
+          path: adapters/dd2
 
       - name: Publish check
         run: python tools/publish_check.py
@@ -154,12 +193,13 @@ jobs:
           # The SR2 mission scripts are not shipped: the launcher generates them on the player's PC from this delta.
           if (-not (Test-Path adapters/sr2/scripts.delta.json)) { throw "adapters/sr2/scripts.delta.json is missing (rebuild.cmd in adapters/sr2 writes it)" }
           dotnet publish launcher/CoopLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o pkg/launcher/app
-          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/sr2 | Out-Null
-          Copy-Item launcher/games/*.json pkg/launcher/games/ -Exclude ds2.json
+          New-Item -ItemType Directory -Force pkg/launcher/games, pkg/adapters/re0, pkg/adapters/sr2, pkg/adapters/dd2 | Out-Null
+          Copy-Item launcher/games/*.json pkg/launcher/games/ -Exclude ds2.json, cd.json
           Copy-Item adapters/re0/dinput8.dll pkg/adapters/re0/
           Copy-Item adapters/re0/fonts pkg/adapters/re0/ -Recurse
           Copy-Item adapters/sr2/dinput8.dll pkg/adapters/sr2/
           Copy-Item adapters/sr2/scripts.delta.json pkg/adapters/sr2/
+          Copy-Item adapters/dd2/dd2coop.dll pkg/adapters/dd2/
           Copy-Item launcher/package/README.txt pkg/
           $legacy = if ($env:CHANNEL -eq 'latest') { @('--legacy-zip', 'RE0-Coop.zip') } else { @() }
           $previous = if (Test-Path previous/manifest.json) { @('--previous', 'previous') } else { @() }
