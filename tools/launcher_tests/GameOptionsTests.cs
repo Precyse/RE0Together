@@ -71,6 +71,7 @@ public static class GameOptionsTests
         var host = new Dictionary<string, string> { [PartnerMode] = "state", [Character] = "rebecca" };
         var values = GameOptions.ForAdapter(Profile, Own(), host, isHost: true);
         Check.That(values[PartnerMode] == "input" && values[Character] == "billy", "the host's ini keeps the host's own choices");
+        Check.That(values[GameOptions.RoleKey] == "host", "the host's ini says it is the host");
     }
 
     private static void GuestTakesHostOptions()
@@ -79,6 +80,7 @@ public static class GameOptionsTests
         var values = GameOptions.ForAdapter(Profile, Own(), host, isHost: false);
         Check.That(values[PartnerMode] == "state", "a guest runs the host's partner mode, whatever it chose itself");
         Check.That(values[Character] == "rebecca", "a guest takes the host's character option too");
+        Check.That(values[GameOptions.RoleKey] == "guest", "a guest's ini says it is a guest");
     }
 
     private static void GuestKeepsItsOwnOtherOptions()

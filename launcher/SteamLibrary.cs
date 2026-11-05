@@ -91,7 +91,8 @@ public static class SteamLibrary
 
     private static readonly string[] GridImageExtensions = { ".png", ".jpg", ".jpeg", ".webp" };
 
-    private static string SteamRoot() =>
+    /// <summary>Steam's install folder (registry SteamPath, else the default).</summary>
+    public static string SteamRoot() =>
         (Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam")?.GetValue("SteamPath") as string ?? DefaultSteamPath)
         .Replace('/', '\\');
 

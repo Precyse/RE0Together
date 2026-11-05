@@ -32,6 +32,7 @@ public sealed class SaveSyncCoordinator : IDisposable
     private readonly SaveWatcher? _watcher;
     private readonly Func<IEnumerable<ulong>> _peers;
     private readonly Func<ulong> _hostId;
+    private readonly (string From, string Into)? _ownFiles;  // a guest's own save folder and its session folder (GuestOwnFiles)
     private readonly long _startedMs = Environment.TickCount64;
     private long? _firstFrameMs;
     private long _lastFrameMs;
@@ -39,8 +40,9 @@ public sealed class SaveSyncCoordinator : IDisposable
 
     private SaveSyncCoordinator(
         GameProfile profile, string gameDir, SaveSender? sender, SaveReceiver? receiver, SaveWatcher? watcher,
-        Func<IEnumerable<ulong>> peers, Func<ulong> hostId)
+        Func<IEnumerable<ulong>> peers, Func<ulong> hostId, (string From, string Into)? ownFiles = null)
     {
+        _ownFiles = ownFiles;
         _profile = profile;
         _gameDir = gameDir;
         _sender = sender;
@@ -81,8 +83,11 @@ public sealed class SaveSyncCoordinator : IDisposable
             ? SavePaths.Expand(template) ?? throw new InvalidOperationException($"No guest save folder for {profile.Name} (the folder template needs a signed-in Steam user)")
             : config.SessionDir;
         var stagingDir = Path.Combine(gameDir, config.SessionDir, SaveReceiver.StagingFolder);
-        var receiver = new SaveReceiver(config, Path.Combine(gameDir, guestDir), stagingDir, transport, () => session.HostId, GameLauncher.IsRunning(profile));
-        var coordinator = new SaveSyncCoordinator(profile, gameDir, null, receiver, null, () => [], () => session.HostId);
+        var sessionDir = Path.Combine(gameDir, guestDir);
+        var receiver = new SaveReceiver(config, sessionDir, stagingDir, transport, () => session.HostId, GameLauncher.IsRunning(profile));
+        var ownSaveDir = config.GuestOwnFiles is { Count: > 0 } ? HostSaveDir(profile, config, steamAccountId) : null;
+        var coordinator = new SaveSyncCoordinator(profile, gameDir, null, receiver, null, () => [], () => session.HostId,
+            ownSaveDir != null ? (ownSaveDir, sessionDir) : null);
         session.FileFrameReceived += coordinator.OnFileFrame;
         return coordinator;
     }
@@ -143,7 +148,38 @@ public sealed class SaveSyncCoordinator : IDisposable
         if (!GameLauncher.IsRunning(_profile)) _receiver.PromoteStaged();
     }
 
-    public void EnableAdapter(IReadOnlyDictionary<string, string> options) => AdapterSettings.EnableCoop(_gameDir, _profile, options);
+    public void EnableAdapter(IReadOnlyDictionary<string, string> options)
+    {
+        if (_ownFiles is { } own && _profile.SaveSync?.GuestOwnFiles is { } names) CopyOwnFiles(own.From, own.Into, names);
+        AdapterSettings.EnableCoop(_gameDir, _profile, options);
+    }
+
+    /// <summary>Copies each named file the guest's own save folder has into the session folder (a missing one is logged and
+    /// skipped: the game makes a fresh one). Returns how many were copied.</summary>
+    internal static int CopyOwnFiles(string ownDir, string sessionDir, IEnumerable<string> names)
+    {
+        var copied = 0;
+        foreach (var name in names)
+        {
+            var source = Path.Combine(ownDir, name);
+            if (Path.GetFileName(name) != name || !File.Exists(source))
+            {
+                Log.Info($"Save sync: own {name} not found in {ownDir}, the game starts without it");
+                continue;
+            }
+            try
+            {
+                Directory.CreateDirectory(sessionDir);
+                File.Copy(source, Path.Combine(sessionDir, name), overwrite: true);
+                ++copied;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Info($"Save sync: could not copy own {name}: {e.Message}");
+            }
+        }
+        return copied;
+    }
 
     public void Dispose()
     {

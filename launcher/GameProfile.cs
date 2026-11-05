@@ -12,10 +12,15 @@ public sealed record AdapterFile(string Src, string Dst, bool Folder = false, st
 
 /// <summary>Save sync settings. Fixed files come from the Steam cloud folder (SteamRemoteFiles). A game that keeps its
 /// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host
-/// then sends whatever matches, announced first by a manifest.</summary>
+/// then sends whatever matches, announced first by a manifest. GuestOwnFiles are never sent: a guest copies its own (its
+/// system save, options and key binds) from its own save folder into the session folder before its game starts.</summary>
 public sealed record SaveSyncProfile(
     List<string> SteamRemoteFiles, string SessionDir,
-    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
+    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null, List<string>? GuestOwnFiles = null);
+
+/// <summary>A game whose players each keep their own save gets a copy of that save folder before and after every session
+/// (<see cref="SaveBackup"/>): Dir is the save folder template, Into the backup folder relative to the game folder.</summary>
+public sealed record SaveBackupProfile(string Dir, string Into, int Keep);
 
 /// <summary>Where a game keeps its save slots: the save file (in the save folder, and in the session folder on a guest), where the executable
 /// holds the file's cipher key (a virtual address as hex text, KeyLength bytes), the name of each slot's entry (<c>{0}</c> is the slot
@@ -76,7 +81,8 @@ public sealed record GameProfile(
     List<string>? Characters = null, List<int>? SupportedBuilds = null, List<GameOption>? Options = null,
     SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
-    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null, UiArtSource? UiArt = null)
+    List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null, UiArtSource? UiArt = null,
+    SaveBackupProfile? SaveBackup = null)
 {
     // UiArt: the game art the in-game overlay draws, taken from the player's own install at launch.
     // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").

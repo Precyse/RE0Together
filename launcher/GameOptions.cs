@@ -7,6 +7,7 @@ namespace CoopLauncher;
 public static class GameOptions
 {
     public const string SeatsKey = "max_players";
+    public const string RoleKey = "role";  // host or guest, for an adapter that must know before it links
 
     public const string CharacterKey = "character";
 
@@ -78,11 +79,13 @@ public static class GameOptions
 
     /// <summary>The values the adapter ini gets: the player's own, except that a guest takes the host's value of every host
     /// option the lobby carries (a value the profile does not offer is ignored; an option with a source takes any value, and its default
-    /// when the lobby has none), so both machines run the same character, partner mode and forced save slot.</summary>
+    /// when the lobby has none), so both machines run the same character, partner mode and forced save slot. <see cref="RoleKey"/>
+    /// says which of the two this machine is.</summary>
     public static Dictionary<string, string> ForAdapter(GameProfile profile, IReadOnlyDictionary<string, string> own,
         IReadOnlyDictionary<string, string> hostValues, bool isHost)
     {
         var values = own.ToDictionary(pair => pair.Key, pair => pair.Value);
+        values[RoleKey] = isHost ? "host" : "guest";
         if (isHost) return values;
         foreach (var option in (profile.Options ?? []).Where(option => option.Host))
         {

@@ -440,6 +440,7 @@ public sealed partial class App
         var options = AdapterOptions();
         _saveSync?.EnableAdapter(options);
         if (_options.NoLaunch) return true;
+        BackupSavesBeforeLaunch();
         Log.Event($"Starting {_profile!.Name}");
         var result = _profile.RendezvousSession
             ? _gameDir != null ? GameLauncher.LaunchWithOptions(_profile, _gameDir, options) : LaunchResult.SteamStartFailed
@@ -537,6 +538,7 @@ public sealed partial class App
     /// <summary>Drops the session and its services (bridge, save sync, log and crash forwarding) but not the lobby.</summary>
     private void DropSession()
     {
+        BackupSavesAfterSession();
         _follow = null;
         _buildCheck = null;
         _logForwarder = null;

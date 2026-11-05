@@ -68,6 +68,8 @@ public static class Program
         SaveReceiverTests.Run();
         SaveSyncTimeoutTests.Run();
         SavePathsTests.Run();
+        SaveBackupTests.Run();
+        SaveOwnFilesTests.Run();
         AdapterSettingsTests.Run();
         LogForwarderTests.Run();
         CrashFilesTests.Run();
