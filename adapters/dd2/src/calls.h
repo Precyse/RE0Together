@@ -83,6 +83,8 @@ enum Id : uint8_t {
     kGetEnemyNavigation,
     kGetMonsterSelector,
     kGetOriginalMaxHp,
+    kGetEnemyChara,
+    kGetMonsterChara,
     kCount
 };
 
@@ -213,6 +215,10 @@ constexpr std::array<Row, kCount> kRows{{
     {kGetEnemyNavigation, "app.Ch200000", "get_NavigationController", "", 0x14633ad20, Feature::Enemy},
     {kGetMonsterSelector, "app.Monster", "get_MonsterActionSelector", "", 0x1464a8ac0, Feature::Enemy},
     {kGetOriginalMaxHp, "app.Character", "get_OriginalMaxHp", "", 0x1452aeb70, Feature::Enemy},
+    // The roster's character of an enemy or monster component, through the engine's getters: Ch200000.get_Chara reads +0x88
+    // where the dump's field table says 0x80 (both bodies are shared accessors, fine to call, never hooked).
+    {kGetEnemyChara, "app.Ch200000", "get_Chara", "", 0x14633ab50, Feature::Body},
+    {kGetMonsterChara, "app.Monster", "get_Chara", "", 0x1464a74b0, Feature::Body},
 }};
 
 // kRows is indexed by Id.

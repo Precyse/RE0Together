@@ -23,8 +23,6 @@ namespace {
 
 // REFramework hook arguments: argv[0] the VM context, argv[1] `this`, then the method's parameters, 8 bytes each.
 constexpr int kFirstParam = 2;
-constexpr uint32_t kEnemyChara = 0x80;          // Ch200000._Chara
-constexpr uint32_t kMonsterChara = 0x130;       // Monster._Chara
 constexpr uint32_t kHolderUniqueId = 0x80;      // ContextHolder.UniqueIDContext
 constexpr uint32_t kContextUniqueId = 0x18;     // UniqueIDContext.UniqueID (Guid, then Int32 index)
 constexpr uint32_t kUniqueIdIndex = 0x10;       // UniqueID._Index inside the value
@@ -55,7 +53,7 @@ std::optional<roster_rule::Comparison> g_lastComparison;
 // destructors here, for __try.
 bool readMember(void* component, bool monster, void** chara, roster_rule::Key* key) {
     __try {
-        *chara = refw::field<void*>(component, monster ? kMonsterChara : kEnemyChara);
+        *chara = calls::objectResult(monster ? calls::kGetMonsterChara : calls::kGetEnemyChara, component);
         void* holder = *chara ? calls::objectResult(calls::kGetContext, *chara) : nullptr;
         void* context = holder ? refw::field<void*>(holder, kHolderUniqueId) : nullptr;
         if (!context) return false;
