@@ -9,7 +9,6 @@
 namespace {
 
 constexpr unsigned kMaxParams = 32;
-constexpr unsigned kMaxFields = 1024;
 constexpr unsigned kNameBuffer = 512;
 
 const REFrameworkPluginInitializeParam* g_param = nullptr;
@@ -72,9 +71,13 @@ std::vector<std::pair<std::string, int64_t>> enumLiterals(const char* type) {
     std::vector<std::pair<std::string, int64_t>> out;
     const REFrameworkTypeDefinitionHandle definition = sdk().tdb->find_type(tdb(), type);
     if (!definition) return out;
-    REFrameworkFieldHandle fields[kMaxFields] = {};
+    // Sized from the type: app.CharacterID alone has over 1700 literals.
+    std::vector<REFrameworkFieldHandle> fields(sdk().type_definition->get_num_fields(definition));
     unsigned count = 0;
-    if (sdk().type_definition->get_fields(definition, fields, sizeof(fields), &count) != REFRAMEWORK_ERROR_NONE) return out;
+    if (fields.empty() || sdk().type_definition->get_fields(definition, fields.data(), static_cast<unsigned>(fields.size() * sizeof(fields[0])),
+                                                            &count) != REFRAMEWORK_ERROR_NONE) {
+        return out;
+    }
     for (unsigned i = 0; i < count; ++i) {
         if (!sdk().field->is_literal(fields[i]) || !sdk().field->is_static(fields[i])) continue;
         const auto* value = static_cast<const int32_t*>(sdk().field->get_init_data(fields[i]));

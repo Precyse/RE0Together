@@ -12,7 +12,6 @@
 namespace {
 
 constexpr const char* kSaveService = "via.storage.saveService.SaveService";
-constexpr const wchar_t* kSaveFolder = L"\\win64_save";  // the game's folder under its mount (games/dd2.json)
 
 std::wstring g_mount;
 bool g_pending = false;
@@ -44,8 +43,8 @@ bool apply() {
     if (!path || !refw::invoke(calls::method(calls::kSetSaveMountPath), service, {path})) return false;
     const std::wstring dir = pathOf(calls::kGetSaveDirectoryPath, service), mount = pathOf(calls::kGetSaveMountPath, service);
     logPaths("after", dir, mount);
-    g_verified = samePath(mount, g_mount) && samePath(dir, g_mount + kSaveFolder);
-    if (!g_verified) logger::write("save_paths: REFUSED, the paths read back are not %s", text::utf8(g_mount).c_str());
+    g_verified = samePath(mount, g_mount);  // the directory reads back as a slot pattern, not a path
+    if (!g_verified) logger::write("save_paths: REFUSED, the mount read back is not %s", text::utf8(g_mount).c_str());
     return true;
 }
 
