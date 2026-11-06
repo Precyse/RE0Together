@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Steamworks;
 
 namespace CoopLauncher;
@@ -32,6 +33,9 @@ public sealed class SteamBootstrap : IDisposable
         });
         _shutdown = Callback<SteamShutdown_t>.Create(_ => Lost = true);
         SteamNetworkingUtils.InitRelayNetworkAccess();
+        // Peers talk through Steam's relays only: the direct NAT route (ICE) failed between some players' networks (session
+        // end 5008 then timeouts 5003, no frame either way), the relays work whatever the routers do.
+        RelaysOnly();
         Log.Info($"Steam ready as {SteamFriends.GetPersonaName()} ({SteamUser.GetSteamID().m_SteamID})");
     }
 
@@ -42,6 +46,23 @@ public sealed class SteamBootstrap : IDisposable
     public bool Lost { get; private set; }
 
     public uint AccountId => SteamUser.GetSteamID().GetAccountID().m_AccountID;
+
+    /// <summary>Sets the global networking config so peers reach each other through Steam's relays only (no direct ICE route).</summary>
+    private static void RelaysOnly()
+    {
+        var value = GCHandle.Alloc(Constants.k_nSteamNetworkingConfig_P2P_Transport_ICE_Enable_Disable, GCHandleType.Pinned);
+        try
+        {
+            var set = SteamNetworkingUtils.SetConfigValue(ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_P2P_Transport_ICE_Enable,
+                ESteamNetworkingConfigScope.k_ESteamNetworkingConfig_Global, IntPtr.Zero, ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
+                value.AddrOfPinnedObject());
+            if (!set) Log.Info("Steam refused the relay-only setting, the direct route stays allowed");
+        }
+        finally
+        {
+            value.Free();
+        }
+    }
 
     public void Pump()
     {
