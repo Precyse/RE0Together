@@ -25,7 +25,8 @@ constexpr const char* kGameSaveDataType = "app.SaveDataManager.GameSaveData";
 constexpr const wchar_t* kGameDataClass = L"GAME_SAVE_DATA";  // the SaveService's name for a game save's root class
 constexpr uint32_t kGameSaveDataList = 0x10;                   // GameSaveData.GameSaveDataList, List<app.SaveDataBase>
 constexpr uint64_t kTimeoutMs = 60000;
-constexpr uint64_t kTitleSettleMs = 3000;  // the title menu shown this long with the SaveService idle: the game's own loads are done
+constexpr uint64_t kTitleSettleMs = 3000;
+constexpr uint64_t kSectionsWaitMs = 10000;  // how long the root's list may take to fill after the load succeeded  // the title menu shown this long with the SaveService idle: the game's own loads are done
 constexpr const char* kMainFlowManager = "app.MainFlowManager";
 constexpr const wchar_t* kResultFile = L"\\capture.result";
 
@@ -34,7 +35,8 @@ enum class Step { Off, Waiting, Loading, Done };
 Step g_step = Step::Off;
 int g_slot = -1;
 uint64_t g_startMs = 0;
-uint64_t g_titleSinceMs = 0;  // when the title menu was first seen idle; 0 while it is not
+uint64_t g_titleSinceMs = 0;
+uint64_t g_loadedMs = 0;  // when the load reported success; 0 before  // when the title menu was first seen idle; 0 while it is not
 void* g_root = nullptr;  // the scratch GameSaveData, one reference of ours
 std::optional<int64_t> g_idle, g_success, g_doing;
 
@@ -59,18 +61,25 @@ void finish(void* service, const std::string& outcome) {
     g_step = Step::Done;
 }
 
-// The loaded root's two sections the character is read from; null when the list lacks one.
-std::pair<void*, void*> sections() {
-    void* list = refw::field<void*>(g_root, kGameSaveDataList);
+struct Sections {
     void* contexts = nullptr;
     void* items = nullptr;
-    const size_t count = list ? save_sections::count(calls::kSaveDataListCount, list) : 0;
-    for (size_t i = 0; i < count; ++i) {
+    size_t count = 0;    // sections in the root's list
+    std::string types;   // their runtime types, for the log when the two are not among them
+};
+
+// The loaded root's two sections the character is read from (the list fills in after the load reports success).
+Sections sections() {
+    Sections out;
+    void* list = refw::field<void*>(g_root, kGameSaveDataList);
+    out.count = list ? save_sections::count(calls::kSaveDataListCount, list) : 0;
+    for (size_t i = 0; i < out.count; ++i) {
         void* section = save_sections::item(calls::kSaveDataListItem, list, i);
-        if (save_sections::isType(section, save_sections::kContextSection)) contexts = section;
-        if (save_sections::isType(section, save_sections::kItemSection)) items = section;
+        if (save_sections::isType(section, save_sections::kContextSection)) out.contexts = section;
+        if (save_sections::isType(section, save_sections::kItemSection)) out.items = section;
+        out.types += (out.types.empty() ? "" : ", ") + refw::typeNameOf(section);
     }
-    return {contexts, items};
+    return out;
 }
 
 void startLoad(void* service) {
@@ -87,13 +96,19 @@ void startLoad(void* service) {
     g_step = Step::Loading;
 }
 
-void readLoaded(void* service) {
+// Once the load succeeded, waits for the root's list to hold both sections (kSectionsWaitMs), then captures.
+void readLoaded(void* service, uint64_t nowMs) {
     const int64_t result = dword(calls::kGetLastSaveResult, service);
     if (result == *g_doing) return;
     if (result != *g_success) return finish(service, "failed: the save did not load (result " + std::to_string(result) + ")");
-    const auto [contexts, items] = sections();
-    if (!contexts || !items) return finish(service, "failed: the save holds no character");
-    if (!profile::captureFrom(contexts, items)) return finish(service, "failed: the character could not be read from the save");
+    if (!g_loadedMs) g_loadedMs = nowMs;
+    const Sections found = sections();
+    if (!found.contexts || !found.items) {
+        if (nowMs - g_loadedMs < kSectionsWaitMs) return;
+        logger::write("capture: %zu sections after the load: %s", found.count, found.types.c_str());
+        return finish(service, "failed: the save holds no character (" + std::to_string(found.count) + " sections loaded)");
+    }
+    if (!profile::captureFrom(found.contexts, found.items)) return finish(service, "failed: the character could not be read from the save");
     finish(service, "ok");
 }
 
@@ -130,7 +145,7 @@ void tick(uint64_t nowMs) {
         if (!g_titleSinceMs) g_titleSinceMs = nowMs;
         if (nowMs - g_titleSinceMs >= kTitleSettleMs) startLoad(service);
     } else if (g_step == Step::Loading) {
-        readLoaded(service);
+        readLoaded(service, nowMs);
     }
 }
 

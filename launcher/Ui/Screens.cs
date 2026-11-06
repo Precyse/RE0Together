@@ -61,7 +61,7 @@ internal static class Screens
     /// <summary>A guest that has not been refused and is through its join steps (build check, save): it waits for the host and
     /// stays through the launch on the hosting screen.</summary>
     private static bool JoinedWaiting(AppStatus status) =>
-        status.Refusal == null && status.Step is SessionStep.Ready or SessionStep.StartingGame;
+        status.Refusal == null && status.Step is SessionStep.Ready or SessionStep.ReadingCharacter or SessionStep.StartingGame;
 
     private static bool RefusedJoin(AppStatus status, Intent intent, JoinTarget? target) =>
         intent == Intent.Join && target != null && status.Refusal is { LobbyId: not 0 } refusal && refusal.LobbyId == target.LobbyId;

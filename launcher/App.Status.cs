@@ -55,7 +55,7 @@ public sealed partial class App
             LobbyReady: _lobby is { IsReady: true }, SessionStarted: _sessionStarted, Refused: _refusal != null && _lobby != null,
             BuildCheckPending: _buildCheck is { Ready: false }, SaveSyncPending: _saveSync is { Ready: false }, LaunchPending: _launchPending,
             Bridged: _bridge != null, BridgeReady: _bridge?.IsReady == true, BridgeWasReady: _bridgeWasReady,
-            StartHeld: _launchPending && StartGateClosed()));
+            StartHeld: _launchPending && StartGateClosed(), ReadingCharacter: _capture is { View.State: CaptureState.Running }));
         return (step, _saveMeter.Percent);
     }
 

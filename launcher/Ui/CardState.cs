@@ -27,7 +27,7 @@ public static class CardStates
     public static CardState OfStep(SessionStep step) => step switch
     {
         SessionStep.Refused or SessionStep.GameClosed => CardState.Problem,
-        SessionStep.CheckingBuild or SessionStep.ReceivingSave or SessionStep.StartingGame => CardState.Progress,
+        SessionStep.CheckingBuild or SessionStep.ReceivingSave or SessionStep.ReadingCharacter or SessionStep.StartingGame => CardState.Progress,
         SessionStep.InGame => CardState.InGame,
         _ => CardState.Idle,
     };
@@ -45,6 +45,7 @@ public static class CardStates
             SessionStep.Ready => "Ready",
             SessionStep.CheckingBuild => "Checking build",
             SessionStep.ReceivingSave => "Receiving save",
+            SessionStep.ReadingCharacter => "Reading character",
             SessionStep.StartingGame => "Starting game",
             SessionStep.InGame => "In game",
             SessionStep.GameClosed => "Game closed",

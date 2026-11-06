@@ -4,12 +4,12 @@ namespace CoopLauncher;
 
 /// <summary>Where one player is in getting a session going; published to the lobby so everyone can show it. Ready: everything
 /// is prepared and the launch waits for the start gate (<see cref="StartGate"/>).</summary>
-public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused, Ready }
+public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused, Ready, ReadingCharacter }
 
 /// <summary>What the step depends on, read from the loop's state.</summary>
 public sealed record StepInputs(
     bool LobbyReady, bool SessionStarted, bool Refused, bool BuildCheckPending, bool SaveSyncPending, bool LaunchPending,
-    bool Bridged, bool BridgeReady, bool BridgeWasReady, bool StartHeld = false);
+    bool Bridged, bool BridgeReady, bool BridgeWasReady, bool StartHeld = false, bool ReadingCharacter = false);
 
 public static class SessionProgress
 {
@@ -25,6 +25,7 @@ public static class SessionProgress
         if (!inputs.SessionStarted) return SessionStep.Lobby;
         if (inputs.BuildCheckPending) return SessionStep.CheckingBuild;
         if (inputs.SaveSyncPending) return SessionStep.ReceivingSave;
+        if (inputs.LaunchPending && inputs.ReadingCharacter) return SessionStep.ReadingCharacter;
         if (inputs.LaunchPending && inputs.StartHeld) return SessionStep.Ready;
         if (inputs.LaunchPending) return SessionStep.StartingGame;
         if (!inputs.Bridged) return SessionStep.InGame;

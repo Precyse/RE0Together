@@ -145,7 +145,7 @@ internal static partial class SessionScreens
     {
         SessionStep.CheckingBuild => JoinStep.BuildCheck,
         SessionStep.ReceivingSave => JoinStep.ReceivingSave,
-        SessionStep.Ready => JoinStep.Waiting,
+        SessionStep.Ready or SessionStep.ReadingCharacter => JoinStep.Waiting,
         SessionStep.StartingGame => JoinStep.Starting,
         SessionStep.InGame or SessionStep.GameClosed => JoinStep.InGame,
         _ => JoinStep.Lobby,
