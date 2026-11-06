@@ -13,6 +13,7 @@
 #include "../src/profile_rule.h"
 #include "../src/save_folders.h"
 #include "../src/session_rule.h"
+#include "../src/title_load_rule.h"
 #include "../src/title_menu_rule.h"
 #include "../src/wire_dd2.h"
 #include "../src/world_gate_rule.h"
@@ -262,13 +263,13 @@ void profileTests() {
 void gameStateTests() {
     using namespace game_state_rule;
     Report report;
-    check(format(report) == "place=title;char=off;save=off;slot=-1;peers=", "GAME_STATE of a fresh solo game");
+    check(format(report) == "place=title;char=off;save=off;slot=-1;load=none;peers=", "GAME_STATE of a fresh solo game");
     report.place = Place::World;
     report.character = Char::Mismatch;
     report.save = Save::Ok;
     report.slot = 3;
     report.peers = {{76561198000000001ULL, false}, {76561198000000002ULL, true}};
-    check(format(report) == "place=world;char=mismatch;save=ok;slot=3;peers=76561198000000001:0,76561198000000002:1",
+    check(format(report) == "place=world;char=mismatch;save=ok;slot=3;load=none;peers=76561198000000001:0,76561198000000002:1",
           "GAME_STATE with a character problem, a slot and a live and a stale peer");
     check(placeOf(world_gate_rule::Place::Travel) == Place::Loading && placeOf(world_gate_rule::Place::Cutscene) == Place::World &&
               placeOf(world_gate_rule::Place::Title) == Place::Title,
@@ -285,6 +286,13 @@ void gameStateTests() {
           "problems: character, save and the host's slot, in order");
     bad.slot = 5;
     check(problems(bad, 5).size() == 2, "the host's slot loaded: no slot line");
+    bad.load = Load::Failed;
+    const auto withLoad = problems(bad, 5);
+    check(withLoad.size() == 3 && withLoad[2] == "The session's save did not load", "a load given up adds its line after the save line");
+    report.load = Load::Failed;
+    check(format(report).find(";load=failed;") != std::string::npos, "GAME_STATE carries load=failed");
+    report.load = Load::Ok;
+    check(format(report).find(";load=ok;") != std::string::npos, "GAME_STATE carries load=ok");
     Report title;
     check(problems(title, 4).size() == 1 && problems(title, kSlotUnknown).empty(), "at the title before a load the guest is told the host's slot");
     Report world;
@@ -321,13 +329,6 @@ void loadSlotRuleTests() {
 
 void titleMenuRuleTests() {
     using namespace title_menu_rule;
-    const Menu ready{true, true, true};
-    check(waiting(ready) && !waiting({false, true, true}) && !waiting({true, false, true}) && !waiting({true, true, false}),
-          "the menu waits only in SelectMenu with the SaveService idle and the redirect safe");
-    check(!settled(0, 99999) && !settled(1000, 1000 + kSettleMs - 1) && settled(1000, 1000 + kSettleMs), "Continue is pressed after the settle time");
-    const int32_t rows[] = {13, 0, 2, 8};
-    check(rowOf(rows, 13) == 0 && rowOf(rows, 2) == 2 && rowOf(rows, 7) == -1 && rowOf({}, 13) == -1 && rowOf(rows, kUnknownLiteral) == -1,
-          "the first row of an item type, or none");
     check(blocksNewGame(true, 0, 0, 1) && blocksNewGame(true, 1, 0, 1), "a guest may not choose the New Game rows");
     check(!blocksNewGame(false, 0, 0, 1), "a host may");
     check(!blocksNewGame(true, 13, 0, 1) && !blocksNewGame(true, 2, 0, 1), "a guest's Continue and Load rows run");
@@ -335,9 +336,70 @@ void titleMenuRuleTests() {
           "nothing is refused when a literal or the row is unknown");
 }
 
+void titleLoadRuleTests() {
+    using namespace title_load_rule;
+    const Title idle{true, true, true, true};
+    check(ready(idle) && !ready({false, true, true, true}) && !ready({true, false, true, true}) && !ready({true, true, false, true}) &&
+              !ready({true, true, true, false}),
+          "the title is ready only in TitleMenu with the GUI waiting, the SaveService idle and the redirect safe");
+    check(classify("TitleMenu") == Phase::Title && classify("RequestLoad") == Phase::Loaded && classify("RequestLoadDataError") == Phase::Error &&
+              classify("LoadDataError") == Phase::Error && classify("LoadDataError0014") == Phase::Error && classify("InGame") == Phase::Other &&
+              classify("RequestLoadData") == Phase::Other && classify("") == Phase::Other,
+          "phases by name: title, loaded, load errors, the rest");
+
+    Loader waits;
+    check(waits.step(1000, true, Phase::Title) == Action::None && waits.step(1000 + kSettleMs - 1, true, Phase::Title) == Action::None,
+          "no request before the title has been ready for the settle time");
+    check(waits.step(1000 + kSettleMs - 1, false, Phase::Title) == Action::None && waits.step(1000 + kSettleMs, true, Phase::Title) == Action::None,
+          "a title that stops being ready starts the settle time again");
+    check(waits.step(1000 + 2 * kSettleMs, true, Phase::Title) == Action::Request && waits.tries() == 1, "ready for the settle time: one request");
+    check(waits.step(1000 + 2 * kSettleMs + 1, true, Phase::Title) == Action::None && waits.tries() == 1, "the request is made once");
+
+    Loader through;
+    through.step(0, true, Phase::Title);
+    check(through.step(kSettleMs, true, Phase::Title) == Action::Request, "a request");
+    check(through.step(kSettleMs + 1, true, Phase::Other) == Action::None && through.step(kSettleMs + kSurviveMs - 1, true, Phase::Other) == Action::None,
+          "past the title but not yet for the survive time: still loading");
+    check(through.step(kSettleMs + kSurviveMs + 1, true, Phase::Other) == Action::Succeeded && through.finished(), "past the title for the survive time: the load went through");
+    check(through.step(kSettleMs + 99999, true, Phase::Title) == Action::None, "nothing more after success");
+
+    Loader loaded;
+    loaded.step(0, true, Phase::Title);
+    loaded.step(kSettleMs, true, Phase::Title);
+    check(loaded.step(kSettleMs + 1, true, Phase::Loaded) == Action::Succeeded, "the RequestLoad phase is success at once");
+
+    Loader retry;
+    retry.step(0, true, Phase::Title);
+    retry.step(kSettleMs, true, Phase::Title);
+    check(retry.step(kSettleMs + 10, true, Phase::Error) == Action::None && !retry.finished(), "an error phase fails the try; another follows");
+    check(retry.step(kSettleMs + 20, true, Phase::Title) == Action::None, "after the error the title must be ready for the settle time again");
+    check(retry.step(2 * kSettleMs + 20, true, Phase::Title) == Action::Request && retry.tries() == 2, "the second try");
+    check(retry.step(2 * kSettleMs + 20 + kTitleStallMs - 1, true, Phase::Title) == Action::None, "still at the title but within the stall time: waiting");
+    check(retry.step(2 * kSettleMs + 20 + kTitleStallMs, true, Phase::Title) == Action::None, "still at the title after the stall time: this try failed");
+    const uint64_t third = 2 * kSettleMs + 20 + kTitleStallMs;
+    retry.step(third + 1, true, Phase::Title);
+    check(retry.step(third + 1 + kSettleMs, true, Phase::Title) == Action::Request && retry.tries() == kMaxTries, "the last try");
+    check(retry.step(third + 1 + kSettleMs + 5, true, Phase::Error) == Action::GaveUp && retry.finished(), "the last try failing gives up");
+    check(retry.step(third + 99999, true, Phase::Title) == Action::None, "nothing more after giving up");
+
+    Loader refused;
+    refused.step(0, true, Phase::Title);
+    refused.step(kSettleMs, true, Phase::Title);
+    check(refused.refused() == Action::None && !refused.finished(), "a refused request is a failed try");
+
+    Loader flicker;
+    flicker.step(0, true, Phase::Title);
+    flicker.step(kSettleMs, true, Phase::Title);
+    flicker.step(kSettleMs + 1, true, Phase::Other);
+    flicker.step(kSettleMs + 2000, true, Phase::Title);
+    check(flicker.step(kSettleMs + 2001 + kSurviveMs - 1, true, Phase::Other) == Action::None,
+          "a phase back at the title restarts the survive time");
+}
+
 int main() {
     loadSlotRuleTests();
     titleMenuRuleTests();
+    titleLoadRuleTests();
     gameStateTests();
     sessionRuleTests();
     rosterTests();

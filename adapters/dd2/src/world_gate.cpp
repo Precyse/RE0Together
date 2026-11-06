@@ -119,6 +119,11 @@ world_gate_rule::Place place() {
     return g_gate.place();
 }
 
+std::string phase() {
+    std::lock_guard lock(g_mutex);
+    return std::string(g_gate.phase());
+}
+
 uint16_t loadSerial() {
     std::lock_guard lock(g_mutex);
     return g_gate.loadSerial();

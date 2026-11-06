@@ -27,6 +27,7 @@
 #include "save_redirect.h"
 #include "session.h"
 #include "support_pawns.h"
+#include "title_load.h"
 #include "world_clock.h"
 #include "world_gate.h"
 
@@ -58,6 +59,7 @@ void runSteps() {
         game_state::tick(nowMs);
         overlay::tick(nowMs);
         offline_capture::tick(nowMs);
+        title_load::tick(nowMs);
         plague_off::tick(nowMs);
         roster::tick(nowMs);
         offline::tick(nowMs);

@@ -1,7 +1,7 @@
 #pragma once
 // What the plugin tells its own launcher about this game (GAME_STATE, adapters/re0/src/protocol.h kGameState) and the
 // problem lines the overlay shows (pure, unit tested). Text, one line of `key=value` pairs joined by ';':
-//   place=title|loading|world;char=ok|none|mismatch|refused|off;save=ok|refused|off;slot=<int>;peers=<steamid>:<0 live|1 stale>,...
+//   place=title|loading|world;char=ok|none|mismatch|refused|off;save=ok|refused|off;slot=<int>;load=none|ok|failed;peers=<steamid>:<0 live|1 stale>,...
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -21,6 +21,9 @@ enum class Char : uint8_t { Off, Ok, None, Mismatch, Refused };
 // The save redirect: off (no other save folder expected), ok (verified), refused (expected, not verified).
 enum class Save : uint8_t { Off, Ok, Refused };
 
+// The plugin's own load of the session's save at the title (title_load.h): none (not done, or not asked for), ok, failed (given up).
+enum class Load : uint8_t { None, Ok, Failed };
+
 constexpr int kSlotUnknown = -1;
 
 struct Peer {
@@ -33,6 +36,7 @@ struct Report {
     Char character = Char::Off;
     Save save = Save::Off;
     int slot = kSlotUnknown;
+    Load load = Load::None;
     std::vector<Peer> peers;
 };
 
@@ -72,9 +76,17 @@ inline const char* name(Save save) {
     }
 }
 
+inline const char* name(Load load) {
+    switch (load) {
+        case Load::Ok: return "ok";
+        case Load::Failed: return "failed";
+        default: return "none";
+    }
+}
+
 inline std::string format(const Report& report) {
     std::string out = std::string("place=") + name(report.place) + ";char=" + name(report.character) + ";save=" + name(report.save) +
-                      ";slot=" + std::to_string(report.slot) + ";peers=";
+                      ";slot=" + std::to_string(report.slot) + ";load=" + name(report.load) + ";peers=";
     for (size_t i = 0; i < report.peers.size(); ++i) {
         out += (i ? "," : "") + std::to_string(report.peers[i].steamId) + (report.peers[i].stale ? ":1" : ":0");
     }
@@ -108,6 +120,7 @@ inline std::vector<std::string> problems(const Report& report, int hostSlot) {
     std::vector<std::string> out;
     if (const char* why = characterProblem(report.character)) out.push_back(std::string("Your character could not be loaded: ") + why);
     if (report.save == Save::Refused) out.push_back("Save not protected: quit to the title");
+    if (report.load == Load::Failed) out.push_back("The session's save did not load");
     const bool notLoadedYet = report.slot == kSlotUnknown && report.place == Place::Title;
     if (hostSlot != kSlotUnknown && (notLoadedYet || (report.slot != kSlotUnknown && report.slot != hostSlot))) {
         out.push_back("Load slot " + std::to_string(hostSlot) + " like the host");

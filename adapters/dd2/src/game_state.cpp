@@ -8,6 +8,7 @@
 #include "protocol.h"
 #include "save_redirect.h"
 #include "session.h"
+#include "title_load.h"
 #include "world_gate.h"
 
 namespace {
@@ -42,6 +43,7 @@ std::optional<Report> current() {
     report.character = profile::spliceState();
     report.save = *save;
     report.slot = load_slot::current();
+    report.load = title_load::result();
     for (const session::PeerView& peer : session::peers()) report.peers.push_back({peer.steamId, peer.stale});
     return report;
 }

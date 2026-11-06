@@ -105,11 +105,12 @@ constexpr const char* kLoadSlot = "load_slot";
 constexpr MethodRow kRequestLoad{"request_load", "app.SaveDataManager", "requestLoad",
                                  "System.Int32,app.SaveDataManager.SaveLoadRequestArgs,System.UInt32[]", 0x145c92980, 1, kLoadSlot};
 
-// The title-menu set (src/title_menu.h): the title menu GUI (app.ui030201) every frame it is up, and its list selection (the one
-// place a row of the menu is chosen: Continue, Load Game, New Game ...).
+// The title sets (src/title_load.h, src/title_menu.h). title_load only watches the title GUI (app.ui030201) every frame it is up;
+// title_menu guards its list selection (the one place a row of the menu is chosen: Continue, Load Game, New Game ...).
+constexpr const char* kTitleLoad = "title_load";
 constexpr const char* kTitleMenu = "title_menu";
 
-constexpr MethodRow kTitleUpdate{"title_update", "app.ui030201", "update", "", 0x145050fe0, 1, kTitleMenu};
+constexpr MethodRow kTitleUpdate{"title_update", "app.ui030201", "update", "", 0x145050fe0, 1, kTitleLoad};
 constexpr MethodRow kTitleSelectList{"title_select_list", "app.ui030201", "onSelectList", "", 0x146089cd0, 1, kTitleMenu};
 
 constexpr std::array<MethodRow, 36> kAll{kChangeFlowPhase, kChangeSceneType, kCompleteSceneLoad, kFerrystoneLoad, kReadyCharacter,

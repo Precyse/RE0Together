@@ -36,6 +36,9 @@ class Gate {
 public:
     uint16_t loadSerial() const { return serial_; }
 
+    // The newest MainFlowManager phase by name; empty before the first change. `phase` of phaseChanged must outlive the gate.
+    std::string_view phase() const { return phase_; }
+
     Place place() const {
         if (title_) return Place::Title;
         if (travelling_) return Place::Travel;
@@ -49,6 +52,7 @@ public:
     // MainFlowManager.changeFlowPhase, after the change.
     Cause phaseChanged(std::string_view phase) {
         const bool wasInGame = inGame_;
+        phase_ = phase;
         title_ = contains(kTitlePhases, phase);
         inGame_ = phase == kInGame;
         if (!inGame_ || wasInGame) return Cause::None;
@@ -90,6 +94,7 @@ private:
     bool title_ = true;
     bool inGame_ = false;
     bool travelling_ = false;
+    std::string_view phase_;
     std::string_view scene_;
 };
 

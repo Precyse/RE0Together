@@ -12,8 +12,8 @@ struct Config {
     std::string campaign;     // a host's campaign id: its world in coop\campaigns\<id> (src/save_folders.h); empty: its own save
     std::string arisen;       // a guest's character: the campaign id whose character it brings; empty: its own save's
     int loadSlot = -1;        // a guest's forced save slot, the host's (load_slot=<n>; src/load_slot_rule.h); -1: none
-    bool autoLoad = false;    // at the idle title menu the game's own Continue is pressed once (src/title_menu.h): on for a co-op
-                              // guest with a forced slot, auto_load=0|1 overrides
+    bool autoLoad = false;    // at the idle title the game's own load is called once (src/title_load.h): on for a co-op guest with
+                              // a forced slot, auto_load=0|1 overrides
     int captureSlot = -1;     // a capture launch (capture=<slot>): read that save slot's character at the title (src/offline_capture.h)
 };
 

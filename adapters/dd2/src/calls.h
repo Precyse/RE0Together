@@ -94,11 +94,8 @@ enum Id : uint8_t {
     kGetEnemyChara,
     kGetMonsterChara,
     kGetPartyPawn,
-    kTitleSelectListCall,
-    kTitleListCount,
-    kTitleListInfo,
     kTitleListSelected,
-    kTitleListSelect,
+    kRequestStartType,
     kCount
 };
 
@@ -244,17 +241,11 @@ constexpr std::array<Row, kCount> kRows{{
     {kGetMonsterChara, "app.Monster", "get_Chara", "", 0x1464a74b0, Feature::Body},
     // The Pawn in a party seat (PawnID SubPawn01 or SubPawn02: the hired support pawns), null when the seat is empty.
     {kGetPartyPawn, "app.PawnManager", "getPartyPawn", "app.PawnManager.PawnID,System.Boolean", 0x1408d7f70, Feature::Puppet},
-    // The title menu (src/title_menu.h): the GUI's own selection handler, and its list (a ScrollCtrlBase of ListItem / ListInfo;
-    // the accessors are shared bodies, fine to call): row count, row by index, the selected row, selecting a row by index.
-    {kTitleSelectListCall, "app.ui030201", "onSelectList", "", 0x146089cd0, Feature::Title},
-    {kTitleListCount, "app.GUIBase.ScrollCtrlBase`2<app.ui030201.ListItem,app.ui030201.ListInfo>", "get_ListCount", "", 0x14640f420,
-     Feature::Title},
-    {kTitleListInfo, "app.GUIBase.ScrollCtrlBase`2<app.ui030201.ListItem,app.ui030201.ListInfo>", "getInfo", "System.Int32",
-     0x1409ce700, Feature::Title},
+    // The title (src/title_menu.h, src/title_load.h): the menu list's selected row (a ScrollCtrlBase of ListItem / ListInfo, a shared
+    // body, fine to call), and the game's own load: MainFlowManager.requestStartType(StartType), the tail of the menu's Continue.
     {kTitleListSelected, "app.GUIBase.ScrollCtrlBase`2<app.ui030201.ListItem,app.ui030201.ListInfo>", "get_SelectedInfo", "",
      0x14640f3d0, Feature::Title},
-    {kTitleListSelect, "app.GUIBase.ScrollCtrlBase`2<app.ui030201.ListItem,app.ui030201.ListInfo>", "setSelect",
-     "System.Int32,System.Boolean", 0x1486b2140, Feature::Title},
+    {kRequestStartType, "app.MainFlowManager", "requestStartType", "app.MainFlowManager.StartType", 0x145b3cc60, Feature::Title},
 }};
 
 // kRows is indexed by Id.
