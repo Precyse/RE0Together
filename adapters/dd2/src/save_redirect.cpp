@@ -13,11 +13,14 @@ namespace {
 
 constexpr const char* kSaveService = "via.storage.saveService.SaveService";
 
+constexpr uint64_t kGuardPeriodMs = 2000;  // how often a set redirect is checked against the game resetting it
 constexpr bool kFileSystem = true;  // set_ForceWindows: the Windows file system instead of the Steam cloud
 
 std::wstring g_mount;
 bool g_pending = false;
 bool g_verified = false;
+uint64_t g_lastGuardMs = 0;
+uint32_t g_resets = 0;
 
 std::wstring pathOf(calls::Id getter, void* service) {
     const refw::InvokeResult* result = refw::invoke(calls::method(getter), service);
@@ -57,17 +60,34 @@ bool apply() {
     return true;
 }
 
+// True when the game put the SaveService back on another mount or off the file system since we set it.
+bool resetByGame() {
+    void* service = refw::nativeSingleton(kSaveService);
+    if (!service) return false;
+    const refw::InvokeResult* windows = refw::invoke(calls::method(calls::kGetForceWindows), service);
+    const bool fileSystem = windows && windows->byte != 0;
+    const std::wstring mount = pathOf(calls::kGetSaveMountPath, service);
+    if (fileSystem && samePath(mount, g_mount)) return false;
+    logger::write("save_paths: the game set mount=%s ForceWindows=%d (reset %u), setting the redirect again", text::utf8(mount).c_str(),
+                  fileSystem, ++g_resets);
+    return true;
+}
+
 }  // namespace
 
 namespace save_redirect {
 
 void enable(const std::wstring& mount) {
     g_mount = mount;
-    g_pending = true;
-    tick();
+    g_pending = !apply();
 }
 
-void tick() {
+void tick(uint64_t nowMs) {
+    if (g_mount.empty()) return;
+    if (!g_pending && g_verified && nowMs - g_lastGuardMs >= kGuardPeriodMs) {
+        g_lastGuardMs = nowMs;
+        g_pending = resetByGame();
+    }
     if (g_pending && apply()) g_pending = false;
 }
 

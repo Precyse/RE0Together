@@ -11,9 +11,10 @@ namespace save_redirect {
 // Turns the redirect to `mount` on; tried at once and then from the tick until the SaveService exists.
 void enable(const std::wstring& mount);
 
-// Game thread: sets the mount once; logs `save_paths: dir=.. mount=..` before and after, and REFUSED when the paths
+// Game thread, every step: sets the mount once the SaveService exists, then every 2 s sets it again if the game reset it
+// (logged with a count); logs `save_paths: dir=.. mount=..` before and after, and REFUSED when the paths
 // read back is not the folder asked for.
-void tick();
+void tick(uint64_t nowMs);
 
 // The redirect was set and verified.
 bool verified();

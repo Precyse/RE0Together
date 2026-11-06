@@ -45,7 +45,7 @@ void runSteps() {
     if (!g_nextStepMs) g_nextStepMs = nowMs;
     int steps = 0;
     while (nowMs >= g_nextStepMs && steps < kMaxCatchUpSteps) {
-        save_redirect::tick();
+        save_redirect::tick(nowMs);
         session::tick(nowMs);
         profile::tick(nowMs);
         plague_off::tick(nowMs);
