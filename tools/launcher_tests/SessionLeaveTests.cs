@@ -36,6 +36,7 @@ internal sealed class ScriptedTransport(ulong localId) : ITransport
 internal sealed class ScriptedLobby(ulong ownerId, params ulong[] members) : ILobby
 {
     private IReadOnlyList<LobbyMember> _members = members.Select(id => new LobbyMember(id, $"Player {id}")).ToList();
+    private readonly Dictionary<ulong, string> _steps = new();
 
     public bool IsReady => true;
 
@@ -71,7 +72,9 @@ internal sealed class ScriptedLobby(ulong ownerId, params ulong[] members) : ILo
     {
     }
 
-    public string MemberData(LobbyMember member, MemberKey key) => string.Empty;
+    public void SetStep(ulong id, SessionStep step) => _steps[id] = StepCodec.Encode(new StepReport(step));
+
+    public string MemberData(LobbyMember member, MemberKey key) => key == MemberKey.Step ? _steps.GetValueOrDefault(member.Id, string.Empty) : string.Empty;
 
     public void Pump()
     {

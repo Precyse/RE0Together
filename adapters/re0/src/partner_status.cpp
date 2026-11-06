@@ -10,6 +10,7 @@ namespace {
 
 constexpr const char kSeparator[] = " / ";
 constexpr size_t kRoomTextCapacity = 16;
+constexpr const char kConnectionLostText[] = "Connection lost";
 
 // The room's name, or its scene id for a room with no known name.
 std::string roomText(const Input& input) {
@@ -37,6 +38,10 @@ Condition condition(int hp, int maxHp) {
 Tag tag(const Input& input) {
     Tag out;
     out.name = input.name.substr(0, kNameChars);
+    if (input.connectionLost) {
+        out.detail = kConnectionLostText;
+        return out;
+    }
     if (input.hasState) {
         out.hasCondition = true;
         out.condition = condition(input.hp, input.maxHp);

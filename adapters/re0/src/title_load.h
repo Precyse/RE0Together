@@ -2,6 +2,7 @@
 #include <cstdint>
 
 #include "coop_menu_rule.h"
+#include "game_state_report_rule.h"
 #include "save_load_rule.h"
 
 // The session load from the title (docs/RE0_NOTES.md "Forced save load"): the host's Start on the Co-op page loads the
@@ -31,5 +32,8 @@ bool busy();
 // The host used Start this session, so a guest's title follows the host's starts (auto_join leaves the title alone).
 // Any thread.
 bool followsHost();
+
+// How the last forced load went (GAME_STATE load=): none until one is tried, reset when the next starts. Any thread.
+game_state_report_rule::Load loadResult();
 
 }  // namespace title_load

@@ -23,6 +23,10 @@ struct PlayerState {
 };
 static_assert(sizeof(PlayerState) == 44);
 
+// Net thread: milliseconds since the last frame of any type from the peer in `slot` (since it appeared when none came yet);
+// 0 for a slot that is not a peer.
+uint32_t silenceMs(uint8_t slot);
+
 // Starts the net client and, at 30 Hz on its thread, broadcasts the state of the character the local player owns.
 void start(NetClient& net, uint16_t port);
 

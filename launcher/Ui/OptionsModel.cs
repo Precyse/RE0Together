@@ -32,7 +32,7 @@ internal static class OptionsModel
         if (SessionProgress.SelectionLocked(step) || (isHost && worldCommitted)) return [];
         var source = isHost ? OptionSources.Campaigns : OptionSources.Characters;
         var pickers = (game.Options ?? []).Where(option => option.Source == source).ToList();
-        if (isHost && OptionSources.SlotOption(game) is { } slot && GameOptions.Offered(game, slot, gameDir).Count() > slot.Values.Count) pickers.Add(slot);
+        if (isHost && OptionSources.SlotOption(game) is { } slot && OptionSources.HasChoices(game, slot, gameDir)) pickers.Add(slot);
         return pickers;
     }
 

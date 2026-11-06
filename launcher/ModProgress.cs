@@ -4,7 +4,8 @@ namespace CoopLauncher;
 public enum ModStep { Checking, BackingUp, Copying, Verifying, RemovingOld, Removing, Downloading, Installing, Done, Failed }
 
 /// <summary>One report of a run: the step, the percent of the whole run (0 to 100, 100 only for Done), the file being worked on
-/// out of the files of the step (0 of 0 when the step has no file count), and for Failed why.</summary>
+/// out of the files of the step (0 of 0 when the step has no file count), and why for Failed (or the note a step carries: what it did
+/// to a file that was not its own).</summary>
 public readonly record struct ModProgress(ModStep Step, int Percent, int File, int Files, string? Reason = null);
 
 /// <summary>The percent of a run. Each step owns a band of the whole; inside it the percent follows the bytes done, so a big file moves
@@ -49,9 +50,11 @@ public sealed class ProgressReporter(IProgress<ModProgress>? sink)
     private int _files;
     private int _file;
     private int _last;
+    private string? _note;
 
-    public void Begin(ModStep step, long totalBytes, int files)
+    public void Begin(ModStep step, long totalBytes, int files, string? note = null)
     {
+        _note = note;
         _step = step;
         _active = files > 0;
         _total = totalBytes;
@@ -84,7 +87,7 @@ public sealed class ProgressReporter(IProgress<ModProgress>? sink)
     private void Send(int percent)
     {
         _last = Math.Max(_last, percent);
-        sink?.Report(new ModProgress(_step, _last, _file, _files));
+        sink?.Report(new ModProgress(_step, _last, _file, _files, _note));
     }
 }
 

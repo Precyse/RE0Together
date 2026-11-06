@@ -36,6 +36,8 @@ public static class StatusText
         RefusalKind.SaveResignFailed => $"{(refusal.Detail.Length > 0 ? refusal.Detail : "A save file")} could not be converted to your Steam account",
         RefusalKind.FrameworkNotLoaded => $"{(refusal.Detail.Length > 0 ? refusal.Detail : "The mod loader")} did not load",
         RefusalKind.ModNotLoaded => "The co-op mod did not load",
+        RefusalKind.OtherCoopMod => $"Another co-op mod ({(refusal.Detail.Length > 0 ? refusal.Detail : "unknown")}) is installed",
+        RefusalKind.ModNotStarted => refusal.Detail.Length > 0 ? $"The co-op mod could not start: {refusal.Detail}" : "The co-op mod could not start",
         RefusalKind.SaveNotProtected => "The mod could not protect your save: quit to the title",
         _ => refusal.Kind.ToString(),
     };

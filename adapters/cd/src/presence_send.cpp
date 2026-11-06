@@ -186,6 +186,8 @@ std::optional<uint64_t> ownStampNow(uint64_t nowMs) {
 
 bool recipesMatch() { return g_moveSizeOk && g_actionSizeOk; }
 
+bool recipesDiffer() { return g_sizeMismatchLogged; }
+
 uint32_t ownUserKey() { return g_ownUser; }
 uint32_t ownPlayerKey() { return g_ownPlayer; }
 

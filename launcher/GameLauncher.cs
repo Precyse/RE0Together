@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using CoopLauncher.Gui;
 
@@ -17,6 +18,25 @@ public static class GameLauncher
         var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe));
         foreach (var process in processes) process.Dispose();
         return processes.Length > 0;
+    }
+
+    /// <summary>When the game's oldest running process started, null when no process runs or its start cannot be read.</summary>
+    public static DateTime? StartedAtUtc(GameProfile profile)
+    {
+        var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Exe));
+        try
+        {
+            return processes.Length == 0 ? null : processes.Min(process => process.StartTime.ToUniversalTime());
+        }
+        catch (Exception e) when (e is Win32Exception or InvalidOperationException)
+        {
+            Log.Info($"Could not read when {profile.Name} started: {e.Message}");
+            return null;
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
     }
 
     /// <summary>The game's process now; a window that does not answer (<see cref="Process.Responding"/>) is a hang.</summary>
@@ -76,7 +96,7 @@ public static class GameLauncher
             Process.Start(new ProcessStartInfo($"steam://rungameid/{profile.SteamAppId}") { UseShellExecute = true });
             return LaunchResult.Started;
         }
-        catch (System.ComponentModel.Win32Exception e)
+        catch (Win32Exception e)
         {
             Log.Info($"Could not start {profile.Name} through Steam: {e.Message}");
             return LaunchResult.SteamStartFailed;

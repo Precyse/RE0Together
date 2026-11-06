@@ -1,6 +1,6 @@
 { "id": "dd2", "name": "Dragon's Dogma 2", "steamAppId": 2054970, "exe": "DD2.exe",
   "maxPlayers": 3, "port": 27985, "supportedBuilds": [26256634],
-  "settingsAtBoot": true, "linkTimeoutMs": 90000, "frameworkLog": "re2_framework_log.txt",
+  "bootKeys": ["coop", "role", "port", "echo_puppet", "peer_puppet", "enemy_sync", "campaign", "arisen", "load_slot", "auto_load", "capture"], "linkTimeoutMs": 90000, "frameworkLog": "re2_framework_log.txt",
   "requires": [ { "file": "dinput8.dll", "name": "REFramework",
     "accept": [ "f5e3a2ed77dbc1bba84cb5934770a9554d431bb4a3772b11d70440f3299692fe" ],
     "install": { "urls": [ "https://github.com/praydog/REFramework-nightly/releases/download/nightly-01421-0352bbd57f4e527fe2810e927e66749281f9201e/REFramework.zip" ],
@@ -20,6 +20,7 @@
   "campaigns": { "dir": "coop/campaigns", "saveFolder": "win64_save", "characterFile": "profile.dd2p", "importDd2gether": true,
     "ownCharacter": "coop/profile/profile.dd2p" },
   "options": [ { "key": "campaign", "label": "Campaign", "source": "campaigns", "values": [ { "value": "", "label": "Your save" } ] },
-               { "key": "arisen", "label": "Character", "source": "characters", "values": [ { "value": "", "label": "Your Arisen" } ] } ],
+               { "key": "arisen", "label": "Character", "source": "characters", "values": [ { "value": "", "label": "Your Arisen" } ] },
+               { "key": "load_slot", "label": "Save", "host": true, "source": "saveFileSlots", "values": [ { "value": "", "label": "Newest" } ] } ],
   "saveBackup": { "dir": "{steamuserdata}/{steamaccountid}/2054970/remote/win64_save", "into": "coop/archive/real", "keep": 10 },
   "crashFiles": ["coop/crash-*.dmp", "coop/hang-*.dmp", "coop/caught-*.dmp", "reframework_crash.dmp"] }

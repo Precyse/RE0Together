@@ -63,6 +63,9 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
     /// <summary>Why the host cannot start the game yet (its campaign holds no saved world); empty when nothing stops it.</summary>
     public string StartBlocked { get; init; } = string.Empty;
 
+    /// <summary>The game runs and its mod waits for the game's title screen before it links (the mod-load check found no failure).</summary>
+    public bool GameWaitingForTitle { get; init; }
+
     /// <summary>The guest's capture launch reading its character (<see cref="CharacterCapture"/>), null when none ran.</summary>
     public CaptureView? Capture { get; init; }
 
@@ -119,7 +122,7 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
 
     public bool Equals(AppStatus? other) =>
         other is not null && State == other.State && LobbyId == other.LobbyId && RttMs == other.RttMs && GameId == other.GameId
-        && Refusal == other.Refusal && StartBlocked == other.StartBlocked && ConnectingToHost == other.ConnectingToHost && Bridged == other.Bridged && Step == other.Step && SavePercent == other.SavePercent
+        && Refusal == other.Refusal && StartBlocked == other.StartBlocked && GameWaitingForTitle == other.GameWaitingForTitle && ConnectingToHost == other.ConnectingToHost && Bridged == other.Bridged && Step == other.Step && SavePercent == other.SavePercent
         && Seats == other.Seats && RejoinAttempt == other.RejoinAttempt && SecondsLeft == other.SecondsLeft
         && Offline == other.Offline && LaunchedAtMs == other.LaunchedAtMs && Invite == other.Invite
         && SaveFile == other.SaveFile && SaveBytes == other.SaveBytes && SaveTotal == other.SaveTotal

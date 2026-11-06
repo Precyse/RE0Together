@@ -24,6 +24,9 @@ std::optional<uint64_t> ownStampNow(uint64_t nowMs);
 // logged once) when this build's sizes differ.
 bool recipesMatch();
 
+// True once a Req of this build was seen at a size the recipes do not expect (the same case recipesMatch logs).
+bool recipesDiffer();
+
 // The own keys from the template (zero before one), for the receiver's key barrier.
 uint32_t ownUserKey();
 uint32_t ownPlayerKey();

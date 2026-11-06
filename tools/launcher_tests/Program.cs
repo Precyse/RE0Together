@@ -39,12 +39,15 @@ public static class Program
         BuildInfoTests.Run();
         MemberGraceTests.Run();
         SessionLeaveTests.Run();
+        PartnerPresenceTests.Run();
+        BootSettingsTests.Run();
         PeerBudgetTests.Run();
         FreshQueueTests.Run();
         GameOptionsTests.Run();
         BlowfishTests.Run();
         SaveIndexTests.Run();
         OptionSourcesTests.Run();
+        FileSlotTests.Run();
         AdapterOptionTests.Run();
         LobbyStateTextTests.Run();
         LobbyCodeTests.Run();
@@ -74,6 +77,7 @@ public static class Program
         SaveResignTests.Run();
         SaveSyncTimeoutTests.Run();
         SavePathsTests.Run();
+        NativeJoinTests.Run();
         SaveBackupTests.Run();
         AdapterSettingsTests.Run();
         LogForwarderTests.Run();

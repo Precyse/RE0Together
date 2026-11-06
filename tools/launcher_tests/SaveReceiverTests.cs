@@ -50,6 +50,31 @@ public static class SaveReceiverTests
         UnresignableFileIsRefused();
         ManifestListsTheFilesTheHostHas();
         AnotherWorldStartsTheSetAgain();
+        ManifestRemovesFilesTheHostLacks();
+    }
+
+    private static void ManifestRemovesFilesTheHostLacks()
+    {
+        const string StaleName = "old.bin";
+        using var closed = new Rig(gameRunning: false);
+        Directory.CreateDirectory(Path.Combine(closed.Session, "folder"));
+        File.WriteAllText(Path.Combine(closed.Session, StaleName), "x");
+        File.WriteAllText(Path.Combine(closed.Session, StaleName + SaveReceiver.TempSuffix), "x");
+        File.WriteAllText(Path.Combine(closed.Session, SaveName), "x");
+        File.WriteAllText(Path.Combine(closed.Session, SaveName + SaveReceiver.TempSuffix), "x");
+        closed.Receiver.OnFrame(Host, FileMessages.Manifest([SaveName]));
+        Check.That(!File.Exists(Path.Combine(closed.Session, StaleName)) && !File.Exists(Path.Combine(closed.Session, StaleName + SaveReceiver.TempSuffix)),
+            "stale: a file the manifest does not list is removed when it arrives with the game closed");
+        Check.That(File.Exists(Path.Combine(closed.Session, SaveName)) && File.Exists(Path.Combine(closed.Session, SaveName + SaveReceiver.TempSuffix))
+            && Directory.Exists(Path.Combine(closed.Session, "folder")), "stale: listed files, their half-received copies and folders stay");
+
+        using var running = new Rig(gameRunning: true);
+        Directory.CreateDirectory(running.Session);
+        File.WriteAllText(Path.Combine(running.Session, StaleName), "x");
+        running.Receiver.OnFrame(Host, FileMessages.Manifest([SaveName]));
+        Check.That(File.Exists(Path.Combine(running.Session, StaleName)), "stale: a running game keeps its files when the manifest arrives");
+        running.Receiver.PromoteStaged();
+        Check.That(!File.Exists(Path.Combine(running.Session, StaleName)), "stale: they are dropped at the next staging promotion");
     }
 
     private static void ManifestListsTheFilesTheHostHas()

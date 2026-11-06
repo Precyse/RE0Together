@@ -7,6 +7,7 @@
 #include <span>
 #include <vector>
 
+#include "game_state_rule.h"
 #include "wire_cd.h"
 
 namespace link {
@@ -22,6 +23,12 @@ void sendMarker(uint64_t nowMs);
 
 // To every peer. False while not linked.
 bool send(uint16_t type, bool reliable, std::span<const uint8_t> payload);
+
+// The launcher link is up (WELCOME received).
+bool isLinked();
+
+// Each peer's link state for GAME_STATE: live, stale (its CD_WORLD stopped) or mismatch (its adapter is not ours).
+const std::vector<game_state_rule::Peer>& peerLinks();
 
 // A peer joined (or rejoined) in this tick: modules announce their state again.
 bool peerJoinedThisTick();

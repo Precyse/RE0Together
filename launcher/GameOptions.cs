@@ -32,8 +32,12 @@ public static class GameOptions
 
     /// <summary>The values an option offers on this machine: its profile values, a DLC outfit only when the game folder holds the DLC, and for
     /// an option with a source the ones this machine supplies.</summary>
-    public static IEnumerable<OptionValue> Offered(GameProfile profile, GameOption option, string? gameDir) =>
-        option.Source == null ? option.AvailableIn(gameDir) : option.Values.Concat(OptionSources.Values(profile, option, gameDir));
+    public static IEnumerable<OptionValue> Offered(GameProfile profile, GameOption option, string? gameDir) => option.Source switch
+    {
+        null => option.AvailableIn(gameDir),
+        OptionSources.SaveFileSlots => OptionSources.Values(profile, option, gameDir),  // its first value (force none) is only the fallback
+        _ => option.Values.Concat(OptionSources.Values(profile, option, gameDir)),
+    };
 
     /// <summary>An option the grids do not list because its values come from this machine at run time (the save slot picker has its own row).</summary>
     public static bool IsRuntime(GameOption option) => option.Source != null;
@@ -128,9 +132,10 @@ public static class GameOptions
         return chosen == null ? characters : characters.Where(c => c == chosen).Concat(characters.Where(c => c != chosen)).ToList();
     }
 
-    private static string ValueOf(GameProfile profile, GameOption option, string? gameDir)
+    /// <summary>One option's value: the player's choice if it is still offered, else the option's default (<see cref="OptionSources.DefaultOf"/>).</summary>
+    internal static string ValueOf(GameProfile profile, GameOption option, string? gameDir)
     {
         var chosen = AppSettings.Current.Option(profile.Id, option.Key);
-        return chosen != null && Offered(profile, option, gameDir).Any(v => v.Value == chosen) ? chosen : option.Default;
+        return chosen != null && Offered(profile, option, gameDir).Any(v => v.Value == chosen) ? chosen : OptionSources.DefaultOf(profile, option, gameDir);
     }
 }

@@ -12,6 +12,7 @@
 #include "dev_cmd.h"
 #include "equipment.h"
 #include "funnels.h"
+#include "game_state.h"
 #include "hooks.h"
 #include "link.h"
 #include "minimap.h"
@@ -79,6 +80,7 @@ void runModules() {
     world_time::tick(nowMs);
     story::tick(nowMs, peerJoined);
     save_guard::tick(nowMs);
+    game_state::tick();
     census::tick(nowMs);
     if (g_devCommands) dev_cmd::tick(nowMs);
 }

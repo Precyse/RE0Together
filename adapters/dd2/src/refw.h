@@ -105,4 +105,12 @@ bool staticField(const char* type, const char* field, T& out) {
     return staticFieldBytes(type, field, &out, sizeof(T));
 }
 
+// An instance field of a managed object read by type and name through REFramework (the dump's field offsets can be off,
+// calls.h kGetEnemyChara); false when the field is unknown or `object` is null.
+bool instanceFieldBytes(const char* type, const char* field, void* object, void* out, size_t size);
+template <typename T>
+bool instanceField(const char* type, const char* field, void* object, T& out) {
+    return instanceFieldBytes(type, field, object, &out, sizeof(T));
+}
+
 }  // namespace refw

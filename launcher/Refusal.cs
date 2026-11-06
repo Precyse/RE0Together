@@ -12,6 +12,7 @@ public enum RefusalKind
     UnknownGame, LobbyFull, LobbyClosed, LobbyNotAllowed, LobbyFailed, NotCoopLobby, SteamOffline, SaveTimedOut,
     SaveFolderMissing, SaveDiffers, HostLeft, Removed, RejoinGaveUp, PortInUse, LaunchFailed, RequirementOtherVersion,
     HostUnreachable, GameRunning, SaveResignFailed, FrameworkNotLoaded, ModNotLoaded, SaveNotProtected,
+    OtherCoopMod, ModNotStarted,
 }
 
 /// <summary>A refused start: the kind, a detail for the words that carry one (build number, file name, port), the game it

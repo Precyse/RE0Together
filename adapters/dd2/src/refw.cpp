@@ -179,6 +179,16 @@ bool staticFieldBytes(const char* type, const char* field, void* out, size_t siz
     return true;
 }
 
+bool instanceFieldBytes(const char* type, const char* field, void* object, void* out, size_t size) {
+    if (!object) return false;
+    const REFrameworkFieldHandle handle = sdk().tdb->find_field(tdb(), type, field);
+    if (!handle || sdk().field->is_static(handle)) return false;
+    const void* data = sdk().field->get_data_raw(handle, object, false);
+    if (!data) return false;
+    std::memcpy(out, data, size);
+    return true;
+}
+
 uint32_t tdbHash() {
     const uint32_t counts[] = {sdk().tdb->get_num_types(tdb()), sdk().tdb->get_num_methods(tdb()),
                                sdk().tdb->get_num_fields(tdb())};

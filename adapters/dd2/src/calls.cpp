@@ -5,7 +5,7 @@
 
 namespace {
 
-constexpr const char* kFeatureNames[] = {"body", "clock", "offline", "serializer", "puppet", "saves", "profile", "enemy"};
+constexpr const char* kFeatureNames[] = {"body", "clock", "offline", "serializer", "puppet", "saves", "profile", "enemy", "title"};
 static_assert(std::size(kFeatureNames) == static_cast<size_t>(calls::Feature::Count));
 
 std::array<REFrameworkMethodHandle, calls::kCount> g_methods{};

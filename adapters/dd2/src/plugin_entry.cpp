@@ -32,6 +32,7 @@
 #include "save_redirect.h"
 #include "session.h"
 #include "tick.h"
+#include "title_menu.h"
 #include "wire_dd2.h"
 #include "world_clock.h"
 #include "world_gate.h"
@@ -78,7 +79,8 @@ extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFram
     if (folders.mount) save_redirect::enable(*folders.mount);
     if (profile::install(carried ? profile::Mode::Splice : profile::Mode::Capture, folders.profile)) modules |= wire_dd2::kModuleProfile;
     if (config.captureSlot >= 0 && !carried) offline_capture::enable(config.captureSlot);
-    load_slot::install();
+    load_slot::install(carried, config.loadSlot);
+    if ((carried || config.autoLoad) && config.captureSlot < 0) title_menu::install(carried, config.autoLoad);
     if (config.coop) overlay::install();
     if (config.coop && plague_off::install()) modules |= wire_dd2::kModulePlagueOff;
     const bool roster = config.coop && roster::install();

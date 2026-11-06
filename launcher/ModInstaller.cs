@@ -113,7 +113,7 @@ public static class ModInstaller
             }
             removals.AddRange(manifests.SelectMany(manifest => manifest.Dropped()).Select(file => new Removal(file)));
             var backups = placements.Where(placement => placement.BackupWeight > 0).ToList();
-            report.Begin(ModStep.BackingUp, backups.Sum(placement => placement.BackupWeight), backups.Count);
+            report.Begin(ModStep.BackingUp, backups.Sum(placement => placement.BackupWeight), backups.Count, MovedAsideWords(backups));
             foreach (var placement in backups)
             {
                 placement.Backup();
@@ -253,6 +253,10 @@ public static class ModInstaller
         return new Placement(file, packageHash, ours ? null : NextBackupPath(file));
     }
 
+    /// <summary>The step words when another mod's file is in the way of ours: which file is moved where (null when nothing is).</summary>
+    private static string? MovedAsideWords(List<Placement> backups) =>
+        backups.Count == 0 ? null : string.Join("; ", backups.Select(placement => $"Another {Path.GetFileName(placement.Target)} was moved to {placement.BackupPath}"));
+
     private static string NextBackupPath(ModFile file)
     {
         var path = file.Backup;
@@ -367,6 +371,10 @@ public static class ModInstaller
         public long Weight { get; } = PackageWeight(file);
 
         /// <summary>The weight of the player's file that is backed up first, 0 when there is none.</summary>
+        public string Target => file.Dst;
+
+        public string? BackupPath => backupPath;
+
         public long BackupWeight { get; } = backupPath == null ? 0 : ModInstaller.Weight(file.Dst);
 
         public void Backup()
@@ -375,7 +383,7 @@ public static class ModInstaller
             Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
             File.Copy(file.Dst, backupPath);
             _backedUp = true;
-            Log.Info($"Backed up existing {file.Dst} to {backupPath}");
+            Log.Info($"Another {Path.GetFileName(file.Dst)} was moved to {backupPath}");
         }
 
         public void Stage()

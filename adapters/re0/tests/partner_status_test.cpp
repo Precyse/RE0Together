@@ -63,6 +63,24 @@ void testTag() {
     check(tag(Input{}).name.empty(), "no partner, no tag");
 }
 
+void testConnectionLost() {
+    check(!partner_status::connectionLost(0), "a frame just arrived: connected");
+    check(!partner_status::connectionLost(partner_status::kConnectionLostMs - 1), "just under the limit: connected");
+    check(partner_status::connectionLost(partner_status::kConnectionLostMs), "at the limit: lost");
+    Input input;
+    input.name = "Ahmad";
+    input.hasState = true;
+    input.hp = 150;
+    input.room = 0x24;
+    input.inMenu = true;
+    input.connectionLost = true;
+    check(tag(input).name == "Ahmad" && !tag(input).hasCondition, "a lost partner shows no condition");
+    checkDetail(input, "Connection lost", "a lost partner says so alone");
+    input.connectionLost = false;
+    check(tag(input).hasCondition, "the next frame brings the condition back");
+    checkDetail(input, "Hall / In menu", "and the detail line");
+}
+
 }  // namespace
 
 void testShows() {
@@ -77,6 +95,7 @@ int main() {
     testShows();
     testCondition();
     testTag();
+    testConnectionLost();
     if (g_failures == 0) std::printf("PASS\n");
     return g_failures == 0 ? 0 : 1;
 }

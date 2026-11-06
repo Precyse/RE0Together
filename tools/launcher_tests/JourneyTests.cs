@@ -143,11 +143,41 @@ public static class JourneyTests
             Check.That(ModLoadCheck.Diagnose(profile, dir, started) is { Kind: RefusalKind.GameUnsupported }, "mod load: a mod that switched itself off for this build");
             File.WriteAllText(Path.Combine(dir, "coop", "adapter.log"), $"{started.ToLocalTime().AddHours(-1):yyyy-MM-dd HH:mm:ss.fff} build_gate: stamp 0x1 co-op off\n{stamp} dd2coop: start\n");
             Check.That(ModLoadCheck.Diagnose(profile, dir, started) == null, "mod load: an earlier run's line is not this run's");
+            ModLoadLines(profile, dir, started, stamp);
         }
         finally
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    /// <summary>What the adapter's own lines make of a started game: the build gate of CD (stamp=0x) and DD2, a named other co-op mod, any
+    /// other "co-op off" reason, and an adapter waiting for the title screen.</summary>
+    private static void ModLoadLines(GameProfile profile, string dir, DateTime started, string stamp)
+    {
+        var log = Path.Combine(dir, "coop", "adapter.log");
+        void Write(params string[] lines) => File.WriteAllLines(log, lines.Select(line => $"{stamp} {line}"));
+        Write("adapter: start (Crimson Desert)", "build_gate: exe stamp=0x6AEB7D5A base=0x140000000 loaded at 0x140000000: build_mismatch, co-op off");
+        Check.That(ModLoadCheck.Diagnose(profile, dir, started) is { Kind: RefusalKind.GameUnsupported }, "mod load: the CD build gate line is an unsupported build");
+        Write("adapter: start", "build_gate: conflict: cdmp present: co-op off");
+        Check.That(ModLoadCheck.Diagnose(profile, dir, started) is { Kind: RefusalKind.OtherCoopMod, Detail: "cdmp" }, "mod load: a conflict line names the other co-op mod");
+        Write("build_gate: conflict: DD2gether present (reframework/autorun/coop): co-op off");
+        Check.That(ModLoadCheck.Diagnose(profile, dir, started) is { Kind: RefusalKind.OtherCoopMod, Detail: "DD2gether" }, "mod load: DD2's conflict line names its mod too");
+        Write("adapter: start", "init: no save folder: co-op off: the save folder is missing");
+        var inert = ModLoadCheck.Diagnose(profile, dir, started);
+        Check.That(inert is { Kind: RefusalKind.ModNotStarted, Detail: "the save folder is missing" }
+            && StatusText.Refusal(inert) == "The co-op mod could not start: the save folder is missing", "mod load: any other co-op off line gives its reason");
+        Write("adapter: start", "init: something went wrong, co-op off");
+        Check.That(StatusText.Refusal(ModLoadCheck.Diagnose(profile, dir, started)!) == "The co-op mod could not start", "mod load: a co-op off line without a reason");
+        Check.That(StatusText.Refusal(new Refusal(RefusalKind.OtherCoopMod, "cdmp")) == "Another co-op mod (cdmp) is installed", "mod load: the words for another co-op mod");
+
+        Write("adapter: start (Crimson Desert)", "build_gate: exe stamp=0x6AEB7D59 base=0x140000000 loaded at 0x140000000: supported", "adapter: waiting for the title (WorldSystem)");
+        Check.That(ModLoadCheck.Diagnose(profile, dir, started) == null && ModLoadCheck.WaitingForTitle(profile, dir, started), "mod load: an adapter waiting for the title is no failure but a wait");
+        Write("adapter: waiting for the title (WorldSystem)", "adapter: WorldSystem present");
+        Check.That(!ModLoadCheck.WaitingForTitle(profile, dir, started), "mod load: no longer waiting once the title is there");
+        File.WriteAllText(log, $"{started.ToLocalTime().AddHours(-1):yyyy-MM-dd HH:mm:ss.fff} adapter: waiting for the title (WorldSystem)\n");
+        File.SetLastWriteTimeUtc(log, started.AddSeconds(1));
+        Check.That(!ModLoadCheck.WaitingForTitle(profile, dir, started), "mod load: an earlier run's waiting line is not this run's");
     }
 
     private static void IniReset()

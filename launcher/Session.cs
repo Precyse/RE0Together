@@ -18,6 +18,7 @@ public sealed class Session : IDisposable
     private readonly PeerStats _stats = new();
     private readonly MemberGrace _grace = new();
     private readonly PeerBudget _budget = new();
+    private readonly PartnerPresence _presence = new();
     private readonly FreshQueue? _fresh;
     private readonly Dictionary<ulong, string> _names = new();
     private readonly HashSet<ulong> _kicked = new();
@@ -138,6 +139,7 @@ public sealed class Session : IDisposable
         }
         if (_active && !Ended)
             _stats.Tick(PeerSlots(), SendPing, (slot, rtt) => _bridge.Send(ControlMessages.PeerStats(slot, rtt)));
+        ObservePartnerGames();
         FlushFresh();
         ReportBudget(now);
     }
@@ -280,6 +282,7 @@ public sealed class Session : IDisposable
             if (id == _transport.LocalId || (next.TryGetValue(id, out var s) && s == slot)) continue;
             _stats.Remove(slot);
             _budget.Remove(slot);
+            _presence.Forget(id);
             _bridge.Send(ControlMessages.PeerDown(slot));
             if (!next.ContainsKey(id)) Log.Event($"{NameOf(id)} left");
         }
@@ -309,8 +312,33 @@ public sealed class Session : IDisposable
             if (id != _transport.LocalId) SendPeerUp(id, slot);
     }
 
-    private void SendPeerUp(ulong id, byte slot) =>
+    private void SendPeerUp(ulong id, byte slot)
+    {
+        _presence.AdapterToldUp(id);
         _bridge.Send(ControlMessages.PeerUp(slot, id, _names.GetValueOrDefault(id, id.ToString())));
+    }
+
+    /// <summary>A partner whose game left while its launcher stays in the lobby (membership never says so) is PEER_DOWN to the adapter,
+    /// and PEER_UP when its game is in the world again.</summary>
+    private void ObservePartnerGames()
+    {
+        if (!_active || Ended || Held) return;
+        foreach (var (id, slot) in _slots)
+        {
+            if (id == _transport.LocalId || IsHeld(id) || _lobby.Members.FirstOrDefault(member => member.Id == id) is not { } member) continue;
+            switch (_presence.Observe(id, _lobby.MemberData(member, MemberKey.Step)))
+            {
+                case PresenceChange.Down:
+                    Log.Info($"{NameOf(id)}'s game left, PEER_DOWN slot {slot} to the adapter");
+                    _bridge.Send(ControlMessages.PeerDown(slot));
+                    break;
+                case PresenceChange.Up:
+                    Log.Info($"{NameOf(id)}'s game is in again, PEER_UP slot {slot} to the adapter");
+                    SendPeerUp(id, slot);
+                    break;
+            }
+        }
+    }
 
     private void ReportBudget(long nowMs)
     {

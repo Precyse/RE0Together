@@ -36,10 +36,12 @@ std::atomic<bool> g_follows{false};
 save_load_rule::Order g_launcherPick;  // set once before the game runs
 bool g_launcherPickDone = false;       // started or skipped: a later main menu (game over, quit) is the player's
 std::atomic<bool> g_busy{false};  // g_order is set (read by the net thread's auto_join)
+std::atomic<game_state_report_rule::Load> g_result{game_state_report_rule::Load::None};  // read by the net thread's GAME_STATE
 
 void setOrder(const Order& order) {
     g_order = order;
     g_busy = true;
+    g_result = game_state_report_rule::Load::None;
 }
 
 void clearOrder() {
@@ -65,9 +67,15 @@ bool saveBusy() {
 
 void setTitleState(uint32_t state) { game::writeMemory(g_title + game::kTitleStateOffset, state); }
 
+// The session's save did not load: the toast here, the partner's card through GAME_STATE (load=failed).
+void reportLoadFailed() {
+    g_result = game_state_report_rule::Load::Failed;
+    debug_overlay::toast("The session's save did not load.", kFailedToastSeconds, toast_queue::Style::Panel);
+}
+
 void fail(const char* why) {
     logger::write("title_load: slot %d not started (%s), the main menu is back", g_order->slot, why);
-    debug_overlay::toast("The session's save did not load.", kFailedToastSeconds, toast_queue::Style::Panel);
+    reportLoadFailed();
     clearOrder();
     enter(Stage::Idle);
     setTitleState(title_load_rule::kStateMainMenuOpen);
@@ -121,6 +129,7 @@ void commit(uint32_t hash) {
     logger::write("title_load: slot %d loaded (hash %08x), start mode %d, wesker %d, switching to the game", order.slot, hash, mode,
                   loaded->wesker ? 1 : 0);
     clearOrder();
+    g_result = game_state_report_rule::Load::Ok;
     enter(Stage::Started);
     game::callThiscall<void>(areaSwitch, reinterpret_cast<void*>(areas), game::kGameArea);
     if (order.host) lobby::announceStart(order.slot, hash);
@@ -175,7 +184,7 @@ void takeLauncherPick() {
             if (g_launcherPick.active() && character_owner::isHost()) {
                 logger::write("title_load: the launcher's slot %d changed since it was picked (hash %08x, picked %08x), not started",
                               g_launcherPick.slot, slotHash.value_or(0), g_launcherPick.hash.value_or(0));
-                debug_overlay::toast("The session's save did not load.", kFailedToastSeconds, toast_queue::Style::Panel);
+                reportLoadFailed();
             }
             return;
         case title_load_rule::LauncherPick::Start:
@@ -249,5 +258,7 @@ coop_menu_rule::StartStatus status() {
 bool busy() { return g_busy; }
 
 bool followsHost() { return g_follows; }
+
+game_state_report_rule::Load loadResult() { return g_result; }
 
 }  // namespace title_load

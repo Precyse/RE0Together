@@ -163,7 +163,7 @@ internal static partial class SessionScreens
         var sending = s.Players.FirstOrDefault(player => !player.IsLocal && player.Step == SessionStep.ReceivingSave);
         var third = s.StartBlocked.Length > 0 ? new StepRow(s.StartBlocked, StepMark.Failed)
             : s.Refusal is { } refusal && RefusalStep(refusal.Kind) == JoinStep.Starting ? FailedRow(refusal, string.Empty, LogLines(refusal.Kind, g, gameDir))
-            : s.Step == SessionStep.StartingGame ? new StepRow("Starting game", StepMark.Active, SinceTimer(s.StepSinceMs, nowMs))
+            : s.Step == SessionStep.StartingGame ? new StepRow(s.GameWaitingForTitle ? WaitingForTitleWords : "Starting game", StepMark.Active, SinceTimer(s.StepSinceMs, nowMs))
             : sending != null ? new StepRow($"Sending save to {sending.Name}", StepMark.Active)
             : new StepRow("Waiting for players", opening ? StepMark.Pending : StepMark.Active, opening ? string.Empty : SinceTimer(s.LobbyOpenedAtMs, nowMs));
         return
@@ -171,7 +171,7 @@ internal static partial class SessionScreens
             new StepRow("Lobby open", opening ? StepMark.Active : StepMark.Done),
             new StepRow(mod.Mod.Build > 0 ? $"Mod {mod.Mod.Build}" : "Mod installed", opening ? StepMark.Pending : StepMark.Done),
             third,
-            new StepRow("In game", StepMark.Pending),
+            new StepRow(g.InGameStep ?? "In game", StepMark.Pending),
         ];
     }
 

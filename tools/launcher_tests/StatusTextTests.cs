@@ -37,6 +37,8 @@ public static class StatusTextTests
         [RefusalKind.FrameworkNotLoaded] = "Juiced did not load",
         [RefusalKind.ModNotLoaded] = "The co-op mod did not load",
         [RefusalKind.SaveNotProtected] = "The mod could not protect your save: quit to the title",
+        [RefusalKind.OtherCoopMod] = "Another co-op mod (Juiced) is installed",
+        [RefusalKind.ModNotStarted] = "The co-op mod could not start: Juiced",
     };
 
     public static void Run()

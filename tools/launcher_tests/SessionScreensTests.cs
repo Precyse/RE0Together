@@ -37,6 +37,7 @@ public static class SessionScreensTests
         using var data = new TempData();
         TempData.UseDefaults();
         JoiningSteps();
+        CdWords();
         JoiningRefusals();
         JoiningHeader();
         StartAgain();
@@ -55,6 +56,18 @@ public static class SessionScreensTests
 
     private static string Marks(JoiningModel model) =>
         string.Concat(model.Steps.Select(row => row.Mark switch { StepMark.Done => 'D', StepMark.Active => 'A', StepMark.Failed => 'F', _ => 'P' }));
+
+    private static void CdWords()
+    {
+        var cd = GameProfile.Load("cd");
+        var guest = new[] { HostSlot(), GuestSlot(SessionStep.None, local: true) };
+        var status = Re0Status(SessionStep.StartingGame, guest) with { GameId = "cd" };
+        Check.That(Join(status, cd).Steps[^2].Text == "Starting game" && Join(status, cd).Steps[^1].Text == "Load your own save", "cd joining: the last step row is the profile's words");
+        Check.That(Join(status with { GameWaitingForTitle = true }, cd).Steps[^2].Text == "Waiting for the title screen", "cd joining: a mod waiting for the title is a step, not a failure");
+        Check.That(Join(Re0Status(SessionStep.StartingGame, guest)).Steps[^1].Text == "In game", "joining: a profile without words keeps In game");
+        var hosting = Host(Re0Status(SessionStep.None, HostSlot(SessionStep.None, local: true)) with { GameId = "cd" }, cd);
+        Check.That(hosting.Steps[^1].Text == "Load your own save", "cd hosting: the last step row is the profile's words");
+    }
 
     private static void JoiningSteps()
     {

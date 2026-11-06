@@ -16,6 +16,7 @@ public sealed partial class App
     private const long LobbySearchMs = 10_000;
     private const long PendingResetCheckMs = 5000;
     private const long NoProcessRetryMs = 20_000;
+    private const long ModLoadRecheckMs = 30_000;
     private const long SetArrivingWaitMs = 8_000;
 
     private readonly CliOptions _options;
@@ -45,9 +46,13 @@ public sealed partial class App
     private CharacterCapture? _capture;  // a guest's capture launch, kept until the session ends so its outcome stays on show
     private CharacterCapture? _aborting;  // a capture whose session was dropped, pumped until its game is closed
     private bool _launchRetried;
-    private bool _modLoadChecked;
+    private long? _gameSeenAtMs;  // when the game's process was first seen after the launch: the link timeout counts from here
+    private long? _modLoadCheckedAtMs;
+    private string? _modLoadNote;
+    private bool _gameWaitingForTitle;
     private bool _modLoadRefused;
     private bool _saveRefused;
+    private bool _coopOffRefused;
     private readonly HashSet<ulong> _announcedRefusals = [];
     private bool _hostStarted;
     private long? _launchedAtMs;
@@ -207,7 +212,7 @@ public sealed partial class App
             return null;
         }
         var profile = GameProfile.Load(gameId);
-        if (Preflight(profile, 0) is { } refusal)
+        if (Preflight(profile, 0, new Dictionary<string, string>(), isHost: true) is { } refusal)
         {
             Refuse(refusal);
             return null;
@@ -226,8 +231,12 @@ public sealed partial class App
     }
 
     /// <summary>The start checks (<see cref="StartChecks"/>), which a run that never starts the game (--no-launch) skips.</summary>
-    private Refusal? Preflight(GameProfile profile, ulong lobbyId) =>
-        _options.NoLaunch ? null : StartChecks.Run(profile, ResolveGameDir(profile), lobbyId);
+    private Refusal? Preflight(GameProfile profile, ulong lobbyId, IReadOnlyDictionary<string, string> hostValues, bool isHost)
+    {
+        if (_options.NoLaunch) return null;
+        var gameDir = ResolveGameDir(profile);
+        return StartChecks.Run(profile, gameDir, lobbyId, GameOptions.ForAdapter(profile, GameOptions.Current(profile, gameDir), hostValues, isHost));
+    }
 
     private void Open(Command command, string argument)
     {
@@ -353,7 +362,7 @@ public sealed partial class App
     {
         var profile = GameProfile.Load(_lobby!.GameId!);
         var isHost = _lobby.OwnerId == _transport!.LocalId;
-        if (!isHost && Preflight(profile, _lobby.Id) is { } refusal)
+        if (!isHost && Preflight(profile, _lobby.Id, _lobby.HostOptions, isHost: false) is { } refusal)
         {
             Refuse(refusal);
             EndSession();
@@ -477,9 +486,9 @@ public sealed partial class App
             Refuse(RefusalKind.SaveDiffers);
             return false;
         }
-        if (_profile!.SettingsAtBoot && GameLauncher.IsRunning(_profile))
+        if (BootSettings.Blocks(_profile!, _gameDir, AdapterOptions()))
         {
-            Log.Info($"{_profile.Name} already runs and reads its settings only at start, not launching the game");
+            Log.Info($"{_profile!.Name} already runs and started with other settings than this session needs, not launching the game");
             Refuse(RefusalKind.GameRunning, _profile.Name);
             return false;
         }
@@ -533,7 +542,7 @@ public sealed partial class App
     {
         _launchedAtMs = Environment.TickCount64;
         _launchRetried = false;
-        _modLoadChecked = false;
+        ResetModLoadWatch();
     }
 
     /// <summary>A capture whose session was dropped: the game is asked to close and the ini is set back (<see cref="CharacterCapture.Abort"/>);
@@ -562,28 +571,56 @@ public sealed partial class App
         if (GameLauncher.Launch(_profile, _gameDir) == LaunchResult.Started) _launchedAtMs = Environment.TickCount64;
     }
 
-    /// <summary>A game that runs past the profile's link timeout without the adapter linking: the logs say why (<see cref="ModLoadCheck"/>),
-    /// shown on both screens and published. A link that comes late takes the failure back.</summary>
+    /// <summary>A game that runs past the profile's link timeout (counted from when its process was first seen) without the adapter
+    /// linking: the logs say why (<see cref="ModLoadCheck"/>), shown on both screens and published. Without a cause the logs are read
+    /// again every <see cref="ModLoadRecheckMs"/> until the adapter links. A link that comes late takes the failure back.</summary>
     private void WatchModLoad()
     {
-        if (_bridge is not { } bridge || _profile == null || _gameDir == null || _launchedAtMs is not { } launchedAt) return;
+        if (_bridge is not { } bridge || _profile == null || _gameDir == null || _launchedAtMs == null) return;
         if (bridge.IsReady)
         {
             if (_modLoadRefused) _refusal = null;
             _modLoadRefused = false;
+            _gameWaitingForTitle = false;
             return;
         }
-        var sinceLaunch = Environment.TickCount64 - launchedAt;
-        if (_modLoadChecked || sinceLaunch < _profile.LinkTimeoutMs || !GameLauncher.IsRunning(_profile)) return;
-        _modLoadChecked = true;
-        if (ModLoadCheck.Diagnose(_profile, _gameDir, DateTime.UtcNow.AddMilliseconds(-sinceLaunch)) is not { } cause)
+        var nowMs = Environment.TickCount64;
+        if (!GameLauncher.IsRunning(_profile))
         {
-            Log.Info($"{_profile.Name} runs without the co-op link and its logs name no cause");
+            ResetModLoadWatch();
             return;
         }
-        Log.Info($"{_profile.Name} did not bring the co-op mod up, see {ModLoadCheck.LogPath(_profile, _gameDir)}");
-        _modLoadRefused = true;
-        Refuse(cause with { LobbyId = _lobby?.Id ?? 0 });
+        _gameSeenAtMs ??= nowMs;
+        var runningMs = nowMs - _gameSeenAtMs.Value;
+        var due = _modLoadCheckedAtMs is not { } checkedAt || nowMs - checkedAt >= ModLoadRecheckMs;
+        if (_modLoadRefused || runningMs < _profile.LinkTimeoutMs || !due) return;
+        _modLoadCheckedAtMs = nowMs;
+        CheckModLoad(DateTime.UtcNow.AddMilliseconds(-runningMs));
+    }
+
+    private void CheckModLoad(DateTime startedUtc)
+    {
+        if (ModLoadCheck.Diagnose(_profile!, _gameDir!, startedUtc) is { } cause)
+        {
+            Log.Info($"{_profile!.Name} did not bring the co-op mod up, see {ModLoadCheck.LogPath(_profile, _gameDir!)}");
+            _modLoadRefused = true;
+            _gameWaitingForTitle = false;
+            Refuse(cause with { LobbyId = _lobby?.Id ?? 0 });
+            return;
+        }
+        _gameWaitingForTitle = ModLoadCheck.WaitingForTitle(_profile!, _gameDir!, startedUtc);
+        var note = _gameWaitingForTitle ? "its mod waits for the title screen" : "runs without the co-op link and its logs name no cause";
+        if (note == _modLoadNote) return;
+        _modLoadNote = note;
+        Log.Info($"{_profile!.Name} {note}");
+    }
+
+    private void ResetModLoadWatch()
+    {
+        _gameSeenAtMs = null;
+        _modLoadCheckedAtMs = null;
+        _modLoadNote = null;
+        _gameWaitingForTitle = false;
     }
 
     private SessionStep HostStep() =>
@@ -694,8 +731,10 @@ public sealed partial class App
         _hostStarted = false;
         _hostStartedUnix = 0;
         _launchedAtMs = null;
+        ResetModLoadWatch();
         _modLoadRefused = false;
         _saveRefused = false;
+        _coopOffRefused = false;
         _gameState = null;
         _bridgeWasReady = false;
         _saveMeter = new SaveProgressMeter();

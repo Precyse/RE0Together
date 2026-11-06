@@ -3,13 +3,15 @@ using System.Globalization;
 namespace CoopLauncher;
 
 /// <summary>Options whose values this machine supplies at run time (a profile option with a <c>source</c>): the save slot a host forces
-/// the game to load at launch, and the hash of that slot, which tells a guest's copy of the save from a stale one. The choice is the
+/// the game to load at launch (read from an encrypted save index, <see cref="SaveSlots"/>, or from one file per slot,
+/// <see cref="SaveFileSlots"/>), and the hash of that slot, which tells a guest's copy of the save from a stale one. The choice is the
 /// slot's number (empty = none, the title screen as usual); the hash is worked out from the save, never chosen. The campaign a host
 /// plays and the character a guest brings (<see cref="CampaignStore"/>) are chosen in the options grids like any option; picking
 /// <see cref="NewCampaign"/> or <see cref="CopyCampaign"/> makes a campaign and chooses it (<see cref="Choose"/>).</summary>
 public static class OptionSources
 {
     public const string SaveSlots = "saveSlots";
+    public const string SaveFileSlots = "saveFileSlots";
     public const string SaveHash = "saveHash";
     public const string Campaigns = "campaigns";
     public const string Characters = "characters";
@@ -21,13 +23,22 @@ public static class OptionSources
     public const string HashKey = "load_hash";
 
     /// <summary>The option that picks the slot to load, or null when the game has none.</summary>
-    public static GameOption? SlotOption(GameProfile profile) => profile.Options?.FirstOrDefault(option => option.Source == SaveSlots);
+    public static GameOption? SlotOption(GameProfile profile) => profile.Options?.FirstOrDefault(option => option.Source is SaveSlots or SaveFileSlots);
+
+    /// <summary>Whether this machine has a slot to offer for the option (a picker with nothing to pick is not shown).</summary>
+    public static bool HasChoices(GameProfile profile, GameOption option, string? gameDir) => Values(profile, option, gameDir).Any();
+
+    /// <summary>What a slot option with nothing valid picked takes: for the file slots the host's newest save (the option's
+    /// first value, empty = force none, when the folder holds none), else the option's first value.</summary>
+    public static string DefaultOf(GameProfile profile, GameOption option, string? gameDir) =>
+        option.Source == SaveFileSlots && FileSlots(profile, gameDir).FirstOrDefault() is { } newest ? SlotValue(newest.Number) : option.Default;
 
     /// <summary>The used slots of the host's save as choices (value: the slot's number from 0, label: <see cref="SaveSlot.Label"/>); none for an
     /// option with another source or when the save cannot be read.</summary>
     public static IEnumerable<OptionValue> Values(GameProfile profile, GameOption option, string? gameDir) => option.Source switch
     {
-        SaveSlots => SaveIndexFiles.ReadHost(profile, gameDir).Slots.Where(slot => slot.Used).Select(slot => new OptionValue(SlotValue(slot), slot.Label)),
+        SaveSlots => SaveIndexFiles.ReadHost(profile, gameDir).Slots.Where(slot => slot.Used).Select(slot => new OptionValue(SlotValue(slot.Index), slot.Label)),
+        SaveFileSlots => FileSlots(profile, gameDir).Select(slot => new OptionValue(SlotValue(slot.Number), slot.Label)),
         Campaigns => CampaignStore.List(profile, gameDir).Select(campaign => new OptionValue(campaign.Id, campaign.Name))
             .Concat([new OptionValue(NewCampaign, NewCampaignLabel), new OptionValue(CopyCampaign, CopyCampaignLabel)]),
         Characters => CampaignStore.List(profile, gameDir).Select(campaign => new OptionValue(campaign.Id, CharacterLabel(profile, gameDir!, campaign))),
@@ -102,9 +113,14 @@ public static class OptionSources
     {
         var option = profile.Options?.FirstOrDefault(candidate => candidate.Source == Campaigns);
         if (option == null) return null;
-        var id = GameOptions.Current(profile, gameDir)[option.Key];
+        var id = GameOptions.ValueOf(profile, option, gameDir);
         return id.Length == 0 ? null : CampaignStore.SaveDir(profile, gameDir, id);
     }
+
+    /// <summary>The slots of the world this machine hosts (the campaign's save folder, else the game's own save folder) that the save sync
+    /// sends to the guests, the newest first.</summary>
+    public static IReadOnlyList<SlotFiles.Entry> FileSlots(GameProfile profile, string? gameDir) =>
+        SlotFiles.InFolder(gameDir == null ? null : CampaignSaveDir(profile, gameDir) ?? OwnSaveDir(profile), profile.SaveSync?.SteamRemoteFiles);
 
     /// <summary>The words for a campaign that holds no saved world yet.</summary>
     public const string NoWorldWords = "This campaign has no saved world yet: start it alone once and save";
@@ -123,11 +139,20 @@ public static class OptionSources
     public static bool SessionCopyMatches(GameProfile profile, string? gameDir, IReadOnlyDictionary<string, string> hostValues)
     {
         if (!hostValues.TryGetValue(SlotKey, out var slotValue) || slotValue.Length == 0) return true;
+        if (SlotOption(profile)?.Source == SaveFileSlots) return SessionHoldsFileSlot(profile, gameDir, slotValue);
         var copy = SlotOf(SaveIndexFiles.ReadSession(profile, gameDir), slotValue);
         return copy != null && copy.Hash == hostValues.GetValueOrDefault(HashKey);
     }
 
-    private static string SlotValue(SaveSlot slot) => slot.Index.ToString(CultureInfo.InvariantCulture);
+    /// <summary>The guest's copy of the host's world has a file for the slot the host forces.</summary>
+    private static bool SessionHoldsFileSlot(GameProfile profile, string? gameDir, string slotValue) =>
+        gameDir != null && profile.SaveSync is { } sync && int.TryParse(slotValue, NumberStyles.None, CultureInfo.InvariantCulture, out var number)
+        && SlotFiles.InFolder(Path.Combine(gameDir, sync.SessionDir)).Any(slot => slot.Number == number);
+
+    private static string? OwnSaveDir(GameProfile profile) =>
+        profile.SaveSync is { } sync ? SaveSyncCoordinator.HostSaveDir(profile, sync, SavePaths.SteamAccountId()) : null;
+
+    private static string SlotValue(int number) => number.ToString(CultureInfo.InvariantCulture);
 
     private static SaveSlot? SlotOf(SaveIndex index, string? slotValue) =>
         int.TryParse(slotValue, NumberStyles.None, CultureInfo.InvariantCulture, out var number)

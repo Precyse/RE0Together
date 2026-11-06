@@ -33,6 +33,7 @@ constexpr uint64_t kCountersPeriodMs = 5000;
 NetClient& g_net = *new NetClient;
 
 struct Peer {
+    bool helloSeen = false;
     bool helloOk = false;
     bool mismatchLogged = false;
     wire_cd::World world{};
@@ -50,6 +51,7 @@ uint32_t g_wireRefused = 0;
 uint32_t g_ticks = 0;
 bool g_joinedThisTick = false;
 std::vector<uint8_t> g_slots;
+std::vector<game_state_rule::Peer> g_peerLinks;
 uint64_t g_nowMs = 0;
 bool g_linked = false;
 uint8_t g_localSlot = 0, g_hostSlot = 0;
@@ -63,6 +65,7 @@ void sendAll(uint16_t type, const T& message) {
 void onHello(uint8_t slot, Peer& peer, const wire_cd::Hello& hello) {
     const bool same = hello.proto == g_hello.proto && hello.exeTimeDateStamp == g_hello.exeTimeDateStamp &&
                       std::memcmp(hello.adapterHash, g_hello.adapterHash, wire_cd::kHashBytes) == 0;
+    peer.helloSeen = true;
     peer.helloOk = same;
     if (same) {
         logger::write("link: slot %u adapter matches (sets 0x%X, catalogue %s, %s)", slot, hello.siteSetMask,
@@ -154,6 +157,11 @@ bool sameCounters(const std::vector<wire_cd::Counter>& a, const std::vector<wire
     return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(wire_cd::Counter)) == 0;
 }
 
+game_state_rule::Link linkOf(const Peer& peer, uint64_t nowMs) {
+    const bool worldStale = peer.worldKnown && nowMs - peer.worldAtMs > kWorldStaleMs;
+    return game_state_rule::linkOf(peer.helloSeen, peer.helloOk, worldStale);
+}
+
 void sendState(uint64_t nowMs, bool force) {
     const wire_cd::World world = world_gate::report();
     if (force || nowMs - g_lastWorldMs >= kWorldResendMs || std::memcmp(&world, &g_lastWorld, sizeof(world)) != 0) {
@@ -195,8 +203,11 @@ void tick(uint64_t nowMs) {
     g_localSlot = session.localSlot;
     g_hostSlot = session.hostSlot;
     g_slots.clear();
+    g_peerLinks.clear();
     for (const PeerInfo& info : session.peers) {
-        if (info.slot != session.localSlot) g_slots.push_back(info.slot);
+        if (info.slot == session.localSlot) continue;
+        g_slots.push_back(info.slot);
+        if (const Peer* peer = g_peers.find(info.slot)) g_peerLinks.push_back({info.steamId, linkOf(*peer, nowMs)});
     }
     for (const GameFrame& frame : frames) onFrame(frame);
     if (!session.linked || g_peers.empty()) return;
@@ -209,6 +220,10 @@ void tick(uint64_t nowMs) {
 bool send(uint16_t type, bool reliable, std::span<const uint8_t> payload) {
     return g_net.send(type, reliable, kAllPeers, payload);
 }
+
+bool isLinked() { return g_linked; }
+
+const std::vector<game_state_rule::Peer>& peerLinks() { return g_peerLinks; }
 
 bool peerJoinedThisTick() { return g_joinedThisTick; }
 

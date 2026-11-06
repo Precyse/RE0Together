@@ -9,6 +9,7 @@
 
 #include "containment.h"
 #include "funnels.h"
+#include "game_state_rule.h"
 #include "link.h"
 #include "log.h"
 #include "presence_rule.h"
@@ -38,6 +39,7 @@ struct Copy {
     std::optional<std::vector<uint8_t>> lastMove;    // compact
     std::optional<std::vector<uint8_t>> lastAction;  // a self-contained StartAction Req
     bool spawned = false;
+    bool silenced = false;  // removed after kSilenceMs without a frame; the copy returns with the next frame
     uint64_t spawnedAtMs = 0;
     uint32_t spawnCount = 0;
     bool stillMoveSent = false;
@@ -107,6 +109,7 @@ void spawn(Copy& copy, uint64_t nowMs) {
         injectAck(g_op.move, *still);
     }
     copy.spawned = true;
+    copy.silenced = false;
     copy.spawnedAtMs = nowMs;
     ++copy.spawnCount;
     copy.stillMoveSent = false;
@@ -162,9 +165,13 @@ void onRotate(Copy& copy, std::span<const uint8_t> req, uint64_t nowMs) {
 }
 
 void tickCopy(Copy& copy, uint64_t nowMs) {
-    if (copy.spawned && nowMs - copy.lastFrameMs > kSilenceMs) remove(copy, "8 s of silence");
+    const bool silent = nowMs - copy.lastFrameMs > kSilenceMs;
+    if (copy.spawned && silent) {
+        remove(copy, "8 s of silence");
+        copy.silenced = true;
+    }
     if (!copy.spawned) {
-        if (canInject() && containment::active() && peerReady(copy.slot) && !copy.user.empty() && copy.lastMove) spawn(copy, nowMs);
+        if (!silent && canInject() && containment::active() && peerReady(copy.slot) && !copy.user.empty() && copy.lastMove) spawn(copy, nowMs);
         return;
     }
     if (!copy.stillMoveSent && nowMs - copy.spawnedAtMs >= kStillMoveAfterMs && copy.lastMove && canInject()) {
@@ -207,6 +214,7 @@ bool onFrame(uint8_t slot, uint16_t type, std::span<const uint8_t> payload, uint
     Copy& copy = g_copies[slot];
     copy.slot = slot;
     copy.lastFrameMs = nowMs;
+    copy.silenced = false;
     switch (type) {
         case wire_cd::kCharTemplate:
             if (const auto t = wire_cd::decodeTemplate(payload)) {
@@ -253,6 +261,14 @@ void tick(uint64_t nowMs, std::span<const uint8_t> slotsPresent) {
         tickCopy(it->second, nowMs);
         ++it;
     }
+}
+
+const char* copyProblem() {
+    for (const auto& [slot, copy] : g_copies) {
+        if (copy.silenced) return game_state_rule::kCodeSilent;
+        if (!copy.spawned && !copy.refusal.empty()) return game_state_rule::kCodeTemplate;
+    }
+    return nullptr;
 }
 
 Stats stats() { return g_stats; }

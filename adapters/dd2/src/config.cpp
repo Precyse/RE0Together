@@ -2,8 +2,10 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <string>
 
+#include "load_slot_rule.h"
 #include "log.h"
 #include "save_folders.h"
 #include "paths.h"
@@ -30,6 +32,7 @@ Config loadConfig() {
         in.open(path);
     }
     Config config;
+    std::optional<bool> autoLoad;
     std::string line;
     while (std::getline(in, line)) {
         const auto eq = line.find('=');
@@ -43,10 +46,13 @@ Config loadConfig() {
         if (key == "enemy_sync" && (value == "0" || value == "1")) config.enemySync = value == "1";
         if (key == "campaign" && save_folders::validId(value)) config.campaign = value;
         if (key == "arisen" && save_folders::validId(value)) config.arisen = value;
+        if (key == "load_slot") config.loadSlot = load_slot_rule::parse(value.c_str());
+        if (key == "auto_load" && (value == "0" || value == "1")) autoLoad = value == "1";
         if (key == "capture") config.captureSlot = std::atoi(value.c_str());
     }
-    logger::write("config: port=%u coop=%d guest=%d echo_puppet=%d peer_puppet=%d enemy_sync=%d campaign=%s arisen=%s", config.port,
-                  config.coop, config.guest, config.echoPuppet, config.peerPuppet, config.enemySync, config.campaign.c_str(),
-                  config.arisen.c_str());
+    config.autoLoad = autoLoad.value_or(config.coop && config.guest && config.loadSlot >= 0);
+    logger::write("config: port=%u coop=%d guest=%d echo_puppet=%d peer_puppet=%d enemy_sync=%d campaign=%s arisen=%s load_slot=%d auto_load=%d",
+                  config.port, config.coop, config.guest, config.echoPuppet, config.peerPuppet, config.enemySync,
+                  config.campaign.c_str(), config.arisen.c_str(), config.loadSlot, config.autoLoad);
     return config;
 }

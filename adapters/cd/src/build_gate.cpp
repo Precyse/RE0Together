@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstring>
+#include <string>
 
 #include "log.h"
 #include "safe_read.h"
@@ -10,6 +11,8 @@
 namespace {
 
 constexpr uint32_t kHeaderPage = 0x1000;  // the PE headers of the loaded exe
+constexpr wchar_t kConflictMod[] = L"cdmp";
+constexpr wchar_t kConflictFile[] = L"cdmp.asi";  // the other co-op mod's plugin, in the exe's folder
 
 }  // namespace
 
@@ -38,6 +41,17 @@ bool checkRunningGame() {
                   static_cast<unsigned long long>(found.imageBase), static_cast<unsigned long long>(module),
                   ok ? "supported" : "build_mismatch, co-op off");
     return ok;
+}
+
+bool checkNoConflict() {
+    wchar_t path[MAX_PATH] = {};
+    const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return true;
+    std::wstring file(path, length);
+    file.replace(file.find_last_of(L"\\/") + 1, std::wstring::npos, kConflictFile);
+    if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) return true;
+    logger::write("build_gate: conflict: %ls present: co-op off", kConflictMod);
+    return false;
 }
 
 bool siteMatches(const cd_sites::Site& site, const uint8_t* live) {

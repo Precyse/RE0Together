@@ -10,7 +10,8 @@ public sealed record SaveFailure(string File, string Reason);
 /// that cannot be written (the game, antivirus or a sync tool holds it) fails only that transfer: the host is told and resends.
 /// A profile that re-signs its saves has every verified file rewritten for this machine's Steam account before it is moved; a file
 /// that cannot be re-signed is refused for good (the host is told not to send it again) and named in <see cref="Failure"/>. A manifest
-/// with a new generation (the host chose another world) starts the set again.</summary>
+/// with a new generation (the host chose another world) starts the set again. A file in the session dir that the host's manifest
+/// does not list is removed when the manifest arrives with the game closed, otherwise at the next <see cref="PromoteStaged"/>.</summary>
 public sealed class SaveReceiver
 {
     /// <summary>The largest file a guest takes; the host does not send a set that holds a bigger one.</summary>
@@ -37,6 +38,7 @@ public sealed class SaveReceiver
     private readonly HashSet<string> _received = [];
     private List<string>? _expected;  // the host's manifest: the files it has (the profile's list until the manifest arrives)
     private bool _initialSetDone;
+    private bool _staleCheckPending;
     private byte? _generation;
 
     /// <param name="resignFile">Rewrites a received file for this machine's Steam account (throws <see cref="InvalidDataException"/> when it
@@ -72,6 +74,8 @@ public sealed class SaveReceiver
                 _generation = generation;
                 _expected = names;
                 _received.RemoveWhere(name => !names.Contains(name));
+                _staleCheckPending = true;
+                if (!_gameRunning) RemoveStale();
                 Log.Info($"Save sync: host announced {names.Count} files");
                 UpdateComplete();
                 break;
@@ -106,6 +110,7 @@ public sealed class SaveReceiver
     /// <summary>Moves the staged files into the session dir, replacing the guest's own copies. Call only while the game is not running.</summary>
     public void PromoteStaged()
     {
+        if (_staleCheckPending) RemoveStale();
         if (!Directory.Exists(_stagingDir)) return;
         foreach (var path in Directory.GetFiles(_stagingDir).Where(p => !p.EndsWith(TempSuffix)))
         {
@@ -120,6 +125,25 @@ public sealed class SaveReceiver
                 Log.Info($"Save sync: staged {Path.GetFileName(path)} not moved yet ({e.Message})");
             }
         }
+    }
+
+    /// <summary>Removes the files of the session dir (not its folders) that the host's manifest does not list, a half-received one by the
+    /// name it will get. Call only while the game is not running.</summary>
+    private void RemoveStale()
+    {
+        _staleCheckPending = false;
+        if (_expected == null || !Directory.Exists(_sessionDir)) return;
+        foreach (var path in Directory.GetFiles(_sessionDir).Where(path => !_expected.Contains(FinalName(path))))
+        {
+            DeleteQuietly(path);
+            Log.Info($"Save sync: removed {Path.GetFileName(path)}, the host's set does not have it");
+        }
+    }
+
+    private static string FinalName(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.EndsWith(TempSuffix) ? name[..^TempSuffix.Length] : name;
     }
 
     public void Abort()

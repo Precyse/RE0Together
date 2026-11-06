@@ -91,6 +91,10 @@ splice never replaces the guest's character with the host's. With the save redir
 nothing is spliced (`splice: contexts not spliced, the save redirect is not verified`). The host's saves reach the guests: after
 a save the log shows `save_notice: save written, shared with the guests` and its launcher re-sends the files.
 
+## Forced save load (guest; `load_slot`, `auto_load`)
+The host picks the save slot on the hosting screen (Save: the slots of its mounted folder, labelled `Autosave / 12 Nov 19:31`, `Slot 1 / ...`; default the newest); it travels in the lobby and the launcher writes `load_slot=<n>` into every player's `coop\adapter.ini`. A guest's game loads that slot whichever row it chooses (Continue or Load Game): the log shows `save_load: forced slot N (asked M)`. A host, a solo game and a guest without `load_slot` load what they ask for; the system data load is never changed. A guest also cannot start a new world: its New Game rows do nothing (`title_menu: New Game refused`).
+A co-op guest with a forced slot (`auto_load=0` turns it off, `auto_load=1` turns it on for anyone): once the title menu has waited idle for 3 s the plugin selects the Continue row and runs the menu's own selection handler, once (`title_menu: auto_load: Continue pressed (row R of N, item types ...)`; `no Continue row` when the menu has none). Notes: `docs/codemap/dd2.md` "Title menu".
+
 ## Launcher report and overlay (co-op)
 `game_state: place=..;char=..;save=..;slot=..;peers=..` is sent to the own launcher when the link comes up and on every change
 (`place` title, loading or world; `char` off, ok, none, mismatch or refused; `save` off, ok or refused; `slot` the slot of

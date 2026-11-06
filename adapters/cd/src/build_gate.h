@@ -23,6 +23,10 @@ bool supported(const Identity& found);
 // The running exe's identity (and its actual load address) against kSupported; logs the result.
 bool checkRunningGame();
 
+// False (and logged as `conflict: cdmp present: co-op off`) while another co-op mod's file is beside the exe; the launcher
+// moves it away at install, and its log reader names it (launcher/ModLoadCheck.cs).
+bool checkNoConflict();
+
 // True when `live` starts with the site's expected bytes.
 bool siteMatches(const cd_sites::Site& site, const uint8_t* live);
 

@@ -46,6 +46,7 @@ using GetStorageFn = void*(__cdecl*)();
 GetStorageFn g_original = nullptr;
 save_redirect::WriteListener g_onCloudWrite = nullptr;
 bool g_servingSession = false;
+std::atomic<bool> g_patched{false};
 std::atomic<bool> g_activated{false};
 std::atomic<ULONGLONG> g_lastLog[static_cast<size_t>(Op::Count)];
 
@@ -241,12 +242,18 @@ bool install(WriteListener onCloudWrite) {
         return false;
     }
     logger::write("save_redirect: import patched");
-    if (!g_servingSession) return true;
-    return hooks::install("save owner check", game::kSaveOwnerCheckFunction, reinterpret_cast<void*>(&isSaveOwnerDetour),
-                          reinterpret_cast<void**>(&g_originalIsSaveOwner));
+    if (g_servingSession &&
+        !hooks::install("save owner check", game::kSaveOwnerCheckFunction, reinterpret_cast<void*>(&isSaveOwnerDetour),
+                        reinterpret_cast<void**>(&g_originalIsSaveOwner))) {
+        return false;
+    }
+    g_patched = true;
+    return true;
 }
 
 bool servingSession() { return g_servingSession; }
+
+bool patched() { return g_patched; }
 
 void uninstall() {
     if (g_original) writeImport(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_original)));

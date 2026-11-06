@@ -8,10 +8,12 @@
 #include "../src/game_state_rule.h"
 #include "../src/hook_rule.h"
 #include "../src/join_warp_rule.h"
+#include "../src/load_slot_rule.h"
 #include "../src/local_body.h"
 #include "../src/profile_rule.h"
 #include "../src/save_folders.h"
 #include "../src/session_rule.h"
+#include "../src/title_menu_rule.h"
 #include "../src/wire_dd2.h"
 #include "../src/world_gate_rule.h"
 
@@ -305,7 +307,37 @@ void sessionRuleTests() {
     check(!session_rule::stale(5000, 6000), "a frame stamped after the tick does not make a peer stale");
 }
 
+void loadSlotRuleTests() {
+    using namespace load_slot_rule;
+    check(parse("4") == 4 && parse("0") == 0 && parse("12") == 12, "the forced slot is a plain number");
+    check(parse("") == kNoSlot && parse(nullptr) == kNoSlot && parse("x") == kNoSlot && parse("-1") == kNoSlot && parse("4a") == kNoSlot,
+          "an empty, signed or non-numeric slot forces nothing");
+    check(slotFor(true, 4, 0) == 4 && slotFor(true, 4, 1) == 4 && slotFor(true, 4, 4) == 4, "a guest loads the host's slot whichever row it asked");
+    check(slotFor(true, 0, 3) == 0, "slot 0 (the autosave) can be the forced one");
+    check(slotFor(true, 4, -1) == -1, "the system data load is never changed");
+    check(slotFor(false, 4, 0) == 0, "a host never rewrites a load");
+    check(slotFor(true, kNoSlot, 3) == 3, "a guest with no forced slot loads what it asked");
+}
+
+void titleMenuRuleTests() {
+    using namespace title_menu_rule;
+    const Menu ready{true, true, true};
+    check(waiting(ready) && !waiting({false, true, true}) && !waiting({true, false, true}) && !waiting({true, true, false}),
+          "the menu waits only in SelectMenu with the SaveService idle and the redirect safe");
+    check(!settled(0, 99999) && !settled(1000, 1000 + kSettleMs - 1) && settled(1000, 1000 + kSettleMs), "Continue is pressed after the settle time");
+    const int32_t rows[] = {13, 0, 2, 8};
+    check(rowOf(rows, 13) == 0 && rowOf(rows, 2) == 2 && rowOf(rows, 7) == -1 && rowOf({}, 13) == -1 && rowOf(rows, kUnknownLiteral) == -1,
+          "the first row of an item type, or none");
+    check(blocksNewGame(true, 0, 0, 1) && blocksNewGame(true, 1, 0, 1), "a guest may not choose the New Game rows");
+    check(!blocksNewGame(false, 0, 0, 1), "a host may");
+    check(!blocksNewGame(true, 13, 0, 1) && !blocksNewGame(true, 2, 0, 1), "a guest's Continue and Load rows run");
+    check(!blocksNewGame(true, kUnknownLiteral, kUnknownLiteral, kUnknownLiteral) && !blocksNewGame(true, 0, kUnknownLiteral, kUnknownLiteral),
+          "nothing is refused when a literal or the row is unknown");
+}
+
 int main() {
+    loadSlotRuleTests();
+    titleMenuRuleTests();
     gameStateTests();
     sessionRuleTests();
     rosterTests();

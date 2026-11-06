@@ -22,6 +22,7 @@ struct Input {
     bool sameRoom = false;
     uint16_t room = kNoRoom;  // the partner's loaded scene id
     bool inMenu = false;
+    bool connectionLost = false;  // nothing arrived from the partner for kConnectionLostMs
 };
 
 Condition condition(int hp, int maxHp);
@@ -31,7 +32,8 @@ struct Tag {
     std::string name;
     bool hasCondition = false;  // false until a PLAYER_STATE arrived
     Condition condition = Condition::Fine;
-    std::string detail;         // "Hall", "In menu" or both ("Room 0xNN" for a room with no known name); empty while together
+    std::string detail;         // "Hall", "In menu" or both ("Room 0xNN" for a room with no known name); empty while together;
+                                // "Connection lost" alone when the partner went silent
 
     bool operator==(const Tag&) const = default;
 };
@@ -40,6 +42,12 @@ Tag tag(const Input& input);
 
 // A PLAYER_STATE older than this is not the partner's condition any more (they send one 50 times a second).
 constexpr uint32_t kStateFreshMs = 2000;
+
+// No frame of any kind from the partner for this long: the link is down (the partner's game sends something every 2 s at
+// the least) and the tag says so until the next frame.
+constexpr uint32_t kConnectionLostMs = 6000;
+
+constexpr bool connectionLost(uint32_t silenceMs) { return silenceMs >= kConnectionLostMs; }
 
 // The tag shows only while both games are in play and the partner's own state is fresh: not after a game over, a reload
 // or the partner closing its game while its launcher stays in the session.

@@ -14,6 +14,9 @@ bool install(WriteListener onCloudWrite);
 // True when the files of <game dir>\coop\session are being served (this machine is a guest playing the host's save).
 bool servingSession();
 
+// True once `install` succeeded in full: the import points at the proxy and, for a guest, the save owner check is bypassed.
+bool patched();
+
 // Restores the original import.
 void uninstall();
 

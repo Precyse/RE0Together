@@ -62,6 +62,6 @@ bool gameMatchesBuild() {
     bool ok = timeStampMatches();
     ok = codeMatches(expectedCode()) && ok;
     ok = codeMatches(force_join_sites::checks()) && ok;
-    logger::write(ok ? "code check: exe matches the supported build" : "code check: exe differs, nothing will be patched");
+    logger::write(ok ? "code check: exe matches the supported build" : "code check: exe differs from the supported build");
     return ok;
 }

@@ -64,6 +64,7 @@ add_library(dd2coop SHARED
     src/save_service.cpp
     src/save_notice.cpp
     src/load_slot.cpp
+    src/title_menu.cpp
     src/game_state.cpp
     src/overlay.cpp
     src/save_folders.cpp

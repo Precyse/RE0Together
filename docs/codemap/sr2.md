@@ -21,7 +21,7 @@ Build and tests: `adapters/sr2/rebuild.cmd`, `adapters/sr2/test.cmd` (vcvars32, 
 | src/byte_pattern.h | pure byte compare | `firstMismatch` |
 | src/code_patch.cpp | an exe code edit as data (`CodePatch`: address, expected bytes, replacement) | `codeMatches`, `applyCodePatches`, `revertCodePatches`, `relativeBranch`, `littleEndian` |
 | src/memory.cpp | safe read of this process; `readDword` (0 when unreadable) | `readMemory`, `readDword`, `readByte`, `readWord`, `readFloat`, `readCString`, ... |
-| src/code_check.cpp | refuses to patch a different exe: PE time stamp, prologues of hooked functions | `gameMatchesBuild` |
+| src/code_check.cpp | refuses to patch a different exe: PE time stamp, prologues of hooked functions | `gameMatchesBuild` (logs the differences; `init.cpp` logs the `co-op off:` line and stops) |
 | src/coop_limits.cpp | hooks `net_set_mode`; before mode 1 runs it calls `coop_pools::resize` (with room for the 64 vehicle pool when `vehicle_pool::wanted`), then `vehicle_pool::install`, then `replication_switch::enable` | `install`, `insideNetSetMode` |
 | src/limit_thunk.cpp | retargets the allocator-set activation call (0x7F7220) to a naked thunk that writes `max_players` into both limits first (and calls `vehicle_pool::onCoopActivation`) | `install` |
 | src/coop_pools.cpp | gives the `coop_player cpu`, `coop_player gpu` and `coop_allocators` pools a VirtualAlloc block (per-pool size rule), once, all or none, with an identity and empty check | `resize` |

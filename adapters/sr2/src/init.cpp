@@ -67,7 +67,10 @@ DWORD WINAPI initThread(LPVOID) {
         const bool replicating = config.maxPlayers > sr2::kCoopDefaultPlayers;
         bool supported = gameMatchesBuild();
         if (replicating) supported = replication_switch::sitesMatch() && supported;
-        if (!supported) return 0;
+        if (!supported) {
+            logger::write("co-op off: Saints Row 2's exe differs from the supported one (another patch changed it)");
+            return 0;
+        }
         if (replicating) player_visuals::installSkinPool(config.maxPlayers);
         const bool partnering = replicating && partner_patches::sitesMatch();
         if (replicating && !partnering) logger::write("partner: sites differ, the partner logic is not installed");

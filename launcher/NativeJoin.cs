@@ -45,14 +45,47 @@ public sealed class NativeJoin : IDisposable
         return nativeJoin;
     }
 
-    /// <summary>The status line as a player reads it: "searching 3", "login needed".</summary>
+    /// <summary>The status line as a player reads it: a sentence, with what to do when there is something to do. A state this
+    /// launcher does not know is shown as the mod wrote it.</summary>
     public static string Readable(string line)
     {
         var detailAt = line.IndexOf(DetailKey, StringComparison.Ordinal);
-        var state = (detailAt < 0 ? line : line[..detailAt]).Replace(StatePrefix, string.Empty).Replace('_', ' ');
+        var state = (detailAt < 0 ? line : line[..detailAt]).Replace(StatePrefix, string.Empty);
         var detail = detailAt < 0 ? string.Empty : line[(detailAt + DetailKey.Length)..];
-        return $"{state} {detail}".Trim();
+        return state switch
+        {
+            "advertising" => "Hosting, waiting for players to join",
+            "in_session" => int.TryParse(detail, out var members) ? $"In the session with {members} {(members == 1 ? "player" : "players")}" : "In the session",
+            "wrong_mode" => "Wrong menu: host from Co-op > LAN, not Online",
+            "waiting" => WaitingWords(detail),
+            "login_needed" => "Not signed in: sign in to an online profile in the game's Co-op > Online menu",
+            "searching" => int.TryParse(detail, out var listed) && listed > 0 ? $"Looking for the host's game ({listed} listed)" : "Looking for the host's game",
+            "found" => "Found the host's game, joining",
+            "dialog" => "Answer the game's dialog (pick a save or New Game) to continue",
+            "joining" => "Joining the host's game",
+            "joined" => "In the host's game",
+            "failed" => FailedWords(detail),
+            "stopped" => "Co-op stopped",
+            _ => $"{state.Replace('_', ' ')} {detail}".Trim(),
+        };
     }
+
+    private static string WaitingWords(string detail) => detail switch
+    {
+        "link" => "Waiting for the connection to the host",
+        "front end" => "Waiting for the game's main menu (close any open menu or dialog)",
+        "login" => "Signing in to the online service",
+        _ => $"Waiting {detail}".Trim(),
+    };
+
+    private static string FailedWords(string detail) => detail switch
+    {
+        "version" => "Could not join: the host's Saints Row 2 or mod version differs from yours",
+        "password" => "Could not join: the host refused the session password, leave and join the lobby again",
+        "host_address" => "Could not join: the game found in the list is not the host's, leave and join the lobby again",
+        "no join" => "Could not join after several tries, leave and join the lobby again",
+        _ => $"Could not join {detail}".Trim(),
+    };
 
     /// <summary>A new lobby replaced the failed one for the same session: its id goes into the join file and the status line
     /// is published to it again.</summary>

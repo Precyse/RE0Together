@@ -12,6 +12,7 @@
 
 #include "../src/actor_key.h"
 #include "../src/equip_rule.h"
+#include "../src/game_state_rule.h"
 #include "../src/field_time_rule.h"
 #include "../src/hit_rule.h"
 #include "../src/kill_rule.h"
@@ -593,7 +594,31 @@ void fieldTimeTests() {
 
 }  // namespace
 
+void gameStateTests() {
+    using namespace game_state_rule;
+    using Gate = world_gate_rule::State;
+    check(placeOf(Gate::Ready) == Place::World && placeOf(Gate::Loading) == Place::Loading &&
+              placeOf(Gate::AwaitLocalReady) == Place::Loading && placeOf(Gate::Title) == Place::Title,
+          "game state: the gate maps to world, loading (also while awaiting the local player) and title");
+    check(copyOf({}).refusal == nullptr && !copyOf({}).off, "game state: nothing wrong is copy ok");
+    check(copyOf({false, false, true, kCodeSilent}).off, "game state: presence=0 is copy off whatever else is wrong");
+    check(std::string(copyOf({true, false, true, kCodeSilent}).refusal) == kCodeNames, "game state: missing names come first");
+    check(std::string(copyOf({true, true, true, kCodeSilent}).refusal) == kCodeRecipe, "game state: a recipe mismatch comes before a peer problem");
+    check(std::string(copyOf({true, true, false, kCodeTemplate}).refusal) == kCodeTemplate, "game state: a peer problem is reported");
+    check(linkOf(false, false, false) == Link::Live && linkOf(true, true, false) == Link::Live, "game state: a peer before and after its hello is live");
+    check(linkOf(true, false, true) == Link::Mismatch && linkOf(true, true, true) == Link::Stale, "game state: a different adapter is a mismatch before stale");
+    Report report;
+    check(format(report) == "place=title;char=off;save=off;slot=-1;copy=ok;peers=", "game state: the idle line");
+    report.place = Place::World;
+    report.copy = copyOf({true, true, false, kCodeSilent});
+    report.peers = {{76561198000000001ull, Link::Mismatch}, {5, Link::Live}};
+    check(format(report) == "place=world;char=off;save=off;slot=-1;copy=refused:silent;peers=76561198000000001:2,5:0", "game state: refused copy and peers");
+    report.copy = copyOf({false});
+    check(format(report).find("copy=off;") != std::string::npos, "game state: copy off");
+}
+
 int main() {
+    gameStateTests();
     fieldTimeTests();
     saveHoldTests();
     storyTests();

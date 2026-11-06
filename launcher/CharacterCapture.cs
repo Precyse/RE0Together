@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using CoopLauncher.Gui;
 
 namespace CoopLauncher;
@@ -20,7 +19,7 @@ public sealed record CaptureView(CaptureState State, string Reason = "", string 
 /// <see cref="SettleMs"/> after the game is gone, so the real launch never meets the dying process. Gives up after <see cref="TimeoutMs"/>,
 /// or after <see cref="ModCheckMs"/> when the mod's logs show it never came up.
 /// </summary>
-public sealed partial class CharacterCapture
+public sealed class CharacterCapture
 {
     public const long TimeoutMs = 180_000;
     public const long ModCheckMs = 45_000;
@@ -71,7 +70,7 @@ public sealed partial class CharacterCapture
             : CampaignStore.SaveDir(profile, gameDir, characterId);
         if (GameLauncher.IsRunning(profile)) return capture.Fail(StartWords(LaunchResult.AlreadyRunning, profile, gameDir));
         var names = saveDir != null && Directory.Exists(saveDir) ? Directory.GetFiles(saveDir).Select(path => Path.GetFileName(path)) : [];
-        if (saveDir == null || NewestSlot(names, name => File.GetLastWriteTimeUtc(Path.Combine(saveDir, name))) is not { } slot)
+        if (saveDir == null || SlotFiles.Newest(names, name => File.GetLastWriteTimeUtc(Path.Combine(saveDir, name))) is not { } slot)
             return capture.Fail($"No {profile.Name} save on this PC: play once to create your Arisen, or pick another character");
         try
         {
@@ -105,15 +104,6 @@ public sealed partial class CharacterCapture
     {
         if (View.State == CaptureState.Running) BeginClose(View with { State = CaptureState.Failed, Reason = "The capture was cancelled" }, nowMs);
     }
-
-    /// <summary>The slot of the newest game save among file names: <c>data000.bin</c> is slot 0, <c>data00NSlot.bin</c> slot N; the
-    /// system file (<c>data00-1.bin</c>) and anything else is not a game slot. Null when there is none (pure, unit tested).</summary>
-    public static int? NewestSlot(IEnumerable<string> names, Func<string, DateTime>? writeTime = null) =>
-        names.Select(name => (Name: name, Match: GameSlot().Match(name)))
-            .Where(pair => pair.Match.Success)
-            .OrderByDescending(pair => writeTime?.Invoke(pair.Name) ?? DateTime.MinValue)
-            .Select(pair => (int?)int.Parse(pair.Match.Groups[1].Value, CultureInfo.InvariantCulture))
-            .FirstOrDefault();
 
     /// <summary>The adapter's result line as a view: <c>ok</c> is done; <c>failed: &lt;code&gt;: &lt;detail&gt;</c> failed with a sentence for its
     /// code (title, load, empty, redirect, write, timeout) or, for a code not known, its detail; anything else failed as unreadable.</summary>
@@ -214,7 +204,4 @@ public sealed partial class CharacterCapture
         View = _outcome!;
         Log.Info(View.State == CaptureState.Done ? "Character read" : $"Character not read: {View.Reason}");
     }
-
-    [GeneratedRegex(@"^data0*(\d+)(?:Slot)?\.bin$", RegexOptions.IgnoreCase)]
-    private static partial Regex GameSlot();
 }

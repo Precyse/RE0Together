@@ -7,6 +7,7 @@
 #include "crash_dump.h"
 #include "equipment.h"
 #include "funnels.h"
+#include "game_state.h"
 #include "hooks.h"
 #include "link.h"
 #include "log.h"
@@ -30,6 +31,7 @@ constexpr DWORD kWorldSystemPollMs = 500;
 // Nothing is read or hooked before the title screen's WorldSystem exists: by then Denuvo has run and the Troc
 // instances hold their derived vtables.
 void waitForWorldSystem() {
+    if (!safe_read::pointer(cd_sites::kWorldSystem)) logger::write("adapter: waiting for the title (WorldSystem)");
     while (!safe_read::pointer(cd_sites::kWorldSystem)) Sleep(kWorldSystemPollMs);
     logger::write("adapter: WorldSystem present");
 }
@@ -40,7 +42,7 @@ DWORD WINAPI initThread(LPVOID) {
     logger::write("adapter: start (Crimson Desert)");
     crash_dump::install();
     const Config config = loadConfig();
-    if (!build_gate::checkRunningGame()) return 0;
+    if (!build_gate::checkRunningGame() || !build_gate::checkNoConflict()) return 0;
     waitForWorldSystem();
     crash_dump::install();  // the game's own reporter (sentry) may have put its filter in front of ours by now
 
@@ -48,6 +50,7 @@ DWORD WINAPI initThread(LPVOID) {
     world_gate::watchOpcodes();
     const bool presence = presence_send::watchOpcodes() && presence_recv::resolveOpcodes();
     presence_recv::setEnabled(presence && config.presence);
+    game_state::setPresence(config.presence, presence);
     logger::write("adapter: presence %s", !presence ? "off (message names missing)" : config.presence ? "on" : "off (adapter.ini presence=0)");
     const bool equipmentNames = presence && equipment::resolveOpcodes();
     const bool minimapNames = presence && minimap::resolveOpcodes();

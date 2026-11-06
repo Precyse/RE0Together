@@ -13,6 +13,7 @@ internal static partial class SessionScreens
     private const double BytesPerMb = 1048576.0;
     private const string FileGap = "  ";
     private const string UnknownHost = "host";
+    private const string WaitingForTitleWords = "Waiting for the title screen";
     private const string SeatLineFormat = "Player {0} of {1}";
 
     private enum JoinStep { Lobby, World, BuildCheck, ReceivingSave, Character, Waiting, Starting, InGame }
@@ -106,9 +107,9 @@ internal static partial class SessionScreens
             JoinStep.Character => CharacterRow(mark, s, g, nowMs),
             JoinStep.Waiting => new StepRow($"Waiting for {(hostName.Length > 0 ? hostName : UnknownHost)}", mark),
             JoinStep.Starting => active
-                ? new StepRow("Starting game", mark, SinceTimer(s.StepSinceMs, nowMs), Indeterminate: true)
+                ? new StepRow(s.GameWaitingForTitle ? WaitingForTitleWords : "Starting game", mark, SinceTimer(s.StepSinceMs, nowMs), Indeterminate: true)
                 : new StepRow("Starting game", mark),
-            _ => new StepRow("In game", mark),
+            _ => new StepRow(g.InGameStep ?? "In game", mark),
         };
     }
 
@@ -127,7 +128,7 @@ internal static partial class SessionScreens
 
     /// <summary>The mod's log path under a failure that is about the mod not coming up.</summary>
     private static IReadOnlyList<string>? LogLines(RefusalKind kind, GameProfile g, string? gameDir) =>
-        kind is RefusalKind.ModNotLoaded or RefusalKind.FrameworkNotLoaded && gameDir != null && ModLoadCheck.LogPath(g, gameDir) is { Length: > 0 } path ? [path] : null;
+        kind is RefusalKind.ModNotLoaded or RefusalKind.FrameworkNotLoaded or RefusalKind.ModNotStarted && gameDir != null && ModLoadCheck.LogPath(g, gameDir) is { Length: > 0 } path ? [path] : null;
 
     private static StepRow ReceivingRow(AppStatus s)
     {
@@ -154,7 +155,7 @@ internal static partial class SessionScreens
         RefusalKind.SaveTimedOut or RefusalKind.SaveFolderMissing or RefusalKind.SaveDiffers or RefusalKind.SaveResignFailed => JoinStep.ReceivingSave,
         RefusalKind.SaveNotProtected => JoinStep.InGame,
         RefusalKind.LaunchFailed or RefusalKind.GameUnsupported or RefusalKind.PortInUse or RefusalKind.GameRunning
-            or RefusalKind.FrameworkNotLoaded or RefusalKind.ModNotLoaded => JoinStep.Starting,
+            or RefusalKind.FrameworkNotLoaded or RefusalKind.ModNotLoaded or RefusalKind.OtherCoopMod or RefusalKind.ModNotStarted => JoinStep.Starting,
         _ => JoinStep.Lobby,
     };
 

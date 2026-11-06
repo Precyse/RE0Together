@@ -20,6 +20,8 @@ BRIDGE_PORTS = (27994, 27995)
 RE0_APP_ID = 339340
 COPY_NAMES = ("CheckOld", "CheckNew", "CheckNew2", "CheckNew3", "CheckNew4", "CheckNew5", "CheckNew6")
 MOD_FILE = "dinput8.dll"
+MOD_FOLDER = ROOT / "adapters" / "re0" / "fonts"  # the profile's other mod files: a game without them has no mod hash
+MOD_FOLDER_DST = Path("coop") / "fonts"
 COOP_ENABLED = "coop=1 in"  # the launcher logs "Set ..., coop=1 in <adapter.ini>" when it lets the game start
 OUTCOMES = ("mismatch", "Mod files differ", "Mod not installed", COOP_ENABLED)  # how a guest's log shows the check is done
 
@@ -50,6 +52,7 @@ def run(host_exe, guest_exe, work, host_game_build, guest_game_build, host_mod=N
     for game, mod in ((host_game, host_mod), (guest_game, guest_mod)):
         if mod is not None:
             (game / MOD_FILE).write_bytes(mod)
+            shutil.copytree(MOD_FOLDER, game / MOD_FOLDER_DST)
     common = ["--transport", "local", "--no-launch"]
     host = launcher(["host", "re0", *common, "--local-port", str(PORTS[0]), "--peer-port", str(PORTS[1]),
                      "--bridge-port", str(BRIDGE_PORTS[0]), "--save-source", str(source), "--game-dir", str(host_game)],

@@ -90,6 +90,19 @@ public static class SessionProgressTests
         Check.That(GameState.Parse("place=title;char=off;save=refused;slot=-1;peers=1:0"u8.ToArray()) == new GameState(GamePlace.Title, GameCharacter.Off, GameSave.Refused),
             "GAME_STATE parses its pairs, an unknown key is skipped and slot -1 is unknown");
         Check.That(GameState.Parse("place=nowhere;char=7"u8.ToArray()).IsEmpty, "an unknown value stays unknown");
+        var cd = GameState.Parse("place=world;char=off;save=off;slot=-1;copy=refused:silent;peers=76561198000000001:0,5:2"u8.ToArray());
+        Check.That(cd == new GameState(GamePlace.World, GameCharacter.Off, GameSave.Off, GameState.UnknownSlot, GameCopy.Refused, "silent", true),
+            "GAME_STATE parses the copy with its code and a peer in state 2 as a mod that differs");
+        Check.That(GameState.Parse("copy=ok;peers=7:0,8:1"u8.ToArray()) == new GameState(Copy: GameCopy.Ok), "a live or stale peer is not a difference");
+        Check.That(GameState.Parse("copy=off"u8.ToArray()).Copy == GameCopy.Off && GameState.Parse("copy=maybe"u8.ToArray()).Copy == GameCopy.Unknown, "copy off parses and an unknown copy value stays unknown");
+        var re0 = GameState.Parse("place=world;coop=0;load=failed"u8.ToArray());
+        Check.That(re0 == new GameState(GamePlace.World, Coop: false, Load: GameLoad.Failed), "GAME_STATE parses coop and load");
+        Check.That(GameState.Parse("coop=1;load=ok"u8.ToArray()) == new GameState(Coop: true, Load: GameLoad.Ok) && GameState.Parse("coop=x;load=7"u8.ToArray()).IsEmpty, "coop 1 and load ok parse, other values stay unknown");
+        var re0Text = StepCodec.Encode(new StepReport(SessionStep.InGame, Game: re0));
+        Check.That(re0Text == "step=InGame;place=world;coop=0;load=failed" && StepCodec.TryDecode(re0Text, out var re0Back) && re0Back.Game == re0, "coop and load are published as pairs and decode");
+        var cdText = StepCodec.Encode(new StepReport(SessionStep.InGame, Game: cd));
+        Check.That(cdText == "step=InGame;place=world;char=off;save=off;copy=refused:silent;differs=1", "copy and difference are published as pairs");
+        Check.That(StepCodec.TryDecode(cdText, out var cdBack) && cdBack.Game == cd, "copy and difference decode from the published step");
     }
 
     private static void Meter()

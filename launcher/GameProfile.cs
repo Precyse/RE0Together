@@ -113,12 +113,13 @@ public sealed record GameProfile(
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
     List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null, UiArtSource? UiArt = null,
     SaveBackupProfile? SaveBackup = null, CampaignsProfile? Campaigns = null, List<ConflictProfile>? Conflicts = null,
-    bool SettingsAtBoot = false, long LinkTimeoutMs = GameWatch.UnlinkedAfterMs, string? FrameworkLog = null)
+    List<string>? BootKeys = null, long LinkTimeoutMs = GameWatch.UnlinkedAfterMs, string? FrameworkLog = null, string? InGameStep = null)
 {
     // UiArt: the game art the in-game overlay draws, taken from the player's own install at launch.
     // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").
-    // SettingsAtBoot: the game reads its adapter ini only at start, so a game that already runs cannot be given a session.
+    // BootKeys: the adapter ini keys the adapter reads only at the game's start; a game that already runs started with other values of them cannot be given a session (<see cref="BootSettings"/>).
     // LinkTimeoutMs: how long a started game may run before the adapter must have linked. FrameworkLog: the mod loader's own log in the game folder.
+    // InGameStep: the words of the last step row of a session screen, for a game whose players still have to load their own save once it runs.
     // SaveIndex: where the save slots are (a game whose save file the launcher can list; the host picks a slot to load at launch).
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

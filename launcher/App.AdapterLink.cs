@@ -17,22 +17,30 @@ public sealed partial class App
         _lobbyStateDue = true;
     }
 
-    /// <summary>The adapter says where its game is (GAME_STATE): it is published with the step. A save folder the mod could not redirect is
-    /// a refusal on this player's screen (published like any other) until the adapter says it is fine.</summary>
+    /// <summary>The adapter says where its game is (GAME_STATE): it is published with the step. A save folder the mod could not redirect, or a
+    /// game that booted without co-op (to be closed and started again), is a refusal on this player's screen (published like any other)
+    /// until the adapter says it is fine.</summary>
     private void OnGameState(byte[] payload)
     {
         var state = GameState.Parse(payload);
         if (state == _gameState) return;
         _gameState = state;
         Log.Info($"Game state: {string.Join(' ', state.EncodePairs())}");
-        if (state.Save == GameSave.Refused && _refusal == null)
+        SyncGameRefusal(state.Save == GameSave.Refused, ref _saveRefused, RefusalKind.SaveNotProtected);
+        SyncGameRefusal(state.Coop == false, ref _coopOffRefused, RefusalKind.GameRunning, _profile?.Name ?? string.Empty);
+    }
+
+    /// <summary>The refusal of a game problem is set while the problem is there and nothing else is refused, and taken back when it is gone.</summary>
+    private void SyncGameRefusal(bool problem, ref bool latched, RefusalKind kind, string detail = "")
+    {
+        if (problem && _refusal == null)
         {
-            _saveRefused = true;
-            Refuse(RefusalKind.SaveNotProtected);
+            latched = true;
+            Refuse(kind, detail);
         }
-        else if (state.Save != GameSave.Refused && _saveRefused)
+        else if (!problem && latched)
         {
-            _saveRefused = false;
+            latched = false;
             _refusal = null;
         }
     }

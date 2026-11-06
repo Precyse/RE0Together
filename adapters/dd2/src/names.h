@@ -105,13 +105,20 @@ constexpr const char* kLoadSlot = "load_slot";
 constexpr MethodRow kRequestLoad{"request_load", "app.SaveDataManager", "requestLoad",
                                  "System.Int32,app.SaveDataManager.SaveLoadRequestArgs,System.UInt32[]", 0x145c92980, 1, kLoadSlot};
 
-constexpr std::array<MethodRow, 34> kAll{kChangeFlowPhase, kChangeSceneType, kCompleteSceneLoad, kFerrystoneLoad, kReadyCharacter,
+// The title-menu set (src/title_menu.h): the title menu GUI (app.ui030201) every frame it is up, and its list selection (the one
+// place a row of the menu is chosen: Continue, Load Game, New Game ...).
+constexpr const char* kTitleMenu = "title_menu";
+
+constexpr MethodRow kTitleUpdate{"title_update", "app.ui030201", "update", "", 0x145050fe0, 1, kTitleMenu};
+constexpr MethodRow kTitleSelectList{"title_select_list", "app.ui030201", "onSelectList", "", 0x146089cd0, 1, kTitleMenu};
+
+constexpr std::array<MethodRow, 36> kAll{kChangeFlowPhase, kChangeSceneType, kCompleteSceneLoad, kFerrystoneLoad, kReadyCharacter,
                                          kCharacterDestroy, kNavDestination, kPawnNavDestination, kActionCore, kLocomotion, kIdle,
                                          kDamageHp, kSetHp, kLeaveStrayPawn, kDestroyStrayPawn, kPawnLost, kSaveContexts,
                                          kLoadContexts, kSaveItems, kLoadItems, kAddPossessionPoint, kSetPossessionLv,
                                          kPawnPossessionLv, kMainPawnPossessionLv, kJudgePossession, kKillPossessed,
                                          kRegisterEnemy, kRemoveEnemy, kRegisterMonster, kRemoveMonster, kMonsterNavDestination,
-                                         kMonsterLocomotion, kMonsterIdle, kRequestLoad};
+                                         kMonsterLocomotion, kMonsterIdle, kRequestLoad, kTitleUpdate, kTitleSelectList};
 
 // Native bodies shared by many methods (an empty method body, a trivial setter): never hooked, whatever a row says.
 constexpr std::array<uintptr_t, 1> kSharedBodies{0x145ab65c0};  // shared by 48,893 methods, among them every empty .ctor

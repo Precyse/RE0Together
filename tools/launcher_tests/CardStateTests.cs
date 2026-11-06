@@ -17,6 +17,9 @@ public static class CardStateTests
         RefusalKind? refusal = null) =>
         new(1, "Amy", false, false, status, step, 0, rtt, held, silent, Refusal: refusal);
 
+    private static PlayerSlot InGame(GameState game) =>
+        new(1, "Amy", false, false, Step: SessionStep.InGame, Game: game);
+
     private static void States()
     {
         Check.That(CardStates.Of(Player(held: true, step: SessionStep.InGame)) == CardState.Problem, "a held player is a problem even in game");
@@ -56,6 +59,15 @@ public static class CardStateTests
         Check.That(CardStates.Words(Player(SessionStep.Refused, refusal: RefusalKind.GameBuild)) == "Game version differs", "a refused player reads its own reason");
         Check.That(CardStates.Words(Player(SessionStep.InGame, refusal: RefusalKind.GameBuild)) == "In game", "a reason only counts on the Refused step");
         Check.That(CardStates.Words(Player(rtt: 12)) == "Connected", "a ping without a step reads Connected");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.World, Copy: GameCopy.Refused, CopyWhy: "silent"))) == "Partner not shown: no data from them", "a copy removed for silence reads why");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.World, Copy: GameCopy.Refused, CopyWhy: "odd"))) == "Partner not shown: odd", "an unknown copy code is shown as it is");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.Title, ModDiffers: true, Copy: GameCopy.Refused, CopyWhy: "template"))) == "Mod differs", "a different mod comes before the copy");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.World, Copy: GameCopy.Ok))) == "In world" && CardStates.Words(InGame(new GameState(GamePlace.World, Copy: GameCopy.Off))) == "In world", "a shown or unwanted copy is no problem");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.World, Load: GameLoad.Failed))) == "Save did not load", "a save that did not load reads so");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.World, Coop: false))) == "Co-op off in this game", "a game that booted without co-op reads so");
+        Check.That(CardStates.Words(InGame(new GameState(GamePlace.World, Coop: true, Load: GameLoad.Ok))) == "In world", "co-op on and a loaded save are no problem");
+        Check.That(CardStates.Of(InGame(new GameState(GamePlace.World, Coop: false))) == CardState.Problem, "co-op off is a problem card");
+        Check.That(CardStates.Of(InGame(new GameState(GamePlace.World, Copy: GameCopy.Refused, CopyWhy: "recipe"))) == CardState.Problem, "a copy that is not shown is a problem card");
         Check.That(CardStates.Words(Player()) == "", "nothing known reads nothing");
     }
 }

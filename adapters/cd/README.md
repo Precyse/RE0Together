@@ -26,6 +26,14 @@ Remove it to go back to vanilla. Settings: `bin64\coop\adapter.ini` (`capture=1`
 3. `python -I tools/cd/capture_dump.py <capture.cdcap> <bin64\coop\troc_catalogue.tsv> --summary` lists every message
    seen and its exact payload sizes: they fill `size_table.h` in the next phase.
 
+## Launcher status (GAME_STATE)
+The adapter tells its launcher where the game is and whether the partner's copy is shown (`adapter.log` line
+`game_state: place=...;copy=ok|off|refused:<code>;peers=...`). Codes: `silent` (no frame from the peer for 8 s; the copy
+is removed and comes back with the next frame), `template`, `recipe`, `names`. A peer whose adapter differs from ours
+(`peers` state 2) reads "Mod differs" on its card. `adapter.log` also says `waiting for the title (WorldSystem)` while the
+game boots, and `conflict: cdmp present: co-op off` when `bin64\cdmp.asi` is still beside the exe (the launcher archives
+cdmp at install; by hand, move it away).
+
 ## Presence check (probe L04 and the phase 3 gate, two PCs)
 `presence=1` (default). Both players load their own save; each `adapter.log` shows `presence_send: own template
 generation 1`, then on the other machine `presence_recv: slot N copy spawned ...`. CD_COUNTERS (in the log of both) must

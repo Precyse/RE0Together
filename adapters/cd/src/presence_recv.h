@@ -4,7 +4,7 @@
 // first action and a still Move, then its Move, StartAction and Rotate Reqs as Acks (presence_rule.h) on our own clock.
 // Only while both machines are Ready and the containment hooks are in (containment.h), never inside a load window,
 // only when this build's Req sizes match the recipes, and only when adapter.ini presence=1. A copy is removed with the game's own fade when the peer leaves, falls silent
-// for 8 s or sends a new template generation; our own load clears every copy (the client drops them itself).
+// for 8 s (and does not come back until a frame arrives) or sends a new template generation; our own load clears every copy (the client drops them itself).
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -32,6 +32,10 @@ struct CopyView {
     bool live = false;         // spawned and past its login grace
 };
 std::optional<CopyView> copyView(uint8_t slot, uint64_t nowMs);
+
+// Why a peer's copy is not shown while it should be (a game_state_rule.h code), or null: the template was refused, or the peer
+// fell silent and its copy was removed. The first problem of any peer.
+const char* copyProblem();
 
 struct Stats {
     uint32_t templatesApplied = 0, movesApplied = 0, actionsApplied = 0, actionsHeld = 0;

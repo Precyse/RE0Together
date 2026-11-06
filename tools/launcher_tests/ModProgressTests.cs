@@ -64,6 +64,17 @@ public static class ModProgressTests
         Check.That(failed.Reports.Last() is { Step: ModStep.Failed, Reason: "disk full" } last && last.Percent < 100, "a failed run keeps its percent below 100 and says why");
         Check.That(failed.Reports.All(r => r.Percent < 100), "a failed run never reaches 100");
 
+        var noted = new Collected();
+        var notedReport = new ProgressReporter(noted);
+        notedReport.Begin(ModStep.BackingUp, 10, 1, "Another winmm.dll was moved to x");
+        notedReport.Advance(10);
+        notedReport.Begin(ModStep.Copying, 10, 1);
+        notedReport.Advance(10);
+        Check.That(noted.Reports.Where(r => r.Step == ModStep.BackingUp).All(r => r.Reason == "Another winmm.dll was moved to x")
+            && noted.Reports.Where(r => r.Step == ModStep.Copying).All(r => r.Reason == null), "a step's note is on that step's reports only");
+        Check.That(CoopLauncher.Web.ModRunViews.Text(noted.Reports.First()) == "Another winmm.dll was moved to x"
+            && CoopLauncher.Web.ModRunViews.Text(noted.Reports.Last(r => r.Step == ModStep.Copying)) == "Copying", "the page shows the note instead of the step name");
+
         new ProgressReporter(null).Begin(ModStep.Checking, 10, 1);
     }
 

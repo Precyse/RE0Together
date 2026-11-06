@@ -27,6 +27,7 @@
 #include "frame_router.h"
 #include "game.h"
 #include "game_state.h"
+#include "game_state_report.h"
 #include "inventory_sync.h"
 #include "join_sync.h"
 #include "log.h"
@@ -68,6 +69,7 @@ struct KnownPeer {
     uint32_t joinSerial;  // the PEER_UP this slot's peer was last announced by
 };
 std::map<uint8_t, KnownPeer> g_knownPeers;  // slot -> peer, as of the last tick
+std::map<uint8_t, Clock::time_point> g_lastFrameAt;  // slot -> when a frame of any type last came from that peer
 SessionSnapshot g_lastSession;                // the previous tick's session without its peers
 
 // This guest's host went away: it goes back to the main menu, since nothing played on would reach the host's save.
@@ -87,6 +89,7 @@ void announcePeerChanges(const SessionSnapshot& session) {
         const auto known = g_knownPeers.find(slot);
         if (known == g_knownPeers.end()) {
             debug_overlay::toast((peer.name + " joined the game.").c_str(), kPeerToastSeconds, toast_queue::Style::Line);
+            g_lastFrameAt[slot] = Clock::now();
             partner_hud::onPeerJoined();
         } else if (guest && known->second.joinSerial != peer.joinSerial) {
             resync::request("partner reconnected");
@@ -94,6 +97,7 @@ void announcePeerChanges(const SessionSnapshot& session) {
     }
     for (const auto& [slot, peer] : g_knownPeers) {
         if (now.contains(slot)) continue;
+        g_lastFrameAt.erase(slot);
         debug_overlay::toast((peer.name + " left the game.").c_str(), kPeerToastSeconds, toast_queue::Style::Line);
         const bool wasGuest = g_lastSession.localSlot != g_lastSession.hostSlot;
         if (g_lastSession.linked && wasGuest && slot == g_lastSession.hostSlot) announceHostLeft(peer.name);
@@ -144,6 +148,7 @@ void noteModeMismatch(const GameFrame& frame) {
 }
 
 void onFrame(const GameFrame& frame) {
+    if (const auto seen = g_lastFrameAt.find(frame.slot); seen != g_lastFrameAt.end()) seen->second = Clock::now();
     net_trace::record(frame);
     noteModeMismatch(frame);
     if (frame.type == proto::kMsgPartyRequest || frame.type == proto::kMsgPartyMode) {
@@ -247,6 +252,7 @@ void tick(NetClient& net) {
     door_travel::onNetTick();
     phase_watch::onNetTick();
     session_slot::onNetTick(net);
+    game_state_report::onNetTick(net, session);
     lobby::onNetTick(net, session);
     auto_join::onNetTick();
     resync::onNetTick();
@@ -264,6 +270,12 @@ void tick(NetClient& net) {
 }  // namespace
 
 namespace state_sync {
+
+uint32_t silenceMs(uint8_t slot) {
+    const auto seen = g_lastFrameAt.find(slot);
+    if (seen == g_lastFrameAt.end()) return 0;
+    return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - seen->second).count());
+}
 
 void start(NetClient& net, uint16_t port) {
     net.start(port, kGameId, [&net] { tick(net); });

@@ -13,6 +13,14 @@ public static class CardStates
     private const string ConnectedWords = "Connected";
     private const string CharacterNotLoadedWords = "Character not loaded";
     private const string SaveNotProtectedWords = "Save not protected";
+    private const string SilentCode = "silent";
+    private const string TemplateCode = "template";
+    private const string RecipeCode = "recipe";
+    private const string NamesCode = "names";
+    private const string CoopOffWords = "Co-op off in this game";
+    private const string SaveNotLoadedWords = "Save did not load";
+    private const string ModDiffersWords = "Mod differs";
+    private const string PartnerNotShownPrefix = "Partner not shown: ";
     private const string DifferentSaveWords = "Different save than the host";
 
     /// <summary>Held, silent, a refused or closed game, a character or save that is wrong in game: Problem. Connecting, checking the
@@ -79,15 +87,32 @@ public static class CardStates
             _ => "In game",
         };
 
-    /// <summary>What is wrong in the game the adapter reports, in words, or null: a save folder that is not protected, a character that is
-    /// not loaded once in the world, or a save other than the host's (a guest at its title is told which slot to load).</summary>
+    /// <summary>What is wrong in the game the adapter reports, in words, or null: a save folder that is not protected, a game that booted
+    /// without co-op, a save that did not load, a mod that differs
+    /// from the other player's, the other player's copy that is not shown, a character that is not loaded once in the world, or a save
+    /// other than the host's (a guest at its title is told which slot to load).</summary>
     private static string? GameProblem(PlayerSlot player, PlayerSlot? host)
     {
         if (player.Game is not { } game) return null;
         if (game.Save == GameSave.Refused) return SaveNotProtectedWords;
+        if (game.Coop == false) return CoopOffWords;
+        if (game.Load == GameLoad.Failed) return SaveNotLoadedWords;
+        if (game.ModDiffers) return ModDiffersWords;
+        if (game.Copy == GameCopy.Refused) return PartnerNotShownPrefix + CopyWhyWords(game.CopyWhy);
         if (game.Place == GamePlace.World && game.Character is GameCharacter.None or GameCharacter.Mismatch or GameCharacter.Refused) return CharacterNotLoadedWords;
         if (player.IsHost || host?.Game is not { Slot: >= 0 } hostGame) return null;
         if (game.Place == GamePlace.Title) return $"Load slot {hostGame.Slot} like the host";
         return game.Place == GamePlace.World && game.Slot >= 0 && game.Slot != hostGame.Slot ? DifferentSaveWords : null;
     }
+
+    /// <summary>The adapter's short code for a copy that is not shown, in words; a code this launcher does not know is shown as it is.</summary>
+    private static string CopyWhyWords(string code) => code switch
+    {
+        SilentCode => "no data from them",
+        TemplateCode => "their character cannot be copied",
+        RecipeCode => "game build not supported by the mod",
+        NamesCode => "mod incomplete for this game build",
+        "" => "unknown reason",
+        _ => code,
+    };
 }

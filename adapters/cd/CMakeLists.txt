@@ -41,6 +41,7 @@ add_library(cd_adapter SHARED
     src/capture.cpp
     src/main_tick.cpp
     src/world_gate.cpp
+    src/game_state.cpp
     src/link.cpp
     src/self_hash.cpp
     src/census.cpp

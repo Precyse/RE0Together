@@ -148,6 +148,19 @@ public static class AdapterSettings
         }
     }
 
+    /// <summary>The ini's keys and values as they are now (what a game that started after the last write runs with), null when there is no ini.</summary>
+    public static Dictionary<string, string>? ReadKeys(string gameDir, GameProfile profile)
+    {
+        var path = IniPath(gameDir, profile);
+        if (!File.Exists(path)) return null;
+        return ReadLines(path).Select(line => line.Split('=', 2)).Where(parts => parts.Length == 2)
+            .GroupBy(parts => parts[0].Trim()).ToDictionary(group => group.Key, group => group.Last()[1].Trim());
+    }
+
+    /// <summary>When the ini was last written, null when there is none.</summary>
+    public static DateTime? IniWrittenUtc(string gameDir, GameProfile profile) =>
+        File.Exists(IniPath(gameDir, profile)) ? File.GetLastWriteTimeUtc(IniPath(gameDir, profile)) : null;
+
     private static string IniPath(string gameDir, GameProfile profile) => Path.Combine(gameDir, profile.AdapterIni);
 
     private static void SetKeys(string iniPath, IReadOnlyDictionary<string, string> keys)
@@ -161,7 +174,7 @@ public static class AdapterSettings
             else lines.Add(line);
         }
         Directory.CreateDirectory(Path.GetDirectoryName(iniPath)!);
-        File.WriteAllLines(iniPath, lines);
+        if (!File.Exists(iniPath) || !lines.SequenceEqual(ReadLines(iniPath))) File.WriteAllLines(iniPath, lines);  // an unchanged file keeps its write time: it says what a running game started with
         Log.Info($"Set {string.Join(", ", keys.Select(pair => $"{pair.Key}={pair.Value}"))} in {iniPath}");
     }
 

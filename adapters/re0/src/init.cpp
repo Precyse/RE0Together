@@ -29,6 +29,7 @@
 #include "flag_sync.h"
 #include "floor_items_sync.h"
 #include "game.h"
+#include "game_state_report.h"
 #include "game_tick.h"
 #include "coop_menu.h"
 #include "gui_text.h"
@@ -150,7 +151,7 @@ void startSubsystems() {
     // Before the decryption wait: the game creates its D3D device right after SteamStub finishes unpacking.
     if (config.overlay && !debug_overlay::install()) logger::write("adapter: overlay unavailable");
     if (!waitForDecryption()) {
-        logger::write("adapter: game code not decrypted after %lu ms, staying inert", kDecryptTimeoutMs);
+        logger::write("adapter: co-op off: the game did not finish decrypting (waited %lu ms)", kDecryptTimeoutMs);
         return;
     }
     if (config.netTrace) net_trace::enable();
@@ -162,10 +163,11 @@ void startSubsystems() {
     game_tick::install();
     crash_dump::install();
     if (config.coop) input_redirect::install();
+    game_state_report::configure(config.coop, save_redirect::patched());
     state_sync::start(g_net, config.port);
 }
 
-void logFatal(DWORD code) { logger::write("adapter: unhandled exception 0x%08lx during init, staying inert", code); }
+void logFatal(DWORD code) { logger::write("adapter: co-op off: start failed: unhandled exception 0x%08lx during init", code); }
 
 }  // namespace
 

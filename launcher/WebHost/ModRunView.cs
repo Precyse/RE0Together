@@ -43,8 +43,9 @@ internal static class ModRunViews
         return new ModRunDto(new StepDto(Text(progress), mark, $"{progress.Percent}%", progress.Percent / PercentScale, false, [], []), false, null);
     }
 
-    /// <summary>The step's name, with the file out of the files of the step when there are several.</summary>
+    /// <summary>The step's name, with the file out of the files of the step when there are several; the note a step carries replaces it.</summary>
     public static string Text(ModProgress progress) =>
+        progress.Reason is { } note && progress.Step != ModStep.Failed ? note :
         progress.Files > 1 && progress.File > 0 && progress.Step != ModStep.Done ? $"{Labels[progress.Step]} {progress.File}/{progress.Files}" : Labels[progress.Step];
 
     /// <summary>The home screen while a mod action runs: nothing that starts a session or another action can be pressed.</summary>
