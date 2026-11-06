@@ -35,6 +35,9 @@
 
 namespace {
 
+// REFramework's target name for the game (sdk::GameIdentity, compared exactly by its plugin loader; not the "dd2" it logs).
+constexpr const char* kReframeworkGameName = "DD2";
+
 uint32_t namesHash() {
     uint32_t state = fnv1a32::kOffsetBasis;
     auto add = [&state](const char* type, const char* method, const char* params, uintptr_t pinned) {
@@ -52,7 +55,7 @@ extern "C" __declspec(dllexport) void reframework_plugin_required_version(REFram
     version->major = REFRAMEWORK_PLUGIN_VERSION_MAJOR;
     version->minor = REFRAMEWORK_PLUGIN_VERSION_MINOR;
     version->patch = REFRAMEWORK_PLUGIN_VERSION_PATCH;
-    version->game_name = "dd2";
+    version->game_name = kReframeworkGameName;
 }
 
 extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFrameworkPluginInitializeParam* param) {
