@@ -1,7 +1,7 @@
 namespace CoopLauncher.Gui;
 
 /// <summary>What the notice row's fix button does.</summary>
-internal enum NoticeFix { None, InstallMod, UpdateMod, UpdateLauncher, Browse, JoinAgain, Switch, StartSteam }
+internal enum NoticeFix { None, InstallMod, UpdateMod, UpdateLauncher, Browse, JoinAgain, Switch, StartSteam, CheckUpdate, CloseGame }
 
 /// <summary>What the home hero and friends show for one status: which buttons are usable, the mod button, the friends hosting
 /// and the notice.</summary>
@@ -38,16 +38,23 @@ internal static class SessionCards
             return status.Invite != null ? NoticeFix.Switch : SteamIsOff(status) ? NoticeFix.StartSteam : NoticeFix.None;
         return refusal.Kind switch
         {
-            RefusalKind.ModNotInstalled => NoticeFix.InstallMod,
+            RefusalKind.ModNotInstalled or RefusalKind.RequirementMissing or RefusalKind.RequirementOtherVersion => NoticeFix.InstallMod,
             RefusalKind.ModFiles => NoticeFix.UpdateMod,
+            RefusalKind.LauncherBuild when HostIsBehind(refusal.Detail) => NoticeFix.None,
             RefusalKind.LauncherBuild or RefusalKind.UnknownGame => newerBuild > 0 ? NoticeFix.UpdateLauncher : NoticeFix.None,
+            RefusalKind.GameUnsupported => NoticeFix.CheckUpdate,
+            RefusalKind.GameRunning => NoticeFix.CloseGame,
             RefusalKind.GameNotFound => NoticeFix.Browse,
             RefusalKind.LobbyFull or RefusalKind.LobbyClosed or RefusalKind.LobbyNotAllowed or RefusalKind.LobbyFailed
-                or RefusalKind.NotCoopLobby or RefusalKind.SteamOffline or RefusalKind.SaveTimedOut or RefusalKind.SaveDiffers or RefusalKind.RejoinGaveUp =>
+                or RefusalKind.NotCoopLobby or RefusalKind.SteamOffline or RefusalKind.SaveTimedOut or RefusalKind.SaveDiffers or RefusalKind.RejoinGaveUp
+                or RefusalKind.HostUnreachable =>
                 refusal.LobbyId != 0 ? NoticeFix.JoinAgain : NoticeFix.None,
             _ => NoticeFix.None,
         };
     }
+
+    /// <summary>The refusal's host build is lower than this machine's: updating this launcher would not help, the host has to.</summary>
+    private static bool HostIsBehind(string detail) => RefusalVersions.TryParse(detail, out var host, out var you) && host < you;
 
     private static bool SteamIsOff(AppStatus status) => status.State == AppState.Offline && status.Offline == OfflineReason.SteamNotRunning;
 
@@ -57,16 +64,19 @@ internal static class SessionCards
         var fix = FixFor(status, newerBuild);
         var label = FixLabel(fix, newerBuild);
         if (status.Refusal is { } refusal)
-            return new Notice($"{refusal.Kind}/{refusal.GameId}/{refusal.LobbyId}", StatusText.Refusal(refusal), label, Report: true);
+            return new Notice($"{refusal.Kind}/{refusal.GameId}/{refusal.LobbyId}", StatusText.Refusal(refusal, HostName(status)), label, Report: true);
         if (status.Invite is { } invite) return new Notice($"invite/{invite.LobbyId}", string.Format(InviteWords, invite.FromName), label, Report: false);
         return fix == NoticeFix.StartSteam ? new Notice("steam/offline", SteamOfflineWords, label, Report: false) : null;
     }
+
+    private static string HostName(AppStatus status) => status.Players.FirstOrDefault(player => player.IsHost)?.Name ?? string.Empty;
 
     /// <summary>A refusal that the player's own fix has already resolved, so it can go: the game is found, its mod installed or
     /// its required file present.</summary>
     public static bool Resolved(Refusal refusal, GameStatus game) => refusal.Kind switch
     {
-        RefusalKind.ModNotInstalled or RefusalKind.GameNotFound or RefusalKind.RequirementMissing => game.CanHost,
+        RefusalKind.ModNotInstalled or RefusalKind.GameNotFound or RefusalKind.RequirementMissing or RefusalKind.RequirementOtherVersion => game.CanHost,
+        RefusalKind.GameRunning => !game.GameRunning,
         _ => false,
     };
 
@@ -92,6 +102,8 @@ internal static class SessionCards
         NoticeFix.JoinAgain => "Join again",
         NoticeFix.Switch => SwitchLabel,
         NoticeFix.StartSteam => StartSteamLabel,
+        NoticeFix.CheckUpdate => "Check for update",
+        NoticeFix.CloseGame => "Close game",
         _ => null,
     };
 }

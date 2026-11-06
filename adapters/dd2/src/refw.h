@@ -3,6 +3,7 @@
 // native bodies rebased to the dump's image base, enum literals by name, and hooks.
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,6 +27,9 @@ uintptr_t rebasedBody(REFrameworkMethodHandle method);
 
 // Every literal of an enum type as (name, value); empty when the type is unknown.
 std::vector<std::pair<std::string, int64_t>> enumLiterals(const char* type);
+
+// One literal of an enum type by name.
+std::optional<int64_t> enumLiteral(const char* type, const char* name);
 
 // 1 + the hook id, or 0 when REFramework refused the hook.
 unsigned addHook(REFrameworkMethodHandle method, REFPreHookFn pre, REFPostHookFn post);

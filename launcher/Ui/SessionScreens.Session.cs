@@ -26,11 +26,11 @@ internal static partial class SessionScreens
         var state = preGame ? null : LobbyStateOf(s, c, unixNow ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         return new SessionModel(
             preGame, isHost, s.LobbyId != 0 ? s.LobbyId.ToString(CultureInfo.InvariantCulture) : string.Empty,
-            !preGame ? [] : isHost ? HostingSteps(s, mod, nowMs) : JoiningSteps(s, g, s.Players.FirstOrDefault(player => player.IsHost)?.Name ?? string.Empty, nowMs),
+            !preGame ? [] : isHost ? HostingSteps(s, g, gameDir, mod, nowMs) : JoiningSteps(s, g, gameDir, s.Players.FirstOrDefault(player => player.IsHost)?.Name ?? string.Empty, nowMs),
             preGame && (isHost ? StartEnabled(s, local!) : ReadyEnabled(s, g)), state,
             preGame ? [] : HostOptions(s, g), preGame ? [] : events.TakeLast(RecentEvents).ToList(),
             preGame ? !isHost && LaunchStalled(s, c, nowMs) : state?.Kind == LobbyStateKind.GameClosed, preGame ? $"{s.Players.Count}/{seats.Count}" : string.Empty,
-            seats, seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
+            seats, seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0), preGame && !isHost ? GuestButtonWords(s, ReadyEnabled(s, g)) : string.Empty);
     }
 
     /// <summary>One card per seat: the host first, then the other members, then open seats up to the seat count.</summary>
@@ -53,7 +53,7 @@ internal static partial class SessionScreens
         for (var seat = 0; seat < count; seat++)
         {
             var character = seat < s.SeatCharacters.Count ? s.SeatCharacters[seat] : string.Empty;
-            cards.Add(seat < members.Count ? Taken(members[seat], character, g, gameDir, wide, withSteps && !members[seat].IsLocal, hostView && !members[seat].IsLocal) : OpenCard(character));
+            cards.Add(seat < members.Count ? Taken(members[seat], members.FirstOrDefault(member => member.IsHost && member != members[seat]), character, g, gameDir, wide, withSteps && !members[seat].IsLocal, hostView && !members[seat].IsLocal) : OpenCard(character));
         }
         return cards;
     }
@@ -69,15 +69,15 @@ internal static partial class SessionScreens
     private static PlayerCard OpenCard(string character) =>
         new(0, OpenName, string.Empty, character, string.Empty, string.Empty, CardState.Open, false, null, [], null, string.Empty);
 
-    private static PlayerCard Taken(PlayerSlot player, string character, GameProfile g, string? gameDir, bool wide, bool withSteps, bool kickable)
+    private static PlayerCard Taken(PlayerSlot player, PlayerSlot? host, string character, GameProfile g, string? gameDir, bool wide, bool withSteps, bool kickable)
     {
         var corner = Corner(player);
         var hostCorner = player.IsHost && (corner.Length == 0 || (wide && player.IsLocal));
         var outfit = OutfitValue(player, character, g, gameDir);
         var entry = g.HasCharacterSelect ? GameOptions.CharacterEntry(g, character) : null;
         return new PlayerCard(
-            player.Id, player.Name, hostCorner ? HostWord : corner, DetailOf(character, outfit, g), CardStates.Words(player),
-            player.IsHost && !hostCorner ? HostWord : string.Empty, CardStates.Of(player), player.IsLocal, FigureOf(character, outfit, g),
+            player.Id, player.Name, hostCorner ? HostWord : corner, character.Length == 0 ? player.Label : DetailOf(character, outfit, g), CardStates.Words(player, host),
+            player.IsHost && !hostCorner ? HostWord : string.Empty, CardStates.Of(player, host), player.IsLocal, FigureOf(character, outfit, g),
             withSteps ? JoinerSteps(player, g) : [], player.Step == SessionStep.ReceivingSave ? player.Percent / PercentScale : null,
             player.Held ? MinutesSeconds(player.HoldSecondsLeft) : string.Empty,
             entry?.Unit ?? string.Empty, entry?.FullName ?? string.Empty, OutfitLabel(character, outfit, g) ?? string.Empty, CardStates.IsReady(player), kickable);
@@ -131,19 +131,39 @@ internal static partial class SessionScreens
         return rows;
     }
 
-    /// <summary>A guest that picks its character may press READY once its save arrived, until it did.</summary>
+    /// <summary>A guest that picks its character may press READY once its save arrived and until it did (again after a character that
+    /// could not be read).</summary>
     private static bool ReadyEnabled(AppStatus s, GameProfile g) =>
-        OptionSources.GuestPicksCharacter(g) && s.Step == SessionStep.Ready && !s.StartRequested;
+        OptionSources.GuestPicksCharacter(g) && s.Step is SessionStep.PickingCharacter or SessionStep.CharacterNotRead && !s.StartRequested;
 
-    /// <summary>The host may start once its own step is Ready and nobody else is still joining.</summary>
+    /// <summary>The host may start once its own step is Ready and every guest is ready too.</summary>
     private static bool StartEnabled(AppStatus s, PlayerSlot local) =>
-        s.Step == SessionStep.Ready && !s.Players.Any(player => player != local && player.Step is SessionStep.Lobby or SessionStep.CheckingBuild or SessionStep.ReceivingSave);
+        s.Step == SessionStep.Ready && s.StartBlocked.Length == 0 && s.Players.Where(player => player != local).All(CardStates.IsPrepared);
 
-    private static IReadOnlyList<StepRow> HostingSteps(AppStatus s, GameStatus mod, long nowMs)
+    /// <summary>The guest's button follows its step: READY while it can be pressed, else what the guest is waiting for (WAITING FOR HOST only
+    /// once everything is prepared).</summary>
+    private static string GuestButtonWords(AppStatus s, bool readyEnabled)
+    {
+        if (readyEnabled) return "READY";
+        if (s.ConnectingToHost) return "CONNECTING";
+        return s.Step switch
+        {
+            SessionStep.None or SessionStep.Lobby => "CONNECTING",
+            SessionStep.CheckingBuild => "CHECKING BUILD",
+            SessionStep.ReceivingSave => "RECEIVING SAVE",
+            SessionStep.ReadingCharacter => "READING CHARACTER",
+            SessionStep.StartingGame => "STARTING GAME",
+            _ => "WAITING FOR HOST",
+        };
+    }
+
+    private static IReadOnlyList<StepRow> HostingSteps(AppStatus s, GameProfile g, string? gameDir, GameStatus mod, long nowMs)
     {
         var opening = s.Step == SessionStep.None;
         var sending = s.Players.FirstOrDefault(player => !player.IsLocal && player.Step == SessionStep.ReceivingSave);
-        var third = s.Step == SessionStep.StartingGame ? new StepRow("Starting game", StepMark.Active, SinceTimer(s.StepSinceMs, nowMs))
+        var third = s.StartBlocked.Length > 0 ? new StepRow(s.StartBlocked, StepMark.Failed)
+            : s.Refusal is { } refusal && RefusalStep(refusal.Kind) == JoinStep.Starting ? FailedRow(refusal, string.Empty, LogLines(refusal.Kind, g, gameDir))
+            : s.Step == SessionStep.StartingGame ? new StepRow("Starting game", StepMark.Active, SinceTimer(s.StepSinceMs, nowMs))
             : sending != null ? new StepRow($"Sending save to {sending.Name}", StepMark.Active)
             : new StepRow("Waiting for players", opening ? StepMark.Pending : StepMark.Active, opening ? string.Empty : SinceTimer(s.LobbyOpenedAtMs, nowMs));
         return

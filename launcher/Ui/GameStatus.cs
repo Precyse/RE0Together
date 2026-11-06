@@ -5,11 +5,13 @@ internal readonly record struct ModAction(string Label, bool Enabled);
 
 /// <summary>What the rail, the mod button and the settings view say about a game's mod. Every game ships in one package,
 /// so an update names the game's mod version in the package (<see cref="PackageBuild"/>). A game build the profile does not list,
-/// or a required file the game folder lacks (named by MissingRequirement), is shown instead of the mod state.</summary>
+/// or a required file the game folder does not satisfy (UnmetRequirement), is shown instead of the mod state.</summary>
 internal sealed record GameStatus(
     ModStatus Mod, bool GameFound, int PackageBuild, int GameBuild = GameBuilds.Unknown, bool BuildSupported = true,
-    string? MissingRequirement = null, bool GameRunning = false)
+    RequirementProblem? UnmetRequirement = null, bool GameRunning = false)
 {
+    private const string ReplaceLabel = "Replace";
+
     public static readonly GameStatus Unknown = new(new ModStatus(ModState.NotInstalled, 0), false, 0);
 
     public bool ModInstalled => Mod.State != ModState.NotInstalled;
@@ -20,16 +22,16 @@ internal sealed record GameStatus(
     public bool NeedsAttention => HasProblem || GameFound && Mod.State == ModState.UpdateAvailable;
 
     /// <summary>Something stops or endangers play: a modified mod, an unsupported game build or a missing required file.</summary>
-    public bool HasProblem => GameFound && (Mod.State == ModState.Modified || !BuildSupported || MissingRequirement != null);
+    public bool HasProblem => GameFound && (Mod.State == ModState.Modified || !BuildSupported || UnmetRequirement != null);
 
     /// <summary>Hosting needs the game, its mod (an update or a repair is applied by the start itself), a supported game build
     /// and every required file.</summary>
-    public bool CanHost => GameFound && ModInstalled && BuildSupported && MissingRequirement == null;
+    public bool CanHost => GameFound && ModInstalled && BuildSupported && UnmetRequirement == null;
 
     /// <summary>The rail's line under the game's name.</summary>
     public string Line => !GameFound ? "Game not found"
         : !BuildSupported ? $"Game build {GameBuild} unsupported"
-        : MissingRequirement != null ? $"{MissingRequirement} not found"
+        : UnmetRequirement is { } unmet ? StatusText.Requirement(unmet.Name, unmet.OtherVersion)
         : Mod.State switch
         {
             ModState.NotInstalled => "Not installed",
@@ -45,7 +47,7 @@ internal sealed record GameStatus(
     public ModAction? Action => Mod.State switch
     {
         ModState.NotInstalled => new ModAction("Install", GameFound && !GameRunning),
-        _ when MissingRequirement != null => new ModAction("Install", GameFound && !GameRunning),
+        _ when UnmetRequirement is { } unmet => new ModAction(unmet.OtherVersion ? ReplaceLabel : "Install", GameFound && !GameRunning),
         ModState.UpdateAvailable => new ModAction("Update", GameFound && !GameRunning),
         ModState.Modified => new ModAction("Repair", GameFound && !GameRunning),
         _ => null,
@@ -76,6 +78,6 @@ internal sealed record GameStatus(
         var gameBuild = GameBuilds.Installed(game, gameDir);
         return new GameStatus(
             ModInstaller.Status(game, gameDir), gameDir != null, BuildCheck.LocalModVersion(game.Id), gameBuild, GameBuilds.IsSupported(game, gameBuild),
-            gameDir == null ? null : game.MissingRequirement(gameDir), GameLauncher.IsRunning(game));
+            gameDir == null ? null : game.UnmetRequirement(gameDir), GameLauncher.IsRunning(game));
     }
 }

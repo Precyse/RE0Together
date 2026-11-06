@@ -22,10 +22,12 @@
 #include "puppet_brain.h"
 #include "puppet_driver.h"
 #include "fnv1a32.h"
+#include "load_slot.h"
 #include "log.h"
 #include "names.h"
 #include "refw.h"
 #include "offline_capture.h"
+#include "overlay.h"
 #include "save_folders.h"
 #include "save_redirect.h"
 #include "session.h"
@@ -69,13 +71,15 @@ extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFram
     uint16_t modules = 0;
     if (world_gate::install()) modules |= wire_dd2::kModuleWorldGate;
     calls::resolve();
-    // A co-op guest plays the host's world from coop\session as its own Arisen; every other launch keeps its profile fresh.
     // A co-op guest plays the host's world as the character it picked; a host's campaign is its own world; see save_folders.h.
+    // Every other launch keeps its profile fresh.
     const bool carried = config.coop && config.guest;
     const save_folders::Folders folders = save_folders::of(config);
     if (folders.mount) save_redirect::enable(*folders.mount);
     if (profile::install(carried ? profile::Mode::Splice : profile::Mode::Capture, folders.profile)) modules |= wire_dd2::kModuleProfile;
     if (config.captureSlot >= 0 && !carried) offline_capture::enable(config.captureSlot);
+    load_slot::install();
+    if (config.coop) overlay::install();
     if (config.coop && plague_off::install()) modules |= wire_dd2::kModulePlagueOff;
     const bool roster = config.coop && roster::install();
     if (roster) modules |= wire_dd2::kModuleRoster;

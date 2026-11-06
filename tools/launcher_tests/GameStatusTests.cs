@@ -12,8 +12,9 @@ public static class GameStatusTests
     private const int UnsupportedBuild = 99999;
 
     private static GameStatus Make(ModState state, int modBuild = ModBuild, bool found = true, int gameBuild = GameBuild,
-        bool supported = true, string? missing = null, bool running = false) =>
-        new(new ModStatus(state, modBuild), found, ModBuild, gameBuild, supported, missing, running);
+        bool supported = true, string? missing = null, bool running = false, bool otherVersion = false) =>
+        new(new ModStatus(state, modBuild), found, ModBuild, gameBuild, supported,
+            missing == null ? null : new RequirementProblem(new RequiredFile("juiced.dll", missing), otherVersion), running);
 
     public static void Run()
     {
@@ -29,6 +30,8 @@ public static class GameStatusTests
         Check.That(Make(ModState.Installed, found: false).Line == "Game not found", "line: game not found beats the mod");
         Check.That(Make(ModState.Installed, gameBuild: UnsupportedBuild, supported: false).Line == "Game build 99999 unsupported", "line: unsupported build");
         Check.That(Make(ModState.NotInstalled, missing: "Juiced").Line == "Juiced not found", "line: missing required file");
+        Check.That(Make(ModState.Installed, missing: "Juiced", otherVersion: true).Line == "Juiced is another version", "line: another version of a required file");
+        Check.That(Make(ModState.Installed, missing: "Juiced", otherVersion: true).Action is { Label: "Replace" }, "button: another version replaces");
         Check.That(Make(ModState.NotInstalled).Line == "Not installed", "line: not installed");
         Check.That(Make(ModState.Installed).Line == "Mod 412", "line: installed build");
         Check.That(Make(ModState.Installed, modBuild: 0).Line == "Installed", "line: installed, build unknown");

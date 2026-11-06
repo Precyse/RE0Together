@@ -78,6 +78,13 @@ std::optional<wire_dd2::BodyState> latest(uint8_t slot, uint8_t kind) {
     return it == g_peers.end() || kind >= wire_dd2::kBodyKinds ? std::nullopt : it->second.bodies[kind];
 }
 
+std::optional<double> distance(uint8_t slot) {
+    const auto arisen = latest(slot, wire_dd2::kKindArisen);
+    if (!arisen) return std::nullopt;
+    const double meters = distanceTo(*arisen);
+    return meters < 0.0 ? std::nullopt : std::optional(meters);
+}
+
 void tick(uint64_t nowMs) {
     if (nowMs - g_lastSummaryMs < kSummaryPeriodMs) return;
     g_lastSummaryMs = nowMs;

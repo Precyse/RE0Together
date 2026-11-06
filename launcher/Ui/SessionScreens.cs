@@ -15,12 +15,13 @@ internal static partial class SessionScreens
     private const string UnknownHost = "host";
     private const string SeatLineFormat = "Player {0} of {1}";
 
-    private enum JoinStep { Lobby, BuildCheck, ReceivingSave, Waiting, Starting, InGame }
+    private enum JoinStep { Lobby, World, BuildCheck, ReceivingSave, Character, Waiting, Starting, InGame }
 
     /// <summary>The joining screen: the host and the seat, the steps of this game's profile up to the one the status is at (a
     /// refusal fails the step it belongs to), the buttons' state. <paramref name="target"/> is what the player asked to join, null
     /// for a typed code; the host is then read from the lobby once it is known.</summary>
-    public static JoiningModel Joining(AppStatus s, GameProfile g, GameStatus mod, JoinTarget? target, GameCondition c, int newerBuild, long nowMs)
+    public static JoiningModel Joining(
+        AppStatus s, GameProfile g, GameStatus mod, JoinTarget? target, GameCondition c, int newerBuild, long nowMs, string? gameDir = null)
     {
         var host = s.Players.FirstOrDefault(player => player.IsHost);
         var hostName = FirstText(target?.HostName, host?.Name, s.Listing?.HostName);
@@ -29,7 +30,7 @@ internal static partial class SessionScreens
         var label = fix == NoticeFix.None ? string.Empty : SessionCards.NoticeFor(s, newerBuild)?.Action?.ToUpperInvariant() ?? string.Empty;
         return new JoiningModel(
             hostName.Length > 0 ? $"Joining {hostName}" : "Joining", SeatLine(s, g), hostId, hostName,
-            JoiningSteps(s, g, hostName, nowMs), fix, label, FixEnabled(fix, mod), StartAgain: LaunchStalled(s, c, nowMs));
+            JoiningSteps(s, g, gameDir, hostName, nowMs), fix, label, FixEnabled(fix, mod), StartAgain: LaunchStalled(s, c, nowMs));
     }
 
     /// <summary>A guest's game that has been starting for <see cref="StartAgainAfterMs"/>, never started or exited: it may be started again.</summary>
@@ -67,45 +68,42 @@ internal static partial class SessionScreens
     /// <summary>Installing or updating the mod needs the game closed; every other fix is always usable.</summary>
     private static bool FixEnabled(NoticeFix fix, GameStatus mod) => !(fix is NoticeFix.InstallMod or NoticeFix.UpdateMod && mod.GameRunning);
 
-    private static IReadOnlyList<StepRow> JoiningSteps(AppStatus s, GameProfile g, string hostName, long nowMs)
+    private static IReadOnlyList<StepRow> JoiningSteps(AppStatus s, GameProfile g, string? gameDir, string hostName, long nowMs)
     {
         var bridged = g.Bridged(s.HostOptions);
+        var world = s.Players.FirstOrDefault(player => player.IsHost)?.Label ?? string.Empty;
         var steps = new List<JoinStep> { JoinStep.Lobby };
+        if (world.Length > 0) steps.Add(JoinStep.World);
         if (bridged) steps.Add(JoinStep.BuildCheck);
         if (bridged && g.SaveSync != null) steps.Add(JoinStep.ReceivingSave);
+        if (bridged && OptionSources.GuestPicksCharacter(g)) steps.Add(JoinStep.Character);
         steps.AddRange([JoinStep.Waiting, JoinStep.Starting, JoinStep.InGame]);
 
-        var failed = s.Refusal is { } refusal ? RefusalStep(refusal.Kind) : (JoinStep?)null;
+        var failed = s.Refusal is { } refusal ? RefusalStep(refusal.Kind)
+            : s.Step == SessionStep.CharacterNotRead && steps.Contains(JoinStep.Character) ? JoinStep.Character : (JoinStep?)null;
         var current = failed ?? StepOf(s.Step);
         var at = failed == null && current == JoinStep.InGame ? steps.Count : steps.FindIndex(step => step >= current);
 
         var rows = new List<StepRow>();
         for (var i = 0; i < steps.Count; i++)
         {
-            var mark = i < at ? StepMark.Done : i > at ? StepMark.Pending : failed != null ? StepMark.Failed : StepMark.Active;
-            rows.Add(JoinRow(steps[i], mark, s, hostName, nowMs));
+            var mark = steps[i] == JoinStep.World ? StepMark.Done : i < at ? StepMark.Done : i > at ? StepMark.Pending : failed != null ? StepMark.Failed : StepMark.Active;
+            rows.Add(JoinRow(steps[i], mark, s, g, gameDir, hostName, world, nowMs));
         }
-        if (s.Capture is { } capture) rows.Insert(steps.IndexOf(JoinStep.Waiting), CaptureRow(capture, s, nowMs));
         return rows;
     }
 
-    /// <summary>The capture launch's row: reading (with its timer), read, or why not (READY tries again).</summary>
-    private static StepRow CaptureRow(CaptureView capture, AppStatus s, long nowMs) => capture.State switch
+    private static StepRow JoinRow(JoinStep step, StepMark mark, AppStatus s, GameProfile g, string? gameDir, string hostName, string world, long nowMs)
     {
-        CaptureState.Running => new StepRow("Reading your character", StepMark.Active, SinceTimer(s.StepSinceMs, nowMs), Indeterminate: true),
-        CaptureState.Done => new StepRow("Character read", StepMark.Done),
-        _ => new StepRow($"Character not read: {capture.Reason}", StepMark.Failed),
-    };
-
-    private static StepRow JoinRow(JoinStep step, StepMark mark, AppStatus s, string hostName, long nowMs)
-    {
-        if (mark == StepMark.Failed) return FailedRow(s.Refusal!);
+        if (mark == StepMark.Failed) return s.Refusal is { } refusal ? FailedRow(refusal, hostName, LogLines(refusal.Kind, g, gameDir)) : CharacterFailedRow(s);
         var active = mark == StepMark.Active;
         return step switch
         {
             JoinStep.Lobby => new StepRow("Lobby", mark),
-            JoinStep.BuildCheck => new StepRow("Build check", mark),
+            JoinStep.World => new StepRow($"World: {world}", mark),
+            JoinStep.BuildCheck => new StepRow(s.ConnectingToHost ? $"Connecting to {(hostName.Length > 0 ? hostName : UnknownHost)}" : "Build check", mark),
             JoinStep.ReceivingSave => active ? ReceivingRow(s) : new StepRow("Receiving save", mark),
+            JoinStep.Character => CharacterRow(mark, s, g, nowMs),
             JoinStep.Waiting => new StepRow($"Waiting for {(hostName.Length > 0 ? hostName : UnknownHost)}", mark),
             JoinStep.Starting => active
                 ? new StepRow("Starting game", mark, SinceTimer(s.StepSinceMs, nowMs), Indeterminate: true)
@@ -113,6 +111,23 @@ internal static partial class SessionScreens
             _ => new StepRow("In game", mark),
         };
     }
+
+    /// <summary>The character row: choose it, reading it (the game opens to its title and closes by itself), read.</summary>
+    private static StepRow CharacterRow(StepMark mark, AppStatus s, GameProfile g, long nowMs)
+    {
+        if (mark == StepMark.Active && s.Step == SessionStep.ReadingCharacter)
+            return new StepRow("Reading your character", mark, SinceTimer(s.StepSinceMs, nowMs), Indeterminate: true, Lines: [CharacterCapture.OpensLine(g)]);
+        if (mark == StepMark.Done) return new StepRow(s.Capture is { State: CaptureState.Done } ? "Character read" : "Character chosen", mark);
+        return new StepRow("Choose character", mark);
+    }
+
+    /// <summary>The failed character row: the reason (it says what to do next) and the mod's log under it.</summary>
+    private static StepRow CharacterFailedRow(AppStatus s) =>
+        new("Character not read", StepMark.Failed, Lines: s.Capture is { } capture ? new[] { capture.Reason, capture.LogPath }.Where(line => line.Length > 0).ToList() : null);
+
+    /// <summary>The mod's log path under a failure that is about the mod not coming up.</summary>
+    private static IReadOnlyList<string>? LogLines(RefusalKind kind, GameProfile g, string? gameDir) =>
+        kind is RefusalKind.ModNotLoaded or RefusalKind.FrameworkNotLoaded && gameDir != null && ModLoadCheck.LogPath(g, gameDir) is { Length: > 0 } path ? [path] : null;
 
     private static StepRow ReceivingRow(AppStatus s)
     {
@@ -122,8 +137,8 @@ internal static partial class SessionScreens
         return new StepRow("Receiving save", StepMark.Active, $"{s.SavePercent}%", s.SavePercent / PercentScale, Lines: line);
     }
 
-    private static StepRow FailedRow(Refusal refusal) => new(
-        StatusText.Refusal(refusal), StepMark.Failed,
+    private static StepRow FailedRow(Refusal refusal, string hostName, IReadOnlyList<string>? lines) => new(
+        StatusText.Refusal(refusal, hostName), StepMark.Failed, Lines: lines,
         Pairs: RefusalVersions.TryParse(refusal.Detail, out var host, out var you)
             ? new[] { ("Host", host.ToString(CultureInfo.InvariantCulture)), ("You", you.ToString(CultureInfo.InvariantCulture)) }
             : null);
@@ -135,9 +150,11 @@ internal static partial class SessionScreens
     /// <summary>The step a refusal belongs to.</summary>
     private static JoinStep RefusalStep(RefusalKind kind) => kind switch
     {
-        RefusalKind.LauncherBuild or RefusalKind.GameBuild or RefusalKind.ModFiles or RefusalKind.ModNotInstalled => JoinStep.BuildCheck,
-        RefusalKind.SaveTimedOut or RefusalKind.SaveFolderMissing or RefusalKind.SaveDiffers => JoinStep.ReceivingSave,
-        RefusalKind.LaunchFailed or RefusalKind.GameUnsupported or RefusalKind.PortInUse => JoinStep.Starting,
+        RefusalKind.LauncherBuild or RefusalKind.GameBuild or RefusalKind.ModFiles or RefusalKind.ModNotInstalled or RefusalKind.HostUnreachable => JoinStep.BuildCheck,
+        RefusalKind.SaveTimedOut or RefusalKind.SaveFolderMissing or RefusalKind.SaveDiffers or RefusalKind.SaveResignFailed => JoinStep.ReceivingSave,
+        RefusalKind.SaveNotProtected => JoinStep.InGame,
+        RefusalKind.LaunchFailed or RefusalKind.GameUnsupported or RefusalKind.PortInUse or RefusalKind.GameRunning
+            or RefusalKind.FrameworkNotLoaded or RefusalKind.ModNotLoaded => JoinStep.Starting,
         _ => JoinStep.Lobby,
     };
 
@@ -145,7 +162,8 @@ internal static partial class SessionScreens
     {
         SessionStep.CheckingBuild => JoinStep.BuildCheck,
         SessionStep.ReceivingSave => JoinStep.ReceivingSave,
-        SessionStep.Ready or SessionStep.ReadingCharacter => JoinStep.Waiting,
+        SessionStep.PickingCharacter or SessionStep.ReadingCharacter or SessionStep.CharacterNotRead => JoinStep.Character,
+        SessionStep.Ready => JoinStep.Waiting,
         SessionStep.StartingGame => JoinStep.Starting,
         SessionStep.InGame or SessionStep.GameClosed => JoinStep.InGame,
         _ => JoinStep.Lobby,

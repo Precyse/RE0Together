@@ -24,17 +24,12 @@ public static class ConflictArchive
         {
             var present = Present(conflict, gameDir);
             if (present.Count == 0) continue;
-            var archive = Path.GetFullPath(Path.Combine(gameDir, conflict.Into,
-                $"{CampaignStore.Slug(conflict.Name)}_{now.ToString(StampFormat, CultureInfo.InvariantCulture)}"));
+            var archive = FolderFor(gameDir, conflict.Into, conflict.Name, now);
             foreach (var path in present)
             {
-                var from = Path.Combine(gameDir, path);
-                var into = Path.Combine(archive, path);
                 try
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(into)!);
-                    if (Directory.Exists(from)) Directory.Move(from, into);
-                    else File.Move(from, into);
+                    MoveInto(Path.Combine(gameDir, path), Path.Combine(archive, path));
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
@@ -45,5 +40,17 @@ public static class ConflictArchive
             made.Add(archive);
         }
         return made;
+    }
+
+    /// <summary>The archive folder <c>&lt;gameDir&gt;/&lt;into&gt;/&lt;name&gt;_&lt;stamp&gt;</c> of one archiving (not created).</summary>
+    public static string FolderFor(string gameDir, string into, string name, DateTime now) =>
+        Path.GetFullPath(Path.Combine(gameDir, into, $"{CampaignStore.Slug(name)}_{now.ToString(StampFormat, CultureInfo.InvariantCulture)}"));
+
+    /// <summary>Moves a file or folder to <paramref name="destination"/>, making its folder; throws what a move throws.</summary>
+    public static void MoveInto(string from, string destination)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (Directory.Exists(from)) Directory.Move(from, destination);
+        else File.Move(from, destination);
     }
 }

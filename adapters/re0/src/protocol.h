@@ -26,6 +26,7 @@ constexpr uint16_t kHeartbeat = 0x0020;
 constexpr uint16_t kSaveChanged = 0x0060;  // adapter to its own launcher, reliable: ascii name of a save the game wrote
 constexpr uint16_t kOptionSet = 0x0061;    // adapter to its own launcher, reliable: ascii key=value the player chose in game
 constexpr uint16_t kLobbyState = 0x0062;   // launcher to its adapter, reliable: the lobby as text (lobby_wire.h)
+constexpr uint16_t kGameState = 0x0063;    // adapter to its own launcher, reliable: ascii `key=value` pairs joined by `;`: what the game reports of itself (DD2: dd2/src/game_state_rule.h)
 constexpr uint16_t kFirstGameType = 0x0100;
 constexpr uint16_t kMsgRoomState = kFirstGameType + 4;  // 0x0104
 constexpr uint16_t kMsgMenuState = kFirstGameType + 5;  // 0x0105

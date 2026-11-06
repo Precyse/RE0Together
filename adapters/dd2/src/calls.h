@@ -93,6 +93,7 @@ enum Id : uint8_t {
     kGetOriginalMaxHp,
     kGetEnemyChara,
     kGetMonsterChara,
+    kGetPartyPawn,
     kCount
 };
 
@@ -236,6 +237,8 @@ constexpr std::array<Row, kCount> kRows{{
     // where the dump's field table says 0x80 (both bodies are shared accessors, fine to call, never hooked).
     {kGetEnemyChara, "app.Ch200000", "get_Chara", "", 0x14633ab50, Feature::Body},
     {kGetMonsterChara, "app.Monster", "get_Chara", "", 0x1464a74b0, Feature::Body},
+    // The Pawn in a party seat (PawnID SubPawn01 or SubPawn02: the hired support pawns), null when the seat is empty.
+    {kGetPartyPawn, "app.PawnManager", "getPartyPawn", "app.PawnManager.PawnID,System.Boolean", 0x1408d7f70, Feature::Puppet},
 }};
 
 // kRows is indexed by Id.

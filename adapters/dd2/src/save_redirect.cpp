@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <string>
 
 #include "calls.h"
@@ -18,7 +19,7 @@ constexpr bool kFileSystem = true;  // set_ForceWindows: the Windows file system
 
 std::wstring g_mount;
 bool g_pending = false;
-bool g_verified = false;
+std::atomic<bool> g_verified{false};  // read by the load hooks
 uint64_t g_lastGuardMs = 0;
 uint32_t g_resets = 0;
 
@@ -91,6 +92,12 @@ void tick(uint64_t nowMs) {
     if (g_pending && apply()) g_pending = false;
 }
 
-bool verified() { return g_verified; }
+State state() {
+    if (g_mount.empty()) return State::Off;
+    if (g_pending) return State::Pending;
+    return g_verified ? State::Verified : State::Refused;
+}
+
+bool safeToLoad() { return g_mount.empty() || (!g_pending && g_verified); }
 
 }  // namespace save_redirect

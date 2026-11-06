@@ -15,6 +15,8 @@ internal sealed class UpdateFlow
     private enum Phase { None, Offered, Downloading, Ready }
 
     private const int UpToDateShownMs = 1500;
+    private const long RecheckIntervalMs = 15 * 60 * 1000;
+    private const long SeenBuildRecheckMs = 60 * 1000;
 
     private static readonly IReadOnlyDictionary<string, int> NoMods = new Dictionary<string, int>();
 
@@ -26,6 +28,7 @@ internal sealed class UpdateFlow
     private bool _asked;
     private bool _upToDate;
     private int _percent;
+    private long _lastReadMs = Environment.TickCount64;
 
     /// <summary>The offer, the download or the staged build changed: the button needs redrawing.</summary>
     public event Action? Changed;
@@ -75,23 +78,35 @@ internal sealed class UpdateFlow
 
     /// <summary>Reads the release in the background and offers a newer build. <paramref name="automatic"/> starts the download
     /// as soon as it is offered.</summary>
-    public void Check(bool automatic) => Read(automatic, asked: false);
+    public void Check(bool automatic) => Read(automatic, asked: false, force: false);
+
+    /// <summary>Looks at the channel again when it is time: every <see cref="RecheckIntervalMs"/> while no game runs, and at once (at most
+    /// once a minute) when a lobby or a refusal showed a launcher build above this one and above any on offer
+    /// (<paramref name="seenBuild"/>, 0 when none). Ignored while a read or a download is under way.</summary>
+    public void Poll(Func<bool> gameRunning, int seenBuild, bool automatic)
+    {
+        if (_reading || _phase == Phase.Downloading) return;
+        var sinceRead = Environment.TickCount64 - _lastReadMs;
+        var higherSeen = seenBuild > BuildCheck.LocalBuild() && seenBuild > NewerBuild && sinceRead >= SeenBuildRecheckMs;
+        if (higherSeen || (sinceRead >= RecheckIntervalMs && !gameRunning())) Read(automatic, asked: false, force: true);
+    }
 
     /// <summary>The player asked for a check (Settings): the same as <see cref="Check"/>, with the button showing it runs and, when
     /// nothing newer exists, for a moment that it is up to date. Ignored while a check or a download is under way.</summary>
     public void CheckNow(bool automatic)
     {
-        if (!_reading && _phase != Phase.Downloading) Read(automatic, asked: true);
+        if (!_reading && _phase != Phase.Downloading) Read(automatic, asked: true, force: true);
     }
 
-    private void Read(bool automatic, bool asked)
+    private void Read(bool automatic, bool asked, bool force)
     {
         _autoPending = automatic;
         _reading = true;
+        _lastReadMs = Environment.TickCount64;
         _asked = asked;
         _upToDate = false;
         if (asked) Changed?.Invoke();
-        Task.Run(() => ReleaseFeed.Read(force: asked)).ContinueWith(task =>
+        Task.Run(() => ReleaseFeed.Read(force)).ContinueWith(task =>
         {
             _reading = false;
             var wasAsked = _asked;

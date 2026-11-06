@@ -5,10 +5,13 @@
 
 #include "../src/clock_rule.h"
 #include "../src/enemy_rule.h"
+#include "../src/game_state_rule.h"
 #include "../src/hook_rule.h"
+#include "../src/join_warp_rule.h"
 #include "../src/local_body.h"
 #include "../src/profile_rule.h"
 #include "../src/save_folders.h"
+#include "../src/session_rule.h"
 #include "../src/wire_dd2.h"
 #include "../src/world_gate_rule.h"
 
@@ -196,6 +199,24 @@ void enemyTests() {
     check(enemy_rule::damageOk(50, 100) && !enemy_rule::damageOk(0, 100) && !enemy_rule::damageOk(150, 100) &&
               !enemy_rule::damageOk(std::nanf(""), 100),
           "hit damage positive, finite, at most the target's HP");
+    check(enemy_rule::fresh(1000, 500) && enemy_rule::fresh(1500, 500) && !enemy_rule::fresh(1501, 500),
+          "a host enemy state is fresh for 1 s");
+    const double here[3] = {0, 0, 0}, near[3] = {20, 0, 0}, far[3] = {30, 40, 0};
+    check(!join_warp_rule::needsWarp(join_warp_rule::distanceM(here, near)) && join_warp_rule::needsWarp(join_warp_rule::distanceM(here, far)),
+          "the join warp is for bodies over 30 m apart");
+    join_warp_rule::OncePerLoad once;
+    check(!once.pending(), "no join warp before a load pair is seen");
+    once.observe(1, 1);
+    once.observe(1, 1);
+    check(once.pending(), "a load pair arms the join warp");
+    once.settle();
+    once.observe(1, 1);
+    check(!once.pending(), "the same pair does not arm it again");
+    once.observe(2, 1);
+    check(once.pending(), "a load of ours arms it again");
+    once.settle();
+    once.observe(2, 2);
+    check(once.pending(), "a load of the host's arms it again");
     enemy_rule::HitBudget budget;
     uint32_t admitted = 0;
     for (int i = 0; i < 30; ++i) admitted += budget.admit(1, target, 1000);
@@ -236,7 +257,57 @@ void profileTests() {
     check(!profile_rule::decode(wrongFormat), "another profile format is refused");
 }
 
+void gameStateTests() {
+    using namespace game_state_rule;
+    Report report;
+    check(format(report) == "place=title;char=off;save=off;slot=-1;peers=", "GAME_STATE of a fresh solo game");
+    report.place = Place::World;
+    report.character = Char::Mismatch;
+    report.save = Save::Ok;
+    report.slot = 3;
+    report.peers = {{76561198000000001ULL, false}, {76561198000000002ULL, true}};
+    check(format(report) == "place=world;char=mismatch;save=ok;slot=3;peers=76561198000000001:0,76561198000000002:1",
+          "GAME_STATE with a character problem, a slot and a live and a stale peer");
+    check(placeOf(world_gate_rule::Place::Travel) == Place::Loading && placeOf(world_gate_rule::Place::Cutscene) == Place::World &&
+              placeOf(world_gate_rule::Place::Title) == Place::Title,
+          "the world gate's places map onto title, loading and world");
+    check(problems(Report{}, kSlotUnknown).empty(), "a solo game has no problems");
+    Report bad;
+    bad.place = Place::World;
+    bad.character = Char::Refused;
+    bad.save = Save::Refused;
+    bad.slot = 2;
+    const auto lines = problems(bad, 5);
+    check(lines.size() == 3 && lines[0].rfind("Your character could not be loaded: ", 0) == 0 &&
+              lines[1] == "Save not protected: quit to the title" && lines[2] == "Load slot 5 like the host",
+          "problems: character, save and the host's slot, in order");
+    bad.slot = 5;
+    check(problems(bad, 5).size() == 2, "the host's slot loaded: no slot line");
+    Report title;
+    check(problems(title, 4).size() == 1 && problems(title, kSlotUnknown).empty(), "at the title before a load the guest is told the host's slot");
+    Report world;
+    world.place = Place::World;
+    check(problems(world, 4).empty(), "in the world with an unknown slot nothing is claimed");
+    check(partnerLine("Ann", true, Place::World, 12.0) == "Ann: connection lost", "a stale partner is shown as lost");
+    check(partnerLine("Ann", false, Place::World, 12.4) == "Ann: in world, 12 m", "a partner in the world shows the distance");
+    check(partnerLine("Ann", false, Place::World, std::nullopt) == "Ann: in world", "no distance when unknown");
+    check(partnerLine("Ann", false, Place::Loading, 12.0) == "Ann: loading" && partnerLine("Ann", false, Place::Title, 1.0) == "Ann: title",
+          "loading and title partners show no distance");
+    const std::string all = partnerLine("Ann", false, Place::World, 3.0) + partnerLine("Ann", true, Place::Title, 3.0);
+    check(all.find("Â·") == std::string::npos && all.find("â¢") == std::string::npos, "no dot separators in the lines");
+}
+
+void sessionRuleTests() {
+    using session_rule::kPeerStaleMs;
+    check(!session_rule::stale(10000, 10000), "a peer heard this tick is live");
+    check(!session_rule::stale(10000 + kPeerStaleMs, 10000), "a peer silent exactly the limit is still live");
+    check(session_rule::stale(10001 + kPeerStaleMs, 10000), "a peer silent past the limit is stale");
+    check(!session_rule::stale(5000, 6000), "a frame stamped after the tick does not make a peer stale");
+}
+
 int main() {
+    gameStateTests();
+    sessionRuleTests();
     rosterTests();
     enemyTests();
     saveFolderTests();

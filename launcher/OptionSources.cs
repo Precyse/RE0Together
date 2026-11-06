@@ -40,6 +40,31 @@ public static class OptionSources
             ? $"{campaign.Name} / Lv {level}"
             : campaign.Name;
 
+    /// <summary>The campaign a host plays as the guests are told it: its name, or the campaign option's first label (the host's own save).
+    /// Empty for a game without campaigns.</summary>
+    public static string CampaignLabel(GameProfile profile, string? gameDir)
+    {
+        var option = profile.Options?.FirstOrDefault(candidate => candidate.Source == Campaigns);
+        if (option == null) return string.Empty;
+        var id = GameOptions.Current(profile, gameDir)[option.Key];
+        if (id.Length == 0) return option.Values[0].Label;
+        return gameDir != null ? CampaignStore.List(profile, gameDir).FirstOrDefault(campaign => campaign.Id == id)?.Name ?? id : id;
+    }
+
+    /// <summary>The character a guest brings as the others are told it (<see cref="CharacterLabel"/>); empty for a game without one.</summary>
+    public static string PickedCharacterLabel(GameProfile profile, string? gameDir)
+    {
+        var option = profile.Options?.FirstOrDefault(candidate => candidate.Source == Characters);
+        if (option == null || gameDir == null) return string.Empty;
+        var id = GameOptions.Current(profile, gameDir)[option.Key];
+        if (id.Length == 0)
+        {
+            var level = profile.Campaigns?.OwnCharacter is { } own ? CampaignStore.CharacterLevel(Path.Combine(gameDir, own)) : null;
+            return level is { } known ? $"{option.Values[0].Label} / Lv {known}" : option.Values[0].Label;
+        }
+        return CampaignStore.List(profile, gameDir).FirstOrDefault(campaign => campaign.Id == id) is { } campaign ? CharacterLabel(profile, gameDir, campaign) : id;
+    }
+
     /// <summary>The adapter ini key of the character a guest brings, or null for a game without one.</summary>
     public static string? CharacterOptionKey(GameProfile profile) => profile.Options?.FirstOrDefault(option => option.Source == Characters)?.Key;
 
@@ -80,6 +105,14 @@ public static class OptionSources
         var id = GameOptions.Current(profile, gameDir)[option.Key];
         return id.Length == 0 ? null : CampaignStore.SaveDir(profile, gameDir, id);
     }
+
+    /// <summary>The words for a campaign that holds no saved world yet.</summary>
+    public const string NoWorldWords = "This campaign has no saved world yet: start it alone once and save";
+
+    /// <summary>Whether the campaign a host plays holds a world to send: its folder has the profile's first save file. True for the host's
+    /// own save and for a game without campaigns (a new campaign is empty until the game wrote it).</summary>
+    public static bool CampaignHasWorld(GameProfile profile, string gameDir) =>
+        CampaignSaveDir(profile, gameDir) is not { } dir || profile.SaveSync?.SteamRemoteFiles.FirstOrDefault() is not { } first || File.Exists(Path.Combine(dir, first));
 
     /// <summary>The hash of the chosen slot in the host's save, empty when no slot is chosen or it is not in the save.</summary>
     public static string SlotHash(GameProfile profile, string? gameDir, string? slotValue) =>

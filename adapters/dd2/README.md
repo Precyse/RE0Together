@@ -25,7 +25,7 @@ run beside it). Copy `dd2coop.dll` to `reframework\plugins\`.
 
 ## Session check (two PCs, DD2gether moved out)
 Each log shows `calls: body on`, `calls: clock on`, `calls: offline on`, `world_clock: day ... s, hour ... s, minute ... s;
-host side on, guest side on` (if the guest side is off, the line before it names setTime's parameters), then with a peer:
+host side on, guest side on` (off when the clock units were not read), then with a peer:
 `offline: forced offline play requested (ok)`, `peer_bodies: slot N: ... states, ... actions ...` every 30 s with a sane
 distance, and on the guest `world_clock: ... game s off the host: set day ...` after joining.
 
@@ -68,11 +68,38 @@ its extras fade out, and the host's others are created from their generate recor
 logs `enemy_mirror: N mirrors; ... killed with the host, ... extras removed, ... created, ... hits sent` and the host
 `enemy_stream: N guest hits replayed, N refused, N records sent`. Live checks: a guest's sword hit staggers the host's
 enemy as a native hit does (P7-5), mirrors do not attack on their own (P7-4), a created enemy appears where the host's is
-(`enemy_spawn: stopped at <step>` names a refusal), the mirror's HP bar follows the host's. Away from the host the guest's
-own enemies are removed (no enemies are simulated away from the host yet).
+(`enemy_spawn: stopped at <step>` names a refusal), the mirror's HP bar follows the host's. Only enemies within 120 m of the host's
+body are mirrored, removed or created on the guest; farther out the guest's own enemies keep their own AI (no enemies are simulated
+away from the host yet). A mirror whose host state is older than 1 s, or any mirror while the host is silent, is released (AI
+back on, damage accepted again).
+
+## Join warp and support pawns (co-op; guests warp, both sides seat main pawns)
+After each load of ours and of the host's, a guest more than 30 m from the host's body logs `join_warp: N m from the host (load S,
+host load S), warped to it` (`no warp` when near, `warp refused` when the call failed), once per load pair. Support pawns (the
+two hired party seats): the guest logs `support_pawns: support pawn 0x... dismissed (the host's world, first co-op load)` for the
+host world's pawns in its first 20 s in game; a machine whose party seats are full dismisses one per peer main pawn it seats
+(`... a seat for a peer's main pawn`). Players' own main pawns are never dismissed. Not live-tested: `getPartyPawn` and the
+PawnID literals SubPawn01/02 are read at first use (`PawnID literals missing` leaves the pawns alone).
 
 ## Campaigns and characters (launcher options popup)
 Campaign: Own save (default), a campaign, New campaign (an empty world: the game starts a new one) or New from own save. Hosting a campaign logs `save_paths: after dir=...\coop\campaigns\<id>\win64_save` and the guests get that world; your own save is not touched. Character (when joining): Own save or a campaign whose Arisen was captured (host or play it once). DD2gether's campaigns and characters are imported at launcher start and from Settings, Import DD2gether (`Imported N DD2gether save(s)`); an imported character can be brought once its campaign was played.
 
-Progress made during co-op is not carried back yet (journal and write-back come with the XP and loot phase); the next
-solo save captures the real save again.
+A guest's progress goes back to its character file: after a load that was spliced and checked ok (`splice: ok`, no piece
+refused), each of its saves is written to the character file (`profile: captured level=.. job=..`; the old file is kept as
+`profile.dd2p.bak`) and the next load splices that. After a `MISMATCH` or a refused piece nothing is written, so a failed
+splice never replaces the guest's character with the host's. With the save redirect not verified (`save_paths: REFUSED`)
+nothing is spliced (`splice: contexts not spliced, the save redirect is not verified`). The host's saves reach the guests: after
+a save the log shows `save_notice: save written, shared with the guests` and its launcher re-sends the files.
+
+## Launcher report and overlay (co-op)
+`game_state: place=..;char=..;save=..;slot=..;peers=..` is sent to the own launcher when the link comes up and on every change
+(`place` title, loading or world; `char` off, ok, none, mismatch or refused; `save` off, ok or refused; `slot` the slot of
+the newest game load, -1 before one, `load_slot: the game loads slot N` in the log; `peers` `<steamid>:<0 live|1 stale>`
+joined by commas). A peer silent for 6 s is stale (`session: slot N silent for 6 s, treated as gone`, later `is sending
+again`). In co-op the top left corner of the game shows each partner (title, loading, in world with the distance, connection
+lost) and, when something is wrong, one line: `Your character could not be loaded: <why>`, `Save not protected: quit to the
+title` or `Load slot N like the host` (a guest whose load slot differs from the one in the host's PLACE). The log shows
+`overlay: panel registered`; a fault in the draw is logged and dumped and the panel stays off.
+
+The capture launch writes `coop\capture.result`: `ok` or `failed: <code>: <detail>` with the code title, load, empty, redirect,
+write or timeout; the 60 s run from the first time the title menu shows.

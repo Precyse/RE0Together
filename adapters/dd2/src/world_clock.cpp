@@ -1,9 +1,6 @@
 #include "world_clock.h"
 
-#include <array>
-#include <cctype>
 #include <optional>
-#include <string>
 
 #include "calls.h"
 #include "clock_rule.h"
@@ -17,11 +14,12 @@ namespace {
 
 constexpr const char* kTimeManager = "app.TimeManager";
 constexpr uint64_t kSendPeriodMs = 5000;
-constexpr size_t kSetTimeInts = 3;
+// TimeManager.setTime(hour, minute, day, weather immediately), from its decompile (docs/codemap/dd2.md "setTime"). The day
+// is an absolute day only when it is ahead of the clock; kKeepDay leaves the day alone.
+constexpr int32_t kKeepDay = -1;
+constexpr bool kWeatherImmediate = true;  // as every engine caller passes it
 
 clock_rule::Units g_units;
-// setTime's argument position of day, hour and minute, from its parameter names; unset when they did not match.
-std::optional<std::array<size_t, kSetTimeInts>> g_setTimeOrder;
 bool g_enabled = false;
 
 uint32_t g_serial = 0;
@@ -30,6 +28,8 @@ int32_t g_lastSentHour = -1;
 
 std::optional<wire_dd2::Clock> g_pending;  // guest: the host's last CLOCK not yet applied
 std::optional<uint16_t> g_hostSerialAtLastSet;
+
+void* asArg(int64_t value) { return reinterpret_cast<void*>(static_cast<intptr_t>(value)); }
 
 std::optional<clock_rule::Time> ownTime(float* scale = nullptr) {
     void* manager = refw::managedSingleton(kTimeManager);
@@ -46,30 +46,6 @@ std::optional<clock_rule::Time> ownTime(float* scale = nullptr) {
         *scale = timeScale ? timeScale->f : 0.0f;
     }
     return time;
-}
-
-std::string lower(std::string text) {
-    for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return text;
-}
-
-// Day, hour and minute positions among setTime's parameters, matched by name.
-std::optional<std::array<size_t, kSetTimeInts>> setTimeOrder() {
-    const std::vector<std::string> names = refw::paramNames(calls::method(calls::kSetTime));
-    std::string joined;
-    for (const std::string& name : names) joined += name + " ";
-    logger::write("world_clock: TimeManager.setTime parameters: %s", joined.c_str());
-    constexpr std::array<const char*, kSetTimeInts> kWanted{"day", "hour", "min"};
-    std::array<size_t, kSetTimeInts> order{};
-    for (size_t want = 0; want < kSetTimeInts; ++want) {
-        size_t found = names.size();
-        for (size_t i = 0; i < kSetTimeInts && i < names.size(); ++i) {
-            if (lower(names[i]).find(kWanted[want]) != std::string::npos) found = i;
-        }
-        if (found == names.size()) return std::nullopt;
-        order[want] = found;
-    }
-    return order;
 }
 
 void hostTick(uint64_t nowMs) {
@@ -89,7 +65,7 @@ void hostTick(uint64_t nowMs) {
 }
 
 void applyPending() {
-    if (!g_pending || !g_setTimeOrder || world_gate::place() != world_gate_rule::Place::InGame) return;
+    if (!g_pending || world_gate::place() != world_gate_rule::Place::InGame) return;
     const auto own = ownTime();
     void* manager = refw::managedSingleton(kTimeManager);
     if (!own || !manager) return;
@@ -103,12 +79,11 @@ void applyPending() {
         return;
     }
     if (decision.verdict != clock_rule::Verdict::Set) return;
-    std::array<void*, kSetTimeInts + 1> args{};
-    const int32_t values[kSetTimeInts] = {decision.day, decision.hour, decision.minute};
-    for (size_t i = 0; i < kSetTimeInts; ++i) args[(*g_setTimeOrder)[i]] = reinterpret_cast<void*>(static_cast<intptr_t>(values[i]));
-    const bool ok = refw::invoke(calls::method(calls::kSetTime), manager, {args[0], args[1], args[2], args[3]}) != nullptr;
+    const int32_t day = decision.day >= own->day ? decision.day : kKeepDay;
+    const bool ok = refw::invoke(calls::method(calls::kSetTime), manager,
+                                 {asArg(decision.hour), asArg(decision.minute), asArg(day), asArg(kWeatherImmediate)}) != nullptr;
     if (hostPlace) g_hostSerialAtLastSet = hostPlace->loadSerial;
-    logger::write("world_clock: %.0f game s off the host: set day %d %02d:%02d (%s)", decision.offGameSeconds, decision.day,
+    logger::write("world_clock: %.0f game s off the host: set day %d %02d:%02d (%s)", decision.offGameSeconds, day,
                   decision.hour, decision.minute, ok ? "ok" : "setTime failed");
 }
 
@@ -121,11 +96,9 @@ void install() {
     refw::staticField(kTimeManager, "InGameDaySeconds", g_units.daySeconds);
     refw::staticField(kTimeManager, "InGameHourSeconds", g_units.hourSeconds);
     refw::staticField(kTimeManager, "InGameMinuteSeconds", g_units.minuteSeconds);
-    g_setTimeOrder = setTimeOrder();
     g_enabled = g_units.valid();
-    logger::write("world_clock: day %d s, hour %d s, minute %d s; host side %s, guest side %s", g_units.daySeconds,
-                  g_units.hourSeconds, g_units.minuteSeconds, g_enabled ? "on" : "off",
-                  g_enabled && g_setTimeOrder ? "on" : "off (setTime parameters not recognised)");
+    logger::write("world_clock: day %d s, hour %d s, minute %d s; %s", g_units.daySeconds, g_units.hourSeconds,
+                  g_units.minuteSeconds, g_enabled ? "host side on, guest side on" : "off (clock units not read)");
 }
 
 void tick(uint64_t nowMs) {

@@ -17,6 +17,26 @@ public sealed partial class App
         _lobbyStateDue = true;
     }
 
+    /// <summary>The adapter says where its game is (GAME_STATE): it is published with the step. A save folder the mod could not redirect is
+    /// a refusal on this player's screen (published like any other) until the adapter says it is fine.</summary>
+    private void OnGameState(byte[] payload)
+    {
+        var state = GameState.Parse(payload);
+        if (state == _gameState) return;
+        _gameState = state;
+        Log.Info($"Game state: {string.Join(' ', state.EncodePairs())}");
+        if (state.Save == GameSave.Refused && _refusal == null)
+        {
+            _saveRefused = true;
+            Refuse(RefusalKind.SaveNotProtected);
+        }
+        else if (state.Save != GameSave.Refused && _saveRefused)
+        {
+            _saveRefused = false;
+            _refusal = null;
+        }
+    }
+
     /// <summary>A slot of the session changed: the text carries slots.</summary>
     private void OnSlotsChanged() => _lobbyStateDue = true;
 

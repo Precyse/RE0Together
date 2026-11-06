@@ -197,6 +197,12 @@ public static class LoopbackBridgeTests
         bridge.Send(ControlMessages.LobbyState(text));
         var state = adapter.ReadOf(Msg.LobbyState);
         Check.That(state is { } frame && (frame.Flags & Framing.FlagReliable) != 0 && Encoding.UTF8.GetString(frame.Payload) == text, "LOBBY_STATE reaches the adapter as a reliable UTF-8 frame");
+
+        var states = new List<byte[]>();
+        bridge.GameStateReceived += states.Add;
+        adapter.Send(Framing.Reliable(Msg.GameState, Encoding.ASCII.GetBytes("place=world;char=ok;save=ok;slot=2;peers=76561198000000001:0")));
+        PumpUntil(bridge, () => states.Count == 1);
+        Check.That(states.Count == 1 && gameFrames == 0 && GameState.Parse(states[0]) == new GameState(GamePlace.World, GameCharacter.Ok, GameSave.Ok, 2), "GAME_STATE from the adapter raises the event and is not a game frame");
     }
 
     private static void BackedUpReliableFramesDropTheLink()

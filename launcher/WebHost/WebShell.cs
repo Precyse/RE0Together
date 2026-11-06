@@ -32,7 +32,7 @@ public sealed class WebShell : ChromelessForm
         Text = WindowTitle;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         AutoScaleMode = AutoScaleMode.None;
-        BackColor = Theme.Bg2;
+        BackColor = Theme.Bg;
         MinimumSize = SizeFromClientSize(new Size(WindowWidth, MinimumHeight));
         Size = SizeFromClientSize(new Size(WindowWidth, WindowHeight));
         WindowMemory.Restore(this);

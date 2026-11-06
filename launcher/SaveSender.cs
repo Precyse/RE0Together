@@ -2,7 +2,8 @@ namespace CoopLauncher;
 
 /// <summary>Host side of save sync: chooses the profile's files for a peer and streams them with the shared <see cref="FileStreamer"/> (paced, resent until ACKed ok). A set the
 /// guest could not take (too many names, a name that is not ASCII, a file over <see cref="SaveReceiver.MaxFileBytes"/>) is not sent
-/// at all, and a missing save folder is an empty set, so the guest never waits for something that cannot arrive.</summary>
+/// at all, and a file or folder that is missing is left out of the set the manifest announces (an empty set for no folder), so the guest
+/// never waits for something that cannot arrive. Another world (<see cref="Retarget"/>) is announced with a new generation.</summary>
 public sealed class SaveSender
 {
     private const string Label = "Save sync";
@@ -12,6 +13,7 @@ public sealed class SaveSender
     private readonly ITransport _transport;
     private readonly FileStreamer _streamer;
     private readonly HashSet<string> _logged = [];
+    private byte _generation;
 
     /// <summary>The clock (milliseconds) defaults to the system tick count; tests drive their own.</summary>
     public SaveSender(SaveSyncProfile config, string sourceDir, ITransport transport, Func<long>? clock = null)
@@ -22,8 +24,13 @@ public sealed class SaveSender
         _streamer = new FileStreamer(transport, Label, clock);
     }
 
-    /// <summary>The folder the set is read from from now on (the host picked another campaign); the caller sends it again.</summary>
-    public void Retarget(string sourceDir) => _sourceDir = sourceDir;
+    /// <summary>The folder the set is read from from now on (the host picked another campaign); the caller sends it again. The manifest
+    /// carries a new generation, so a guest drops the set it has and takes this one.</summary>
+    public void Retarget(string sourceDir)
+    {
+        _sourceDir = sourceDir;
+        _generation = _generation == byte.MaxValue ? (byte)1 : (byte)(_generation + 1);
+    }
 
     public void SendTo(ulong peer)
     {
@@ -34,11 +41,8 @@ public sealed class SaveSender
             LogOnce($"Save sync: not sending the save set to {peer}: {reason}");
             return;
         }
-        if (_config.FilePattern != null)
-        {
-            _transport.Send(peer, FileMessages.Manifest(names));
-            Log.Info($"Save sync: announced {names.Count} files to {peer}");
-        }
+        _transport.Send(peer, FileMessages.Manifest(names, _generation));
+        Log.Info($"Save sync: announced {names.Count} files to {peer}");
         foreach (var name in names) Enqueue(peer, name);
     }
 
@@ -53,7 +57,7 @@ public sealed class SaveSender
             LogOnce($"Save sync: not sending {name} to {peer}: {reason}");
             return true;
         }
-        if (_config.FilePattern != null) _transport.Send(peer, FileMessages.Manifest(names));
+        _transport.Send(peer, FileMessages.Manifest(names, _generation));
         return Enqueue(peer, name);
     }
 
@@ -93,10 +97,11 @@ public sealed class SaveSender
         return true;
     }
 
-    /// <summary>The profile's fixed list, or every file in the source folder that matches the profile's pattern (none when the folder is missing).</summary>
+    /// <summary>The files of the profile's fixed list that exist, or every file in the source folder that matches the profile's pattern
+    /// (none when the folder is missing).</summary>
     private List<string> FileNames()
     {
-        if (_config.FilePattern is not { } pattern) return _config.SteamRemoteFiles;
+        if (_config.FilePattern is not { } pattern) return _config.SteamRemoteFiles.Where(name => File.Exists(Path.Combine(_sourceDir, name))).ToList();
         try
         {
             return Directory.GetFiles(_sourceDir, pattern).Select(Path.GetFileName).OfType<string>().Order().ToList();

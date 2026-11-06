@@ -18,6 +18,14 @@ public static class ReleaseFeed
     private const string UserAgent = "coop-launcher-updater";
     private const int MetadataTimeoutSeconds = 5;
     private const int DownloadChunkBytes = 81920;
+    private const int StallTimeoutSeconds = 30;
+    private const int DownloadTimeoutMinutes = 10;
+
+    /// <summary>How long a download may wait for the server's answer or for its next bytes before it fails.</summary>
+    internal static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(StallTimeoutSeconds);
+
+    /// <summary>How long one whole download may take.</summary>
+    internal static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(DownloadTimeoutMinutes);
 
     private static readonly HttpClient Client = CreateClient();
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -62,8 +70,19 @@ public static class ReleaseFeed
     internal static HttpResponseMessage Get(string url, CancellationToken cancel)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        var response = Client.Send(request, HttpCompletionOption.ResponseHeadersRead, cancel);
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        stall.CancelAfter(StallTimeout);
+        var response = Client.Send(request, HttpCompletionOption.ResponseHeadersRead, stall.Token);
         return response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>Reads the next chunk of a download body; fails with <see cref="OperationCanceledException"/> when no byte comes within
+    /// <see cref="StallTimeout"/> or <paramref name="cancel"/> fires. 0 at the end.</summary>
+    internal static int ReadChunk(Stream body, byte[] chunk, CancellationToken cancel)
+    {
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        stall.CancelAfter(StallTimeout);
+        return body.ReadAsync(chunk, stall.Token).AsTask().GetAwaiter().GetResult();
     }
 
     private static Release? Fetch((string Repo, string Channel) config)
@@ -99,7 +118,7 @@ public static class ReleaseFeed
             using var response = Get(urlOf(asset), cancel);
             using var body = response.Content.ReadAsStream(cancel);
             var chunk = new byte[DownloadChunkBytes];
-            for (var read = body.Read(chunk); read > 0; read = body.Read(chunk))
+            for (var read = ReadChunk(body, chunk, cancel); read > 0; read = ReadChunk(body, chunk, cancel))
             {
                 destination.Write(chunk, 0, read);
                 onBytes(read);

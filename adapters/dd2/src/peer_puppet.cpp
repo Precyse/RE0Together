@@ -16,6 +16,7 @@
 #include "puppet_registry.h"
 #include "refw.h"
 #include "session.h"
+#include "support_pawns.h"
 #include "world_gate.h"
 
 namespace {
@@ -59,6 +60,7 @@ void seat(const BodyKey& key, Shown& shown) {
     void* pawns = refw::managedSingleton(kPawnManager);
     if (!body || !pawns) return;
     shown.seatTried = true;
+    support_pawns::makeRoom();
     const refw::InvokeResult* hired = refw::invoke(calls::method(calls::kHirePawn), pawns,
                                                    {body->character, reinterpret_cast<void*>(kHireSkipEquip)});
     shown.seated = hired && hired->byte != 0;

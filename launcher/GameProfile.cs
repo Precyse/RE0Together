@@ -39,12 +39,20 @@ public sealed record SaveIndexProfile(string File, string KeyAddress, int KeyLen
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SessionKind { Lobby, Native, Rendezvous }
 
-/// <summary>A file the game folder must hold for co-op to work, the name the status line gives it when it is missing, and where
-/// the launcher can install it from (none: the player installs it).</summary>
-public sealed record RequiredFile(string File, string Name, DependencySource? Install = null);
+/// <summary>A file the game folder must hold for co-op to work, the name the status line gives it when it is missing, where
+/// the launcher can install it from (none: the player installs it) and, when only certain builds work, the SHA-256 of each build
+/// that does (Accept; empty: any file of that name will do).</summary>
+public sealed record RequiredFile(string File, string Name, DependencySource? Install = null, List<string>? Accept = null);
 
-/// <summary>A dependency's download: an https zip pinned by its SHA-256, and the entries taken from it into the game folder.</summary>
-public sealed record DependencySource(string Url, string Sha256, List<DependencyFile> Files);
+/// <summary>A required file the game folder does not satisfy: absent, or (OtherVersion) present but none of the accepted builds.</summary>
+public sealed record RequirementProblem(RequiredFile Required, bool OtherVersion)
+{
+    public string Name => Required.Name;
+}
+
+/// <summary>A dependency's download: https zips at the same pinned SHA-256 tried in order (ours first, then the fallbacks), and the
+/// entries taken from the zip into the game folder.</summary>
+public sealed record DependencySource(List<string> Urls, string Sha256, List<DependencyFile> Files);
 
 /// <summary>One zip entry (From) and where it goes, relative to the game folder (To).</summary>
 public sealed record DependencyFile(string From, string To);
@@ -104,15 +112,19 @@ public sealed record GameProfile(
     SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
     List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null, UiArtSource? UiArt = null,
-    SaveBackupProfile? SaveBackup = null, CampaignsProfile? Campaigns = null, List<ConflictProfile>? Conflicts = null)
+    SaveBackupProfile? SaveBackup = null, CampaignsProfile? Campaigns = null, List<ConflictProfile>? Conflicts = null,
+    bool SettingsAtBoot = false, long LinkTimeoutMs = GameWatch.UnlinkedAfterMs, string? FrameworkLog = null)
 {
     // UiArt: the game art the in-game overlay draws, taken from the player's own install at launch.
     // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").
+    // SettingsAtBoot: the game reads its adapter ini only at start, so a game that already runs cannot be given a session.
+    // LinkTimeoutMs: how long a started game may run before the adapter must have linked. FrameworkLog: the mod loader's own log in the game folder.
     // SaveIndex: where the save slots are (a game whose save file the launcher can list; the host picks a slot to load at launch).
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly ConcurrentDictionary<string, GameProfile> Loaded = new();
     private static readonly Lazy<IReadOnlyList<string>> Ids = new(ReadIds);
+    private static readonly ConcurrentDictionary<(string Path, long Length, DateTime Written), string> Hashes = new();
 
     public bool NativeSession => SessionKind == SessionKind.Native;
 
@@ -128,12 +140,27 @@ public sealed record GameProfile(
         SessionKind == SessionKind.Lobby ||
         (RendezvousSession && BridgeWhen is { } condition && hostValues.TryGetValue(condition.Key, out var value) && value == condition.Value);
 
-    /// <summary>The required files missing from the game folder, in profile order.</summary>
-    public IReadOnlyList<RequiredFile> MissingRequirements(string gameDir) =>
-        Requires?.Where(required => !File.Exists(Path.Combine(gameDir, required.File))).ToList() ?? [];
+    /// <summary>The required files the game folder does not satisfy (missing, or another version than the accepted ones), in profile order.</summary>
+    public IReadOnlyList<RequirementProblem> UnmetRequirements(string gameDir) =>
+        Requires?.Select(required => ProblemOf(required, gameDir)).OfType<RequirementProblem>().ToList() ?? [];
 
-    /// <summary>The name of the first required file missing from the game folder, or null when all are there.</summary>
-    public string? MissingRequirement(string gameDir) => MissingRequirements(gameDir).FirstOrDefault()?.Name;
+    /// <summary>The first required file the game folder does not satisfy, or null when all are as required.</summary>
+    public RequirementProblem? UnmetRequirement(string gameDir) => UnmetRequirements(gameDir).FirstOrDefault();
+
+    private static RequirementProblem? ProblemOf(RequiredFile required, string gameDir)
+    {
+        var path = Path.Combine(gameDir, required.File);
+        if (!File.Exists(path)) return new RequirementProblem(required, OtherVersion: false);
+        if (required.Accept is not { Count: > 0 } accepted) return null;
+        var hash = Hashes.GetOrAdd(HashKey(path), _ => ComponentUpdate.Sha256Of(path));
+        return accepted.Contains(hash, StringComparer.OrdinalIgnoreCase) ? null : new RequirementProblem(required, OtherVersion: true);
+    }
+
+    private static (string Path, long Length, DateTime Written) HashKey(string path)
+    {
+        var info = new FileInfo(path);
+        return (info.FullName, info.Length, info.LastWriteTimeUtc);
+    }
 
     /// <summary>The profile of a game, read once: the window and the loop thread share the instance. A profile that cannot be
     /// read (missing, empty, a bad fresh frame type) throws and is read again on the next call.</summary>
@@ -160,6 +187,8 @@ public sealed record GameProfile(
             {
                 if (required.Install is { } source && DependencyInstaller.Problem(source) is { } problem)
                     throw new InvalidDataException($"{required.Name}: {problem}");
+                if (required.Accept?.Any(hash => !DependencyInstaller.IsSha256(hash)) == true)
+                    throw new InvalidDataException($"{required.Name}: an accepted SHA-256 is not 64 hex digits");
             }
             if (profile.SaveSync?.Resign is { } resign && SaveResigner.Problem(resign) is { } resignProblem)
                 throw new InvalidDataException(resignProblem);

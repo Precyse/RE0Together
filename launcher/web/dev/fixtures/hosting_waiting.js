@@ -189,6 +189,7 @@ export default {
     ],
     "locked": false
   }],
+   "primary": "",
    "seatsClickable": false,
    "notice": null
   },

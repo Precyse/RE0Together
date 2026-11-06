@@ -35,6 +35,7 @@ public static class Program
         CampaignStoreTests.Run();
         ConflictArchiveTests.Run();
         CharacterCaptureTests.Run();
+        JourneyTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
         SessionLeaveTests.Run();

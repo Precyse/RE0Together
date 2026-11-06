@@ -15,6 +15,8 @@ public sealed partial class App
     private const long FriendPollMs = 5000;
     private const long LobbySearchMs = 10_000;
     private const long PendingResetCheckMs = 5000;
+    private const long NoProcessRetryMs = 20_000;
+    private const long SetArrivingWaitMs = 8_000;
 
     private readonly CliOptions _options;
     private readonly bool _interactive;
@@ -30,6 +32,7 @@ public sealed partial class App
     private Session? _session;
     private SaveSyncCoordinator? _saveSync;
     private LogForwarder? _logForwarder;
+    private LogForwarder? _launcherLogForwarder;
     private CrashSender? _crashSender;
     private NativeJoin? _nativeJoin;
     private bool _sessionStarted;
@@ -40,6 +43,12 @@ public sealed partial class App
     private bool _startHeld;
     private bool _startRequested;
     private CharacterCapture? _capture;  // a guest's capture launch, kept until the session ends so its outcome stays on show
+    private CharacterCapture? _aborting;  // a capture whose session was dropped, pumped until its game is closed
+    private bool _launchRetried;
+    private bool _modLoadChecked;
+    private bool _modLoadRefused;
+    private bool _saveRefused;
+    private readonly HashSet<ulong> _announcedRefusals = [];
     private bool _hostStarted;
     private long? _launchedAtMs;
     private bool _bridgeWasReady;
@@ -101,11 +110,10 @@ public sealed partial class App
         Open(Command.Join, invite.LobbyId.ToString());
     });
 
-    /// <summary>The host's START GAME: opens the start gate, so the held launch goes ahead. Ignored for a guest and when nothing is held.</summary>
     /// <summary>The host's START GAME, or a guest's READY (a game where the guest picks its character, <see cref="OptionSources.GuestPicksCharacter"/>).</summary>
     public void StartGame() => _commands.Enqueue(() =>
     {
-        if (_startHeld) _startRequested = true;
+        if (_startHeld && StartBlocked().Length == 0) _startRequested = true;
     });
 
     /// <summary>The host removes a guest from the session: it is told to leave and does not count among the lobby's players again.</summary>
@@ -255,6 +263,7 @@ public sealed partial class App
             _avatars?.Pump();
             AcceptInvite();
             _lobby?.Pump();
+            AnnounceRefusedJoins();
             if (_lobby?.Failure is { } failure && !OnLobbyFailure(failure)) return 1;
             DropEndedHeldSession();
             WatchHost();
@@ -265,11 +274,16 @@ public sealed partial class App
             if (!_sessionStarted && _lobby is { IsReady: true } && !StartSession() && !_interactive) return 1;
             _bridge?.Pump();
             _bridgeWasReady |= _bridge?.IsReady == true;
+            if (_gameState != null && _bridge?.IsReady != true) _gameState = null;  // the game is gone: so is what it said
             _session?.Pump();
             _saveSync?.Pump();
             _logForwarder?.Pump();
+            _launcherLogForwarder?.Pump();
             _crashSender?.Pump();
             _nativeJoin?.Pump();
+            PumpAbortedCapture();
+            RetryLaunchWhenNoProcess();
+            WatchModLoad();
             if (_launchPending && !TryLaunch())
             {
                 if (!_interactive) return 1;
@@ -385,6 +399,7 @@ public sealed partial class App
         _session.OptionSet += OnAdapterOptionSet;
         _session.PeerJoined += _ => OnSlotsChanged();
         _bridge.AdapterReady += OnAdapterLinked;
+        _bridge.GameStateReceived += OnGameState;
         _buildCheck = BuildCheck.Create(_profile!, _gameDir, _session, _transport!);
         if (_gameDir == null) return true;
         try
@@ -407,6 +422,7 @@ public sealed partial class App
         {
             Log.Info($"Log forwarding is off: {e.Message}");
         }
+        _launcherLogForwarder = LogForwarder.CreateLauncherLog(_session, _transport!, _gameDir, _profile!);
         _crashSender = CrashSender.Create(_profile!, _gameDir, _session, _transport!, _logForwarder);
         CrashReceiver.Attach(_gameDir, _session, _transport!, MemberName);
         return true;
@@ -433,6 +449,18 @@ public sealed partial class App
             Refuse(Refusals.FromBuildMismatch(refused.Reason), MismatchDetail(refused));
             return false;
         }
+        if (_buildCheck is { Unreachable: true })
+        {
+            Log.Info("No frame from the host through Steam, not launching the game");
+            Refuse(RefusalKind.HostUnreachable, MemberName(_hostId));
+            return false;
+        }
+        if (_saveSync?.Failure is { } unusable)
+        {
+            Log.Info($"The save cannot be used: {unusable.File} ({unusable.Reason}), not launching the game");
+            Refuse(RefusalKind.SaveResignFailed, unusable.File);
+            return false;
+        }
         if (_buildCheck?.Ready == false) return true;
         if (_saveSync?.TimedOut == true)
         {
@@ -441,10 +469,18 @@ public sealed partial class App
             return false;
         }
         if (_saveSync?.Ready == false || CharacterNotReady() || StartGateClosed()) return true;
-        if (!SaveMatchesHost())
+        var matches = SaveMatchesHost();
+        if (!matches && _saveSync?.SinceLastFrameMs is < SetArrivingWaitMs) return true;  // the host's set is still arriving (another world)
+        if (!matches)
         {
             Log.Info("The save received from the host does not hold the slot the host loads, not launching the game");
             Refuse(RefusalKind.SaveDiffers);
+            return false;
+        }
+        if (_profile!.SettingsAtBoot && GameLauncher.IsRunning(_profile))
+        {
+            Log.Info($"{_profile.Name} already runs and reads its settings only at start, not launching the game");
+            Refuse(RefusalKind.GameRunning, _profile.Name);
             return false;
         }
         _launchPending = false;
@@ -456,7 +492,7 @@ public sealed partial class App
         var result = _profile.RendezvousSession
             ? _gameDir != null ? GameLauncher.LaunchWithOptions(_profile, _gameDir, options) : LaunchResult.SteamStartFailed
             : GameLauncher.Launch(_profile, _gameDir);
-        if (result == LaunchResult.Started) _launchedAtMs = Environment.TickCount64;
+        if (result == LaunchResult.Started) MarkLaunched();
         return result is LaunchResult.Started or LaunchResult.AlreadyRunning || RefuseLaunch(result);
     }
 
@@ -481,7 +517,7 @@ public sealed partial class App
     private bool CharacterNotReady()
     {
         if (_session?.IsHost != false || _gameDir == null || !_startRequested) return false;
-        if (_capture is { View.State: CaptureState.Running } running)
+        if (_capture is { InProgress: true } running)
         {
             running.Pump(Environment.TickCount64);
             if (running.View.State == CaptureState.Failed) _startRequested = false;
@@ -491,6 +527,63 @@ public sealed partial class App
         _capture = CharacterCapture.Start(_profile!, _gameDir, OptionSources.PickedCharacter(_profile!, _gameDir)!, Environment.TickCount64);
         if (_capture.View.State == CaptureState.Failed) _startRequested = false;
         return true;
+    }
+
+    private void MarkLaunched()
+    {
+        _launchedAtMs = Environment.TickCount64;
+        _launchRetried = false;
+        _modLoadChecked = false;
+    }
+
+    /// <summary>A capture whose session was dropped: the game is asked to close and the ini is set back (<see cref="CharacterCapture.Abort"/>);
+    /// it is pumped from the loop until the game is gone.</summary>
+    private void AbortCapture()
+    {
+        if (_capture is not { InProgress: true } capture) return;
+        capture.Abort(Environment.TickCount64);
+        _aborting = capture;
+    }
+
+    private void PumpAbortedCapture()
+    {
+        if (_aborting is not { } capture) return;
+        capture.Pump(Environment.TickCount64);
+        if (!capture.InProgress) _aborting = null;
+    }
+
+    /// <summary>Steam sometimes starts no game process: once, <see cref="NoProcessRetryMs"/> after the start, the game is started again.</summary>
+    private void RetryLaunchWhenNoProcess()
+    {
+        if (_launchedAtMs is not { } launchedAt || _launchRetried || _profile == null || Environment.TickCount64 - launchedAt < NoProcessRetryMs) return;
+        _launchRetried = true;
+        if (GameLauncher.IsRunning(_profile)) return;
+        Log.Info($"No {_profile.Name} process {NoProcessRetryMs / MillisPerSecond} s after the start, starting it once more");
+        if (GameLauncher.Launch(_profile, _gameDir) == LaunchResult.Started) _launchedAtMs = Environment.TickCount64;
+    }
+
+    /// <summary>A game that runs past the profile's link timeout without the adapter linking: the logs say why (<see cref="ModLoadCheck"/>),
+    /// shown on both screens and published. A link that comes late takes the failure back.</summary>
+    private void WatchModLoad()
+    {
+        if (_bridge is not { } bridge || _profile == null || _gameDir == null || _launchedAtMs is not { } launchedAt) return;
+        if (bridge.IsReady)
+        {
+            if (_modLoadRefused) _refusal = null;
+            _modLoadRefused = false;
+            return;
+        }
+        var sinceLaunch = Environment.TickCount64 - launchedAt;
+        if (_modLoadChecked || sinceLaunch < _profile.LinkTimeoutMs || !GameLauncher.IsRunning(_profile)) return;
+        _modLoadChecked = true;
+        if (ModLoadCheck.Diagnose(_profile, _gameDir, DateTime.UtcNow.AddMilliseconds(-sinceLaunch)) is not { } cause)
+        {
+            Log.Info($"{_profile.Name} runs without the co-op link and its logs name no cause");
+            return;
+        }
+        Log.Info($"{_profile.Name} did not bring the co-op mod up, see {ModLoadCheck.LogPath(_profile, _gameDir)}");
+        _modLoadRefused = true;
+        Refuse(cause with { LobbyId = _lobby?.Id ?? 0 });
     }
 
     private SessionStep HostStep() =>
@@ -557,8 +650,18 @@ public sealed partial class App
         ResetAdapterSettings();
     }
 
+    /// <summary>The host's log says once for each launcher that left again because it could not take part, and why.</summary>
+    private void AnnounceRefusedJoins()
+    {
+        if (_lobby is not { IsReady: true } lobby || lobby.OwnerId != _transport!.LocalId) return;
+        _announcedRefusals.IntersectWith(lobby.RefusedJoins.Select(join => join.Id));
+        foreach (var join in lobby.RefusedJoins.Where(join => _announcedRefusals.Add(join.Id)))
+            Log.Event(join.Kind == RefusalKind.LauncherBuild ? $"{join.Name} could not join: launcher {join.Detail}" : $"{join.Name} could not join: {StatusText.Refusal(new Refusal(join.Kind, join.Detail))}");
+    }
+
     private void DisposeLobby()
     {
+        _announcedRefusals.Clear();
         _lobby?.Dispose();
         _lobby = null;
     }
@@ -566,10 +669,12 @@ public sealed partial class App
     /// <summary>Drops the session and its services (bridge, save sync, log and crash forwarding) but not the lobby.</summary>
     private void DropSession()
     {
+        AbortCapture();
         BackupSavesAfterSession();
         _follow = null;
         _buildCheck = null;
         _logForwarder = null;
+        _launcherLogForwarder = null;
         _crashSender = null;
         _nativeJoin?.Dispose();
         _nativeJoin = null;
@@ -589,6 +694,9 @@ public sealed partial class App
         _hostStarted = false;
         _hostStartedUnix = 0;
         _launchedAtMs = null;
+        _modLoadRefused = false;
+        _saveRefused = false;
+        _gameState = null;
         _bridgeWasReady = false;
         _saveMeter = new SaveProgressMeter();
         _sessionStarted = false;

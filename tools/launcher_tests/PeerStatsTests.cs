@@ -21,8 +21,16 @@ public static class PeerStatsTests
 
         Tick();
         Check.That(pings.SequenceEqual([Slot1, Slot2]), "both slots are pinged");
-        Check.That(!stats.SilentFor(Slot1, now + PeerStats.SilentAfterMs), "a slot that never answered is silent only after the limit");
-        Check.That(stats.SilentFor(Slot1, now + PeerStats.SilentAfterMs + 1), "a slot that never answered counts from its first ping");
+        Check.That(!stats.SilentFor(Slot1, now + PeerStats.SilentAfterMs + 1) && !stats.HasHeard(Slot1), "a slot never heard from is connecting, never silent");
+
+        now += 1000;
+        stats.OnHeard(Slot2);
+        Check.That(stats.HasHeard(Slot2) && !stats.SilentFor(Slot2, now + PeerStats.SilentAfterMs), "any frame counts as heard");
+        Check.That(stats.SilentFor(Slot2, now + PeerStats.SilentAfterMs + 1), "a slot heard from goes silent after the limit");
+        stats.Remove(Slot2);
+        Check.That(!stats.HasHeard(Slot2), "Remove forgets that the slot was heard");
+
+        now += 1000;
 
         now += 2000;
         stats.OnPong(Slot1, PeerStats.NowMicros - 40_000);

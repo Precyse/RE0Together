@@ -159,7 +159,7 @@ internal sealed partial class UiController
         var status = _app.Status;
         if (SessionCards.FixFor(status, _update.NewerBuild) == NoticeFix.None) return false;
         if (_screen != ScreenKind.Joining || GameOf(status) is not { } game) return true;
-        return SessionScreens.Joining(status, game.Profile, game.Status, _target, _watch.Condition, _update.NewerBuild, Environment.TickCount64).FixEnabled;
+        return SessionScreens.Joining(status, game.Profile, game.Status, _target, _watch.Condition, _update.NewerBuild, Environment.TickCount64, GameFolders.Find(game.Profile)).FixEnabled;
     }
 
     // ---------------------------------------------------------------- games and sessions
@@ -240,11 +240,11 @@ internal sealed partial class UiController
         return true;
     }
 
-    /// <summary>Install on the home screen: a game missing a dependency first shows what it lacks (the dependencies popup, whose
-    /// Install runs the same install with the dependencies first); otherwise the install starts.</summary>
+    /// <summary>Install on the home screen: a game with an unmet dependency (missing, or another version) first shows it (the dependencies
+    /// popup, whose Install or Replace runs the same install with the dependencies first); otherwise the install starts.</summary>
     private void InstallOrAsk(GameProfile game)
     {
-        if (GameFolders.Find(game) is { } gameDir && game.MissingRequirements(gameDir).Count > 0)
+        if (GameFolders.Find(game) is { } gameDir && game.UnmetRequirements(gameDir).Count > 0)
         {
             _popup = PopupKind.Dependencies;
             Apply(_app.Status);
@@ -343,6 +343,12 @@ internal sealed partial class UiController
                 break;
             case NoticeFix.StartSteam:
                 LauncherActions.StartSteam();
+                break;
+            case NoticeFix.CheckUpdate:
+                _update.CheckNow(AppSettings.Current.CheckForUpdates);
+                break;
+            case NoticeFix.CloseGame when game != null:
+                GameCloser.RequestClose(game);
                 break;
         }
     }
@@ -499,7 +505,7 @@ internal sealed partial class UiController
     {
         if (CurrentSession() is not { Hosting: true } session || GameFor(command) is not { } game || game.Profile.Id != GameOf(_app.Status)?.Profile.Id) return UnknownTarget;
         if (GameFolders.Find(game.Profile) is not { } folder) return UnknownTarget;
-        var option = OptionsModel.SessionPickers(game.Profile, folder, _app.Status.Step, session.IsHost).FirstOrDefault(candidate => candidate.Key == command.Text("key"));
+        var option = OptionsModel.SessionPickers(game.Profile, folder, _app.Status.Step, session.IsHost, UiSnapshot.WorldCommitted(_app.Status)).FirstOrDefault(candidate => candidate.Key == command.Text("key"));
         if (option == null || GameOptions.Offered(game.Profile, option, folder).All(value => value.Value != command.Text("value"))) return UnknownTarget;
         try
         {

@@ -53,6 +53,12 @@ public static class LobbyRowsTests
         Check.That(Action(Listing()) == LobbyAction.Join, "action: a matching lobby joins");
         Check.That(Action(Listing(players: 4)) == LobbyAction.Full, "action: a full lobby is Full");
         Check.That(Action(Listing(launcher: 410)) == LobbyAction.Unavailable, "action: another launcher build is unavailable");
+        Check.That(LobbyRowModels.ReasonOf(Listing(launcher: Newer), LobbyAction.Unavailable, Local) == "Newer launcher"
+                   && LobbyRowModels.ReasonOf(Listing(launcher: 410), LobbyAction.Unavailable, Local) == "Older host"
+                   && LobbyRowModels.ReasonOf(Listing(), LobbyAction.Unavailable, Local) == "" && LobbyRowModels.ReasonOf(Listing(launcher: Newer), LobbyAction.UpdateLauncher, Local) == "",
+            "reason: a newer or an older host launcher is named, nothing else is");
+        Check.That(LobbyRowModels.ButtonOf(LobbyAction.Unavailable, "Older host") == new LobbyButton("Older host", false, false) && LobbyRowModels.ButtonOf(LobbyAction.Unavailable).Label == "Join",
+            "reason: a disabled Join names its reason");
         Check.That(Action(Listing(launcher: Newer), newer: Newer) == LobbyAction.UpdateLauncher, "action: the newer launcher build on offer is an Update");
         Check.That(Action(Listing(launcher: 410, players: 4)) == LobbyAction.Unavailable, "action: the launcher build is checked before the lobby is full");
         Check.That(Action(Listing(mod: 409)) == LobbyAction.Unavailable, "action: another mod build that nothing here provides is unavailable");

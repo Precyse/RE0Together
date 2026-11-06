@@ -37,12 +37,6 @@ void holdThinkStop(void* character) {
     if (module) refw::field<bool>(module, kModuleSkipThink) = true;
 }
 
-void warp(const puppet_registry::Body& body, const wire_dd2::BodyState& target) {
-    double at[3] = {target.position[0], target.position[1], target.position[2]};
-    float rotation[4] = {0.0f, std::sin(target.yaw / 2), 0.0f, std::cos(target.yaw / 2)};
-    refw::invoke(calls::method(calls::kWarp), body.character, {at, rotation, g_warpOption});
-}
-
 void turnToward(const puppet_registry::Body& body, const double point[3]) {
     if (!body.turn) return;
     double at[3] = {point[0], point[1], point[2]};
@@ -72,6 +66,12 @@ bool init() {
     return g_idle.has_value() && g_warpOption;
 }
 
+bool warpTo(void* character, const double position[3], float yaw) {
+    double at[3] = {position[0], position[1], position[2]};
+    float rotation[4] = {0.0f, std::sin(yaw / 2), 0.0f, std::cos(yaw / 2)};
+    return g_warpOption && refw::invoke(calls::method(calls::kWarp), character, {at, rotation, g_warpOption}) != nullptr;
+}
+
 void drive(const puppet_registry::Body& body, const wire_dd2::BodyState& target, std::span<const wire_dd2::ActionEvent> edges,
            State& state) {
     const puppet_registry::DriverScope scope;
@@ -80,7 +80,7 @@ void drive(const puppet_registry::Body& body, const wire_dd2::BodyState& target,
     if (!now) return;
     const double off = distance(now->position, target.position);
     if (!state.warped || off > kWarpM) {
-        warp(body, target);
+        warpTo(body.character, target.position, target.yaw);
         state.warped = true;
         state.lastSpeed = -1;
     } else if (off > kArriveM) {

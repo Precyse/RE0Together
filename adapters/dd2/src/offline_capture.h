@@ -3,8 +3,11 @@
 // read a character, never played. Once the game shows its title menu with the SaveService idle for 3 s, the save of that
 // slot is loaded into a scratch app.SaveDataManager.GameSaveData through the SaveService (cleanData, addDataClass,
 // loadSingle; no gameplay), its context and item sections are handed to the profile capture (profile::captureFrom), and the
-// outcome is written to coop\capture.result for the launcher: "ok" or "failed: <why>". The launcher then closes the game
-// (the SaveService's data classes are not the game's own any more). Gives up after 60 s.
+// outcome is written to coop\capture.result for the launcher: `ok` or `failed: <code>: <detail>` with the code one of
+// title (no title menu within 5 min), load (the game would not load the slot), empty (the slot holds no character),
+// redirect (the save folder redirect was refused; a pending one is waited for), write (the character was not readable or
+// not written) and timeout (60 s from the title menu first shown). The launcher then closes the game (the SaveService's
+// data classes are not the game's own any more).
 #include <cstdint>
 
 namespace offline_capture {

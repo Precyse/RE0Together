@@ -1,7 +1,8 @@
 namespace CoopLauncher;
 
 /// <summary>
-/// Guests mirror the lines their adapter appends to its log to the host (LOG_APPEND), paced to one chunk every
+/// Guests mirror the lines their adapter appends to its log to the host (LOG_APPEND; a second forwarder does the same for the launcher's
+/// own log, LAUNCHER_LOG_APPEND, kept in <c>peer_&lt;id&gt;_launcher_&lt;stamp&gt;.log</c>), paced to one chunk every
 /// <see cref="SendIntervalMs"/> until <see cref="Flush"/> lifts the pace (a crash or exit: <see cref="CrashSender"/>). The host appends
 /// them to one file per peer and session (peer_&lt;id&gt;_&lt;stamp&gt;.log beside its own adapter log, the newest <see cref="KeptPeerLogs"/>
 /// per peer are kept). A disk error on either side skips that pass and never reaches the loop.
@@ -15,12 +16,15 @@ public sealed class LogForwarder
     private const int MaxBytesPerSend = 32 * 1024;
     private const string PeerPrefix = "peer_";
     private const string LogExtension = ".log";
+    private const string LauncherTag = "launcher_";
 
     private readonly string _logPath;
     private readonly string _logDir;
     private readonly ITransport _transport;
     private readonly Func<ulong> _hostId;
     private readonly bool _isHost;
+    private readonly ushort _messageType;
+    private readonly string _fileTag;
     private readonly string _stamp = DateTime.Now.ToString(AppData.StampFormat);
     private readonly HashSet<ulong> _prunedPeers = [];
     private bool _failureLogged;
@@ -28,10 +32,16 @@ public sealed class LogForwarder
     private long _lastSendMs;
     private bool _flushing;
 
-    internal LogForwarder(string logPath, ITransport transport, Func<ulong> hostId, bool isHost)
+    /// <param name="messageType">The frame type this forwarder sends and receives (the adapter log's or the launcher log's).</param>
+    /// <param name="peerLogDir">Where the host writes the peers' files; the folder of <paramref name="logPath"/> when null.</param>
+    /// <param name="fileTag">What follows <c>peer_&lt;id&gt;_</c> in the host's file name; empty for the adapter log.</param>
+    internal LogForwarder(string logPath, ITransport transport, Func<ulong> hostId, bool isHost, ushort messageType = Msg.LogAppend, string fileTag = "",
+        string? peerLogDir = null)
     {
+        _messageType = messageType;
+        _fileTag = fileTag;
         _logPath = logPath;
-        _logDir = Path.GetDirectoryName(logPath)!;
+        _logDir = peerLogDir ?? Path.GetDirectoryName(logPath)!;
         _transport = transport;
         _hostId = hostId;
         _isHost = isHost;
@@ -43,6 +53,15 @@ public sealed class LogForwarder
     {
         if (profile.AdapterLog is not { } log) return null;
         var forwarder = new LogForwarder(Path.Combine(gameDir, log), transport, () => session.HostId, session.IsHost);
+        session.DiagnosticsFrameReceived += forwarder.OnFrame;
+        return forwarder;
+    }
+
+    /// <summary>The forwarder of this launcher's own log (a guest's; the host writes what it receives beside its adapter logs).</summary>
+    public static LogForwarder CreateLauncherLog(Session session, ITransport transport, string gameDir, GameProfile profile)
+    {
+        var folder = Path.Combine(gameDir, Path.GetDirectoryName(profile.AdapterLog ?? string.Empty) ?? string.Empty);
+        var forwarder = new LogForwarder(AppData.LogFile, transport, () => session.HostId, session.IsHost, Msg.LauncherLogAppend, LauncherTag, folder);
         session.DiagnosticsFrameReceived += forwarder.OnFrame;
         return forwarder;
     }
@@ -89,7 +108,7 @@ public sealed class LogForwarder
                 return;
             }
             var chunk = ReadFrom(_offset, (int)Math.Min(MaxBytesPerSend, length - _offset));
-            if (chunk.Length == 0 || !_transport.Send(_hostId(), Framing.Reliable(Msg.LogAppend, chunk))) return;
+            if (chunk.Length == 0 || !_transport.Send(_hostId(), Framing.Reliable(_messageType, chunk))) return;
             _offset += chunk.Length;
         }
         while (_flushing);
@@ -97,7 +116,7 @@ public sealed class LogForwarder
 
     private void OnFrame(ulong sender, Frame frame)
     {
-        if (!_isHost || frame.Type != Msg.LogAppend || frame.Payload.Length == 0) return;
+        if (!_isHost || frame.Type != _messageType || frame.Payload.Length == 0) return;
         try
         {
             Directory.CreateDirectory(_logDir);
@@ -111,14 +130,15 @@ public sealed class LogForwarder
 
     private void AppendPeerLog(ulong sender, byte[] lines)
     {
-        using (var file = new FileStream(Path.Combine(_logDir, $"{PeerPrefix}{sender}_{_stamp}{LogExtension}"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+        using (var file = new FileStream(Path.Combine(_logDir, $"{PeerPrefix}{sender}_{_fileTag}{_stamp}{LogExtension}"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
             file.Write(lines);
         if (_prunedPeers.Add(sender)) PrunePeerLogs(sender);
     }
 
     private void PrunePeerLogs(ulong peer)
     {
-        var names = Directory.GetFiles(_logDir, $"{PeerPrefix}{peer}*{LogExtension}").Select(Path.GetFileName).OfType<string>().Where(name => IsPeerLog(name, peer));
+        var names = Directory.GetFiles(_logDir, $"{PeerPrefix}{peer}*{LogExtension}").Select(Path.GetFileName).OfType<string>()
+            .Where(name => IsPeerLog(name, peer) && IsOfStream(name, peer));
         foreach (var expired in ExpiredPeerLogs(names))
         {
             try
@@ -131,6 +151,10 @@ public sealed class LogForwarder
             }
         }
     }
+
+    /// <summary>Whether a peer's log file belongs to this forwarder's stream: the launcher log has its tag, the adapter log has none.</summary>
+    private bool IsOfStream(string fileName, ulong peer) =>
+        fileName.StartsWith($"{PeerPrefix}{peer}_{LauncherTag}", StringComparison.OrdinalIgnoreCase) == (_fileTag == LauncherTag);
 
     private void LogFailureOnce(string what)
     {

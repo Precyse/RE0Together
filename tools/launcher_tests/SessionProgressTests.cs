@@ -59,25 +59,37 @@ public static class SessionProgressTests
 
     private static void Codec()
     {
-        Check.That(StepCodec.Encode(SessionStep.ReceivingSave, 40, null) == "step=ReceivingSave;pct=40", "receiving save carries its percent");
-        Check.That(StepCodec.Encode(SessionStep.Refused, 0, RefusalKind.ModFiles) == "step=Refused;why=ModFiles", "refused carries its kind");
-        Check.That(StepCodec.Encode(SessionStep.InGame, 77, RefusalKind.ModFiles) == "step=InGame", "other steps carry neither");
-        Check.That(StepCodec.Encode(SessionStep.ReceivingSave, 140, null) == "step=ReceivingSave;pct=100", "the percent is capped");
+        Check.That(StepCodec.Encode(new StepReport(SessionStep.ReceivingSave, 40)) == "step=ReceivingSave;pct=40", "receiving save carries its percent");
+        Check.That(StepCodec.Encode(new StepReport(SessionStep.Refused, Refusal: RefusalKind.ModFiles)) == "step=Refused;why=ModFiles", "refused carries its kind");
+        Check.That(StepCodec.Encode(new StepReport(SessionStep.Refused, Refusal: RefusalKind.GameBuild, Detail: "5/3")) == "step=Refused;why=GameBuild;detail=5/3", "refused carries its detail");
+        Check.That(StepCodec.Encode(new StepReport(SessionStep.InGame, 77, RefusalKind.ModFiles)) == "step=InGame", "other steps carry neither");
+        Check.That(StepCodec.Encode(new StepReport(SessionStep.ReceivingSave, 140)) == "step=ReceivingSave;pct=100", "the percent is capped");
+        Check.That(StepCodec.Encode(new StepReport(SessionStep.CharacterNotRead, Detail: "no save; try=again")) == "step=CharacterNotRead;why=no save, try:again",
+            "a character that was not read carries its reason, the separators removed");
 
         foreach (var step in Enum.GetValues<SessionStep>())
         {
-            var ok = StepCodec.TryDecode(StepCodec.Encode(step, 0, null), out var back, out _, out _);
-            Check.That(ok && back == step, $"{step} survives a round trip");
+            var ok = StepCodec.TryDecode(StepCodec.Encode(new StepReport(step)), out var back);
+            Check.That(ok && back.Step == step, $"{step} survives a round trip");
         }
-        Check.That(StepCodec.TryDecode("step=ReceivingSave;pct=40", out var save, out var percent, out var none)
-                   && save == SessionStep.ReceivingSave && percent == 40 && none == null, "save step and percent decode");
-        Check.That(StepCodec.TryDecode("step=Refused;why=ModFiles", out var refused, out _, out var why)
-                   && refused == SessionStep.Refused && why == RefusalKind.ModFiles, "refused step and kind decode");
-        Check.That(!StepCodec.TryDecode("", out _, out _, out _), "empty text does not decode");
-        Check.That(!StepCodec.TryDecode("searching 3", out _, out _, out _), "foreign text does not decode");
-        Check.That(!StepCodec.TryDecode("step=Dancing", out _, out _, out _), "an unknown step does not decode");
-        Check.That(!StepCodec.TryDecode("step=5", out _, out _, out _), "a numeric step does not decode");
-        Check.That(StepCodec.TryDecode("step=Refused;why=Nonsense", out _, out _, out var unknownWhy) && unknownWhy == null, "an unknown kind is dropped, the step stays");
+        Check.That(StepCodec.TryDecode("step=ReceivingSave;pct=40", out var save) && save is { Step: SessionStep.ReceivingSave, Percent: 40, Refusal: null }, "save step and percent decode");
+        Check.That(StepCodec.TryDecode("step=Refused;why=ModFiles", out var refused) && refused is { Step: SessionStep.Refused, Refusal: RefusalKind.ModFiles }, "refused step and kind decode");
+        Check.That(StepCodec.TryDecode("step=Refused;why=GameBuild;detail=5/3", out var detailed) && detailed.Detail == "5/3", "the refusal detail decodes");
+        Check.That(StepCodec.TryDecode("step=CharacterNotRead;why=no save", out var unread) && unread is { Step: SessionStep.CharacterNotRead, Detail: "no save", Refusal: null }, "the reason of an unread character decodes");
+        Check.That(!StepCodec.TryDecode("", out _), "empty text does not decode");
+        Check.That(!StepCodec.TryDecode("searching 3", out _), "foreign text does not decode");
+        Check.That(!StepCodec.TryDecode("step=Dancing", out _), "an unknown step does not decode");
+        Check.That(!StepCodec.TryDecode("step=5", out _), "a numeric step does not decode");
+        Check.That(StepCodec.TryDecode("step=Refused;why=Nonsense", out var unknownWhy) && unknownWhy.Refusal == null, "an unknown kind is dropped, the step stays");
+
+        var game = new GameState(GamePlace.World, GameCharacter.Ok, GameSave.Ok, 2);
+        var text = StepCodec.Encode(new StepReport(SessionStep.InGame, Label: "Arisen / Lv 4", Game: game));
+        Check.That(text == "step=InGame;label=Arisen / Lv 4;place=world;char=ok;save=ok;slot=2", "label and game state are published as pairs");
+        Check.That(StepCodec.TryDecode(text, out var back2) && back2.Label == "Arisen / Lv 4" && back2.Game == game, "label and game state decode");
+        Check.That(StepCodec.TryDecode("step=InGame", out var plain) && plain.Game == null && plain.Label == "", "a step without game state has none");
+        Check.That(GameState.Parse("place=title;char=off;save=refused;slot=-1;peers=1:0"u8.ToArray()) == new GameState(GamePlace.Title, GameCharacter.Off, GameSave.Refused),
+            "GAME_STATE parses its pairs, an unknown key is skipped and slot -1 is unknown");
+        Check.That(GameState.Parse("place=nowhere;char=7"u8.ToArray()).IsEmpty, "an unknown value stays unknown");
     }
 
     private static void Meter()

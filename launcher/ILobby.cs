@@ -2,6 +2,10 @@ namespace CoopLauncher;
 
 public sealed record LobbyMember(ulong Id, string Name);
 
+/// <summary>A launcher that entered the lobby and left again because it cannot take part, with the reason it published before leaving
+/// (<see cref="RefusalKind.LauncherBuild"/> with its own launcher build as the detail).</summary>
+public sealed record RefusedJoin(ulong Id, string Name, RefusalKind Kind, string Detail);
+
 /// <summary>What a member publishes about itself: the game's own status line (rendezvous games), its session step
 /// (<see cref="StepCodec"/>) and its own option values (<see cref="GameOptions.OwnValues"/>, encoded).</summary>
 public enum MemberKey { GameStatus, Step, Options }
@@ -50,6 +54,9 @@ public interface ILobby : IDisposable
 
     /// <summary>Increments whenever Members or OwnerId change.</summary>
     int Revision { get; }
+
+    /// <summary>Launchers that entered and published why they could not take part (only the Steam lobby knows).</summary>
+    IReadOnlyList<RefusedJoin> RefusedJoins => [];
 
     void Pump();
 }

@@ -1,7 +1,7 @@
 namespace CoopLauncher;
 
 /// <summary>What must hold on this machine before a lobby is opened for a game, or a joined lobby's session starts: the game is
-/// found, its build is supported, its required files are there and its mod is installed and current. A conflicting mod
+/// found and, when it reads its settings only at start, not running, its build is supported, its required files are there and its mod is installed and current. A conflicting mod
 /// (<see cref="ConflictArchive"/>) is moved to the archive first while the game is closed.</summary>
 public static class StartChecks
 {
@@ -11,10 +11,12 @@ public static class StartChecks
     {
         Refusal Refused(RefusalKind kind, string detail = "") => new(kind, detail, profile.Id, lobbyId);
         if (gameDir == null) return Refused(RefusalKind.GameNotFound);
+        if (profile.SettingsAtBoot && GameLauncher.IsRunning(profile)) return Refused(RefusalKind.GameRunning, profile.Name);
         var build = GameBuilds.Installed(profile, gameDir);
         if (!GameBuilds.IsSupported(profile, build)) return Refused(RefusalKind.GameUnsupported, build.ToString());
         ConflictArchive.Run(profile, gameDir, GameLauncher.IsRunning(profile), DateTime.Now);
-        if (profile.MissingRequirement(gameDir) is { } missing) return Refused(RefusalKind.RequirementMissing, missing);
+        if (profile.UnmetRequirement(gameDir) is { } unmet)
+            return Refused(unmet.OtherVersion ? RefusalKind.RequirementOtherVersion : RefusalKind.RequirementMissing, unmet.Name);
         var mod = ModInstaller.Status(profile, gameDir);
         if (mod.State == ModState.NotInstalled) return Refused(RefusalKind.ModNotInstalled);
         if (mod.State == ModState.Installed || GameLauncher.IsRunning(profile)) return null;

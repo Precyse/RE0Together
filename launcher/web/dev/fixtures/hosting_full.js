@@ -212,6 +212,7 @@ export default {
     }
    ],
    "pickers": [],
+   "primary": "",
    "seatsClickable": false,
    "notice": null
   },

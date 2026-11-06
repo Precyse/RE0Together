@@ -67,6 +67,7 @@ public sealed record BuildInfo(int LauncherBuild, int GameBuild, byte[]? ModHash
 public sealed class BuildCheck
 {
     private const long WaitMs = 10_000;
+    public const long UnreachableAfterMs = 20_000;
 
     private readonly GameProfile _profile;
     private readonly string? _gameDir;
@@ -101,8 +102,17 @@ public sealed class BuildCheck
         return check;
     }
 
-    /// <summary>The game may start: on the host always; on a guest once the host's build matched (or did not arrive in time).</summary>
-    public bool Ready => _isHost || _heard || Environment.TickCount64 - _startedMs > WaitMs;
+    /// <summary>The game may start: on the host always; on a guest once the host's build arrived, or (a host that sends none) once
+    /// other frames from it did and <see cref="WaitMs"/> passed.</summary>
+    public bool Ready => _isHost || _heard || (HeardFromHost && Environment.TickCount64 - _startedMs > WaitMs);
+
+    /// <summary>A guest has had no frame at all from the host yet: it is still connecting to it.</summary>
+    public bool Connecting => !_isHost && !_heard && !HeardFromHost;
+
+    /// <summary>A guest that heard nothing from the host for <see cref="UnreachableAfterMs"/>: the host cannot be reached through Steam.</summary>
+    public bool Unreachable => Connecting && Environment.TickCount64 - _startedMs > UnreachableAfterMs;
+
+    private bool HeardFromHost => _session.HeardFrom(_session.HostId);
 
     /// <summary>Set when the builds differ; the session must not go on.</summary>
     public string? Mismatch { get; private set; }

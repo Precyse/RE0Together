@@ -9,19 +9,24 @@
 #include "echo_puppet.h"
 #include "enemy_mirror.h"
 #include "enemy_stream.h"
+#include "game_state.h"
+#include "join_warp.h"
 #include "peer_puppet.h"
 #include "log.h"
 #include "refw.h"
 #include "offline.h"
 #include "offline_capture.h"
+#include "overlay.h"
 #include "owner_stream.h"
 #include "peer_bodies.h"
 #include "plague_off.h"
 #include "profile.h"
 #include "puppet_brain.h"
 #include "roster.h"
+#include "save_notice.h"
 #include "save_redirect.h"
 #include "session.h"
+#include "support_pawns.h"
 #include "world_clock.h"
 #include "world_gate.h"
 
@@ -49,6 +54,9 @@ void runSteps() {
         save_redirect::tick(nowMs);
         session::tick(nowMs);
         profile::tick(nowMs);
+        save_notice::tick(nowMs);
+        game_state::tick(nowMs);
+        overlay::tick(nowMs);
         offline_capture::tick(nowMs);
         plague_off::tick(nowMs);
         roster::tick(nowMs);
@@ -63,6 +71,8 @@ void runSteps() {
             owner_stream::tick(nowMs);
             world_clock::tick(nowMs);
             peer_bodies::tick(nowMs);
+            join_warp::tick(nowMs);
+            support_pawns::tick(nowMs);
         }
         g_nextStepMs += kStepMs;
         ++steps;

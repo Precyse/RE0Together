@@ -11,7 +11,7 @@ const SCREEN_HOSTING = 'hosting';
 const COPY_ICON_PX = 20;
 const STATE_GLYPH_SIZE = 'large';
 const STATE_MARKS = { inGame: 'done', reconnecting: 'active', waitingForHost: 'active', gameClosed: 'failed' };
-const LABELS = { code: 'LOBBY CODE', ready: 'READY', players: 'PLAYERS', start: 'START GAME', waiting: 'WAITING FOR HOST', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
+const LABELS = { code: 'LOBBY CODE', players: 'PLAYERS', start: 'START GAME', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
 
 const makeOption = () => h('div', { class: 'session-option' }, h('span', { class: 'session-option-label' }), h('span'));
 
@@ -71,7 +71,7 @@ function createPickers(ctx) {
 }
 
 /** Hosting: the step list, the pickers (host: campaign and save slot; guest: character), START GAME (a guest sees READY while it
- *  picks its character, else a disabled Waiting for host, RELAUNCH when its game stalled) and Leave. */
+ *  picks its character, else a disabled button naming what it waits for, RELAUNCH when its game stalled) and Leave. */
 function createHostingBody(ctx) {
   const steps = createSteps('large');
   steps.el.classList.add('steps-tight');
@@ -85,7 +85,7 @@ function createHostingBody(ctx) {
       steps.update(session.steps);
       pickers.update(session.pickers, gameId);
       relaunch = !session.isHost && session.relaunch;
-      setText(primary, session.isHost ? LABELS.start : relaunch ? LABELS.relaunch : session.startEnabled ? LABELS.ready : LABELS.waiting);
+      setText(primary, session.isHost ? LABELS.start : relaunch ? LABELS.relaunch : session.primary);
       primary.disabled = !session.startEnabled && !relaunch;
     },
   };

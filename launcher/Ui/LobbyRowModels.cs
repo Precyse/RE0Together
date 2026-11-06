@@ -13,7 +13,7 @@ internal readonly record struct LobbyButton(string Label, bool Primary, bool Ena
 
 /// <summary>One row of the Lobbies tab, and the lobby popup's own look: the lobby, its game, what its button does and whether the
 /// host's mod build differs from the installed one (drawn red).</summary>
-internal sealed record LobbyRowModel(LobbyListing Listing, GameProfile Game, LobbyAction Action, bool ModDiffers);
+internal sealed record LobbyRowModel(LobbyListing Listing, GameProfile Game, LobbyAction Action, bool ModDiffers, string Reason = "");
 
 /// <summary>The pure mapping from the lobby search to the rows of the Lobbies tab; unit tested (<c>LobbyRowsTests</c>).</summary>
 internal static class LobbyRowModels
@@ -38,7 +38,8 @@ internal static class LobbyRowModels
             var game = games.FirstOrDefault(known => known.Id == listing.GameId);
             if (game == null || gameId != null && game.Id != gameId) continue;
             var mod = statusOf(game.Id);
-            rows.Add(new LobbyRowModel(listing, game, ActionFor(listing, mod, localBuild, newerBuild, newerModOf(game.Id)), ModDiffers(listing, mod)));
+            var action = ActionFor(listing, mod, localBuild, newerBuild, newerModOf(game.Id));
+            rows.Add(new LobbyRowModel(listing, game, action, ModDiffers(listing, mod), ReasonOf(listing, action, localBuild)));
         }
         return rows;
     }
@@ -64,13 +65,22 @@ internal static class LobbyRowModels
         return LobbyAction.Join;
     }
 
-    /// <summary>The button of a lobby: the primary JOIN, a disabled Full, Update (for both updates), or a disabled Join.</summary>
-    public static LobbyButton ButtonOf(LobbyAction action) => action switch
+    /// <summary>Why a disabled Join cannot be used when the launcher builds are the reason: the host runs a newer launcher than this one
+    /// (which no update on offer matches), or an older one. Empty otherwise.</summary>
+    public static string ReasonOf(LobbyListing listing, LobbyAction action, int localBuild)
+    {
+        if (action != LobbyAction.Unavailable || listing.LauncherBuild == 0 || listing.LauncherBuild == localBuild) return string.Empty;
+        return listing.LauncherBuild > localBuild ? "Newer launcher" : "Older host";
+    }
+
+    /// <summary>The button of a lobby: the primary JOIN, a disabled Full, Update (for both updates), or a disabled Join that names its
+    /// <paramref name="reason"/> when it has one.</summary>
+    public static LobbyButton ButtonOf(LobbyAction action, string reason = "") => action switch
     {
         LobbyAction.Join => new LobbyButton("JOIN", Primary: true, Enabled: true),
         LobbyAction.Full => new LobbyButton("Full", Primary: false, Enabled: false),
         LobbyAction.UpdateLauncher or LobbyAction.UpdateMod => new LobbyButton("Update", Primary: false, Enabled: true),
-        _ => new LobbyButton("Join", Primary: false, Enabled: false),
+        _ => new LobbyButton(reason.Length > 0 ? reason : "Join", Primary: false, Enabled: false),
     };
 
     /// <summary>The ping column: <c>N ms</c>, empty while unknown.</summary>

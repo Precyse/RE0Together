@@ -14,7 +14,7 @@ internal static partial class UiSnapshot
 {
     private static JoiningDto Joining(SnapshotInput i, GameEntry game)
     {
-        var model = SessionScreens.Joining(i.Status, game.Profile, game.Status, i.Target, i.Condition, i.Update.NewerBuild, i.NowMs);
+        var model = SessionScreens.Joining(i.Status, game.Profile, game.Status, i.Target, i.Condition, i.Update.NewerBuild, i.NowMs, i.FolderOf(game.Profile));
         return new JoiningDto(
             model.Title, model.Sub, Avatar(i, model.HostId, model.HostName), Steps(model.Steps),
             model.Fix == NoticeFix.None ? null : new BtnDto(model.FixLabel, model.FixEnabled), model.StartAgain);
@@ -28,7 +28,7 @@ internal static partial class UiSnapshot
             model.State is { } state ? new LobbyStateDto(state.Kind, state.Words, state.Timer) : null,
             model.Options.Select(option => new[] { option.Label, option.Value }).ToArray(), model.Events.ToArray(), model.Relaunch, model.Counter,
             model.Layout, Cards(i, game.Profile.Id, model.Seats), model.Seats.Any(card => card.Local && card.Figure != null),
-            model.Notice == null ? null : Notice(model.Notice), Pickers(i, game.Profile, model));
+            model.Notice == null ? null : Notice(model.Notice), Pickers(i, game.Profile, model), model.Primary);
     }
 
     /// <summary>The hosting screen's pickers (<see cref="OptionsModel.SessionPickers"/>): the host's campaign and save slot, a guest's
@@ -38,10 +38,13 @@ internal static partial class UiSnapshot
         if (!model.Hosting) return [];
         var folder = i.FolderOf(game);
         var current = GameOptions.Current(game, folder);
-        return OptionsModel.SessionPickers(game, folder, i.Status.Step, model.IsHost).Select(option => new OptionRowDto(
+        return OptionsModel.SessionPickers(game, folder, i.Status.Step, model.IsHost, WorldCommitted(i.Status)).Select(option => new OptionRowDto(
             option.Key, option.Label, current[option.Key],
             GameOptions.Offered(game, option, folder).Select(value => new OptionValueDto(value.Value, value.Label)).ToArray(), false)).ToArray();
     }
+
+    /// <summary>Another player has begun reading its character from the host's world, or is further: the host's world is fixed.</summary>
+    internal static bool WorldCommitted(AppStatus status) => status.Players.Any(player => !player.IsLocal && SessionProgress.WorldCommitted(player.Step));
 
     /// <summary>The mini page's state for the game the session is about.</summary>
     public static MiniState MiniPage(SnapshotInput i)

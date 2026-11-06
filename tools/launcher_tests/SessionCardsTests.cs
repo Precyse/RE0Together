@@ -50,20 +50,31 @@ public static class SessionCardsTests
             SessionCards.FixFor(AppStatus.Idle with { Refusal = new Refusal(kind, LobbyId: lobby) }, newer);
 
         Check.That(Fix(RefusalKind.ModNotInstalled) == NoticeFix.InstallMod, "fix: mod not installed installs");
+        Check.That(Fix(RefusalKind.RequirementMissing) == NoticeFix.InstallMod && Fix(RefusalKind.RequirementOtherVersion) == NoticeFix.InstallMod,
+            "fix: a missing or another-version required file installs");
         Check.That(Fix(RefusalKind.ModFiles) == NoticeFix.UpdateMod, "fix: mod files differ updates");
         Check.That(Fix(RefusalKind.LauncherBuild, newer: NewerBuild) == NoticeFix.UpdateLauncher && Fix(RefusalKind.UnknownGame, newer: NewerBuild) == NoticeFix.UpdateLauncher,
             "fix: launcher build and unknown game update the launcher when a newer one is known");
         Check.That(Fix(RefusalKind.LauncherBuild) == NoticeFix.None && Fix(RefusalKind.UnknownGame) == NoticeFix.None, "fix: none without a newer release");
         Check.That(Fix(RefusalKind.GameNotFound) == NoticeFix.Browse, "fix: game not found browses");
         foreach (var kind in new[] { RefusalKind.LobbyFull, RefusalKind.LobbyClosed, RefusalKind.LobbyNotAllowed, RefusalKind.LobbyFailed,
-                     RefusalKind.NotCoopLobby, RefusalKind.SteamOffline, RefusalKind.SaveTimedOut, RefusalKind.SaveDiffers, RefusalKind.RejoinGaveUp })
+                     RefusalKind.NotCoopLobby, RefusalKind.SteamOffline, RefusalKind.SaveTimedOut, RefusalKind.SaveDiffers, RefusalKind.RejoinGaveUp,
+                     RefusalKind.HostUnreachable })
         {
             Check.That(Fix(kind, LobbyId) == NoticeFix.JoinAgain, $"fix: {kind} joins again when the refusal carries a lobby");
             Check.That(Fix(kind) == NoticeFix.None, $"fix: {kind} has no fix without a lobby");
         }
-        foreach (var kind in new[] { RefusalKind.GameBuild, RefusalKind.GameUnsupported, RefusalKind.RequirementMissing, RefusalKind.SaveFolderMissing,
+        foreach (var kind in new[] { RefusalKind.GameBuild, RefusalKind.SaveFolderMissing, RefusalKind.SaveResignFailed, RefusalKind.FrameworkNotLoaded, RefusalKind.ModNotLoaded,
                      RefusalKind.HostLeft, RefusalKind.Removed, RefusalKind.PortInUse, RefusalKind.LaunchFailed })
             Check.That(Fix(kind, LobbyId, NewerBuild) == NoticeFix.None, $"fix: {kind} has none");
+        Check.That(Fix(RefusalKind.GameUnsupported) == NoticeFix.CheckUpdate && SessionCards.NoticeFor(AppStatus.Idle with { Refusal = new Refusal(RefusalKind.GameUnsupported) }, 0)!.Action == "Check for update",
+            "fix: an unsupported game build checks for an update");
+        Check.That(Fix(RefusalKind.GameRunning) == NoticeFix.CloseGame && SessionCards.NoticeFor(AppStatus.Idle with { Refusal = new Refusal(RefusalKind.GameRunning, "Dragon's Dogma 2") }, 0)!.Action == "Close game",
+            "fix: a game that runs is closed");
+        var hostBehind = AppStatus.Idle with { Refusal = new Refusal(RefusalKind.LauncherBuild, RefusalVersions.Format(3, 5)) };
+        Check.That(SessionCards.FixFor(hostBehind, NewerBuild) == NoticeFix.None, "fix: a host with the older launcher is the one to update");
+        Check.That(SessionCards.FixFor(AppStatus.Idle with { Refusal = new Refusal(RefusalKind.LauncherBuild, RefusalVersions.Format(7, 5)) }, NewerBuild) == NoticeFix.UpdateLauncher,
+            "fix: a guest with the older launcher updates it");
     }
 
     private static void Notices()

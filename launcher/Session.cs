@@ -93,7 +93,7 @@ public sealed class Session : IDisposable
     /// <summary>A peer's build number (BUILD_INFO), with the sender's transport id.</summary>
     public event Action<ulong, Frame>? BuildInfoReceived;
 
-    /// <summary>A guest's diagnostics (LOG_APPEND), with the sender's transport id. Never relayed to the adapter.</summary>
+    /// <summary>A guest's diagnostics (LOG_APPEND, LAUNCHER_LOG_APPEND), with the sender's transport id. Never relayed to the adapter.</summary>
     public event Action<ulong, Frame>? DiagnosticsFrameReceived;
 
     /// <summary>True for another member of the slot map, also while it is held.</summary>
@@ -113,6 +113,12 @@ public sealed class Session : IDisposable
 
     /// <summary>True when a member that is not held has not answered a ping for <see cref="PeerStats.SilentAfterMs"/>.</summary>
     public bool IsSilent(ulong memberId, long nowMs) => PeerSlot(memberId) is { } slot && _stats.SilentFor(slot, nowMs);
+
+    /// <summary>True for a member in the slot map that no frame has come from yet: its connection is still being made.</summary>
+    public bool IsConnecting(ulong memberId) => PeerSlot(memberId) is { } slot && !_stats.HasHeard(slot);
+
+    /// <summary>Whether any frame has come from the member (false for the local member and for one not in the slot map).</summary>
+    public bool HeardFrom(ulong memberId) => PeerSlot(memberId) is { } slot && _stats.HasHeard(slot);
 
     /// <summary>True while a member is missing from the lobby and still inside its grace.</summary>
     public bool IsHeld(ulong memberId) => _grace.HeldIds.Contains(memberId);
@@ -392,6 +398,7 @@ public sealed class Session : IDisposable
 
     private void OnPeerFrame(ulong senderId, Frame frame)
     {
+        if (_slots.TryGetValue(senderId, out var heardSlot)) _stats.OnHeard(heardSlot);
         if (Msg.IsFileTransfer(frame.Type))
         {
             FileFrameReceived?.Invoke(senderId, frame);
@@ -402,7 +409,7 @@ public sealed class Session : IDisposable
             BuildInfoReceived?.Invoke(senderId, frame);
             return;
         }
-        if (frame.Type == Msg.LogAppend)
+        if (frame.Type is Msg.LogAppend or Msg.LauncherLogAppend)
         {
             DiagnosticsFrameReceived?.Invoke(senderId, frame);
             return;

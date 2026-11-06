@@ -15,6 +15,10 @@ namespace puppet_driver {
 // Once at start: the locomotion literals. False when the enum is missing (driving then only warps).
 bool init();
 
+// Game thread: any character (a puppet, or our own Arisen for the join warp) to a world position (doubles) and facing, through
+// Character.warp. False before init found the warp option, or when the call was refused.
+bool warpTo(void* character, const double position[3], float yaw);
+
 struct State {
     bool warped = false;
     int32_t lastSpeed = -1;

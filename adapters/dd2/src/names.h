@@ -98,13 +98,20 @@ constexpr MethodRow kMonsterLocomotion{"monster_locomotion", "app.MonsterActionS
 constexpr MethodRow kMonsterIdle{"monster_idle", "app.MonsterActionSelector", "requestIdleImpl", "System.Boolean", 0x1449fc510, 1,
                                  kMirror};
 
-constexpr std::array<MethodRow, 33> kAll{kChangeFlowPhase, kChangeSceneType, kCompleteSceneLoad, kFerrystoneLoad, kReadyCharacter,
+// The load-slot set: the one funnel every game load of the SaveDataManager goes through (requestLoadAuto passes slot 0,
+// requestLoadManual and requestLoadSlot their slot, requestLoadSystemData -1); the slot is the file number data00<slot>.bin.
+constexpr const char* kLoadSlot = "load_slot";
+
+constexpr MethodRow kRequestLoad{"request_load", "app.SaveDataManager", "requestLoad",
+                                 "System.Int32,app.SaveDataManager.SaveLoadRequestArgs,System.UInt32[]", 0x145c92980, 1, kLoadSlot};
+
+constexpr std::array<MethodRow, 34> kAll{kChangeFlowPhase, kChangeSceneType, kCompleteSceneLoad, kFerrystoneLoad, kReadyCharacter,
                                          kCharacterDestroy, kNavDestination, kPawnNavDestination, kActionCore, kLocomotion, kIdle,
                                          kDamageHp, kSetHp, kLeaveStrayPawn, kDestroyStrayPawn, kPawnLost, kSaveContexts,
                                          kLoadContexts, kSaveItems, kLoadItems, kAddPossessionPoint, kSetPossessionLv,
                                          kPawnPossessionLv, kMainPawnPossessionLv, kJudgePossession, kKillPossessed,
                                          kRegisterEnemy, kRemoveEnemy, kRegisterMonster, kRemoveMonster, kMonsterNavDestination,
-                                         kMonsterLocomotion, kMonsterIdle};
+                                         kMonsterLocomotion, kMonsterIdle, kRequestLoad};
 
 // Native bodies shared by many methods (an empty method body, a trivial setter): never hooked, whatever a row says.
 constexpr std::array<uintptr_t, 1> kSharedBodies{0x145ab65c0};  // shared by 48,893 methods, among them every empty .ctor

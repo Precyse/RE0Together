@@ -16,7 +16,13 @@ void enable(const std::wstring& mount);
 // read back is not the folder asked for.
 void tick(uint64_t nowMs);
 
-// The redirect was set and verified.
-bool verified();
+// Off: no other save folder expected. Pending: expected, not set yet (the SaveService does not exist, or the game just
+// reset it). Verified: set and read back. Refused: set and not the folder asked for, or the SaveService calls are missing.
+enum class State : uint8_t { Off, Pending, Verified, Refused };
+State state();
+
+// Any thread: nothing is loaded from or saved to the real save folder (no redirect expected, or it is verified). The
+// co-op character is spliced into a load only when this holds.
+bool safeToLoad();
 
 }  // namespace save_redirect

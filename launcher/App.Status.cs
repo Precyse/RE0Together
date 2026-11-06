@@ -28,6 +28,12 @@ public sealed partial class App
     private SessionStep _timedStep;
     private long _stepSinceMs;
     private LobbyListing? _lastListing;
+    private GameState? _gameState;
+    private long _startBlockedCheckedMs;
+    private string _startBlocked = string.Empty;
+    private AppSettings? _labelSettings;
+    private CaptureView? _labelCapture;
+    private string _label = string.Empty;
 
     private void PublishStatus()
     {
@@ -49,21 +55,58 @@ public sealed partial class App
     private IEnumerable<ulong> AvatarIds(AppStatus status) =>
         status.Players.Select(player => player.Id).Concat(status.FriendLobbies.Select(friend => friend.FriendId)).Append(_transport!.LocalId);
 
-    private (SessionStep Step, int Percent) LocalProgress()
+    private StepReport LocalProgress()
     {
         var step = SessionProgress.Step(new StepInputs(
             LobbyReady: _lobby is { IsReady: true }, SessionStarted: _sessionStarted, Refused: _refusal != null && _lobby != null,
             BuildCheckPending: _buildCheck is { Ready: false }, SaveSyncPending: _saveSync is { Ready: false }, LaunchPending: _launchPending,
             Bridged: _bridge != null, BridgeReady: _bridge?.IsReady == true, BridgeWasReady: _bridgeWasReady,
-            StartHeld: _launchPending && StartGateClosed(), ReadingCharacter: _capture is { View.State: CaptureState.Running }));
-        return (step, _saveMeter.Percent);
+            StartHeld: _launchPending && StartGateClosed(), ReadingCharacter: _capture is { InProgress: true },
+            PickingCharacter: MustPickCharacter(), CharacterFailed: _capture is { View.State: CaptureState.Failed } && !_startRequested));
+        return new StepReport(step, _saveMeter.Percent, _refusal?.Kind, ReportDetail(step), LocalLabel(), _gameState);
+    }
+
+    /// <summary>Why the host cannot start with guests yet: its campaign holds no saved world for them to receive (looked at once a second).
+    /// Alone the host can start it, which is how a new campaign gets its first save.</summary>
+    private string StartBlocked()
+    {
+        if (_session is not { IsHost: true, PeerIds.Count: > 0 } || _profile == null || _gameDir == null || !_launchPending) return string.Empty;
+        var now = Environment.TickCount64;
+        if (now - _startBlockedCheckedMs < MillisPerSecond) return _startBlocked;
+        _startBlockedCheckedMs = now;
+        return _startBlocked = OptionSources.CampaignHasWorld(_profile, _gameDir) ? string.Empty : OptionSources.NoWorldWords;
+    }
+
+    /// <summary>A guest of a game where it brings a character, held at the start gate, that has not pressed READY.</summary>
+    private bool MustPickCharacter() =>
+        _launchPending && _startHeld && _profile != null && _session?.IsHost == false && OptionSources.GuestPicksCharacter(_profile) && !_startRequested;
+
+    /// <summary>What the published step says besides its name: the refusal's detail, or why the character could not be read.</summary>
+    private string ReportDetail(SessionStep step) => step switch
+    {
+        SessionStep.Refused => _refusal?.Detail ?? string.Empty,
+        SessionStep.CharacterNotRead => _capture?.View.Reason ?? string.Empty,
+        _ => string.Empty,
+    };
+
+    /// <summary>The host's campaign or the guest's character as the others are told it, worked out again only when the settings were
+    /// replaced or the capture changed (the campaign folders are read to name them).</summary>
+    private string LocalLabel()
+    {
+        if (_profile == null || _gameDir == null) return string.Empty;
+        var settings = AppSettings.Current;
+        var capture = _capture?.View;
+        if (ReferenceEquals(settings, _labelSettings) && capture == _labelCapture) return _label;
+        _labelSettings = settings;
+        _labelCapture = capture;
+        return _label = _session?.IsHost == true ? OptionSources.CampaignLabel(_profile, _gameDir) : OptionSources.PickedCharacterLabel(_profile, _gameDir);
     }
 
     /// <summary>Tells the lobby this player's step when it changed (never every tick).</summary>
-    private void PublishStep((SessionStep Step, int Percent) progress)
+    private void PublishStep(StepReport progress)
     {
         if (_lobby is not { IsReady: true } lobby) return;
-        var text = StepCodec.Encode(progress.Step, progress.Percent, _refusal?.Kind);
+        var text = StepCodec.Encode(progress);
         if (ReferenceEquals(lobby, _publishedTo) && text == _publishedStep) return;
         _publishedTo = lobby;
         _publishedStep = text;
@@ -130,7 +173,7 @@ public sealed partial class App
         _stepSinceMs = now;
     }
 
-    private AppStatus CurrentStatus((SessionStep Step, int Percent) progress)
+    private AppStatus CurrentStatus(StepReport progress)
     {
         var now = Environment.TickCount64;
         if (_lobby == null)
@@ -148,7 +191,7 @@ public sealed partial class App
         return new AppStatus(state, _lobby.Id, _session?.RttMs)
         {
             Players = players, GameId = _lobby.GameId, SeatCharacters = view.SeatCharacters, Bridged = _bridge != null,
-            Refusal = _refusal, Step = progress.Step, SavePercent = progress.Percent, Seats = view.Seats, HostOptions = view.HostOptions,
+            Refusal = _refusal, StartBlocked = StartBlocked(), ConnectingToHost = _buildCheck is { Connecting: true }, Step = progress.Step, SavePercent = progress.Percent, Seats = view.Seats, HostOptions = view.HostOptions,
             LaunchedAtMs = _launchedAtMs, Invite = _invite, SaveFile = _saveMeter.CurrentFile, SaveBytes = _saveMeter.ReceivedBytes,
             SaveTotal = _saveMeter.TotalBytes, LobbyOpenedAtMs = _lobbyOpenedAtMs, StepSinceMs = StepSince(progress.Step),
             SessionStartedUnix = _lastListing?.StartedUnix ?? 0, Listing = _lastListing, StartRequested = _startRequested,
@@ -195,7 +238,7 @@ public sealed partial class App
 
     /// <summary>Members host first, each with what its game says, the step its launcher published (this launcher's own for the
     /// local seat) and how the session sees it.</summary>
-    private List<PlayerSlot> PlayerSlots(ILobby lobby, (SessionStep Step, int Percent) local, long nowMs)
+    private List<PlayerSlot> PlayerSlots(ILobby lobby, StepReport local, long nowMs)
     {
         var hostId = _hostId != 0 ? _hostId : lobby.OwnerId;
         return lobby.Members
@@ -204,11 +247,13 @@ public sealed partial class App
             .Select(member =>
             {
                 var isLocal = member.Id == _transport!.LocalId;
-                var (step, percent, refusal) = isLocal ? (local.Step, local.Percent, _refusal?.Kind) : PublishedStep(lobby, member);
+                var report = isLocal ? local : PublishedStep(lobby, member);
+                var transferring = Transferring(report.Step) || Transferring(local.Step);
                 return new PlayerSlot(
                     member.Id, member.Name, member.Id == hostId, isLocal, NativeJoin.Readable(lobby.MemberData(member, MemberKey.GameStatus)),
-                    step, percent, isLocal ? null : MeasuredRtt(member.Id, step, local.Step), _session?.IsHeld(member.Id) ?? false, _session?.IsSilent(member.Id, nowMs) ?? false,
-                    lobby.MemberData(member, MemberKey.Options), HoldSecondsLeft(member.Id, nowMs), refusal);
+                    report.Step, report.Percent, isLocal ? null : MeasuredRtt(member.Id, report.Step, local.Step), _session?.IsHeld(member.Id) ?? false,
+                    !transferring && (_session?.IsSilent(member.Id, nowMs) ?? false), lobby.MemberData(member, MemberKey.Options),
+                    HoldSecondsLeft(member.Id, nowMs), report.Refusal, !isLocal && (_session?.IsConnecting(member.Id) ?? false), report.Detail, report.Label, report.Game);
             })
             .ToList();
     }
@@ -227,14 +272,17 @@ public sealed partial class App
     private int HoldSecondsLeft(ulong memberId, long nowMs) =>
         _session is { } session ? (int)Math.Ceiling(session.HoldMsLeft(memberId, nowMs) / (double)MillisPerSecond) : 0;
 
-    private static (SessionStep Step, int Percent, RefusalKind? Refusal) PublishedStep(ILobby lobby, LobbyMember member) =>
-        StepCodec.TryDecode(lobby.MemberData(member, MemberKey.Step), out var step, out var percent, out var refusal)
-            ? (step, percent, refusal) : (SessionStep.None, 0, null);
+    private static StepReport PublishedStep(ILobby lobby, LobbyMember member) =>
+        StepCodec.TryDecode(lobby.MemberData(member, MemberKey.Step), out var report) ? report : StepReport.None;
 
     /// <summary>Every other slot of the session is a member in its game (its published step) or, from a launcher that publishes
     /// none, one that answers pings, and none is held (missing from the lobby) or silent.</summary>
     private bool PartnersInGame(IReadOnlyList<PlayerSlot> players) =>
         _session is { PeerConnected: true } session
         && session.PeerIds.All(id => players.FirstOrDefault(player => player.Id == id) is { Held: false, Silent: false } partner
-            && (partner.Step == SessionStep.InGame || (partner.Step == SessionStep.None && partner.RttMs != null)));
+            && (InWorld(partner) || (partner.Step == SessionStep.None && partner.RttMs != null)));
+
+    /// <summary>In the world: what its adapter says when it says anything, else that its launcher published InGame.</summary>
+    private static bool InWorld(PlayerSlot player) =>
+        player.Game is { Place: not GamePlace.Unknown } game ? game.Place == GamePlace.World : player.Step == SessionStep.InGame;
 }

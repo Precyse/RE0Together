@@ -1,5 +1,6 @@
 #pragma once
-// The enemy sync's rules (pure, unit tested; DD2 design world.md 1-2): which host enemies are streamed to a guest, and
+// The enemy sync's rules (pure, unit tested; DD2 design world.md 1-2): which host enemies are streamed to a guest (and, the
+// other way round, which enemies a guest hands over to the host's world: those within the same range of the host), and
 // which hits from a guest the host replays (the DS2 limits: at most 20 hits per target and 120 per sender each second,
 // damage finite, positive and at most the target's full HP).
 #include <cmath>
@@ -16,6 +17,7 @@ constexpr double kStreamRadiusM = 120.0;  // farther from every guest than this,
 constexpr uint32_t kHitsPerTarget = 20;
 constexpr uint32_t kHitsPerSender = 120;
 constexpr uint64_t kBudgetWindowMs = 1000;
+constexpr uint64_t kHostStateStaleMs = 1000;  // a guest drives a mirror only from a host state at most this old
 
 struct Point {
     double x = 0, y = 0, z = 0;
@@ -28,6 +30,10 @@ inline bool streamed(const Point& enemy, std::span<const Point> guests) {
     }
     return false;
 }
+
+// A guest mirrors a host enemy only while the host's state for it is fresh; an enemy the host stopped reporting is the
+// guest's own again.
+inline bool fresh(uint64_t nowMs, uint64_t stateAtMs) { return nowMs < stateAtMs || nowMs - stateAtMs <= kHostStateStaleMs; }
 
 inline bool damageOk(float damage, float targetMaxHp) {
     return std::isfinite(damage) && damage > 0.0f && std::isfinite(targetMaxHp) && damage <= targetMaxHp;

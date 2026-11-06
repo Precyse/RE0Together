@@ -25,10 +25,11 @@ internal static class OptionsModel
     public static List<OptionValue> Values(GameProfile game, GameOption option, string? gameDir) => GameOptions.Offered(game, option, gameDir).ToList();
 
     /// <summary>The options the hosting screen offers while this machine's game has not started: the host's campaign and the game's slot
-    /// option (when the save has a slot to pick); a guest's character.</summary>
-    public static List<GameOption> SessionPickers(GameProfile game, string? gameDir, SessionStep step, bool isHost)
+    /// option (when the save has a slot to pick); a guest's character. The host's pickers are gone once a guest has begun reading its
+    /// character from the host's world (<paramref name="worldCommitted"/>).</summary>
+    public static List<GameOption> SessionPickers(GameProfile game, string? gameDir, SessionStep step, bool isHost, bool worldCommitted = false)
     {
-        if (SessionProgress.SelectionLocked(step)) return [];
+        if (SessionProgress.SelectionLocked(step) || (isHost && worldCommitted)) return [];
         var source = isHost ? OptionSources.Campaigns : OptionSources.Characters;
         var pickers = (game.Options ?? []).Where(option => option.Source == source).ToList();
         if (isHost && OptionSources.SlotOption(game) is { } slot && GameOptions.Offered(game, slot, gameDir).Count() > slot.Values.Count) pickers.Add(slot);

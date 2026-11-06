@@ -61,7 +61,7 @@ export default {
    "kind": "dependencies",
    "gameName": "Dragon's Dogma 2",
    "rows": [
-    { "name": "REFramework", "source": "github.com/praydog", "installable": true }
+    { "name": "REFramework", "source": "github.com/praydog", "installable": true, "otherVersion": false }
    ],
    "installEnabled": true
   },

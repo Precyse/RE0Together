@@ -10,13 +10,16 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <span>
 #include <vector>
 
 #include "calls.h"
+#include "enemy_rule.h"
 #include "enemy_spawn.h"
 #include "local_body.h"
 #include "log.h"
 #include "object_set.h"
+#include "peer_bodies.h"
 #include "puppet_driver.h"
 #include "puppet_registry.h"
 #include "refw.h"
@@ -30,7 +33,6 @@ namespace {
 using roster_rule::Key;
 using world_gate_rule::Place;
 
-constexpr uint64_t kStaleMs = 1000;        // a host state older than this is not driven
 constexpr uint64_t kActionPeriodMs = 250;  // one removal or creation per period: 4 per second
 constexpr uint64_t kSummaryPeriodMs = 30000;
 constexpr float kHpEpsilon = 0.5f;
@@ -127,7 +129,20 @@ Mirror mirrorOf(const roster::Member& member) {
     return mirror;
 }
 
-// The keys in both rosters are mirrors; any other mirror is let go.
+enemy_rule::Point pointOf(const double position[3]) { return {position[0], position[1], position[2]}; }
+
+bool nearHost(const enemy_rule::Point& enemy, const enemy_rule::Point& host) {
+    return enemy_rule::streamed(enemy, std::span(&host, 1));
+}
+
+// The host reports this enemy now, within the stream range of the host's own body: ours to mirror (or, missing, to create).
+bool hostOwns(const Key& key, const enemy_rule::Point& host, uint64_t nowMs) {
+    const auto state = g_host.find(key);
+    return state != g_host.end() && enemy_rule::fresh(nowMs, state->second.atMs) &&
+           nearHost(pointOf(state->second.state.position), host);
+}
+
+// The keys in both rosters that the host owns are mirrors; any other mirror is let go (AI and damage back to normal).
 void bind(const std::vector<Key>& both, const std::vector<roster::Member>& members) {
     bool changed = false;
     for (auto it = g_mirrors.begin(); it != g_mirrors.end();) {
@@ -167,14 +182,9 @@ void syncHp(const Mirror& mirror, float hostHp) {
                  {floatArg(hostHp), asArg(kOnlyWhileUp), asArg(kWholeBody)});
 }
 
-void drive(uint64_t nowMs) {
+void drive() {
     for (auto it = g_mirrors.begin(); it != g_mirrors.end();) {
-        const auto host = g_host.find(it->first);
-        if (host == g_host.end() || nowMs - host->second.atMs > kStaleMs) {
-            ++it;
-            continue;
-        }
-        const wire_dd2::EnemyState& state = host->second.state;
+        const wire_dd2::EnemyState& state = g_host.at(it->first).state;  // bind() kept only keys with a fresh state
         if (state.flags & wire_dd2::kEnemyDead) {
             kill(it++);
             continue;
@@ -207,12 +217,20 @@ const roster::Member* memberWith(const std::vector<roster::Member>& members, con
     return nullptr;
 }
 
-// One removal of an extra or one creation of a missing enemy per period.
-void reconcile(const roster_rule::Comparison& comparison, const std::vector<roster::Member>& members, uint64_t nowMs) {
+bool memberNearHost(const roster::Member& member, const enemy_rule::Point& host) {
+    const auto sample = local_body::sampleCharacter(member.character);
+    return sample && nearHost(pointOf(sample->position), host);
+}
+
+// One removal of an extra (only within the host's range: farther out it stays ours) or one creation of a missing enemy
+// per period.
+void reconcile(const roster_rule::Comparison& comparison, const std::vector<roster::Member>& members,
+               const enemy_rule::Point& host, uint64_t nowMs) {
     if (nowMs - g_lastActionMs < kActionPeriodMs) return;
     for (const Key& key : comparison.extra) {
         const roster::Member* member = memberWith(members, key);
-        if (!member || !g_destroyed.insert(key).second) continue;
+        if (!member || g_destroyed.count(key) || !memberNearHost(*member, host)) continue;
+        g_destroyed.insert(key);
         g_lastActionMs = nowMs;
         if (enemy_spawn::destroy(member->character)) ++g_removed;
         return;
@@ -269,6 +287,7 @@ void summary(uint64_t nowMs) {
     g_kills = g_removed = g_createdCount = g_hitsSent = 0;
 }
 
+// A stale host (session::hostPlace is empty then) counts as not in game: every mirror is released.
 bool bothInGame() {
     const auto host = session::hostPlace();
     return world_gate::place() == Place::InGame && host && static_cast<Place>(host->place) == Place::InGame;
@@ -289,21 +308,27 @@ void tick(uint64_t nowMs) {
         resetLoad();
     }
     const std::vector<Key>* hostKeys = roster::hostKeys();
-    if (session::isHost() || !session::active() || !bothInGame() || !hostKeys) {
+    const auto hostSlot = session::hostSlot();
+    const auto hostBody = hostSlot ? peer_bodies::latest(*hostSlot, wire_dd2::kKindArisen) : std::nullopt;
+    if (session::isHost() || !session::active() || !bothInGame() || !hostKeys || !hostBody) {
         unbindAll();
         return;
     }
+    const enemy_rule::Point host = pointOf(hostBody->position);
     const std::vector<roster::Member> members = roster::members();
     std::vector<Key> own;
     own.reserve(members.size());
     for (const roster::Member& member : members) own.push_back(member.key);
-    const roster_rule::Comparison comparison = roster_rule::compare(*hostKeys, own);
+    roster_rule::Comparison comparison = roster_rule::compare(*hostKeys, own);
+    const auto notHostOwned = [&](const Key& key) { return !hostOwns(key, host, nowMs); };
+    std::erase_if(comparison.both, notHostOwned);
+    std::erase_if(comparison.missing, notHostOwned);
     bind(comparison.both, members);
-    drive(nowMs);
+    drive();
     sendHits();
     if (!roster::settled(nowMs)) return;
     askForMissing(comparison.missing);
-    reconcile(comparison, members, nowMs);
+    reconcile(comparison, members, host, nowMs);
 }
 
 bool isMirrorObject(const void* object) { return g_objects.contains(object); }

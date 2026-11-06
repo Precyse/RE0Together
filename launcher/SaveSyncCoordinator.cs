@@ -57,6 +57,12 @@ public sealed class SaveSyncCoordinator : IDisposable
     /// <summary>Guests wait for every file; the host has nothing to wait for.</summary>
     public bool Ready => _receiver?.Complete ?? true;
 
+    /// <summary>A file this machine could not convert to its Steam account (guest only): the session cannot go on.</summary>
+    public SaveFailure? Failure => _receiver?.Failure;
+
+    /// <summary>Milliseconds since the host's newest save frame arrived, null while none has.</summary>
+    public long? SinceLastFrameMs => _firstFrameMs == null ? null : Environment.TickCount64 - _lastFrameMs;
+
     public bool TimedOut => SaveSyncTimeout.TimedOut(_startedMs, _firstFrameMs, _lastFrameMs, Ready, Environment.TickCount64);
 
     /// <summary>Null when the profile has no save sync. Throws <see cref="InvalidOperationException"/> when the save folder cannot be

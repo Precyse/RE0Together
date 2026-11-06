@@ -97,7 +97,7 @@
   --rail-pad-x: 14px;
   --hero-h: 296px;
   --hero-pad: 24px;
-  --hero-row-bottom: 20px;
+  --hero-row-bottom: 32px;
   --hero-fade-h: 192px;
   --hero-fade-overlap: 2px;
   --hero-notice-extra: calc(var(--control-h) + var(--gap-row));
@@ -106,7 +106,7 @@
   --hero-logo-top: 52px;
   --hero-logo-w: 300px;
   --hero-logo-h: 140px;
-  --dock-pad: 14px;
+  --dock-pad: 20px;
   --action-h: 44px;
   --host-w: 120px;
   --code-digits: 20;

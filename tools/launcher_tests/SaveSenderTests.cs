@@ -69,7 +69,7 @@ public static class SaveSenderTests
         sender.SendTo(Peer);
         sender.SendTo(Peer);
         var manifests = transport.Of(Msg.FileManifest).ToList();
-        Check.That(manifests.Count == 2 && manifests.All(m => FileMessages.TryParseManifest(m.Payload, out var names) && names.Count == 0),
+        Check.That(manifests.Count == 2 && manifests.All(m => FileMessages.TryParseManifest(m.Payload, out var names, out _) && names.Count == 0),
             "a missing save folder sends an empty manifest (the guest completes)");
         sender.Pump();
         Check.That(!transport.Of(Msg.FileBegin).Any(), "a missing save folder sends no file");
@@ -86,7 +86,7 @@ public static class SaveSenderTests
         sender.SendTo(Peer);
         sender.Pump();
         var manifest = transport.Of(Msg.FileManifest).Single();
-        Check.That(FileMessages.TryParseManifest(manifest.Payload, out var names) && names.SequenceEqual(["a.dat", "b.dat"]), "the manifest lists the matching files in order");
+        Check.That(FileMessages.TryParseManifest(manifest.Payload, out var names, out _) && names.SequenceEqual(["a.dat", "b.dat"]), "the manifest lists the matching files in order");
         Check.That(transport.Of(Msg.FileBegin).Count() == 2, "each matching file starts a transfer");
     }
 
@@ -132,7 +132,27 @@ public static class SaveSenderTests
         var sender = new SaveSender(new SaveSyncProfile(["data0.bin"], "coop/session"), folder, transport);
         sender.SendTo(Peer);
         sender.Pump();
-        Check.That(transport.Sent.Count == 0, "a fixed list whose file is missing sends nothing and does not throw");
+        Check.That(transport.Of(Msg.FileManifest).Count() == 1 && FileMessages.TryParseManifest(transport.Of(Msg.FileManifest).Single().Payload, out var names, out _) && names.Count == 0
+                   && !transport.Of(Msg.FileBegin).Any(), "a fixed list whose file is missing announces an empty set and does not throw");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "data1.bin"), "x");
+        var partial = new SaveSender(new SaveSyncProfile(["data0.bin", "data1.bin"], "coop/session"), folder, transport);
+        partial.SendTo(Peer);
+        Check.That(FileMessages.TryParseManifest(transport.Of(Msg.FileManifest).Last().Payload, out var present, out var generation) && present.SequenceEqual(["data1.bin"]) && generation == 0,
+            "a fixed list announces only the files the host has");
+        partial.Retarget(folder);
+        partial.SendTo(Peer);
+        Check.That(FileMessages.TryParseManifest(transport.Of(Msg.FileManifest).Last().Payload, out _, out var next) && next == 1, "another world is announced with a new generation");
+        var rejecting = new RecordingTransport();
+        var streamed = new SaveSender(new SaveSyncProfile(["data1.bin"], "coop/session"), folder, rejecting);
+        streamed.SendTo(Peer);
+        streamed.Pump();
+        FileMessages.TryParseBegin(rejecting.Of(Msg.FileBegin).Single().Payload, out var begin);
+        streamed.OnAck(Peer, FileMessages.Reject(begin.Id));
+        var after = rejecting.Of(Msg.FileBegin).Count();
+        streamed.Pump();
+        Check.That(rejecting.Of(Msg.FileBegin).Count() == after && FileMessages.IsRejection(FileMessages.Reject(1).Payload) && !FileMessages.IsRejection(FileMessages.Ack(1, true).Payload),
+            "a file the guest cannot use is dropped, not sent again");
     }
 
     private static void RejectedFileWaitsBeforeItIsResent(string folder)

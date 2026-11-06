@@ -227,5 +227,12 @@ public static class CrashFilesTests
         File.AppendAllText(logPath, "more");
         forwarder.Pump();
         Check.That(transport.Of(Msg.LogAppend).Sum(frame => frame.Payload.Length) == logBytes, "once caught up the pace is back");
+        var launcherLog = Path.Combine(gameDir, "launcher.log");
+        File.WriteAllBytes(launcherLog, []);
+        var launcherTransport = new RecordingTransport();
+        var launcher = new LogForwarder(launcherLog, launcherTransport, () => HostId, isHost: false, Msg.LauncherLogAppend, "launcher_");
+        File.AppendAllText(launcherLog, "line");
+        launcher.Pump();
+        Check.That(launcherTransport.Of(Msg.LauncherLogAppend).Count() == 1 && !launcherTransport.Of(Msg.LogAppend).Any(), "the launcher log goes out as its own frame type");
     }
 }

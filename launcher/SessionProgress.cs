@@ -3,18 +3,25 @@ using System.Globalization;
 namespace CoopLauncher;
 
 /// <summary>Where one player is in getting a session going; published to the lobby so everyone can show it. Ready: everything
-/// is prepared and the launch waits for the start gate (<see cref="StartGate"/>).</summary>
-public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused, Ready, ReadingCharacter }
+/// is prepared and the launch waits for the start gate (<see cref="StartGate"/>). PickingCharacter: a guest that brings its
+/// character has to pick it and press READY; CharacterNotRead: the capture launch could not read it (the reason is published).</summary>
+public enum SessionStep { None, Lobby, CheckingBuild, ReceivingSave, StartingGame, InGame, GameClosed, Refused, Ready, ReadingCharacter, PickingCharacter, CharacterNotRead }
 
 /// <summary>What the step depends on, read from the loop's state.</summary>
 public sealed record StepInputs(
     bool LobbyReady, bool SessionStarted, bool Refused, bool BuildCheckPending, bool SaveSyncPending, bool LaunchPending,
-    bool Bridged, bool BridgeReady, bool BridgeWasReady, bool StartHeld = false, bool ReadingCharacter = false);
+    bool Bridged, bool BridgeReady, bool BridgeWasReady, bool StartHeld = false, bool ReadingCharacter = false,
+    bool PickingCharacter = false, bool CharacterFailed = false);
 
 public static class SessionProgress
 {
     /// <summary>The characters and outfits can be changed until the game starts: from then on they are fixed.</summary>
     public static bool SelectionLocked(SessionStep step) => step is SessionStep.StartingGame or SessionStep.InGame or SessionStep.GameClosed;
+
+    /// <summary>The host's campaign and save slot are fixed once a guest has begun reading its character from that world: from
+    /// reading on, a guest's step is one of these.</summary>
+    public static bool WorldCommitted(SessionStep guestStep) =>
+        guestStep is SessionStep.ReadingCharacter or SessionStep.Ready or SessionStep.StartingGame or SessionStep.InGame or SessionStep.GameClosed;
 
     /// <summary>The first rule that applies, in this order. A session without the bridge (a rendezvous game's own transport)
     /// is in game as soon as it started: the game's own status line tells the rest.</summary>
@@ -26,6 +33,8 @@ public static class SessionProgress
         if (inputs.BuildCheckPending) return SessionStep.CheckingBuild;
         if (inputs.SaveSyncPending) return SessionStep.ReceivingSave;
         if (inputs.LaunchPending && inputs.ReadingCharacter) return SessionStep.ReadingCharacter;
+        if (inputs.LaunchPending && inputs.CharacterFailed) return SessionStep.CharacterNotRead;
+        if (inputs.LaunchPending && inputs.PickingCharacter) return SessionStep.PickingCharacter;
         if (inputs.LaunchPending && inputs.StartHeld) return SessionStep.Ready;
         if (inputs.LaunchPending) return SessionStep.StartingGame;
         if (!inputs.Bridged) return SessionStep.InGame;
@@ -50,38 +59,66 @@ public static class StartGate
     public static bool HostStarted(SessionStep hostStep) => hostStep is SessionStep.StartingGame or SessionStep.InGame;
 }
 
-/// <summary>The lobby member-data text of a step: <c>step=ReceivingSave;pct=40</c>, <c>step=Refused;why=ModFiles</c>.</summary>
+/// <summary>What a player publishes about itself: its step with the percent of the save (ReceivingSave), the refusal (Refused: its
+/// kind and its detail) or the reason a character could not be read (CharacterNotRead), a label (the host's campaign, a guest's
+/// character) and what the adapter says about the game (<see cref="GameState"/>).</summary>
+public sealed record StepReport(
+    SessionStep Step, int Percent = 0, RefusalKind? Refusal = null, string Detail = "", string Label = "", GameState? Game = null)
+{
+    public static readonly StepReport None = new(SessionStep.None);
+}
+
+/// <summary>The lobby member-data text of a step: <c>step=ReceivingSave;pct=40</c>, <c>step=Refused;why=ModFiles;detail=3</c>,
+/// <c>step=CharacterNotRead;why=no save</c>, <c>step=InGame;label=Arisen / Lv 4;place=world;char=ok;save=ok;slot=2</c>.</summary>
 public static class StepCodec
 {
     private const char PairSeparator = ';';
     private const char KeyValueSeparator = '=';
     private const string StepKey = "step";
     private const string PercentKey = "pct";
-    private const string RefusalKey = "why";
+    private const string WhyKey = "why";
+    private const string DetailKey = "detail";
+    private const string LabelKey = "label";
     private const int MaxPercent = 100;
+    private const int MaxTextLength = 120;
 
-    public static string Encode(SessionStep step, int percent, RefusalKind? refusal)
+    public static string Encode(StepReport report)
     {
-        var text = $"{StepKey}{KeyValueSeparator}{step}";
-        if (step == SessionStep.ReceivingSave) text += $"{PairSeparator}{PercentKey}{KeyValueSeparator}{Math.Clamp(percent, 0, MaxPercent)}";
-        if (step == SessionStep.Refused && refusal is { } kind) text += $"{PairSeparator}{RefusalKey}{KeyValueSeparator}{kind}";
-        return text;
+        var pairs = new List<string> { $"{StepKey}{KeyValueSeparator}{report.Step}" };
+        if (report.Step == SessionStep.ReceivingSave) pairs.Add($"{PercentKey}{KeyValueSeparator}{Math.Clamp(report.Percent, 0, MaxPercent)}");
+        if (report.Step == SessionStep.Refused && report.Refusal is { } kind)
+        {
+            pairs.Add($"{WhyKey}{KeyValueSeparator}{kind}");
+            if (report.Detail.Length > 0) pairs.Add($"{DetailKey}{KeyValueSeparator}{Clean(report.Detail)}");
+        }
+        if (report.Step == SessionStep.CharacterNotRead) pairs.Add($"{WhyKey}{KeyValueSeparator}{Clean(report.Detail)}");
+        if (report.Label.Length > 0) pairs.Add($"{LabelKey}{KeyValueSeparator}{Clean(report.Label)}");
+        if (report.Game != null) pairs.AddRange(report.Game.EncodePairs());
+        return string.Join(PairSeparator, pairs);
     }
 
     /// <summary>False for empty or unknown text (a member on another launcher build publishes nothing or something else).</summary>
-    public static bool TryDecode(string text, out SessionStep step, out int percent, out RefusalKind? refusal)
+    public static bool TryDecode(string text, out StepReport report)
     {
-        step = SessionStep.None;
-        percent = 0;
-        refusal = null;
-        var pairs = text.Split(PairSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(pair => pair.Split(KeyValueSeparator, 2)).Where(parts => parts.Length == 2)
-            .GroupBy(parts => parts[0]).ToDictionary(group => group.Key, group => group.Last()[1]);
-        if (!pairs.TryGetValue(StepKey, out var name) || !TryEnum(name, out step)) return false;
-        if (pairs.TryGetValue(PercentKey, out var pct) && int.TryParse(pct, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
-            percent = Math.Min(value, MaxPercent);
-        if (pairs.TryGetValue(RefusalKey, out var why) && TryEnum(why, out RefusalKind kind)) refusal = kind;
+        report = StepReport.None;
+        var pairs = GameState.Pairs(text);
+        if (!pairs.TryGetValue(StepKey, out var name) || !TryEnum(name, out SessionStep step)) return false;
+        var percent = pairs.TryGetValue(PercentKey, out var pct) && int.TryParse(pct, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+            ? Math.Min(value, MaxPercent) : 0;
+        RefusalKind? refusal = null;
+        var detail = pairs.GetValueOrDefault(DetailKey, string.Empty);
+        if (step == SessionStep.Refused && pairs.TryGetValue(WhyKey, out var why) && TryEnum(why, out RefusalKind kind)) refusal = kind;
+        if (step == SessionStep.CharacterNotRead) detail = pairs.GetValueOrDefault(WhyKey, string.Empty);
+        var game = GameState.FromPairs(pairs);
+        report = new StepReport(step, percent, refusal, detail, pairs.GetValueOrDefault(LabelKey, string.Empty), game.IsEmpty ? null : game);
         return true;
+    }
+
+    /// <summary>Free text must not hold the separators, and stays short.</summary>
+    private static string Clean(string text)
+    {
+        var clean = text.Replace(PairSeparator, ',').Replace(KeyValueSeparator, ':');
+        return clean.Length > MaxTextLength ? clean[..MaxTextLength] : clean;
     }
 
     private static bool TryEnum<T>(string name, out T value) where T : struct, Enum

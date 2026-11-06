@@ -15,6 +15,7 @@ public static class SaveReceiverTests
         public Rig(bool gameRunning, Action<string>? resignFile = null)
         {
             Root = Path.Combine(Path.GetTempPath(), "cf_receiver_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Root);
             Session = Path.Combine(Root, "session");
             Staging = Path.Combine(Session, SaveReceiver.StagingFolder);
             Transport = new RecordingTransport();
@@ -34,7 +35,7 @@ public static class SaveReceiverTests
             Receiver.OnFrame(Host, FileMessages.End(id));
         }
 
-        public List<bool> Acks() => Transport.Of(Msg.FileAck).Select(frame => FileMessages.TryParseAck(frame.Payload, out _, out var ok) && ok).ToList();
+        public List<bool> Acks() => Transport.Of(Msg.FileAck).Select(frame => FileMessages.TryParseAck(frame.Payload, out _, out var ok) && ok && !FileMessages.IsRejection(frame.Payload)).ToList();
 
         public void Dispose() => Directory.Delete(Root, recursive: true);
     }
@@ -47,6 +48,31 @@ public static class SaveReceiverTests
         LockedTargetAcksFalse();
         ResignedBeforeItIsMoved();
         UnresignableFileIsRefused();
+        ManifestListsTheFilesTheHostHas();
+        AnotherWorldStartsTheSetAgain();
+    }
+
+    private static void ManifestListsTheFilesTheHostHas()
+    {
+        using var rig = new Rig(gameRunning: false);
+        rig.Receiver.OnFrame(Host, FileMessages.Manifest([]));
+        Check.That(rig.Receiver.Complete, "a fixed list: the host's manifest of fewer files is the set to wait for");
+    }
+
+    private static void AnotherWorldStartsTheSetAgain()
+    {
+        using var rig = new Rig(gameRunning: false);
+        rig.Receiver.OnFrame(Host, FileMessages.Manifest([SaveName]));
+        rig.Deliver(1);
+        Check.That(rig.Receiver.Complete && File.Exists(Path.Combine(rig.Session, SaveName)), "the first world arrives");
+        Directory.CreateDirectory(rig.Staging);
+        File.WriteAllText(Path.Combine(rig.Staging, "old.bin"), "x");
+        rig.Receiver.OnFrame(Host, FileMessages.Manifest([SaveName], generation: 1));
+        Check.That(!rig.Receiver.Complete && !File.Exists(Path.Combine(rig.Session, SaveName)) && !Directory.Exists(rig.Staging), "a new generation drops the old set and the staging folder");
+        rig.Deliver(2);
+        Check.That(rig.Receiver.Complete && File.Exists(Path.Combine(rig.Session, SaveName)), "the new world is written to the session folder again");
+        rig.Receiver.OnFrame(Host, FileMessages.Manifest([SaveName], generation: 1));
+        Check.That(rig.Receiver.Complete, "the same generation again changes nothing");
     }
 
     private static void FirstSetGoesToSession()
@@ -111,5 +137,7 @@ public static class SaveReceiverTests
         Check.That(!rig.Receiver.Complete && !File.Exists(Path.Combine(rig.Session, SaveName)), "a file that cannot be re-signed never reaches the session");
         Check.That(rig.Acks().SequenceEqual([false]) && !File.Exists(Path.Combine(rig.Session, SaveName + SaveReceiver.TempSuffix)),
             "a file that cannot be re-signed is refused with a negative ACK and no temp file is left");
+        Check.That(rig.Transport.Of(Msg.FileAck).All(frame => FileMessages.IsRejection(frame.Payload)) && rig.Receiver.Failure is { File: SaveName, Reason: "not this account" },
+            "a file that cannot be re-signed tells the host not to send it again and is named as the failure");
     }
 }

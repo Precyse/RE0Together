@@ -60,7 +60,7 @@ internal sealed record OptionsPopupDto(string Kind, string GameName, ArtDto Art,
 
 internal sealed record UpdatePopupDto(string Kind, string Build);
 
-internal sealed record DependencyRowDto(string Name, string Source, bool Installable);
+internal sealed record DependencyRowDto(string Name, string Source, bool Installable, bool OtherVersion);
 
 internal sealed record DependenciesPopupDto(string Kind, string GameName, DependencyRowDto[] Rows, bool InstallEnabled);
 
@@ -97,7 +97,7 @@ internal sealed record CardDto(
 
 internal sealed record SessionDto(
     bool Hosting, bool IsHost, string Code, StepDto[] Steps, bool StartEnabled, LobbyStateDto? State, string[][] Options, string[] Events, bool Relaunch,
-    string Counter, CardLayout Layout, CardDto[] Seats, bool SeatsClickable, NoticeDto? Notice, OptionRowDto[] Pickers);
+    string Counter, CardLayout Layout, CardDto[] Seats, bool SeatsClickable, NoticeDto? Notice, OptionRowDto[] Pickers, string Primary);
 
 internal sealed record HalfDto(ImgDto Figure, string Name, string Role, string Label, string Kind, bool Locked, int Dots, int Index, bool CanCycle, double Opacity);
 

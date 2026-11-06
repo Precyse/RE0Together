@@ -18,11 +18,11 @@ internal sealed record LobbyState(LobbyStateKind Kind, string Words, string Time
 /// <summary>What the hosting and lobby screen shows. Hosting is the screen before the game starts, for every member (the step
 /// list, and START GAME for the host, Waiting for host for a guest), else the lobby (the state line, the host's options and the
 /// last events); IsHost says the local player is the host. Counter is the n/max seat count the hosting screen shows after its
-/// PLAYERS caption. Seats are the cards, Layout the layout they use.</summary>
+/// PLAYERS caption. Seats are the cards, Layout the layout they use. Primary is a guest's button words while it waits (empty for the host).</summary>
 internal sealed record SessionModel(
     bool Hosting, bool IsHost, string Code, IReadOnlyList<StepRow> Steps, bool StartEnabled, LobbyState? State,
     IReadOnlyList<(string Label, string Value)> Options, IReadOnlyList<string> Events, bool Relaunch, string Counter,
-    IReadOnlyList<PlayerCard> Seats, CardLayout Layout, Notice? Notice);
+    IReadOnlyList<PlayerCard> Seats, CardLayout Layout, Notice? Notice, string Primary = "");
 
 /// <summary>The mini window's header state: the highest partner ping, a partner joining, or a partner lost.</summary>
 internal enum MiniHeaderKind { Ping, Joining, Lost }

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "wire_dd2.h"
@@ -33,10 +34,30 @@ bool isHost();
 // The host's last PLACE, when this machine is a guest and has one.
 std::optional<wire_dd2::Place> hostPlace();
 
-// A peer's last PLACE, if it reported one.
+// A peer's last PLACE, if it reported one and is not stale.
 std::optional<wire_dd2::Place> peerPlace(uint8_t slot);
 
-// The slots of the peers whose plugin matches ours.
+// The slots of the peers whose plugin matches ours and that are not stale.
 std::vector<uint8_t> matchingPeers();
+
+// Nothing arrived from the peer for session_rule::kPeerStaleMs. Its puppets and mirrors are released through the
+// peerPlace / hostPlace / matchingPeers paths; true also for a slot that is not a peer.
+bool stale(uint8_t slot);
+
+// A peer as the launcher and the overlay report it.
+struct PeerView {
+    uint8_t slot;
+    uint64_t steamId;
+    std::string name;
+    bool helloOk;  // its plugin matches ours
+    bool stale;
+    std::optional<wire_dd2::Place> place;  // its last PLACE, even a stale one
+};
+
+// Every other player of the session, whatever their plugin and staleness.
+std::vector<PeerView> peers();
+
+// The host's slot while linked to the launcher.
+std::optional<uint8_t> hostSlot();
 
 }  // namespace session

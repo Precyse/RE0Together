@@ -18,6 +18,9 @@ bool onActionEvent(uint8_t slot, std::span<const uint8_t> payload);
 // The newest state of a peer's body of a kind (wire_dd2 kKindArisen, kKindMainPawn), if any arrived in this session.
 std::optional<wire_dd2::BodyState> latest(uint8_t slot, uint8_t kind);
 
+// Metres from the local Arisen to the peer's Arisen at its newest state; none until both are known.
+std::optional<double> distance(uint8_t slot);
+
 // The action edges of that body since the last call, oldest first (at most kMaxPendingEdges are kept).
 constexpr size_t kMaxPendingEdges = 32;
 std::vector<wire_dd2::ActionEvent> takeActionEdges(uint8_t slot, uint8_t kind);

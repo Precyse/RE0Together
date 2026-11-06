@@ -15,6 +15,7 @@ public sealed class PeerStats
     private readonly Func<long> _clock;
     private readonly Dictionary<byte, double> _rttMs = new();
     private readonly Dictionary<byte, long> _lastHeardMs = new();
+    private readonly HashSet<byte> _heard = [];
     private readonly Dictionary<byte, ulong> _restartedMicros = new();
     private long _lastPing;
     private long _lastReport;
@@ -28,11 +29,21 @@ public sealed class PeerStats
     /// <see cref="Restart"/>, so pongs queued behind a save transfer never seed the average.</summary>
     public void OnPong(byte slot, ulong echoedMicros)
     {
-        _lastHeardMs[slot] = _clock();
+        OnHeard(slot);
         if (_restartedMicros.TryGetValue(slot, out var restarted) && echoedMicros < restarted) return;
         var sample = (NowMicros - echoedMicros) / MicrosPerMs;
         _rttMs[slot] = _rttMs.TryGetValue(slot, out var rtt) ? rtt + RttAlpha * (sample - rtt) : sample;
     }
+
+    /// <summary>Any frame from the peer (a pong, a file acknowledgement, a game frame) shows it is there.</summary>
+    public void OnHeard(byte slot)
+    {
+        _lastHeardMs[slot] = _clock();
+        _heard.Add(slot);
+    }
+
+    /// <summary>Whether a frame has come from the peer since it was added; false while it is still being connected to.</summary>
+    public bool HasHeard(byte slot) => _heard.Contains(slot);
 
     /// <summary>Forgets a peer's average: the next ping sent from now on starts it again.</summary>
     public void Restart(byte slot)
@@ -47,14 +58,15 @@ public sealed class PeerStats
     /// <summary>Round-trip time of one peer, null before its first pong.</summary>
     public int? RttOf(byte slot) => _rttMs.TryGetValue(slot, out var rtt) ? (int)Math.Round(rtt) : null;
 
-    /// <summary>True when a pinged peer has not answered for <see cref="SilentAfterMs"/>; one that never answered counts
-    /// from its first ping.</summary>
-    public bool SilentFor(byte slot, long nowMs) => _lastHeardMs.TryGetValue(slot, out var heard) && nowMs - heard > SilentAfterMs;
+    /// <summary>True when a peer that was heard from has been silent for <see cref="SilentAfterMs"/>; one never heard from is still
+    /// connecting (<see cref="HasHeard"/>), not silent.</summary>
+    public bool SilentFor(byte slot, long nowMs) => _heard.Contains(slot) && nowMs - _lastHeardMs[slot] > SilentAfterMs;
 
     public void Remove(byte slot)
     {
         _rttMs.Remove(slot);
         _lastHeardMs.Remove(slot);
+        _heard.Remove(slot);
         _restartedMicros.Remove(slot);
     }
 
@@ -64,11 +76,7 @@ public sealed class PeerStats
         if (now - _lastPing >= PingIntervalMs)
         {
             _lastPing = now;
-            foreach (var slot in peerSlots)
-            {
-                _lastHeardMs.TryAdd(slot, now);
-                sendPing(slot);
-            }
+            foreach (var slot in peerSlots) sendPing(slot);
         }
         if (now - _lastReport >= ReportIntervalMs)
         {

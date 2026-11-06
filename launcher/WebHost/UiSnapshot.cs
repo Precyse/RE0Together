@@ -101,18 +101,20 @@ internal static partial class UiSnapshot
         _ => null,
     };
 
-    /// <summary>The game's missing dependencies: each with where it comes from; Install only when every one can be installed here.</summary>
+    /// <summary>The game's unmet dependencies (missing, or another version): each with where it comes from; Install (Replace for another
+    /// version) only when every one can be installed here.</summary>
     private static DependenciesPopupDto DependenciesPopup(GameEntry game, string folder)
     {
-        var missing = game.Profile.MissingRequirements(folder);
-        var rows = missing.Select(required => new DependencyRowDto(required.Name, SourceOf(required.Install), required.Install != null)).ToArray();
+        var unmet = game.Profile.UnmetRequirements(folder);
+        var rows = unmet.Select(problem => new DependencyRowDto(
+            problem.Name, SourceOf(problem.Required.Install), problem.Required.Install != null, problem.OtherVersion)).ToArray();
         return new DependenciesPopupDto("dependencies", game.Profile.Name, rows, rows.Length > 0 && rows.All(row => row.Installable));
     }
 
     /// <summary>A download's site and owner ("github.com/praydog"); empty for a dependency the player installs.</summary>
     private static string SourceOf(DependencySource? source)
     {
-        if (source == null || !Uri.TryCreate(source.Url, UriKind.Absolute, out var url)) return string.Empty;
+        if (source == null || !Uri.TryCreate(source.Urls[0], UriKind.Absolute, out var url)) return string.Empty;
         var owner = url.Segments.Skip(1).FirstOrDefault()?.TrimEnd('/');
         return string.IsNullOrEmpty(owner) ? url.Host : $"{url.Host}/{owner}";
     }
@@ -146,12 +148,12 @@ internal static partial class UiSnapshot
             seats.Count(seat => seat.Kind == PopupSeatKind.Open), LobbyRowModels.Ping(listing),
             new CheckedDto(!model.ModDiffers, listing.ModBuild > 0 ? listing.ModBuild.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty),
             new CheckedDto(LobbyPopupModel.GameOk(listing, mod), listing.GameBuild > 0 ? $"Build {listing.GameBuild}" : string.Empty),
-            LobbyPopupModel.Network(model), LobbyPopupModel.PlayingText(listing.StartedUnix, i.UnixNow), Button(model.Action));
+            LobbyPopupModel.Network(model), LobbyPopupModel.PlayingText(listing.StartedUnix, i.UnixNow), Button(model));
     }
 
-    private static LobbyBtnDto Button(LobbyAction action)
+    private static LobbyBtnDto Button(LobbyRowModel model)
     {
-        var button = LobbyRowModels.ButtonOf(action);
+        var button = LobbyRowModels.ButtonOf(model.Action, model.Reason);
         return new LobbyBtnDto(button.Label, button.Primary, button.Enabled);
     }
 
@@ -179,7 +181,7 @@ internal static partial class UiSnapshot
                 UiJson.Id(listing.LobbyId), i.ArtOf(model.Game.Id).Capsule, model.Game.Name,
                 new LobbyHostDto(listing.HostName, Avatar(i, listing.HostId, listing.HostName)), LobbyRowModels.Players(listing),
                 new LobbyModDto(listing.ModBuild > 0 ? listing.ModBuild.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty, model.ModDiffers),
-                LobbyRowModels.Ping(listing), Button(model.Action));
+                LobbyRowModels.Ping(listing), Button(model));
         }).ToArray();
         return new LobbiesDto(
             i.Filter, i.LobbyGameId, i.Games.Select(game => new LobbyGameDto(game.Profile.Id, game.Profile.Name)).ToArray(),

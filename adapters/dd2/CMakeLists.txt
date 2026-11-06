@@ -19,6 +19,16 @@ endif()
 set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../re0/src)
 set(COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 
+# REFramework's own ImGui build (1.92.0, no docking) is what the overlay draws into: the same version, compiled without a
+# backend (REFramework renders).
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
+add_library(imgui_core STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp)
+target_include_directories(imgui_core PUBLIC ${IMGUI_DIR})
+
 add_library(dd2coop SHARED
     ${SHARED_DIR}/net_client.cpp
     ${SHARED_DIR}/debug_stats.cpp
@@ -51,16 +61,23 @@ add_library(dd2coop SHARED
     src/save_sections.cpp
     src/profile.cpp
     src/save_redirect.cpp
+    src/save_service.cpp
+    src/save_notice.cpp
+    src/load_slot.cpp
+    src/game_state.cpp
+    src/overlay.cpp
     src/save_folders.cpp
     src/offline_capture.cpp
     src/plague_off.cpp
     src/roster.cpp
     src/enemy_spawn.cpp
     src/enemy_stream.cpp
-    src/enemy_mirror.cpp)
+    src/enemy_mirror.cpp
+    src/join_warp.cpp
+    src/support_pawns.cpp)
 target_include_directories(dd2coop PRIVATE src ${SHARED_DIR} ${COMMON_DIR})
 set_target_properties(dd2coop PROPERTIES PREFIX "")
-target_link_libraries(dd2coop PRIVATE ws2_32 dbghelp)
+target_link_libraries(dd2coop PRIVATE imgui_core ws2_32 dbghelp)
 add_custom_command(TARGET dd2coop POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:dd2coop> ${CMAKE_CURRENT_SOURCE_DIR}/dd2coop.dll)
 

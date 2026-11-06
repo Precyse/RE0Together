@@ -11,41 +11,45 @@
 #include "paths.h"
 #include "profile.h"
 #include "refw.h"
+#include "save_redirect.h"
 #include "save_sections.h"
+#include "save_service.h"
 
 namespace {
 
-constexpr const char* kSaveService = "via.storage.saveService.SaveService";
-constexpr const char* kStateEnum = "via.storage.saveService.SaveState";
 constexpr const char* kResultEnum = "via.storage.saveService.SaveResult";
-constexpr const char* kIdleLiteral = "IDLE";
 constexpr const char* kSuccessLiteral = "Success";
 constexpr const char* kDoingLiteral = "Doing";
 constexpr const char* kGameSaveDataType = "app.SaveDataManager.GameSaveData";
 constexpr const wchar_t* kGameDataClass = L"GAME_SAVE_DATA";  // the SaveService's name for a game save's root class
 constexpr uint32_t kGameSaveDataList = 0x10;                   // GameSaveData.GameSaveDataList, List<app.SaveDataBase>
-constexpr uint64_t kTimeoutMs = 60000;
-constexpr uint64_t kTitleSettleMs = 3000;
-constexpr uint64_t kSectionsWaitMs = 10000;  // how long the root's list may take to fill after the load succeeded  // the title menu shown this long with the SaveService idle: the game's own loads are done
+constexpr uint64_t kTitleWaitMs = 300000;     // how long the game may take to reach its title menu
+constexpr uint64_t kTimeoutMs = 60000;        // from the title menu first shown to the character written
+constexpr uint64_t kTitleSettleMs = 3000;     // the title menu shown this long with the SaveService idle: the game's own loads are done
+constexpr uint64_t kSectionsWaitMs = 10000;   // how long the root's list may take to fill after the load succeeded
 constexpr const char* kMainFlowManager = "app.MainFlowManager";
 constexpr const wchar_t* kResultFile = L"\\capture.result";
+
+// The codes of `failed: <code>: <detail>` in the result file (docs/CONTRACT.md): where the capture stopped.
+constexpr const char* kFailTitle = "title";        // the title menu was never reached
+constexpr const char* kFailLoad = "load";          // the game could not or would not load the slot
+constexpr const char* kFailEmpty = "empty";        // the slot loaded and holds no character
+constexpr const char* kFailRedirect = "redirect";  // the save folder redirect was refused
+constexpr const char* kFailWrite = "write";        // the character was not readable from the save or not written
+constexpr const char* kFailTimeout = "timeout";    // the load did not finish in time
 
 enum class Step { Off, Waiting, Loading, Done };
 
 Step g_step = Step::Off;
 int g_slot = -1;
-uint64_t g_startMs = 0;
-uint64_t g_titleSinceMs = 0;
-uint64_t g_loadedMs = 0;  // when the load reported success; 0 before  // when the title menu was first seen idle; 0 while it is not
-void* g_root = nullptr;  // the scratch GameSaveData, one reference of ours
-std::optional<int64_t> g_idle, g_success, g_doing;
+uint64_t g_armedMs = 0;      // the first step after enable
+uint64_t g_titleMs = 0;      // when the title menu was first seen; 0 before
+uint64_t g_idleSinceMs = 0;  // when the title menu was first seen with the SaveService idle; 0 while it is not
+uint64_t g_loadedMs = 0;     // when the load reported success; 0 before
+void* g_root = nullptr;      // the scratch GameSaveData, one reference of ours
+std::optional<int64_t> g_success, g_doing;
 
-std::optional<int64_t> literal(const char* type, const char* name) {
-    for (const auto& [each, value] : refw::enumLiterals(type)) {
-        if (each == name) return value;
-    }
-    return std::nullopt;
-}
+std::string failure(const char* code, const std::string& detail) { return std::string("failed: ") + code + ": " + detail; }
 
 int64_t dword(calls::Id getter, void* service) {
     const refw::InvokeResult* result = refw::invoke(calls::method(getter), service);
@@ -82,17 +86,28 @@ Sections sections() {
     return out;
 }
 
+bool onTitleMenu() {
+    void* flow = refw::managedSingleton(kMainFlowManager);
+    const refw::InvokeResult* title = flow ? refw::invoke(calls::method(calls::kIsTitleMenuPhase), flow) : nullptr;
+    return title && title->byte;
+}
+
+// Loads the slot into a scratch root. Waits while the save folder redirect is still being set; a refused one ends the capture
+// (the slot would be read from the real save folder, not the world the launcher picked).
 void startLoad(void* service) {
+    const save_redirect::State redirect = save_redirect::state();
+    if (redirect == save_redirect::State::Pending) return;
+    if (redirect == save_redirect::State::Refused) return finish(service, failure(kFailRedirect, "the save folder redirect was refused"));
     g_root = refw::createInstance(kGameSaveDataType);
     void* name = refw::managedString(kGameDataClass);
-    if (!g_root || !name) return finish(service, "failed: the game's save classes are not available");
+    if (!g_root || !name) return finish(service, failure(kFailLoad, "the game's save classes are not available"));
     refw::invoke(calls::method(calls::kSaveCleanData), service);
     const refw::InvokeResult* added = refw::invoke(calls::method(calls::kSaveAddDataClass), service, {name, g_root});
     const refw::InvokeResult* loading =
         added && added->byte ? refw::invoke(calls::method(calls::kSaveLoadSingle), service,
                                             {reinterpret_cast<void*>(static_cast<intptr_t>(g_slot))})
                              : nullptr;
-    if (!loading || !loading->byte) return finish(service, "failed: the game refused to load save slot " + std::to_string(g_slot));
+    if (!loading || !loading->byte) return finish(service, failure(kFailLoad, "the game refused to load save slot " + std::to_string(g_slot)));
     g_step = Step::Loading;
 }
 
@@ -100,15 +115,15 @@ void startLoad(void* service) {
 void readLoaded(void* service, uint64_t nowMs) {
     const int64_t result = dword(calls::kGetLastSaveResult, service);
     if (result == *g_doing) return;
-    if (result != *g_success) return finish(service, "failed: the save did not load (result " + std::to_string(result) + ")");
+    if (result != *g_success) return finish(service, failure(kFailLoad, "the save did not load (result " + std::to_string(result) + ")"));
     if (!g_loadedMs) g_loadedMs = nowMs;
     const Sections found = sections();
     if (!found.contexts || !found.items) {
         if (nowMs - g_loadedMs < kSectionsWaitMs) return;
         logger::write("capture: %zu sections after the load: %s", found.count, found.types.c_str());
-        return finish(service, "failed: the save holds no character (" + std::to_string(found.count) + " sections loaded)");
+        return finish(service, failure(kFailEmpty, "the save holds no character (" + std::to_string(found.count) + " sections loaded)"));
     }
-    if (!profile::captureFrom(found.contexts, found.items)) return finish(service, "failed: the character could not be read from the save");
+    if (!profile::captureFrom(found.contexts, found.items)) return finish(service, failure(kFailWrite, "the character could not be read from the save or written"));
     finish(service, "ok");
 }
 
@@ -118,35 +133,38 @@ namespace offline_capture {
 
 void enable(int slot) {
     g_slot = slot;
-    g_idle = literal(kStateEnum, kIdleLiteral);
-    g_success = literal(kResultEnum, kSuccessLiteral);
-    g_doing = literal(kResultEnum, kDoingLiteral);
+    g_success = refw::enumLiteral(kResultEnum, kSuccessLiteral);
+    g_doing = refw::enumLiteral(kResultEnum, kDoingLiteral);
     g_step = Step::Waiting;
-    logger::write("capture: armed for save slot %d (literals %s)", slot, g_idle && g_success && g_doing ? "found" : "MISSING");
+    logger::write("capture: armed for save slot %d (literals %s)", slot,
+                  save_service::idleKnown() && g_success && g_doing ? "found" : "MISSING");
 }
 
 void tick(uint64_t nowMs) {
     if (g_step == Step::Off || g_step == Step::Done) return;
-    void* service = refw::nativeSingleton(kSaveService);
-    if (!g_idle || !g_success || !g_doing || !calls::enabled(calls::Feature::Saves)) return finish(service, "failed: the save service is not available");
-    if (!g_startMs) g_startMs = nowMs;
-    if (nowMs - g_startMs > kTimeoutMs) return finish(service, "failed: the save did not load within 60 s");
-    if (!service || dword(calls::kGetSaveState, service) != *g_idle) {
-        g_titleSinceMs = 0;
+    void* service = save_service::instance();
+    if (!save_service::idleKnown() || !g_success || !g_doing || !calls::enabled(calls::Feature::Saves)) {
+        return finish(service, failure(kFailLoad, "the save service is not available"));
+    }
+    if (!g_armedMs) g_armedMs = nowMs;
+    const bool title = onTitleMenu();
+    if (title && !g_titleMs) g_titleMs = nowMs;
+    if (!g_titleMs) {
+        if (nowMs - g_armedMs > kTitleWaitMs) finish(service, failure(kFailTitle, "the title menu did not appear"));
         return;
     }
-    if (g_step == Step::Waiting) {
-        void* flow = refw::managedSingleton(kMainFlowManager);
-        const refw::InvokeResult* title = flow ? refw::invoke(calls::method(calls::kIsTitleMenuPhase), flow) : nullptr;
-        if (!title || !title->byte) {
-            g_titleSinceMs = 0;
-            return;
-        }
-        if (!g_titleSinceMs) g_titleSinceMs = nowMs;
-        if (nowMs - g_titleSinceMs >= kTitleSettleMs) startLoad(service);
-    } else if (g_step == Step::Loading) {
-        readLoaded(service, nowMs);
+    if (nowMs - g_titleMs > kTimeoutMs) return finish(service, failure(kFailTimeout, "the save did not load within 60 s of the title"));
+    if (!save_service::idle(service)) {
+        g_idleSinceMs = 0;
+        return;
     }
+    if (g_step == Step::Loading) return readLoaded(service, nowMs);
+    if (!title) {
+        g_idleSinceMs = 0;
+        return;
+    }
+    if (!g_idleSinceMs) g_idleSinceMs = nowMs;
+    if (nowMs - g_idleSinceMs >= kTitleSettleMs) startLoad(service);
 }
 
 }  // namespace offline_capture

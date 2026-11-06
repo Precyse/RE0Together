@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "calls.h"
+#include "game_state_rule.h"
 #include "hook_registry.h"
 #include "log.h"
 #include "local_body.h"
@@ -18,6 +20,8 @@
 #include "names.h"
 #include "profile_rule.h"
 #include "refw.h"
+#include "save_notice.h"
+#include "save_redirect.h"
 #include "save_sections.h"
 #include "serializer.h"
 #include "wire_dd2.h"
@@ -43,11 +47,23 @@ struct Captured {
 };
 
 std::mutex g_mutex;
-Captured g_captured;                  // under g_mutex
-std::optional<profile_rule::Profile> g_profile;  // splice mode: read at install, then read only
+Captured g_captured;                                // under g_mutex
+std::shared_ptr<const profile_rule::Profile> g_profile;  // splice mode: read at install, replaced by each write-back; under g_mutex
 std::atomic<bool> g_spliced{false}, g_checked{false};  // set by the loaders, read by the tick
 
+// The state of the guest's character (game_state_rule::Char). `g_base` is what install found: Off (not a splice guest),
+// None (no readable profile), Refused (hooks or rows missing), Ok (hooks in). On top of Ok, the loads: each loader notes
+// whether it refused, the check after the load whether the Arisen is the profile's. `g_writeBack`: this load was spliced
+// and checked ok, so the guest's saves may be written back to the character file.
+std::atomic<game_state_rule::Char> g_base{game_state_rule::Char::Off};
+std::atomic<bool> g_contextsRefused{false}, g_itemsRefused{false}, g_mismatch{false}, g_writeBack{false};
+
 std::wstring g_path;  // the character file (src/save_folders.h), set at install
+
+std::shared_ptr<const profile_rule::Profile> currentProfile() {
+    std::lock_guard lock(g_mutex);
+    return g_profile;
+}
 
 const std::wstring& profilePath() { return g_path; }
 
@@ -121,8 +137,22 @@ void captureItems(void* section) {
     g_captured.haveItems = g_captured.dirty = true;
 }
 
-void postSaveContexts(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) { captureContexts(returned(retVal)); }
-void postSaveItems(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) { captureItems(returned(retVal)); }
+void postSaveContexts(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) {
+    captureContexts(returned(retVal));
+    save_notice::onSaved();
+}
+void postSaveItems(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) {
+    captureItems(returned(retVal));
+    save_notice::onSaved();
+}
+
+// A guest's saves go back to its character file, but only from a load that was spliced and checked ok.
+void postGuestSaveContexts(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) {
+    if (g_writeBack) captureContexts(returned(retVal));
+}
+void postGuestSaveItems(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) {
+    if (g_writeBack) captureItems(returned(retVal));
+}
 
 // Loading a save captures it too, so a character is carried once its save was loaded with the mod, saved or not.
 int preCaptureLoadContexts(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsigned long long) {
@@ -134,12 +164,14 @@ int preCaptureLoadItems(int argc, void** argv, REFrameworkTypeDefinitionHandle*,
     return REFRAMEWORK_HOOK_CALL_ORIGINAL;
 }
 
+// Writes the character file whole: a temp file moved over it, the file it replaces kept once as `.bak`.
 bool writeFile(const std::string& text) {
     const std::wstring path = profilePath(), part = path + L".part";
     {
         std::ofstream out(part, std::ios::binary | std::ios::trunc);
         if (!(out << text)) return false;
     }
+    CopyFileW(path.c_str(), (path + L".bak").c_str(), FALSE);  // fails when there is no file yet, which is fine
     return MoveFileExW(part.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
 
@@ -161,14 +193,38 @@ bool writeCapture() {
     const bool written = writeFile(profile_rule::encode(out));
     logger::write("profile: %s level=%d job=%d pieces=%zu gold=%d", written ? "captured" : "NOT written", out.level, out.job,
                   out.pieces.size(), gold);
+    if (written) {
+        std::lock_guard lock(g_mutex);
+        if (g_profile) g_profile = std::make_shared<const profile_rule::Profile>(std::move(out));  // the next load splices the progress
+    }
     return written;
 }
 
 // Splice
 
+// A load starts over what the last one decided: no write-back until the check after this load says ok, and nothing
+// half captured from before is written.
+void beginLoad() {
+    g_writeBack = false;
+    g_mismatch = false;
+    std::lock_guard lock(g_mutex);
+    g_captured = Captured{};
+}
+
+// A splice only into a save folder that is not the real one (rule: a refused redirect never splices).
+bool spliceAllowed(std::atomic<bool>& refused, const char* section) {
+    refused = !save_redirect::safeToLoad();
+    if (refused) logger::write("splice: %s not spliced, the save redirect is not verified", section);
+    return !refused;
+}
+
 int preLoadContexts(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsigned long long) {
+    beginLoad();
+    g_spliced = false;
+    g_checked = false;
+    const auto profile = currentProfile();
     void* records = argc > kFirstParam ? save_sections::records(argv[kFirstParam]) : nullptr;
-    if (!records) return REFRAMEWORK_HOOK_CALL_ORIGINAL;
+    if (!profile || !records || !spliceAllowed(g_contextsRefused, "contexts")) return REFRAMEWORK_HOOK_CALL_ORIGINAL;
     size_t replaced = 0, added = 0, refused = 0, owners = 0;
     const size_t n = save_sections::count(calls::kRecordListCount, records);
     for (size_t r = 0; r < n; ++r) {
@@ -178,7 +234,7 @@ int preLoadContexts(int argc, void** argv, REFrameworkTypeDefinitionHandle*, uns
         if (!owner) continue;
         ++owners;
         void* contexts = refw::field<void*>(record, save_sections::kRecordContexts);
-        for (const Piece& piece : g_profile->pieces) {
+        for (const Piece& piece : profile->pieces) {
             if (piece.kind != Kind::Context || piece.owner != *owner) continue;
             void* context = serializer::fromJson(piece.type, piece.json);
             if (!context) {
@@ -200,15 +256,18 @@ int preLoadContexts(int argc, void** argv, REFrameworkTypeDefinitionHandle*, uns
             refw::release(context);
         }
     }
+    g_contextsRefused = refused > 0;
     g_spliced = owners > 0;
-    g_checked = false;
     logger::write("splice: contexts of %zu characters, %zu replaced, %zu added, %zu refused", owners, replaced, added, refused);
     return REFRAMEWORK_HOOK_CALL_ORIGINAL;
 }
 
 int preLoadItems(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsigned long long) {
+    const auto profile = currentProfile();
     void* section = argc > kFirstParam ? argv[kFirstParam] : nullptr;
-    if (!save_sections::isType(section, save_sections::kItemSection)) return REFRAMEWORK_HOOK_CALL_ORIGINAL;
+    if (!profile || !save_sections::isType(section, save_sections::kItemSection) || !spliceAllowed(g_itemsRefused, "items")) {
+        return REFRAMEWORK_HOOK_CALL_ORIGINAL;
+    }
     void* items = refw::field<void*>(section, save_sections::kItemSaves);
     size_t removed = 0, added = 0, refused = 0;
     for (size_t i = save_sections::count(calls::kItemListCount, items); i-- > 0;) {
@@ -217,7 +276,7 @@ int preLoadItems(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsign
         refw::invoke(calls::method(calls::kItemListRemoveAt), items, {reinterpret_cast<void*>(i)});
         ++removed;
     }
-    for (const Piece& piece : g_profile->pieces) {
+    for (const Piece& piece : profile->pieces) {
         if (piece.kind == Kind::Context) continue;
         void* object = serializer::fromJson(piece.type, piece.json);
         if (!object) {
@@ -232,22 +291,27 @@ int preLoadItems(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsign
         }
         refw::release(object);
     }
-    refw::field<int32_t>(section, save_sections::kEquipIndex) = g_profile->equipIndex;
+    refw::field<int32_t>(section, save_sections::kEquipIndex) = profile->equipIndex;
+    g_itemsRefused = refused > 0;
     logger::write("splice: items %zu removed, %zu added, %zu refused", removed, added, refused);
     return REFRAMEWORK_HOOK_CALL_ORIGINAL;
 }
 
-// After a splice, once in gameplay: the Arisen the game built carries the profile's level.
+// After a splice, once in gameplay: the Arisen the game built carries the profile's level. Only an ok check (and no piece
+// refused) lets this load's saves go back to the character file.
 void checkSplice() {
     if (!g_spliced || g_checked || world_gate::place() != world_gate_rule::Place::InGame) return;
     const auto contexts = look::of(local_body::character(wire_dd2::kKindArisen));
-    if (!contexts || !(*contexts)[0]) return;
+    const auto profile = currentProfile();
+    if (!contexts || !(*contexts)[0] || !profile) return;
     g_checked = true;
     const int32_t level = refw::field<int32_t>((*contexts)[0], save_sections::kStatusLevel);
-    if (level == g_profile->level) {
-        logger::write("splice: ok level=%d job=%d", level, g_profile->job);
+    if (level == profile->level) {
+        g_writeBack = !g_contextsRefused && !g_itemsRefused;
+        logger::write("splice: ok level=%d job=%d%s", level, profile->job, g_writeBack ? "" : " (a piece was refused, progress not written back)");
     } else {
-        logger::write("splice: MISMATCH level %d, profile %d", level, g_profile->level);
+        g_mismatch = true;
+        logger::write("splice: MISMATCH level %d, profile %d", level, profile->level);
     }
 }
 
@@ -278,15 +342,18 @@ namespace profile {
 
 bool install(Mode mode, const std::wstring& path) {
     g_path = path;
+    const bool capture = mode == Mode::Capture;
+    if (!capture) g_base = game_state_rule::Char::None;
     if (!calls::enabled(calls::Feature::Profile) || !save_sections::init()) {
         logger::write("%s: not hooked (profile calls or CharacterID literals missing)", names::kProfile);
+        if (!capture) g_base = game_state_rule::Char::Refused;
         return false;
     }
-    const bool capture = mode == Mode::Capture;
     if (!capture) {
-        g_profile = readProfile();
-        if (!g_profile) return false;
-        logger::write("profile: level=%d job=%d pieces=%zu read for the splice", g_profile->level, g_profile->job, g_profile->pieces.size());
+        auto read = readProfile();
+        if (!read) return false;
+        logger::write("profile: level=%d job=%d pieces=%zu read for the splice", read->level, read->job, read->pieces.size());
+        g_profile = std::make_shared<const profile_rule::Profile>(std::move(*read));
     }
     const hook_registry::Handler captureHandlers[] = {
         hook_registry::make<nullptr, postSaveContexts>(&names::kSaveContexts),
@@ -297,9 +364,20 @@ bool install(Mode mode, const std::wstring& path) {
     const hook_registry::Handler spliceHandlers[] = {
         hook_registry::make<preLoadContexts>(&names::kLoadContexts),
         hook_registry::make<preLoadItems>(&names::kLoadItems),
+        hook_registry::make<nullptr, postGuestSaveContexts>(&names::kSaveContexts),
+        hook_registry::make<nullptr, postGuestSaveItems>(&names::kSaveItems),
     };
-    return capture ? hook_registry::installSet(names::kProfile, captureHandlers)
-                   : hook_registry::installSet(names::kProfile, spliceHandlers);
+    const bool hooked = capture ? hook_registry::installSet(names::kProfile, captureHandlers)
+                                : hook_registry::installSet(names::kProfile, spliceHandlers);
+    if (!capture) g_base = hooked ? game_state_rule::Char::Ok : game_state_rule::Char::Refused;
+    return hooked;
+}
+
+game_state_rule::Char spliceState() {
+    const game_state_rule::Char base = g_base;
+    if (base != game_state_rule::Char::Ok) return base;
+    if (g_contextsRefused || g_itemsRefused) return game_state_rule::Char::Refused;
+    return g_mismatch ? game_state_rule::Char::Mismatch : game_state_rule::Char::Ok;
 }
 
 bool captureFrom(void* contextSection, void* itemSection) {
@@ -309,11 +387,8 @@ bool captureFrom(void* contextSection, void* itemSection) {
 }
 
 void tick(uint64_t) {
-    if (g_profile) {
-        checkSplice();
-    } else {
-        writeCapture();
-    }
+    checkSplice();
+    writeCapture();
 }
 
 }  // namespace profile

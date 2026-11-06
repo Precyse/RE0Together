@@ -8,7 +8,6 @@ internal static class Theme
     private static readonly float DpiScale = ScreenScale();
 
     public static readonly Color Bg = ColorTranslator.FromHtml("#0c0d0e");
-    public static readonly Color Bg2 = ColorTranslator.FromHtml("#141618");
     public static readonly Color Line = ColorTranslator.FromHtml("#2a2e33");
 
     /// <summary>The raised grey of an outfit silhouette.</summary>

@@ -86,6 +86,13 @@ std::vector<std::pair<std::string, int64_t>> enumLiterals(const char* type) {
     return out;
 }
 
+std::optional<int64_t> enumLiteral(const char* type, const char* name) {
+    for (const auto& [each, value] : enumLiterals(type)) {
+        if (each == name) return value;
+    }
+    return std::nullopt;
+}
+
 unsigned addHook(REFrameworkMethodHandle method, REFPreHookFn pre, REFPostHookFn post) {
     const unsigned id = sdk().functions->add_hook(method, pre, post, false);
     return id == UINT32_MAX ? 0 : id + 1;

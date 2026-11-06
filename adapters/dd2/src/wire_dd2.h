@@ -61,7 +61,7 @@ struct GameHello {
 };
 struct Place {
     uint8_t place;
-    uint8_t flags;
+    int8_t loadSlot;  // the save slot of the sender's newest game load, -1 before one
     uint16_t loadSerial;
     uint32_t worldEpoch;
     uint32_t stateStoreSerial;

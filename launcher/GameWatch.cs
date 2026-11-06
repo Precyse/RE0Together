@@ -22,15 +22,16 @@ public sealed class GameWatch
 
     /// <summary>The condition for one reading of the process: whether it runs now, whether it ever ran in this session,
     /// whether the adapter link is there (or not expected), when the launcher started the game (null when it did not) and
-    /// since when the process has been running.</summary>
-    public static GameCondition Next(bool running, bool seenRunning, bool linked, long? launchedAtMs, long runningSinceMs, long nowMs)
+    /// since when the process has been running; <paramref name="unlinkedAfterMs"/> is how long it may run unlinked (the profile's).</summary>
+    public static GameCondition Next(
+        bool running, bool seenRunning, bool linked, long? launchedAtMs, long runningSinceMs, long nowMs, long unlinkedAfterMs = UnlinkedAfterMs)
     {
         if (!running)
         {
             if (seenRunning) return GameCondition.Exited;
             return launchedAtMs is { } launched && nowMs - launched > NotStartedAfterMs ? GameCondition.NotStarted : GameCondition.Fine;
         }
-        return !linked && nowMs - runningSinceMs > UnlinkedAfterMs ? GameCondition.Unlinked : GameCondition.Fine;
+        return !linked && nowMs - runningSinceMs > unlinkedAfterMs ? GameCondition.Unlinked : GameCondition.Fine;
     }
 
     /// <summary>Re-reads the process. True when the condition changed.</summary>
@@ -49,13 +50,16 @@ public sealed class GameWatch
         return GameCondition.Fine;
     }
 
+    /// <summary>The capture launch's game (a guest reading its character) is not the session's: it neither counts as seen running nor as
+    /// closed when it ends.</summary>
     private GameCondition Read(AppStatus status, GameProfile game, long nowMs)
     {
+        if (status.Capture is { State: CaptureState.Running or CaptureState.Closing }) return Reset();
         var running = GameLauncher.IsRunning(game);
         if (running && !_wasRunning) _runningSinceMs = nowMs;
         _wasRunning = running;
         _seenRunning |= running;
-        return Next(running, _seenRunning, Linked(status, game), status.LaunchedAtMs, _runningSinceMs, nowMs);
+        return Next(running, _seenRunning, Linked(status, game), status.LaunchedAtMs, _runningSinceMs, nowMs, game.LinkTimeoutMs);
     }
 
     /// <summary>Whether the adapter link is there or not expected: a rendezvous game on its own transport has none, and while

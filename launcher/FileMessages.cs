@@ -17,6 +17,7 @@ public static class FileMessages
     public const int MaxManifestNames = byte.MaxValue;
 
     private const int IdSize = 4;
+    private const byte AckRejected = 2;
     private const int BeginFixedSize = IdSize + 4 + HashSize + 1;
     private const int ChunkHeaderSize = IdSize + 4;
 
@@ -65,8 +66,21 @@ public static class FileMessages
         return SHA256.HashData(stream).AsSpan().SequenceEqual(expected);
     }
 
-    /// <summary>FILE_MANIFEST: u8 count, then per file u8 length + ascii name.</summary>
-    public static Frame Manifest(IReadOnlyList<string> names)
+    public static Frame Reject(uint id)
+    {
+        var p = new byte[IdSize + 1];
+        BinaryPrimitives.WriteUInt32LittleEndian(p, id);
+        p[IdSize] = AckRejected;
+        return Framing.Reliable(Msg.FileAck, p);
+    }
+
+    /// <summary>The ACK of a file the receiver cannot use at all (a save that cannot be converted to its account): the sender must not
+    /// send it again. A sender that does not know the value reads it as ok, which also ends the sending.</summary>
+    public static bool IsRejection(byte[] payload) => payload.Length > IdSize && payload[IdSize] == AckRejected;
+
+    /// <summary>FILE_MANIFEST: u8 count, then per file u8 length + ascii name, then (only after the host chose another world, so the
+    /// number is not 0) u8 generation: a receiver that sees a new one starts its set again. A receiver that does not know it ignores the byte.</summary>
+    public static Frame Manifest(IReadOnlyList<string> names, byte generation = 0)
     {
         var body = new List<byte> { (byte)names.Count };
         foreach (var name in names)
@@ -75,12 +89,14 @@ public static class FileMessages
             body.Add((byte)bytes.Length);
             body.AddRange(bytes);
         }
+        if (generation != 0) body.Add(generation);
         return Framing.Reliable(Msg.FileManifest, body.ToArray());
     }
 
-    public static bool TryParseManifest(byte[] payload, out List<string> names)
+    public static bool TryParseManifest(byte[] payload, out List<string> names, out byte generation)
     {
         names = [];
+        generation = 0;
         if (payload.Length < 1) return false;
         var offset = 1;
         for (var i = 0; i < payload[0]; ++i)
@@ -91,6 +107,7 @@ public static class FileMessages
             names.Add(Encoding.ASCII.GetString(payload, offset, length));
             offset += length;
         }
+        if (offset < payload.Length) generation = payload[offset];
         return true;
     }
 

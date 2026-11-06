@@ -12,6 +12,8 @@ public static class AdapterSettings
     public const int KeptArchiveDays = 30;
 
     internal const string CoopKey = "coop";
+    internal const string CaptureKey = "capture";
+    internal const string NoCapture = "-1";
 
     /// <summary>Sets coop=1 and one line per game option (the adapter reads the ini once, at its start).</summary>
     public static void EnableCoop(string gameDir, GameProfile profile, IReadOnlyDictionary<string, string> options)
@@ -33,7 +35,7 @@ public static class AdapterSettings
     {
         var ini = IniPath(gameDir, profile);
         var sessionDir = Path.Combine(gameDir, config.SessionDir);
-        if (File.Exists(ini) && ReadLines(ini).Any(IsCoopEnabled)) SetKeys(ini, new Dictionary<string, string> { [CoopKey] = "0" });
+        if (File.Exists(ini)) ResetIni(ini, profile);
         if (!Directory.Exists(sessionDir)) return;
         if (!ArchiveSession(sessionDir))
         {
@@ -42,6 +44,16 @@ public static class AdapterSettings
         }
         Directory.Delete(sessionDir, recursive: true);
         Log.Info($"Removed session folder {sessionDir}");
+    }
+
+    /// <summary>coop=0 where it was 1, and for a game with campaigns capture=-1 where a capture launch left a slot in it.</summary>
+    private static void ResetIni(string ini, GameProfile profile)
+    {
+        var lines = ReadLines(ini);
+        var keys = new Dictionary<string, string>();
+        if (lines.Any(IsCoopEnabled)) keys[CoopKey] = "0";
+        if (profile.Campaigns != null && lines.Any(IsCaptureLeft)) keys[CaptureKey] = NoCapture;
+        if (keys.Count > 0) SetKeys(ini, keys);
     }
 
     /// <summary>The archives to delete, given every archive folder name (a timestamp, optionally with a -2, -3 suffix): the
@@ -157,6 +169,9 @@ public static class AdapterSettings
 
     private static bool IsKeyLine(string line, string key) =>
         line.Split('=', 2) is [var existing, _] && existing.Trim() == key;
+
+    private static bool IsCaptureLeft(string line) =>
+        IsKeyLine(line, CaptureKey) && line.Split('=', 2)[1].Trim() != NoCapture;
 
     private static bool IsCoopEnabled(string line) =>
         IsKeyLine(line, CoopKey) && line.Split('=', 2)[1].Trim() == "1";

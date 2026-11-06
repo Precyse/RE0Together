@@ -1,12 +1,16 @@
 namespace CoopLauncher;
 
+/// <summary>A save file this machine cannot use at all, and why.</summary>
+public sealed record SaveFailure(string File, string Reason);
+
 /// <summary>Guest side of save sync: writes incoming files to a temp file, verifies sha256, moves them into the session dir and ACKs.
 /// Once the first full set has arrived, later files (the host saving mid-session) go to a staging folder instead, and
 /// <see cref="PromoteStaged"/> moves them into the session dir when the game is not running, so the guest's own saves
 /// are never replaced under a running game. A guest whose game already runs (it rejoined) stages the first set as well. A file
 /// that cannot be written (the game, antivirus or a sync tool holds it) fails only that transfer: the host is told and resends.
 /// A profile that re-signs its saves has every verified file rewritten for this machine's Steam account before it is moved; a file
-/// that cannot be re-signed is refused like one that fails its hash.</summary>
+/// that cannot be re-signed is refused for good (the host is told not to send it again) and named in <see cref="Failure"/>. A manifest
+/// with a new generation (the host chose another world) starts the set again.</summary>
 public sealed class SaveReceiver
 {
     /// <summary>The largest file a guest takes; the host does not send a set that holds a bigger one.</summary>
@@ -31,8 +35,9 @@ public sealed class SaveReceiver
     private readonly Action<string>? _resignFile;
     private readonly Dictionary<uint, Incoming> _incoming = new();
     private readonly HashSet<string> _received = [];
-    private List<string>? _expected;  // the host's manifest when the profile sends by pattern
+    private List<string>? _expected;  // the host's manifest: the files it has (the profile's list until the manifest arrives)
     private bool _initialSetDone;
+    private byte? _generation;
 
     /// <param name="resignFile">Rewrites a received file for this machine's Steam account (throws <see cref="InvalidDataException"/> when it
     /// cannot); null when the game's saves are not tied to an account.</param>
@@ -54,12 +59,17 @@ public sealed class SaveReceiver
     /// true: files the host sends later are staged, they do not reopen the first sync.</summary>
     public bool Complete => _initialSetDone;
 
+    /// <summary>The file that could not be converted to this machine's Steam account, null while none failed.</summary>
+    public SaveFailure? Failure { get; private set; }
+
     public void OnFrame(ulong sender, Frame frame)
     {
         if (sender != _hostId()) return;
         switch (frame.Type)
         {
-            case Msg.FileManifest when _config.FilePattern != null && FileMessages.TryParseManifest(frame.Payload, out var names):
+            case Msg.FileManifest when FileMessages.TryParseManifest(frame.Payload, out var names, out var generation):
+                if (_generation is { } known && known != generation) StartNewSet();
+                _generation = generation;
                 _expected = names;
                 _received.RemoveWhere(name => !names.Contains(name));
                 Log.Info($"Save sync: host announced {names.Count} files");
@@ -117,6 +127,33 @@ public sealed class SaveReceiver
         foreach (var id in _incoming.Keys.ToList()) Discard(id);
     }
 
+    /// <summary>The host chose another world: what arrived of the old one goes (the files this receiver delivered, the staging folder; a
+    /// running game keeps its own files) and the set is awaited again.</summary>
+    private void StartNewSet()
+    {
+        Abort();
+        if (Directory.Exists(_stagingDir)) DeleteQuietly(_stagingDir);
+        if (!_gameRunning)
+            foreach (var name in _received) DeleteQuietly(Path.Combine(_sessionDir, name));
+        _received.Clear();
+        _initialSetDone = false;
+        Failure = null;
+        Log.Info("Save sync: the host chose another world, receiving its set");
+    }
+
+    private static void DeleteQuietly(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+            else File.Delete(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Save sync: could not delete {path} ({e.Message})");
+        }
+    }
+
     private void OnBegin(FileBegin begin)
     {
         if (_expected == null || !_expected.Contains(begin.Name) || Path.GetFileName(begin.Name) != begin.Name || begin.Size > MaxFileBytes)
@@ -147,8 +184,8 @@ public sealed class SaveReceiver
         if (!_incoming.TryGetValue(id, out var incoming)) return;
         incoming.Stream.Dispose();
         var begin = incoming.Begin;
-        var ok = new FileInfo(incoming.TempPath).Length == begin.Size && FileMessages.HashMatches(incoming.TempPath, begin.Hash)
-                 && Resigned(incoming);
+        var intact = new FileInfo(incoming.TempPath).Length == begin.Size && FileMessages.HashMatches(incoming.TempPath, begin.Hash);
+        var ok = intact && Resigned(incoming);
         if (ok)
         {
             File.Move(incoming.TempPath, Path.Combine(incoming.FinalDir, begin.Name), overwrite: true);
@@ -163,7 +200,7 @@ public sealed class SaveReceiver
             _incoming.Remove(id);
             Log.Info($"Save sync: {begin.Name} failed verification");
         }
-        _transport.Send(sender, FileMessages.Ack(id, ok));
+        _transport.Send(sender, intact && !ok ? FileMessages.Reject(id) : FileMessages.Ack(id, ok));
     }
 
     private bool Resigned(Incoming incoming)
@@ -177,6 +214,7 @@ public sealed class SaveReceiver
         catch (InvalidDataException e)
         {
             Log.Info($"Save sync: {incoming.Begin.Name} could not be re-signed for this Steam account ({e.Message})");
+            Failure = new SaveFailure(incoming.Begin.Name, e.Message);
             return false;
         }
     }

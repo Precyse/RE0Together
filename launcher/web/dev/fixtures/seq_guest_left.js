@@ -137,6 +137,7 @@ export default {
     }
    ],
    "pickers": [],
+   "primary": "",
    "seatsClickable": true,
    "notice": null
   },

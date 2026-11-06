@@ -9,6 +9,9 @@ public sealed class SteamLobby : ILobby
     private const string KeyStatus = "cf_status";
     private const string KeyStep = "cf_step";
     private const string KeyOptions = "cf_options";
+    private const string KeyRefused = "cf_refused";
+    private const char RefusedSeparator = ':';
+    private const long RefusalPublishDelayMs = 1500;
     private const int JoinSecretMin = 100_000_000;  // nine digits
     private const int JoinSecretMax = 1_000_000_000;
     private const long AnswerTimeoutMs = 30_000;
@@ -34,6 +37,9 @@ public sealed class SteamLobby : ILobby
     private bool _publishedPresence;
     private CSteamID _lobby;
     private List<LobbyMember> _members = new();
+    private List<RefusedJoin> _refusedJoins = new();
+    private LobbyFailure? _pendingFailure;
+    private long _pendingFailureDueMs;
 
     private SteamLobby()
     {
@@ -70,6 +76,8 @@ public sealed class SteamLobby : ILobby
     public IReadOnlyList<LobbyMember> Members => _members;
 
     public int Revision { get; private set; }
+
+    public IReadOnlyList<RefusedJoin> RefusedJoins => _refusedJoins;
 
     /// <summary>The lobby read from its own data, again after the data or the members changed.</summary>
     public LobbyListing? Listing
@@ -115,6 +123,11 @@ public sealed class SteamLobby : ILobby
     {
         if (!IsReady && Failure == null && Environment.TickCount64 > _answerDeadlineMs)
             Failure = new LobbyFailure(RefusalKind.SteamOffline, "Steam did not answer the lobby request in time");
+        if (_pendingFailure != null && Environment.TickCount64 >= _pendingFailureDueMs)
+        {
+            Failure = _pendingFailure;
+            _pendingFailure = null;
+        }
         if (_hosting && IsReady && !_locationPublished) PublishLocation();
     }
 
@@ -208,24 +221,49 @@ public sealed class SteamLobby : ILobby
         }
         _lobby = new CSteamID(result.m_ulSteamIDLobby);
         GameId = Text(SteamMatchmaking.GetLobbyData(_lobby, LobbyKeys.Game));
-        Failure = EntryRefusal(Text(SteamMatchmaking.GetLobbyData(_lobby, LobbyKeys.Proto)), Text(SteamMatchmaking.GetLobbyData(_lobby, LobbyKeys.Version)));
-        if (Failure != null) return;
+        if (EntryRefusal(Text(SteamMatchmaking.GetLobbyData(_lobby, LobbyKeys.Proto)), Text(SteamMatchmaking.GetLobbyData(_lobby, LobbyKeys.Version))) is { } refusal)
+        {
+            RefuseEntry(refusal);
+            return;
+        }
         Announce();
         Log.Info($"Joined lobby {_lobby.m_SteamID} for game {GameId}");
     }
 
-    /// <summary>Why this launcher cannot take part in the lobby it entered, null when it can: not a co-op lobby of this
-    /// protocol, a game this launcher has no profile for, or another launcher build than the host's (both numbered).</summary>
+    /// <summary>Why this launcher cannot take part in the lobby it entered, null when it can: another launcher build than the host's
+    /// (both numbered; checked first, since a newer launcher may also speak another protocol or know other games), not a co-op lobby
+    /// of this protocol, or a game this launcher has no profile for.</summary>
     private LobbyFailure? EntryRefusal(string proto, string hostVersion)
     {
+        var local = BuildCheck.LocalBuild();
+        if (int.TryParse(hostVersion, out var host) && host != BuildInfo.DevBuild && local != BuildInfo.DevBuild && host != local)
+            return new LobbyFailure(RefusalKind.LauncherBuild, $"host is on build {host}, this is build {local}", RefusalVersions.Format(host, local));
         if (string.IsNullOrEmpty(GameId) || proto != Framing.ProtocolVersion.ToString())
             return new LobbyFailure(RefusalKind.NotCoopLobby, $"lobby is not a compatible co-op lobby (game '{GameId}', proto '{proto}')");
         if (!GameProfile.ListIds().Contains(GameId))
             return new LobbyFailure(RefusalKind.UnknownGame, $"lobby is for game '{GameId}', which this launcher does not know", GameId);
-        var local = BuildCheck.LocalBuild();
-        if (int.TryParse(hostVersion, out var host) && host != BuildInfo.DevBuild && local != BuildInfo.DevBuild && host != local)
-            return new LobbyFailure(RefusalKind.LauncherBuild, $"host is on build {host}, this is build {local}", RefusalVersions.Format(host, local));
         return null;
+    }
+
+    /// <summary>A launcher that cannot take part tells the host why before it leaves (<c>cf_refused=LauncherBuild:&lt;its build&gt;</c>), and
+    /// leaves a moment later so Steam has carried the line; any other refusal is final at once.</summary>
+    private void RefuseEntry(LobbyFailure failure)
+    {
+        if (failure.Kind != RefusalKind.LauncherBuild)
+        {
+            Failure = failure;
+            return;
+        }
+        SteamMatchmaking.SetLobbyMemberData(_lobby, KeyRefused, $"{failure.Kind}{RefusedSeparator}{BuildCheck.LocalBuild()}");
+        _pendingFailure = failure;
+        _pendingFailureDueMs = Environment.TickCount64 + RefusalPublishDelayMs;
+    }
+
+    /// <summary>The refusal a launcher published, null for no line or one this launcher does not understand.</summary>
+    internal static (RefusalKind Kind, string Detail)? ParseRefused(string text)
+    {
+        var parts = text.Split(RefusedSeparator, 2);
+        return parts.Length == 2 && Enum.TryParse<RefusalKind>(parts[0], out var kind) && Enum.IsDefined(kind) && !char.IsDigit(parts[0][0]) ? (kind, parts[1]) : null;
     }
 
     /// <summary>Publishes our own game/proto so other members can filter us, then marks the lobby usable.</summary>
@@ -258,14 +296,18 @@ public sealed class SteamLobby : ILobby
         _listingDirty = true;
         var self = SteamUser.GetSteamID();
         var members = new List<LobbyMember>();
+        var refused = new List<RefusedJoin>();
         var count = SteamMatchmaking.GetNumLobbyMembers(_lobby);
         for (var i = 0; i < count; i++)
         {
             var id = SteamMatchmaking.GetLobbyMemberByIndex(_lobby, i);
+            var name = Text(SteamFriends.GetFriendPersonaName(id));
+            if (id != self && ParseRefused(Text(SteamMatchmaking.GetLobbyMemberData(_lobby, id, KeyRefused))) is var (kind, detail)) refused.Add(new RefusedJoin(id.m_SteamID, name, kind, detail));
             if (id != self && !IsCompatible(id)) continue;
-            members.Add(new LobbyMember(id.m_SteamID, Text(SteamFriends.GetFriendPersonaName(id))));
+            members.Add(new LobbyMember(id.m_SteamID, name));
         }
         _members = members;
+        _refusedJoins = refused;
         Revision++;
         // Steam lists no members of a lobby we are no longer in: dropped, kicked or timed out.
         if (members.All(m => m.Id != self.m_SteamID))

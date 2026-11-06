@@ -54,6 +54,9 @@ public sealed class LoopbackBridge : IDisposable
     /// <summary>The adapter reports a change the player made on the game's own co-op page (OPTION_SET), with the frame's payload.</summary>
     public event Action<byte[]>? OptionSet;
 
+    /// <summary>The adapter reports where its game is (GAME_STATE), with the frame's payload (<see cref="GameState.Parse"/>).</summary>
+    public event Action<byte[]>? GameStateReceived;
+
     /// <summary>The port the bridge listens on (the chosen one when the constructor was given 0).</summary>
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
@@ -130,6 +133,7 @@ public sealed class LoopbackBridge : IDisposable
         if (frame.Type >= Msg.FirstGameType) GameFrame?.Invoke(frame);
         else if (frame.Type == Msg.SaveChanged) SaveChanged?.Invoke();
         else if (frame.Type == Msg.OptionSet) OptionSet?.Invoke(frame.Payload);
+        else if (frame.Type == Msg.GameState) GameStateReceived?.Invoke(frame.Payload);
     }
 
     private void ValidateHello(Connection conn, Frame hello)

@@ -109,7 +109,11 @@ internal sealed partial class UiController : IDisposable
     public MiniState BuildMini() => UiSnapshot.MiniPage(Input());
 
     /// <summary>The window came to the front: mod states are read again (a game closed or an install happened meanwhile).</summary>
-    public void Activated() => RefreshModsThrottled();
+    public void Activated()
+    {
+        RefreshModsThrottled();
+        PollUpdate(_app.Status);
+    }
 
     /// <summary>The window is shown for the first time: the release is looked up.</summary>
     public void Shown() => _update.Check(automatic: AppSettings.Current.CheckForUpdates);
@@ -206,6 +210,7 @@ internal sealed partial class UiController : IDisposable
                 _screen = ScreenFor(status);
             }
             _update.SetFree(free && !ModRunning);
+            PollUpdate(status);
             if (_sessionOpen && free) RefreshMods();
             _sessionOpen = !free;
             ApplyOverlays(status, free);
@@ -215,6 +220,18 @@ internal sealed partial class UiController : IDisposable
             _applying = false;
         }
         Changed?.Invoke();
+    }
+
+    /// <summary>The release is looked at again when it is time, or when a lobby or a refusal showed a newer launcher build than this one.</summary>
+    private void PollUpdate(AppStatus status) =>
+        _update.Poll(() => _games.Any(game => GameLauncher.IsRunning(game.Profile)), HighestBuildSeen(status), AppSettings.Current.CheckForUpdates);
+
+    /// <summary>The highest launcher build the status shows: a refusal for a host with a newer launcher, or a listed lobby's.</summary>
+    private static int HighestBuildSeen(AppStatus status)
+    {
+        var refused = status.Refusal is { Kind: RefusalKind.LauncherBuild } refusal && RefusalVersions.TryParse(refusal.Detail, out var host, out _) ? host : 0;
+        var listed = status.Lobbies.Concat(status.FriendLobbies.Select(friend => friend.Listing).OfType<LobbyListing>()).Select(listing => listing.LauncherBuild);
+        return listed.Append(refused).Max();
     }
 
     /// <summary>Which screen shows: the open view, else what the status asks for.</summary>

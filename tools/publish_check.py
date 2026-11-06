@@ -13,7 +13,7 @@ from pathlib import Path
 MAX_BYTES = 1_000_000
 # Binaries we ship on purpose.
 ALLOWED_BINARIES = {"launcher/native/steam_api64.dll"}
-ALLOWED_PREFIXES = ("adapters/re0/third_party/",)
+ALLOWED_PREFIXES = ("adapters/re0/third_party/", "adapters/dd2/third_party/")
 # The generated Saints Row 2 scripts are the game's own Lua: the repo holds only our library (tools/sr2/lua/) and the delta that builds them.
 GENERATED_SCRIPTS_PREFIX = "adapters/sr2/scripts/"
 OWN_LUA_PREFIX = "tools/sr2/lua/"

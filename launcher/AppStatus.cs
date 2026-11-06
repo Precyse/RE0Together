@@ -10,11 +10,14 @@ public enum OfflineReason { None, SteamNotRunning }
 /// <summary>One lobby member as the window shows it. Status is what its game reports (rendezvous games), else empty; Step
 /// and Percent are what its launcher published (<see cref="SessionStep"/>); RttMs, Held and Silent come from the session;
 /// Options is the encoded option values its launcher published (<see cref="GameOptions.Decode"/>); HoldSecondsLeft is the
-/// whole seconds before a held member is given up (0 when it is not held); Refusal is the reason a refused member published.</summary>
+/// whole seconds before a held member is given up (0 when it is not held); Refusal is the reason a refused member published.
+/// Connecting: nothing has come from it yet; Detail is the refusal's detail or the reason its character was not read; Label is the
+/// campaign the host plays or the character the guest brings; Game is what its adapter says about its game.</summary>
 public sealed record PlayerSlot(
     ulong Id, string Name, bool IsHost, bool IsLocal, string Status = "",
     SessionStep Step = SessionStep.None, int Percent = 0, int? RttMs = null, bool Held = false, bool Silent = false,
-    string Options = "", int HoldSecondsLeft = 0, RefusalKind? Refusal = null);
+    string Options = "", int HoldSecondsLeft = 0, RefusalKind? Refusal = null,
+    bool Connecting = false, string Detail = "", string Label = "", GameState? Game = null);
 
 /// <summary>A friend hosting a lobby of a game this launcher knows, with the lobby's data once Steam delivered it.</summary>
 public sealed record FriendLobby(ulong FriendId, string Name, ulong LobbyId, string GameId, LobbyListing? Listing = null);
@@ -53,6 +56,12 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
 
     /// <summary>This machine pressed START GAME (host) or READY (guest) in the session.</summary>
     public bool StartRequested { get; init; }
+
+    /// <summary>A guest has had no frame from the host yet: it is still connecting to it.</summary>
+    public bool ConnectingToHost { get; init; }
+
+    /// <summary>Why the host cannot start the game yet (its campaign holds no saved world); empty when nothing stops it.</summary>
+    public string StartBlocked { get; init; } = string.Empty;
 
     /// <summary>The guest's capture launch reading its character (<see cref="CharacterCapture"/>), null when none ran.</summary>
     public CaptureView? Capture { get; init; }
@@ -110,7 +119,7 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
 
     public bool Equals(AppStatus? other) =>
         other is not null && State == other.State && LobbyId == other.LobbyId && RttMs == other.RttMs && GameId == other.GameId
-        && Refusal == other.Refusal && Bridged == other.Bridged && Step == other.Step && SavePercent == other.SavePercent
+        && Refusal == other.Refusal && StartBlocked == other.StartBlocked && ConnectingToHost == other.ConnectingToHost && Bridged == other.Bridged && Step == other.Step && SavePercent == other.SavePercent
         && Seats == other.Seats && RejoinAttempt == other.RejoinAttempt && SecondsLeft == other.SecondsLeft
         && Offline == other.Offline && LaunchedAtMs == other.LaunchedAtMs && Invite == other.Invite
         && SaveFile == other.SaveFile && SaveBytes == other.SaveBytes && SaveTotal == other.SaveTotal

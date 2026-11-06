@@ -188,6 +188,7 @@ export default {
     }
    ],
    "pickers": [],
+   "primary": "RECEIVING SAVE",
    "seatsClickable": true,
    "notice": null
   },

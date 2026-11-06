@@ -63,7 +63,12 @@ public sealed class FileStreamer
         if (!FileMessages.TryParseAck(frame.Payload, out var id, out var ok)) return;
         var transfer = _pending.Find(o => o.Peer == peer && o.Id == id);
         if (transfer == null) return;
-        if (ok)
+        if (FileMessages.IsRejection(frame.Payload))
+        {
+            Log.Info($"{_label}: {peer} cannot use {transfer.Name}, not sending it again");
+            _pending.Remove(transfer);
+        }
+        else if (ok)
         {
             Log.Info($"{_label}: {peer} confirmed {transfer.Name}");
             _pending.Remove(transfer);
