@@ -51,6 +51,7 @@ add_library(dd2coop SHARED
     src/save_sections.cpp
     src/profile.cpp
     src/save_redirect.cpp
+    src/save_folders.cpp
     src/plague_off.cpp
     src/roster.cpp
     src/enemy_spawn.cpp

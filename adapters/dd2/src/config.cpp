@@ -5,6 +5,7 @@
 #include <string>
 
 #include "log.h"
+#include "save_folders.h"
 #include "paths.h"
 
 namespace {
@@ -40,8 +41,11 @@ Config loadConfig() {
         if (key == "echo_puppet" && (value == "0" || value == "1")) config.echoPuppet = value == "1";
         if (key == "peer_puppet" && (value == "0" || value == "1")) config.peerPuppet = value == "1";
         if (key == "enemy_sync" && (value == "0" || value == "1")) config.enemySync = value == "1";
+        if (key == "campaign" && save_folders::validId(value)) config.campaign = value;
+        if (key == "arisen" && save_folders::validId(value)) config.arisen = value;
     }
-    logger::write("config: port=%u coop=%d guest=%d echo_puppet=%d peer_puppet=%d enemy_sync=%d", config.port, config.coop,
-                  config.guest, config.echoPuppet, config.peerPuppet, config.enemySync);
+    logger::write("config: port=%u coop=%d guest=%d echo_puppet=%d peer_puppet=%d enemy_sync=%d campaign=%s arisen=%s", config.port,
+                  config.coop, config.guest, config.echoPuppet, config.peerPuppet, config.enemySync, config.campaign.c_str(),
+                  config.arisen.c_str());
     return config;
 }

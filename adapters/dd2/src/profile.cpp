@@ -16,7 +16,6 @@
 #include "local_body.h"
 #include "look.h"
 #include "names.h"
-#include "paths.h"
 #include "profile_rule.h"
 #include "refw.h"
 #include "save_sections.h"
@@ -48,11 +47,9 @@ Captured g_captured;                  // under g_mutex
 std::optional<profile_rule::Profile> g_profile;  // splice mode: read at install, then read only
 std::atomic<bool> g_spliced{false}, g_checked{false};  // set by the loaders, read by the tick
 
-std::wstring profilePath() {
-    const std::wstring folder = coopDirectory() + L"\\profile";
-    CreateDirectoryW(folder.c_str(), nullptr);
-    return folder + L"\\profile.dd2p";
-}
+std::wstring g_path;  // the character file (src/save_folders.h), set at install
+
+const std::wstring& profilePath() { return g_path; }
 
 void* returned(void** retVal) { return retVal ? *retVal : nullptr; }
 
@@ -264,7 +261,8 @@ std::optional<profile_rule::Profile> readProfile() {
 
 namespace profile {
 
-bool install(Mode mode) {
+bool install(Mode mode, const std::wstring& path) {
+    g_path = path;
     if (!calls::enabled(calls::Feature::Profile) || !save_sections::init()) {
         logger::write("%s: not hooked (profile calls or CharacterID literals missing)", names::kProfile);
         return false;

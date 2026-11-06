@@ -6,16 +6,15 @@
 
 #include "calls.h"
 #include "log.h"
-#include "paths.h"
 #include "refw.h"
 #include "text.h"
 
 namespace {
 
 constexpr const char* kSaveService = "via.storage.saveService.SaveService";
-constexpr const wchar_t* kSessionFolder = L"\\session";
-constexpr const wchar_t* kSaveFolder = L"\\win64_save";  // where the launcher puts the host's world (games/dd2.json)
+constexpr const wchar_t* kSaveFolder = L"\\win64_save";  // the game's folder under its mount (games/dd2.json)
 
+std::wstring g_mount;
 bool g_pending = false;
 bool g_verified = false;
 
@@ -40,15 +39,13 @@ bool apply() {
     }
     void* service = refw::nativeSingleton(kSaveService);
     if (!service) return false;
-    const std::wstring session = coopDirectory() + kSessionFolder;
-    CreateDirectoryW(session.c_str(), nullptr);
     logPaths("before", pathOf(calls::kGetSaveDirectoryPath, service), pathOf(calls::kGetSaveMountPath, service));
-    void* path = refw::managedString(session);
+    void* path = refw::managedString(g_mount);
     if (!path || !refw::invoke(calls::method(calls::kSetSaveMountPath), service, {path})) return false;
     const std::wstring dir = pathOf(calls::kGetSaveDirectoryPath, service), mount = pathOf(calls::kGetSaveMountPath, service);
     logPaths("after", dir, mount);
-    g_verified = samePath(mount, session) && samePath(dir, session + kSaveFolder);
-    if (!g_verified) logger::write("save_paths: REFUSED, the paths read back are not the session folder");
+    g_verified = samePath(mount, g_mount) && samePath(dir, g_mount + kSaveFolder);
+    if (!g_verified) logger::write("save_paths: REFUSED, the paths read back are not %s", text::utf8(g_mount).c_str());
     return true;
 }
 
@@ -56,7 +53,8 @@ bool apply() {
 
 namespace save_redirect {
 
-void enable() {
+void enable(const std::wstring& mount) {
+    g_mount = mount;
     g_pending = true;
     tick();
 }

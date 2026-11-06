@@ -8,6 +8,7 @@
 #include "../src/hook_rule.h"
 #include "../src/local_body.h"
 #include "../src/profile_rule.h"
+#include "../src/save_folders.h"
 #include "../src/wire_dd2.h"
 #include "../src/world_gate_rule.h"
 
@@ -202,6 +203,13 @@ void enemyTests() {
     check(budget.admit(1, target, 1000 + enemy_rule::kBudgetWindowMs), "the next second admits again");
 }
 
+void saveFolderTests() {
+    check(save_folders::validId("chaos") && save_folders::validId("campaign-2"), "launcher campaign ids are valid");
+    check(!save_folders::validId("") && !save_folders::validId("..") && !save_folders::validId("a/b") && !save_folders::validId("Chaos") &&
+              !save_folders::validId(std::string(save_folders::kMaxIdLength + 1, 'a')),
+          "an empty id, a path, upper case and an over-long id are ignored");
+}
+
 void profileTests() {
     profile_rule::Profile profile;
     profile.tdbHash = 0xA1B2C3D4;
@@ -231,6 +239,7 @@ void profileTests() {
 int main() {
     rosterTests();
     enemyTests();
+    saveFolderTests();
     profileTests();
     bodyCardTests();
     clockTests();

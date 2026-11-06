@@ -1,0 +1,42 @@
+#include "save_folders.h"
+
+#include <windows.h>
+
+#include "config.h"
+#include "paths.h"
+#include "text.h"
+
+namespace {
+
+constexpr const wchar_t* kSessionFolder = L"\\session";
+constexpr const wchar_t* kCampaignsFolder = L"\\campaigns";
+constexpr const wchar_t* kOwnProfileFolder = L"\\profile";
+constexpr const wchar_t* kProfileFile = L"\\profile.dd2p";
+
+std::wstring created(const std::wstring& folder) {
+    CreateDirectoryW(folder.c_str(), nullptr);
+    return folder;
+}
+
+std::wstring campaignFolder(const std::string& id) {
+    return created(created(coopDirectory() + kCampaignsFolder) + L"\\" + text::utf16(id));
+}
+
+}  // namespace
+
+namespace save_folders {
+
+Folders of(const Config& config) {
+    const std::wstring ownProfile = created(coopDirectory() + kOwnProfileFolder) + kProfileFile;
+    if (config.coop && config.guest) {
+        const std::wstring character = config.arisen.empty() ? ownProfile : campaignFolder(config.arisen) + kProfileFile;
+        return {created(coopDirectory() + kSessionFolder), character};
+    }
+    if (config.coop && !config.campaign.empty()) {
+        const std::wstring campaign = campaignFolder(config.campaign);
+        return {campaign, campaign + kProfileFile};
+    }
+    return {std::nullopt, ownProfile};
+}
+
+}  // namespace save_folders

@@ -71,5 +71,8 @@ enemy as a native hit does (P7-5), mirrors do not attack on their own (P7-4), a 
 (`enemy_spawn: stopped at <step>` names a refusal), the mirror's HP bar follows the host's. Away from the host the guest's
 own enemies are removed (no enemies are simulated away from the host yet).
 
+## Campaigns and characters (launcher options popup)
+Campaign: Own save (default), a campaign, New campaign (an empty world: the game starts a new one) or New from own save. Hosting a campaign logs `save_paths: after dir=...\coop\campaigns\<id>\win64_save` and the guests get that world; your own save is not touched. Character (when joining): Own save or a campaign whose Arisen was captured (host or play it once). DD2gether's campaigns and characters are imported at launcher start and from Settings, Import DD2gether (`Imported N DD2gether save(s)`); an imported character can be brought once its campaign was played.
+
 Progress made during co-op is not carried back yet (journal and write-back come with the XP and loot phase); the next
 solo save captures the real save again.

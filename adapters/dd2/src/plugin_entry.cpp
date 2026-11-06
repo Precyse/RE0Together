@@ -25,6 +25,7 @@
 #include "log.h"
 #include "names.h"
 #include "refw.h"
+#include "save_folders.h"
 #include "save_redirect.h"
 #include "session.h"
 #include "tick.h"
@@ -65,9 +66,11 @@ extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFram
     if (world_gate::install()) modules |= wire_dd2::kModuleWorldGate;
     calls::resolve();
     // A co-op guest plays the host's world from coop\session as its own Arisen; every other launch keeps its profile fresh.
+    // A co-op guest plays the host's world as the character it picked; a host's campaign is its own world; see save_folders.h.
     const bool carried = config.coop && config.guest;
-    if (carried) save_redirect::enable();
-    if (profile::install(carried ? profile::Mode::Splice : profile::Mode::Capture)) modules |= wire_dd2::kModuleProfile;
+    const save_folders::Folders folders = save_folders::of(config);
+    if (folders.mount) save_redirect::enable(*folders.mount);
+    if (profile::install(carried ? profile::Mode::Splice : profile::Mode::Capture, folders.profile)) modules |= wire_dd2::kModuleProfile;
     if (config.coop && plague_off::install()) modules |= wire_dd2::kModulePlagueOff;
     const bool roster = config.coop && roster::install();
     if (roster) modules |= wire_dd2::kModuleRoster;

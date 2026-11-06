@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 struct Config {
     uint16_t port = 27985;  // the launcher's loopback port (launcher/games/dd2.json)
@@ -8,6 +9,8 @@ struct Config {
     bool echoPuppet = false;  // probe P4-1: a copy of the own Arisen through the stray-pawn route (src/echo_puppet.h); test only
     bool peerPuppet = true;   // each peer's Arisen and main pawn as characters here (src/peer_puppet.h); peer_puppet=0 off
     bool enemySync = true;    // the host's enemies on the guests (src/enemy_stream.h, src/enemy_mirror.h); co-op only, enemy_sync=0 off
+    std::string campaign;     // a host's campaign id: its world in coop\campaigns\<id> (src/save_folders.h); empty: its own save
+    std::string arisen;       // a guest's character: the campaign id whose character it brings; empty: its own save's
 };
 
 // Reads <game dir>\coop\adapter.ini, writing the defaults first when it is missing.
