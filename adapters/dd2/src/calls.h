@@ -58,6 +58,14 @@ enum Id : uint8_t {
     kGetSaveDirectoryPath,
     kGetForceWindows,
     kSetForceWindows,
+    kSaveCleanData,
+    kSaveAddDataClass,
+    kSaveLoadSingle,
+    kGetSaveState,
+    kGetLastSaveResult,
+    kSaveDataListCount,
+    kSaveDataListItem,
+    kIsTitleMenuPhase,
     kContextListCount,
     kContextListItem,
     kContextListSetItem,
@@ -169,6 +177,15 @@ constexpr std::array<Row, kCount> kRows{{
     // so a mount is a folder path.
     {kGetForceWindows, "via.storage.saveService.SaveService", "get_ForceWindows", "", 0x1463372c0, Feature::Saves},
     {kSetForceWindows, "via.storage.saveService.SaveService", "set_ForceWindows", "System.Boolean", 0x1463372e0, Feature::Saves},
+    // A save loaded outside the game's own flow into a scratch GameSaveData (the capture launch, src/offline_capture.h).
+    {kSaveCleanData, "via.storage.saveService.SaveService", "cleanData", "", 0x146336530, Feature::Saves},
+    {kSaveAddDataClass, "via.storage.saveService.SaveService", "addDataClass", "System.String,System.Object", 0x1463364c0, Feature::Saves},
+    {kSaveLoadSingle, "via.storage.saveService.SaveService", "loadSingle", "System.Int32", 0x146336570, Feature::Saves},
+    {kGetSaveState, "via.storage.saveService.SaveService", "get_SaveState", "", 0x146336630, Feature::Saves},
+    {kGetLastSaveResult, "via.storage.saveService.SaveService", "get_LastSaveResult", "", 0x146336640, Feature::Saves},
+    {kSaveDataListCount, "System.Collections.Generic.List`1<app.SaveDataBase>", "get_Count", "", 0x1452a9120, Feature::Saves},
+    {kSaveDataListItem, "System.Collections.Generic.List`1<app.SaveDataBase>", "get_Item", "System.Int32", 0x14549f780, Feature::Saves},
+    {kIsTitleMenuPhase, "app.MainFlowManager", "get_IsTitleMenuPhase", "", 0x147019850, Feature::Saves},
     // The save sections the profile is read from and spliced into (DD2 design progression.md 2-3); the List bodies are
     // generic and shared by every instantiation.
     {kContextListCount, "System.Collections.Generic.List`1<app.Context>", "get_Count", "", 0x1452a9120, Feature::Profile},

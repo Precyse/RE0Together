@@ -25,6 +25,7 @@
 #include "log.h"
 #include "names.h"
 #include "refw.h"
+#include "offline_capture.h"
 #include "save_folders.h"
 #include "save_redirect.h"
 #include "session.h"
@@ -74,6 +75,7 @@ extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFram
     const save_folders::Folders folders = save_folders::of(config);
     if (folders.mount) save_redirect::enable(*folders.mount);
     if (profile::install(carried ? profile::Mode::Splice : profile::Mode::Capture, folders.profile)) modules |= wire_dd2::kModuleProfile;
+    if (config.captureSlot >= 0 && !carried) offline_capture::enable(config.captureSlot);
     if (config.coop && plague_off::install()) modules |= wire_dd2::kModulePlagueOff;
     const bool roster = config.coop && roster::install();
     if (roster) modules |= wire_dd2::kModuleRoster;

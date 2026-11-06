@@ -43,6 +43,7 @@ Config loadConfig() {
         if (key == "enemy_sync" && (value == "0" || value == "1")) config.enemySync = value == "1";
         if (key == "campaign" && save_folders::validId(value)) config.campaign = value;
         if (key == "arisen" && save_folders::validId(value)) config.arisen = value;
+        if (key == "capture") config.captureSlot = std::atoi(value.c_str());
     }
     logger::write("config: port=%u coop=%d guest=%d echo_puppet=%d peer_puppet=%d enemy_sync=%d campaign=%s arisen=%s", config.port,
                   config.coop, config.guest, config.echoPuppet, config.peerPuppet, config.enemySync, config.campaign.c_str(),

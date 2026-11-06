@@ -18,6 +18,10 @@ enum class Mode : uint8_t { Capture, Splice };
 // splice, the profile is missing or from another build.
 bool install(Mode mode, const std::wstring& path);
 
+// Game thread: captures from the two sections of a save loaded outside the game's own flow (src/offline_capture.h) and
+// writes the character file at once; false when a section was not readable or the file was not written.
+bool captureFrom(void* contextSection, void* itemSection);
+
 // Game thread, from the tick: writes a capture once both sections arrived; checks a splice once in gameplay.
 void tick(uint64_t nowMs);
 

@@ -31,6 +31,11 @@ namespace save_folders {
 
 Folders of(const Config& config) {
     const std::wstring ownProfile = created(coopDirectory() + kOwnProfileFolder) + kProfileFile;
+    if (config.captureSlot >= 0) {
+        if (config.arisen.empty()) return {std::nullopt, ownProfile};
+        const std::wstring campaign = campaignFolder(config.arisen);
+        return {created(campaign + kSaveFolder), campaign + kProfileFile};
+    }
     if (config.coop && config.guest) {
         const std::wstring character = config.arisen.empty() ? ownProfile : campaignFolder(config.arisen) + kProfileFile;
         return {created(created(coopDirectory() + kSessionFolder) + kSaveFolder), character};

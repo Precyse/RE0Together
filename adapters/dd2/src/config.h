@@ -11,6 +11,7 @@ struct Config {
     bool enemySync = true;    // the host's enemies on the guests (src/enemy_stream.h, src/enemy_mirror.h); co-op only, enemy_sync=0 off
     std::string campaign;     // a host's campaign id: its world in coop\campaigns\<id> (src/save_folders.h); empty: its own save
     std::string arisen;       // a guest's character: the campaign id whose character it brings; empty: its own save's
+    int captureSlot = -1;     // a capture launch (capture=<slot>): read that save slot's character at the title (src/offline_capture.h)
 };
 
 // Reads <game dir>\coop\adapter.ini, writing the defaults first when it is missing.

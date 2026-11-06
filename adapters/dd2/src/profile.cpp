@@ -143,12 +143,12 @@ bool writeFile(const std::string& text) {
     return MoveFileExW(part.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
 
-void writeCapture() {
+bool writeCapture() {
     profile_rule::Profile out;
     int32_t gold = 0;
     {
         std::lock_guard lock(g_mutex);
-        if (!g_captured.dirty || !g_captured.haveContexts || !g_captured.haveItems) return;
+        if (!g_captured.dirty || !g_captured.haveContexts || !g_captured.haveItems) return false;
         g_captured.dirty = false;
         out.level = g_captured.level;
         out.job = g_captured.job;
@@ -161,6 +161,7 @@ void writeCapture() {
     const bool written = writeFile(profile_rule::encode(out));
     logger::write("profile: %s level=%d job=%d pieces=%zu gold=%d", written ? "captured" : "NOT written", out.level, out.job,
                   out.pieces.size(), gold);
+    return written;
 }
 
 // Splice
@@ -299,6 +300,12 @@ bool install(Mode mode, const std::wstring& path) {
     };
     return capture ? hook_registry::installSet(names::kProfile, captureHandlers)
                    : hook_registry::installSet(names::kProfile, spliceHandlers);
+}
+
+bool captureFrom(void* contextSection, void* itemSection) {
+    captureContexts(contextSection);
+    captureItems(itemSection);
+    return writeCapture();
 }
 
 void tick(uint64_t) {

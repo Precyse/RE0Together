@@ -13,6 +13,7 @@
 #include "log.h"
 #include "refw.h"
 #include "offline.h"
+#include "offline_capture.h"
 #include "owner_stream.h"
 #include "peer_bodies.h"
 #include "plague_off.h"
@@ -48,6 +49,7 @@ void runSteps() {
         save_redirect::tick(nowMs);
         session::tick(nowMs);
         profile::tick(nowMs);
+        offline_capture::tick(nowMs);
         plague_off::tick(nowMs);
         roster::tick(nowMs);
         offline::tick(nowMs);
