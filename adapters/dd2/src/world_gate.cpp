@@ -106,10 +106,10 @@ bool install() {
         return false;
     }
     const hook_registry::Handler handlers[] = {
-        {&names::kChangeFlowPhase, prePhase, postPhase},
-        {&names::kChangeSceneType, preScene, postScene},
-        {&names::kCompleteSceneLoad, nullptr, postSceneLoad},
-        {&names::kFerrystoneLoad, nullptr, postFerrystone},
+        hook_registry::make<prePhase, postPhase>(&names::kChangeFlowPhase),
+        hook_registry::make<preScene, postScene>(&names::kChangeSceneType),
+        hook_registry::make<nullptr, postSceneLoad>(&names::kCompleteSceneLoad),
+        hook_registry::make<nullptr, postFerrystone>(&names::kFerrystoneLoad),
     };
     return hook_registry::installSet(names::kWorldGate, handlers);
 }

@@ -62,12 +62,12 @@ namespace plague_off {
 
 bool install() {
     const hook_registry::Handler handlers[] = {
-        {&names::kAddPossessionPoint, preAlwaysRefuse, nullptr},
-        {&names::kSetPossessionLv, preSetLv, nullptr},
-        {&names::kPawnPossessionLv, preAlwaysRefuse, nullptr},
-        {&names::kMainPawnPossessionLv, preAlwaysRefuse, nullptr},
-        {&names::kJudgePossession, preJudge, postJudge},
-        {&names::kKillPossessed, preKill, postKill},
+        hook_registry::make<preAlwaysRefuse>(&names::kAddPossessionPoint),
+        hook_registry::make<preSetLv>(&names::kSetPossessionLv),
+        hook_registry::make<preAlwaysRefuse>(&names::kPawnPossessionLv),
+        hook_registry::make<preAlwaysRefuse>(&names::kMainPawnPossessionLv),
+        hook_registry::make<preJudge, postJudge>(&names::kJudgePossession),
+        hook_registry::make<preKill, postKill>(&names::kKillPossessed),
     };
     return hook_registry::installSet(names::kPlague, handlers);
 }

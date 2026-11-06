@@ -274,12 +274,12 @@ bool install(Mode mode, const std::wstring& path) {
         logger::write("profile: level=%d job=%d pieces=%zu read for the splice", g_profile->level, g_profile->job, g_profile->pieces.size());
     }
     const hook_registry::Handler captureHandlers[] = {
-        {&names::kSaveContexts, nullptr, postSaveContexts},
-        {&names::kSaveItems, nullptr, postSaveItems},
+        hook_registry::make<nullptr, postSaveContexts>(&names::kSaveContexts),
+        hook_registry::make<nullptr, postSaveItems>(&names::kSaveItems),
     };
     const hook_registry::Handler spliceHandlers[] = {
-        {&names::kLoadContexts, preLoadContexts, nullptr},
-        {&names::kLoadItems, preLoadItems, nullptr},
+        hook_registry::make<preLoadContexts>(&names::kLoadContexts),
+        hook_registry::make<preLoadItems>(&names::kLoadItems),
     };
     return capture ? hook_registry::installSet(names::kProfile, captureHandlers)
                    : hook_registry::installSet(names::kProfile, spliceHandlers);

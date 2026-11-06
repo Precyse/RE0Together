@@ -165,10 +165,10 @@ bool install() {
         return false;
     }
     const hook_registry::Handler handlers[] = {
-        {&names::kRegisterEnemy, preRegisterEnemy, nullptr},
-        {&names::kRemoveEnemy, preRemove, nullptr},
-        {&names::kRegisterMonster, preRegisterMonster, nullptr},
-        {&names::kRemoveMonster, preRemove, nullptr},
+        hook_registry::make<preRegisterEnemy>(&names::kRegisterEnemy),
+        hook_registry::make<preRemove>(&names::kRemoveEnemy),
+        hook_registry::make<preRegisterMonster>(&names::kRegisterMonster),
+        hook_registry::make<preRemove>(&names::kRemoveMonster),
     };
     return hook_registry::installSet(names::kRoster, handlers);
 }

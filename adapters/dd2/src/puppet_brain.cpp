@@ -93,18 +93,18 @@ namespace puppet_brain {
 
 bool install() {
     const hook_registry::Handler handlers[] = {
-        {&names::kReadyCharacter, preReady, postReady},
-        {&names::kCharacterDestroy, preDestroy, nullptr},
-        {&names::kNavDestination, preNavigation, nullptr},
-        {&names::kPawnNavDestination, preNavigation, nullptr},
-        {&names::kActionCore, preAction, nullptr},
-        {&names::kLocomotion, preLocomotion, nullptr},
-        {&names::kIdle, preLocomotion, nullptr},
-        {&names::kDamageHp, preDamageHp, nullptr},
-        {&names::kSetHp, preHp, nullptr},
-        {&names::kLeaveStrayPawn, preCleanup, nullptr},
-        {&names::kDestroyStrayPawn, preDestroyStrayPawn, nullptr},
-        {&names::kPawnLost, preCleanup, nullptr},
+        hook_registry::make<preReady, postReady>(&names::kReadyCharacter),
+        hook_registry::make<preDestroy>(&names::kCharacterDestroy),
+        hook_registry::make<preNavigation>(&names::kNavDestination),
+        hook_registry::make<preNavigation>(&names::kPawnNavDestination),
+        hook_registry::make<preAction>(&names::kActionCore),
+        hook_registry::make<preLocomotion>(&names::kLocomotion),
+        hook_registry::make<preLocomotion>(&names::kIdle),
+        hook_registry::make<preDamageHp>(&names::kDamageHp),
+        hook_registry::make<preHp>(&names::kSetHp),
+        hook_registry::make<preCleanup>(&names::kLeaveStrayPawn),
+        hook_registry::make<preDestroyStrayPawn>(&names::kDestroyStrayPawn),
+        hook_registry::make<preCleanup>(&names::kPawnLost),
     };
     g_installed = hook_registry::installSet(names::kPuppet, handlers);
     return g_installed;
@@ -115,9 +115,9 @@ bool installed() { return g_installed; }
 bool installMirror() {
     if (!g_installed) return false;
     const hook_registry::Handler handlers[] = {
-        {&names::kMonsterNavDestination, preNavigation, nullptr},
-        {&names::kMonsterLocomotion, preLocomotion, nullptr},
-        {&names::kMonsterIdle, preLocomotion, nullptr},
+        hook_registry::make<preNavigation>(&names::kMonsterNavDestination),
+        hook_registry::make<preLocomotion>(&names::kMonsterLocomotion),
+        hook_registry::make<preLocomotion>(&names::kMonsterIdle),
     };
     g_mirrorInstalled = hook_registry::installSet(names::kMirror, handlers);
     return g_mirrorInstalled;
