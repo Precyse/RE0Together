@@ -2,7 +2,7 @@
 // The co-op profile (DD2 design progression.md 2-3): the guest's own Arisen and main pawn (their contexts, items, money
 // and equipment set) carried into the host's world.
 //
-// Capture (every launch but a co-op guest's): each time the game saves, the contexts and item records it wrote for the
+// Capture (every launch but a co-op guest's): each time the game loads or saves, the contexts and item records of the
 // Arisen and the main pawn are read from the save sections, as the engine's JSON, into the launch's character file
 // (src/save_folders.h: coop\profile\profile.dd2p for the game's own save, the campaign's for a campaign).
 // Splice (a co-op guest): every load of the host's world runs the two loaders with the profile's pieces in place of the

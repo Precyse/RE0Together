@@ -55,8 +55,9 @@ void* returned(void** retVal) { return retVal ? *retVal : nullptr; }
 
 // Capture
 
-void postSaveContexts(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) {
-    void* records = save_sections::records(returned(retVal));
+// The Arisen's and the main pawn's contexts from a ContextDBMSSaveData section, as the game saves or loads it.
+void captureContexts(void* section) {
+    void* records = save_sections::records(section);
     if (!records) return;
     Captured part;
     const size_t n = save_sections::count(calls::kRecordListCount, records);
@@ -88,8 +89,8 @@ void postSaveContexts(void** retVal, REFrameworkTypeDefinitionHandle, unsigned l
     g_captured.haveContexts = g_captured.dirty = true;
 }
 
-void postSaveItems(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) {
-    void* section = returned(retVal);
+// Their item records, money and equipment set from an ItemManager.GameSaveData section, as the game saves or loads it.
+void captureItems(void* section) {
     if (!save_sections::isType(section, save_sections::kItemSection)) return;
     Captured part;
     void* items = refw::field<void*>(section, save_sections::kItemSaves);
@@ -118,6 +119,19 @@ void postSaveItems(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long
     g_captured.gold = refw::field<int32_t>(money, kMoneyGold);
     g_captured.equipIndex = refw::field<int32_t>(section, save_sections::kEquipIndex);
     g_captured.haveItems = g_captured.dirty = true;
+}
+
+void postSaveContexts(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) { captureContexts(returned(retVal)); }
+void postSaveItems(void** retVal, REFrameworkTypeDefinitionHandle, unsigned long long) { captureItems(returned(retVal)); }
+
+// Loading a save captures it too, so a character is carried once its save was loaded with the mod, saved or not.
+int preCaptureLoadContexts(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsigned long long) {
+    if (argc > kFirstParam) captureContexts(argv[kFirstParam]);
+    return REFRAMEWORK_HOOK_CALL_ORIGINAL;
+}
+int preCaptureLoadItems(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsigned long long) {
+    if (argc > kFirstParam) captureItems(argv[kFirstParam]);
+    return REFRAMEWORK_HOOK_CALL_ORIGINAL;
 }
 
 bool writeFile(const std::string& text) {
@@ -276,6 +290,8 @@ bool install(Mode mode, const std::wstring& path) {
     const hook_registry::Handler captureHandlers[] = {
         hook_registry::make<nullptr, postSaveContexts>(&names::kSaveContexts),
         hook_registry::make<nullptr, postSaveItems>(&names::kSaveItems),
+        hook_registry::make<preCaptureLoadContexts>(&names::kLoadContexts),
+        hook_registry::make<preCaptureLoadItems>(&names::kLoadItems),
     };
     const hook_registry::Handler spliceHandlers[] = {
         hook_registry::make<preLoadContexts>(&names::kLoadContexts),
