@@ -380,7 +380,9 @@ public sealed partial class App
         if (_gameDir == null) return true;
         try
         {
-            _saveSync = SaveSyncCoordinator.Create(_profile!, _gameDir, _options.SaveSource, _steam?.AccountId, _session, _transport!);
+            // A host playing a campaign sends that world, not its own save.
+            var saveSource = _options.SaveSource ?? (_session.IsHost ? OptionSources.CampaignSaveDir(_profile!, _gameDir) : null);
+            _saveSync = SaveSyncCoordinator.Create(_profile!, _gameDir, saveSource, _steam?.AccountId, _session, _transport!);
         }
         catch (Exception e) when (IsServiceFailure(e))
         {

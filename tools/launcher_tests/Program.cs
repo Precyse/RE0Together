@@ -31,6 +31,9 @@ public static class Program
         if (only == ModSuites) return RunModSuites();
         if (only == FileSuites) return RunFileSuites();
         ContentHashTests.Run();
+        DependencyInstallerTests.Run();
+        CampaignStoreTests.Run();
+        ConflictArchiveTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
         SessionLeaveTests.Run();

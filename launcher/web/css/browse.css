@@ -151,6 +151,10 @@
 .popup-update-buttons { display: flex; justify-content: flex-end; gap: var(--gap); }
 .popup-update-yes { width: var(--confirm-yes-w); }
 .popup-update-no { width: var(--tool-w); }
+.popup-deps-rows { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.popup-deps-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap); padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-small); }
+.popup-deps-source { color: var(--muted); font-size: var(--fs-caption); }
+.popup-deps-row.is-manual .popup-deps-source { color: var(--problem); }
 .option-body { display: block; padding-top: 16px; }
 .option-rows { display: flex; flex-direction: column; gap: var(--gap); }
 .option-row { display: flex; align-items: center; gap: var(--gap); }

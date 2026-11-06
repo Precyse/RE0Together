@@ -25,6 +25,7 @@ internal static class Cmd
     public const string OptionSet = "option.set";
     public const string ModInstall = "mod.install";
     public const string ModRetry = "mod.retry";
+    public const string DependenciesInstall = "dependencies.install";
     public const string NoticeFix = "notice.fix";
     public const string ReportCreate = "report.create";
     public const string SessionCancel = "session.cancel";
@@ -48,6 +49,7 @@ internal static class Cmd
     public const string GameResetFolder = "game.resetFolder";
     public const string GameUninstall = "game.uninstall";
     public const string GameArchive = "game.archive";
+    public const string GameImportDd2gether = "game.importDd2gether";
     public const string UpdateClick = "update.click";
     public const string UpdateRestart = "update.restart";
     public const string UpdateCheck = "update.check";
@@ -118,6 +120,7 @@ internal static class UiCommands
         [Cmd.OptionSet] = [GameId, new("key", FieldKind.Text, Min: 1), new("value", FieldKind.Text, Min: 1)],
         [Cmd.ModInstall] = [GameId],
         [Cmd.ModRetry] = [GameId],
+        [Cmd.DependenciesInstall] = [],
         [Cmd.NoticeFix] = [],
         [Cmd.ReportCreate] = [],
         [Cmd.SessionCancel] = [],
@@ -141,6 +144,7 @@ internal static class UiCommands
         [Cmd.GameResetFolder] = [GameId],
         [Cmd.GameUninstall] = [GameId],
         [Cmd.GameArchive] = [GameId],
+        [Cmd.GameImportDd2gether] = [GameId],
         [Cmd.UpdateClick] = [],
         [Cmd.UpdateRestart] = [],
         [Cmd.UpdateCheck] = [],

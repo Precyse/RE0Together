@@ -57,7 +57,11 @@ internal sealed partial class UiController
                 return SetOption(command);
             case Cmd.ModInstall:
                 return GameFor(command) is { } mod && _screen == ScreenKind.Home && mod.Profile.Id == _selectedId && CurrentHome()?.ModEnabled == true
-                    ? Do(() => StartMod(mod.Profile, ModRunKind.Install)) : UnknownTarget;
+                    ? Do(() => InstallOrAsk(mod.Profile)) : UnknownTarget;
+            case Cmd.DependenciesInstall when _popup == PopupKind.Dependencies && SelectedGame is { } needing && !ModRunning:
+                ClosePopup();
+                StartMod(needing.Profile, ModRunKind.Install);
+                return null;
             case Cmd.ModRetry when !ModRunning:
                 return GameFor(command) is { } retry && _modRuns.GetValueOrDefault(retry.Profile.Id) is { Failed: true } failed
                     ? Do(() => StartMod(retry.Profile, failed.Kind)) : UnknownTarget;
@@ -114,7 +118,7 @@ internal sealed partial class UiController
             case Cmd.SettingsLogs when _screen == ScreenKind.Settings:
                 LauncherActions.OpenLogsFolder();
                 return null;
-            case Cmd.GameBrowse or Cmd.GameResetFolder or Cmd.GameUninstall or Cmd.GameArchive when _screen == ScreenKind.Settings:
+            case Cmd.GameBrowse or Cmd.GameResetFolder or Cmd.GameUninstall or Cmd.GameArchive or Cmd.GameImportDd2gether when _screen == ScreenKind.Settings:
                 return RunGameCommand(command);
             case Cmd.UpdateCheck when _screen == ScreenKind.Settings:
                 _update.CheckNow(automatic: AppSettings.Current.CheckForUpdates);
@@ -229,14 +233,37 @@ internal sealed partial class UiController
         if (GameOf(_app.Status)?.Profile is { } game) GameLauncher.Launch(game, GameFolders.Find(game));
     }
 
-    /// <summary>Installs, updates, repairs or uninstalls a game's mod off the UI thread. Its steps reach the page as they happen (at
-    /// most every 50 ms); <paramref name="afterInstalled"/> runs when an install succeeded.</summary>
+    /// <summary>Moves a conflicting mod out of the game folder before an install (the game is closed then); always goes on.</summary>
+    private static bool ArchiveConflicts(GameProfile game, string gameDir)
+    {
+        ConflictArchive.Run(game, gameDir, GameLauncher.IsRunning(game), DateTime.Now);
+        return true;
+    }
+
+    /// <summary>Install on the home screen: a game missing a dependency first shows what it lacks (the dependencies popup, whose
+    /// Install runs the same install with the dependencies first); otherwise the install starts.</summary>
+    private void InstallOrAsk(GameProfile game)
+    {
+        if (GameFolders.Find(game) is { } gameDir && game.MissingRequirements(gameDir).Count > 0)
+        {
+            _popup = PopupKind.Dependencies;
+            Apply(_app.Status);
+            return;
+        }
+        StartMod(game, ModRunKind.Install);
+    }
+
+    /// <summary>Installs, updates, repairs or uninstalls a game's mod off the UI thread; an install first installs the game's missing
+    /// dependencies. Its steps reach the page as they happen (at most every 50 ms); <paramref name="afterInstalled"/> runs when an
+    /// install succeeded.</summary>
     private void StartMod(GameProfile game, ModRunKind kind, Action? afterInstalled = null)
     {
         if (ModRunning || GameFolders.Find(game) is not { } gameDir) return;
         ShowModProgress(game.Id, kind, new ModProgress(ModStep.Checking, 0, 0, 0));
         var progress = new ThrottledProgress(new Progress<ModProgress>(report => ShowModProgress(game.Id, kind, report)), () => Environment.TickCount64);
-        Task.Run(() => kind == ModRunKind.Install ? ModInstaller.Install(game, gameDir, progress) : ModInstaller.Uninstall(game, gameDir, progress))
+        Task.Run(() => kind == ModRunKind.Install
+                ? ArchiveConflicts(game, gameDir) && DependencyInstaller.Install(game, gameDir, progress) && ModInstaller.Install(game, gameDir, progress)
+                : ModInstaller.Uninstall(game, gameDir, progress))
             .ContinueWith(task => FinishMod(game.Id, kind, task, afterInstalled), _ui);
     }
 
@@ -452,8 +479,16 @@ internal sealed partial class UiController
         if (!settingsOptions && !(_popup == PopupKind.Options && _screen == ScreenKind.Home)) return Refused;
         if (!Free || GameFor(command) is not { } game || (!settingsOptions && game.Profile.Id != _selectedId)) return UnknownTarget;
         var option = OptionsModel.OptionsOf(game.Profile, settingsOptions).FirstOrDefault(candidate => candidate.Key == command.Text("key"));
-        if (option == null || OptionsModel.Values(option, GameFolders.Find(game.Profile)).All(value => value.Value != command.Text("value"))) return UnknownTarget;
-        OptionsModel.Save(game.Profile.Id, option.Key, command.Text("value"));
+        var folder = GameFolders.Find(game.Profile);
+        if (option == null || folder == null || OptionsModel.Values(game.Profile, option, folder).All(value => value.Value != command.Text("value"))) return UnknownTarget;
+        try
+        {
+            OptionsModel.Save(game.Profile.Id, option.Key, OptionSources.Choose(game.Profile, folder, option, command.Text("value")));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not make a campaign for {game.Profile.Name}: {e.Message}");
+        }
         Apply(_app.Status);
         return null;
     }
@@ -488,6 +523,9 @@ internal sealed partial class UiController
                 return null;
             case Cmd.GameArchive when SettingsModel.ArchiveShown(game.Profile):
                 LauncherActions.OpenArchive(game.Profile);
+                return null;
+            case Cmd.GameImportDd2gether when free && Dd2getherImport.Available(game.Profile, GameFolders.Find(game.Profile)):
+                PrepareGameFolder(game.Profile);
                 return null;
             default:
                 return Refused;

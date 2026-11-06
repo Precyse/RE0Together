@@ -49,6 +49,8 @@ internal sealed partial class UiController : IDisposable
         _post = post;
         LoadGames();
         RefreshMods();
+        foreach (var game in _games.Where(game => game.Profile.Conflicts != null || game.Profile.Campaigns?.ImportDd2gether == true))
+            PrepareGameFolder(game.Profile);
         Apply(app.Status);
         _update.Changed += () =>
         {
@@ -247,7 +249,7 @@ internal sealed partial class UiController : IDisposable
     /// question shows over any.</summary>
     private ScreenKind? PopupScreen => _popup switch
     {
-        PopupKind.Options => ScreenKind.Home,
+        PopupKind.Options or PopupKind.Dependencies => ScreenKind.Home,
         PopupKind.Lobby => ScreenKind.Lobbies,
         _ => null,
     };
@@ -261,6 +263,26 @@ internal sealed partial class UiController : IDisposable
 
     /// <summary>Reads every game's mod state in the background (it hashes files) and shows it when done; a refusal that the new state
     /// resolves (the mod installed, the game found) goes.</summary>
+    /// <summary>Off the UI thread, at start and from the settings view's Import DD2gether: moves a conflicting mod to the archive
+    /// (<see cref="ConflictArchive"/>, while the game is closed), then brings DD2gether's campaigns and characters in
+    /// (<see cref="Dd2getherImport"/>, each once; the count is a player event). A failure is logged.</summary>
+    private void PrepareGameFolder(GameProfile profile)
+    {
+        if (GameFolders.Find(profile) is not { } gameDir) return;
+        Task.Run(() =>
+        {
+            try
+            {
+                ConflictArchive.Run(profile, gameDir, GameLauncher.IsRunning(profile), DateTime.Now);
+                if (Dd2getherImport.Run(profile, gameDir) is var count and > 0) Log.Event($"Imported {count} DD2gether save(s) for {profile.Name}");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Info($"DD2gether saves not imported for {profile.Name}: {e.Message}");
+            }
+        }).ContinueWith(_ => Apply(_app.Status), _ui);
+    }
+
     private void RefreshMods()
     {
         if (_refreshing)

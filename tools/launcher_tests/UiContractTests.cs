@@ -88,6 +88,12 @@ public static class UiContractTests
             var screen = state["screen"]?.GetValue<string>();
             if (screen == null || !shapes.TryGetValue(screen, out var shape)) Check.That(false, $"contract: fixture {key} has a state with a known screen (got {screen})");
             else foreach (var problem in Differences(state, shape, "state")) Check.That(false, $"contract: fixture {key}: {problem}");
+            if (state["popup"] is JsonObject popup)
+            {
+                var kind = popup["kind"]?.GetValue<string>();
+                if (kind == null || !shapes.TryGetValue(PopupShape + kind, out var popupShape)) Check.That(false, $"contract: fixture {key} has a popup of a known kind (got {kind})");
+                else foreach (var problem in Differences(popup, popupShape, "state.popup")) Check.That(false, $"contract: fixture {key}: {problem}");
+            }
         }
         if (fixture["mini"] is JsonObject mini)
             foreach (var problem in Differences(mini, shapes["mini"], "mini")) Check.That(false, $"contract: fixture {key}: {problem}");
@@ -147,8 +153,11 @@ public static class UiContractTests
         Check.That(CommandsOf("const other = [];") == null, "bridge: no COMMANDS is reported");
     }
 
+    private const string PopupShape = "popup:";
+
     /// <summary>One merged snapshot shape per screen, from snapshots of the states the screen takes (so that fields that are null in
-    /// one state, like the lobby state of a hosting screen, are filled by another).</summary>
+    /// one state, like the lobby state of a hosting screen, are filled by another), and one per popup kind (<see cref="PopupShape"/>):
+    /// a screen's shape leaves its popup null, so popups of different kinds on one screen are each checked against their own.</summary>
     private static Dictionary<string, JsonNode> Shapes()
     {
         var games = new[] { GameProfile.Load("re0"), GameProfile.Load("sr2") };
@@ -172,7 +181,17 @@ public static class UiContractTests
         var target = new JoinTarget(lobbyId, "Precyse", 2);
 
         var byScreen = new Dictionary<string, List<JsonNode>>();
-        void Add(string screen, MainState state) => (byScreen.TryGetValue(screen, out var list) ? list : byScreen[screen] = []).Add(JsonNode.Parse(UiJson.Write(state))!);
+        void Add(string screen, MainState state)
+        {
+            var node = JsonNode.Parse(UiJson.Write(state))!;
+            if (node["popup"] is JsonObject popup)
+            {
+                var kind = PopupShape + popup["kind"]!.GetValue<string>();
+                (byScreen.TryGetValue(kind, out var popups) ? popups : byScreen[kind] = []).Add(Clone(popup));
+                node["popup"] = null;
+            }
+            (byScreen.TryGetValue(screen, out var list) ? list : byScreen[screen] = []).Add(node);
+        }
         void AddInput(SnapshotInput input) { var state = UiSnapshot.MainPage(input, null); Add(UiJson.Write(state.Screen).Trim('"'), state); }
 
         AddInput(Input(AppStatus.Idle with { FriendLobbies = [friend], Refusal = new Refusal(RefusalKind.ModNotInstalled, "", "re0", 0) }, popup: PopupKind.Options));
@@ -185,6 +204,7 @@ public static class UiContractTests
         AddInput(Input(session("re0", AppState.PeerConnected, SessionStep.Ready, host(step: SessionStep.Ready), guest(SessionStep.Ready, local: true)), view: ScreenKind.Select));
         AddInput(Input(AppStatus.Idle, view: ScreenKind.Settings));
         AddInput(Input(AppStatus.Idle, view: ScreenKind.Settings, popup: PopupKind.Update));
+        AddInput(Input(AppStatus.Idle, popup: PopupKind.Dependencies) with { FolderOf = _ => Path.GetTempPath() });
         var failedRun = new Dictionary<string, ModRunView> { ["re0"] = new(ModRunKind.Install, new ModProgress(ModStep.Failed, 37, 3, 50, "The file is in use")) };
         var copyingRun = new Dictionary<string, ModRunView> { ["re0"] = new(ModRunKind.Install, new ModProgress(ModStep.Copying, 40, 12, 50)) };
         AddInput(Input(AppStatus.Idle) with { ModRuns = failedRun });

@@ -34,8 +34,23 @@ public sealed record SaveIndexProfile(string File, string KeyAddress, int KeyLen
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SessionKind { Lobby, Native, Rendezvous }
 
-/// <summary>A file the game folder must hold for co-op to work, and the name the status line gives it when it is missing.</summary>
-public sealed record RequiredFile(string File, string Name);
+/// <summary>A file the game folder must hold for co-op to work, the name the status line gives it when it is missing, and where
+/// the launcher can install it from (none: the player installs it).</summary>
+public sealed record RequiredFile(string File, string Name, DependencySource? Install = null);
+
+/// <summary>A dependency's download: an https zip pinned by its SHA-256, and the entries taken from it into the game folder.</summary>
+public sealed record DependencySource(string Url, string Sha256, List<DependencyFile> Files);
+
+/// <summary>One zip entry (From) and where it goes, relative to the game folder (To).</summary>
+public sealed record DependencyFile(string From, string To);
+
+/// <summary>Where a game keeps its campaigns (<see cref="CampaignStore"/>): their folder relative to the game folder, the world's save
+/// folder inside each, the character file the adapter writes beside it, and whether DD2gether's campaigns are brought in.</summary>
+/// <summary>Another mod that must not run beside ours: its name, its paths relative to the game folder (files or folders, its
+/// data and saves included) and the folder, relative to the game folder, it is archived into (<see cref="ConflictArchive"/>).</summary>
+public sealed record ConflictProfile(string Name, List<string> Paths, string Into);
+
+public sealed record CampaignsProfile(string Dir, string SaveFolder, string CharacterFile, bool ImportDd2gether = false);
 
 /// <summary>When a Rendezvous game also builds the bridge: the host's value of option Key equals Value (SR2: transport=steam).</summary>
 public sealed record BridgeCondition(string Key, string Value);
@@ -82,7 +97,7 @@ public sealed record GameProfile(
     SessionKind SessionKind = SessionKind.Lobby, List<RequiredFile>? Requires = null,
     string? JoinFile = null, string? StatusFile = null, BridgeCondition? BridgeWhen = null,
     List<string>? FreshTypes = null, ArtSource? OutfitArt = null, List<string>? CrashFiles = null, SaveIndexProfile? SaveIndex = null, UiArtSource? UiArt = null,
-    SaveBackupProfile? SaveBackup = null)
+    SaveBackupProfile? SaveBackup = null, CampaignsProfile? Campaigns = null, List<ConflictProfile>? Conflicts = null)
 {
     // UiArt: the game art the in-game overlay draws, taken from the player's own install at launch.
     // CrashFiles: where the game and its adapter leave crash files, relative to the game folder, as folder and pattern ("coop/dumps/*.dmp").
@@ -106,9 +121,12 @@ public sealed record GameProfile(
         SessionKind == SessionKind.Lobby ||
         (RendezvousSession && BridgeWhen is { } condition && hostValues.TryGetValue(condition.Key, out var value) && value == condition.Value);
 
+    /// <summary>The required files missing from the game folder, in profile order.</summary>
+    public IReadOnlyList<RequiredFile> MissingRequirements(string gameDir) =>
+        Requires?.Where(required => !File.Exists(Path.Combine(gameDir, required.File))).ToList() ?? [];
+
     /// <summary>The name of the first required file missing from the game folder, or null when all are there.</summary>
-    public string? MissingRequirement(string gameDir) =>
-        Requires?.FirstOrDefault(required => !File.Exists(Path.Combine(gameDir, required.File)))?.Name;
+    public string? MissingRequirement(string gameDir) => MissingRequirements(gameDir).FirstOrDefault()?.Name;
 
     /// <summary>The profile of a game, read once: the window and the loop thread share the instance. A profile that cannot be
     /// read (missing, empty, a bad fresh frame type) throws and is read again on the next call.</summary>
@@ -124,13 +142,18 @@ public sealed record GameProfile(
     }
 
     /// <summary>A profile from its JSON, its folder entries expanded against <paramref name="root"/> (the package folder); the fresh
-    /// frame types must be valid (the queue would refuse them mid-session).</summary>
+    /// frame types must be valid (the queue would refuse them mid-session), and so must every dependency download.</summary>
     internal static GameProfile Parse(string id, string json, string root)
     {
         var profile = JsonSerializer.Deserialize<GameProfile>(json, JsonOptions) ?? throw new InvalidDataException($"Empty profile {id}");
         try
         {
             FreshQueue.ParseTypes(profile.FreshTypes);
+            foreach (var required in profile.Requires ?? [])
+            {
+                if (required.Install is { } source && DependencyInstaller.Problem(source) is { } problem)
+                    throw new InvalidDataException($"{required.Name}: {problem}");
+            }
         }
         catch (InvalidDataException e)
         {

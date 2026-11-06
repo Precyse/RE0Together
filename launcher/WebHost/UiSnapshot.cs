@@ -7,7 +7,7 @@ internal sealed record GameEntry(GameProfile Profile, GameStatus Status, ArtDto 
 
 /// <summary>Which popup is open: none, the options of the selected game, the lobby popup of one listed lobby, or the restart
 /// question of a staged update (over any screen).</summary>
-internal enum PopupKind { None, Options, Lobby, Update }
+internal enum PopupKind { None, Options, Lobby, Update, Dependencies }
 
 /// <summary>The update button as the top bar shows it: its label (null while there is nothing to offer), whether it can be
 /// clicked, the newer build on offer (0 when none), whether a build is staged and how a check the player asked for stands.</summary>
@@ -97,8 +97,25 @@ internal static partial class UiSnapshot
         PopupKind.Options when i.Selected is { } selected => OptionsPopup(i, selected),
         PopupKind.Lobby when i.Screen == ScreenKind.Lobbies => LobbyPopup(i),
         PopupKind.Update => new UpdatePopupDto("update", i.Update.NewerBuild > 0 ? $"Build {i.Update.NewerBuild}" : string.Empty),
+        PopupKind.Dependencies when i.Selected is { } selected && i.FolderOf(selected.Profile) is { } folder => DependenciesPopup(selected, folder),
         _ => null,
     };
+
+    /// <summary>The game's missing dependencies: each with where it comes from; Install only when every one can be installed here.</summary>
+    private static DependenciesPopupDto DependenciesPopup(GameEntry game, string folder)
+    {
+        var missing = game.Profile.MissingRequirements(folder);
+        var rows = missing.Select(required => new DependencyRowDto(required.Name, SourceOf(required.Install), required.Install != null)).ToArray();
+        return new DependenciesPopupDto("dependencies", game.Profile.Name, rows, rows.Length > 0 && rows.All(row => row.Installable));
+    }
+
+    /// <summary>A download's site and owner ("github.com/praydog"); empty for a dependency the player installs.</summary>
+    private static string SourceOf(DependencySource? source)
+    {
+        if (source == null || !Uri.TryCreate(source.Url, UriKind.Absolute, out var url)) return string.Empty;
+        var owner = url.Segments.Skip(1).FirstOrDefault()?.TrimEnd('/');
+        return string.IsNullOrEmpty(owner) ? url.Host : $"{url.Host}/{owner}";
+    }
 
     private static OptionsPopupDto OptionsPopup(SnapshotInput i, GameEntry game)
     {
@@ -111,7 +128,7 @@ internal static partial class UiSnapshot
         var folder = i.FolderOf(game);
         return OptionsModel.OptionsOf(game, settingsOptions).Select(option => new OptionRowDto(
             option.Key, option.Label, OptionsModel.ShownValue(game, option, folder, hostValues),
-            OptionsModel.Values(option, folder).Select(value => new OptionValueDto(value.Value, value.Label)).ToArray(), !i.Free)).ToArray();
+            OptionsModel.Values(game, option, folder).Select(value => new OptionValueDto(value.Value, value.Label)).ToArray(), !i.Free)).ToArray();
     }
 
     private static LobbyPopupDto? LobbyPopup(SnapshotInput i)
@@ -176,7 +193,7 @@ internal static partial class UiSnapshot
             game.Profile.Id, game.Profile.Name, i.FolderOf(game.Profile) ?? string.Empty, SettingsModel.BrowseEnabled(idle),
             SettingsModel.ResetEnabled(game.Profile, idle), SettingsModel.UninstallEnabled(game.Status, idle, i.Update.Staged),
             game.Status.SettingsMod, game.Status.SettingsGame, OptionRows(i, game.Profile, settingsOptions: true, hostValues: null), SettingsModel.ArchiveShown(game.Profile),
-            i.ModRunOf(game.Profile.Id))).ToArray();
+            Dd2getherImport.Available(game.Profile, i.FolderOf(game.Profile)), i.ModRunOf(game.Profile.Id))).ToArray();
         return new SettingsDto(AppSettings.Current.CheckForUpdates, i.Update.Check, AppSettings.Current.LobbyVisibility, !i.Free, games);
     }
 }

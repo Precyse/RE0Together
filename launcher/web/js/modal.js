@@ -3,8 +3,9 @@ import { createConfirm } from './confirm.js';
 import * as lobbyPopup from './popup-lobby.js';
 import * as optionsPopup from './popup-options.js';
 import * as updatePopup from './popup-update.js';
+import * as dependenciesPopup from './popup-dependencies.js';
 
-const POPUPS = { lobby: lobbyPopup, options: optionsPopup, update: updatePopup };
+const POPUPS = { lobby: lobbyPopup, options: optionsPopup, update: updatePopup, dependencies: dependenciesPopup };
 
 /**
  * The modal layer under the top bar: the scrim (62 %) fades with the panel (modal recipe 250 / 150 ms, scale 0.96). One popup at a time

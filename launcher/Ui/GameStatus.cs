@@ -45,6 +45,7 @@ internal sealed record GameStatus(
     public ModAction? Action => Mod.State switch
     {
         ModState.NotInstalled => new ModAction("Install", GameFound && !GameRunning),
+        _ when MissingRequirement != null => new ModAction("Install", GameFound && !GameRunning),
         ModState.UpdateAvailable => new ModAction("Update", GameFound && !GameRunning),
         ModState.Modified => new ModAction("Repair", GameFound && !GameRunning),
         _ => null,

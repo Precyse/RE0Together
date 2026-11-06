@@ -83,6 +83,7 @@ export default {
      "gameLine": "Game build 17178773",
      "options": [],
      "archive": false,
+     "dd2gether": false,
      "modRun": null
     },
     {
@@ -96,6 +97,7 @@ export default {
      "gameLine": "Game build 5217290",
      "options": [],
      "archive": true,
+     "dd2gether": false,
      "modRun": null
     },
     {
@@ -126,6 +128,7 @@ export default {
       }
      ],
      "archive": false,
+     "dd2gether": false,
      "modRun": null
     }
    ]

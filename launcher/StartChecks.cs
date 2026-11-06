@@ -1,7 +1,8 @@
 namespace CoopLauncher;
 
 /// <summary>What must hold on this machine before a lobby is opened for a game, or a joined lobby's session starts: the game is
-/// found, its build is supported, its required files are there and its mod is installed and current.</summary>
+/// found, its build is supported, its required files are there and its mod is installed and current. A conflicting mod
+/// (<see cref="ConflictArchive"/>) is moved to the archive first while the game is closed.</summary>
 public static class StartChecks
 {
     /// <summary>The first thing that is wrong, null when the game can start. A mod that is installed but out of date (or, once
@@ -12,6 +13,7 @@ public static class StartChecks
         if (gameDir == null) return Refused(RefusalKind.GameNotFound);
         var build = GameBuilds.Installed(profile, gameDir);
         if (!GameBuilds.IsSupported(profile, build)) return Refused(RefusalKind.GameUnsupported, build.ToString());
+        ConflictArchive.Run(profile, gameDir, GameLauncher.IsRunning(profile), DateTime.Now);
         if (profile.MissingRequirement(gameDir) is { } missing) return Refused(RefusalKind.RequirementMissing, missing);
         var mod = ModInstaller.Status(profile, gameDir);
         if (mod.State == ModState.NotInstalled) return Refused(RefusalKind.ModNotInstalled);

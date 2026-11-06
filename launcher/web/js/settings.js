@@ -71,18 +71,19 @@ export function create(ctx) {
     const reset = tool('Reset', () => send('game.resetFolder', { gameId: game.id }));
     const uninstall = tool('Uninstall', () => send('game.uninstall', { gameId: game.id }));
     const archive = tool('Archive', () => send('game.archive', { gameId: game.id }));
+    const dd2gether = tool('Import DD2gether', () => send('game.importDd2gether', { gameId: game.id }));
     const modLine = h('span', { class: 'settings-mod' });
     const gameLine = h('span', { class: 'settings-game' });
     const modRun = createModRun(ctx, 'line');
     const options = h('div', { class: 'settings-grid' });
-    const buttons = h('div', { class: 'settings-buttons' }, browse, reset, uninstall, archive);
+    const buttons = h('div', { class: 'settings-buttons' }, browse, reset, uninstall, archive, dd2gether);
     const root = section('', h('div', { class: 'settings-row' }, path, buttons), h('div', { class: 'settings-line' }, modLine, modRun.el, gameLine), options);
-    root.parts = { path, browse, reset, uninstall, modLine, modRun, gameLine, options, archive };
+    root.parts = { path, browse, reset, uninstall, modLine, modRun, gameLine, options, archive, dd2gether };
     return root;
   }
 
   function updateGame(root, game) {
-    const { path, browse, reset, uninstall, modLine, modRun, gameLine, options, archive } = root.parts;
+    const { path, browse, reset, uninstall, modLine, modRun, gameLine, options, archive, dd2gether } = root.parts;
     setText(root.caption, game.name);
     path.dataset.full = game.folder;
     fitPath(path, game.folder);
@@ -90,6 +91,7 @@ export function create(ctx) {
     reset.disabled = !game.resetEnabled;
     uninstall.disabled = !game.uninstallEnabled;
     archive.hidden = !game.archive;
+    dd2gether.hidden = !game.dd2gether;
     setText(modLine, game.modLine);
     modLine.hidden = Boolean(game.modRun);
     modRun.update(game.modRun, game.id);
