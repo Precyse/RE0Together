@@ -13,6 +13,8 @@ namespace {
 
 constexpr const char* kSaveService = "via.storage.saveService.SaveService";
 
+constexpr bool kFileSystem = true;  // set_ForceWindows: the Windows file system instead of the Steam cloud
+
 std::wstring g_mount;
 bool g_pending = false;
 bool g_verified = false;
@@ -40,11 +42,18 @@ bool apply() {
     if (!service) return false;
     logPaths("before", pathOf(calls::kGetSaveDirectoryPath, service), pathOf(calls::kGetSaveMountPath, service));
     void* path = refw::managedString(g_mount);
-    if (!path || !refw::invoke(calls::method(calls::kSetSaveMountPath), service, {path})) return false;
+    if (!path || !refw::invoke(calls::method(calls::kSetForceWindows), service, {reinterpret_cast<void*>(uintptr_t{kFileSystem})}) ||
+        !refw::invoke(calls::method(calls::kSetSaveMountPath), service, {path})) {
+        return false;
+    }
     const std::wstring dir = pathOf(calls::kGetSaveDirectoryPath, service), mount = pathOf(calls::kGetSaveMountPath, service);
+    const refw::InvokeResult* windows = refw::invoke(calls::method(calls::kGetForceWindows), service);
+    const bool fileSystem = windows && windows->byte != 0;
     logPaths("after", dir, mount);
-    g_verified = samePath(mount, g_mount);  // the directory reads back as a slot pattern, not a path
-    if (!g_verified) logger::write("save_paths: REFUSED, the mount read back is not %s", text::utf8(g_mount).c_str());
+    g_verified = fileSystem && samePath(mount, g_mount);  // the directory reads back as a slot pattern, not a path
+    if (!g_verified) {
+        logger::write("save_paths: REFUSED, %s", fileSystem ? "the mount read back is another folder" : "ForceWindows did not stay on");
+    }
     return true;
 }
 

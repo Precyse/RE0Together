@@ -56,6 +56,8 @@ enum Id : uint8_t {
     kGetSaveMountPath,
     kSetSaveMountPath,
     kGetSaveDirectoryPath,
+    kGetForceWindows,
+    kSetForceWindows,
     kContextListCount,
     kContextListItem,
     kContextListSetItem,
@@ -161,6 +163,10 @@ constexpr std::array<Row, kCount> kRows{{
     {kGetSaveMountPath, "via.storage.saveService.SaveService", "get_SaveMountPath", "", 0x1463367f0, Feature::Saves},
     {kSetSaveMountPath, "via.storage.saveService.SaveService", "set_SaveMountPath", "System.String", 0x146336880, Feature::Saves},
     {kGetSaveDirectoryPath, "via.storage.saveService.SaveService", "get_SaveDirectoryPath", "", 0x146336940, Feature::Saves},
+    // On Steam the SaveService stores through the Steam cloud and the mount is a name there; ForceWindows makes it the file system,
+    // so a mount is a folder path.
+    {kGetForceWindows, "via.storage.saveService.SaveService", "get_ForceWindows", "", 0x1463372c0, Feature::Saves},
+    {kSetForceWindows, "via.storage.saveService.SaveService", "set_ForceWindows", "System.Boolean", 0x1463372e0, Feature::Saves},
     // The save sections the profile is read from and spliced into (DD2 design progression.md 2-3); the List bodies are
     // generic and shared by every instantiation.
     {kContextListCount, "System.Collections.Generic.List`1<app.Context>", "get_Count", "", 0x1452a9120, Feature::Profile},
