@@ -109,6 +109,13 @@ public sealed partial class App
     /// <summary>The host removes a guest from the session: it is told to leave and does not count among the lobby's players again.</summary>
     public void Kick(ulong memberId) => _commands.Enqueue(() => _session?.Kick(memberId));
 
+    /// <summary>The host picked another campaign while hosting: the guests get that world (<see cref="SaveSyncCoordinator.Retarget"/>).</summary>
+    public void CampaignChanged() => _commands.Enqueue(() =>
+    {
+        if (_session?.IsHost == true && _profile != null && _gameDir != null && _options.SaveSource == null)
+            _saveSync?.Retarget(OptionSources.CampaignSaveDir(_profile, _gameDir));
+    });
+
     /// <summary>The host plays on without the partners it is holding for a reconnect.</summary>
     public void PlaySolo() => _commands.Enqueue(() =>
     {
@@ -436,6 +443,12 @@ public sealed partial class App
         {
             Log.Info("The save received from the host does not hold the slot the host loads, not launching the game");
             Refuse(RefusalKind.SaveDiffers);
+            return false;
+        }
+        if (_session?.IsHost == false && _gameDir != null && OptionSources.UncapturedCharacter(_profile!, _gameDir) is { } character)
+        {
+            Log.Info($"The character {character} was never saved with the mod, not launching the game");
+            Refuse(RefusalKind.CharacterNotSaved, character);
             return false;
         }
         _launchPending = false;

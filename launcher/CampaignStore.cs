@@ -14,6 +14,8 @@ public static partial class CampaignStore
     private const string DefaultName = "Campaign";
     private const string FallbackId = "campaign";
     private const int MaxIdLength = 48;
+    private const int LevelLine = 2;  // after "dd2p <format>" and "tdb <hash>"
+    private const string LevelWord = "level";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
@@ -68,6 +70,22 @@ public static partial class CampaignStore
     /// <summary>The character file the adapter keeps for a campaign.</summary>
     public static string CharacterFile(GameProfile profile, string gameDir, string id) =>
         Path.Combine(gameDir, profile.Campaigns!.Dir, id, profile.Campaigns.CharacterFile);
+
+    /// <summary>The Arisen's level in a character file (its third line, <c>level N job N equip N</c>, the adapter's profile_rule.h), or
+    /// null when there is no file or it cannot be read.</summary>
+    public static int? CharacterLevel(string characterFile)
+    {
+        try
+        {
+            if (!File.Exists(characterFile)) return null;
+            var header = File.ReadLines(characterFile).Skip(LevelLine).FirstOrDefault()?.Split(' ');
+            return header is [LevelWord, var text, ..] && int.TryParse(text, out var level) ? level : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>The first free "Campaign N" name.</summary>
     public static string NextName(IEnumerable<Campaign> campaigns)

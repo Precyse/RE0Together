@@ -30,6 +30,7 @@ public static class StatusTextTests
         [RefusalKind.RejoinGaveUp] = "Could not rejoin",
         [RefusalKind.PortInUse] = "Port 27960 in use",
         [RefusalKind.LaunchFailed] = "Game did not start",
+        [RefusalKind.CharacterNotSaved] = "Juiced not saved yet: host it once and save",
     };
 
     public static void Run()

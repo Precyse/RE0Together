@@ -8,7 +8,7 @@ public sealed class SaveSender
     private const string Label = "Save sync";
 
     private readonly SaveSyncProfile _config;
-    private readonly string _sourceDir;
+    private string _sourceDir;
     private readonly ITransport _transport;
     private readonly FileStreamer _streamer;
     private readonly HashSet<string> _logged = [];
@@ -21,6 +21,9 @@ public sealed class SaveSender
         _transport = transport;
         _streamer = new FileStreamer(transport, Label, clock);
     }
+
+    /// <summary>The folder the set is read from from now on (the host picked another campaign); the caller sends it again.</summary>
+    public void Retarget(string sourceDir) => _sourceDir = sourceDir;
 
     public void SendTo(ulong peer)
     {

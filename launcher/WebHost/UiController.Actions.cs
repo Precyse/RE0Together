@@ -474,7 +474,7 @@ internal sealed partial class UiController
     /// any game in the settings view, or the save slot on the hosting screen; the value must be one the option offers here.</summary>
     private string? SetOption(UiCommand command)
     {
-        if (_screen == ScreenKind.Hosting) return SetSaveSlot(command);
+        if (_screen == ScreenKind.Hosting) return SetSessionPick(command);
         var settingsOptions = _screen == ScreenKind.Settings;
         if (!settingsOptions && !(_popup == PopupKind.Options && _screen == ScreenKind.Home)) return Refused;
         if (!Free || GameFor(command) is not { } game || (!settingsOptions && game.Profile.Id != _selectedId)) return UnknownTarget;
@@ -493,14 +493,23 @@ internal sealed partial class UiController
         return null;
     }
 
-    /// <summary>The host's pick on the hosting screen's save picker, while it is shown.</summary>
-    private string? SetSaveSlot(UiCommand command)
+    /// <summary>A pick on the hosting screen's pickers while they are shown (the host's campaign and save slot, a guest's character); a
+    /// host's new campaign is sent to the guests at once.</summary>
+    private string? SetSessionPick(UiCommand command)
     {
-        if (CurrentSession() is not { IsHost: true, Hosting: true } || GameFor(command) is not { } game || game.Profile.Id != GameOf(_app.Status)?.Profile.Id) return UnknownTarget;
-        var folder = GameFolders.Find(game.Profile);
-        var option = OptionsModel.SavePicker(game.Profile, folder, _app.Status.Step);
-        if (option == null || option.Key != command.Text("key") || GameOptions.Offered(game.Profile, option, folder).All(value => value.Value != command.Text("value"))) return UnknownTarget;
-        OptionsModel.Save(game.Profile.Id, option.Key, command.Text("value"));
+        if (CurrentSession() is not { Hosting: true } session || GameFor(command) is not { } game || game.Profile.Id != GameOf(_app.Status)?.Profile.Id) return UnknownTarget;
+        if (GameFolders.Find(game.Profile) is not { } folder) return UnknownTarget;
+        var option = OptionsModel.SessionPickers(game.Profile, folder, _app.Status.Step, session.IsHost).FirstOrDefault(candidate => candidate.Key == command.Text("key"));
+        if (option == null || GameOptions.Offered(game.Profile, option, folder).All(value => value.Value != command.Text("value"))) return UnknownTarget;
+        try
+        {
+            OptionsModel.Save(game.Profile.Id, option.Key, OptionSources.Choose(game.Profile, folder, option, command.Text("value")));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not make a campaign for {game.Profile.Name}: {e.Message}");
+        }
+        if (option.Source == OptionSources.Campaigns) _app.CampaignChanged();
         Apply(_app.Status);
         return null;
     }

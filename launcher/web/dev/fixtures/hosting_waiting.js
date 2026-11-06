@@ -164,7 +164,19 @@ export default {
      "kickable": false
     }
    ],
-   "save": {
+   "pickers": [{
+    "key": "campaign",
+    "label": "Campaign",
+    "value": "chaos",
+    "values": [
+      { "value": "", "label": "Own save" },
+      { "value": "chaos", "label": "Chaos" },
+      { "value": "maliketh", "label": "Maliketh" },
+      { "value": "new", "label": "New campaign" },
+      { "value": "copy", "label": "New from own save" }
+    ],
+    "locked": false
+  }, {
     "key": "load_slot",
     "label": "Save",
     "value": "2",
@@ -176,7 +188,7 @@ export default {
       { "value": "3", "label": "Slot 4 / Easy / 0:02:16 / Area 1" }
     ],
     "locked": false
-  },
+  }],
    "seatsClickable": false,
    "notice": null
   },

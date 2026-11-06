@@ -211,7 +211,7 @@ export default {
      "kickable": false
     }
    ],
-   "save": null,
+   "pickers": [],
    "seatsClickable": false,
    "notice": null
   },

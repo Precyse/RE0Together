@@ -97,7 +97,7 @@ internal sealed record CardDto(
 
 internal sealed record SessionDto(
     bool Hosting, bool IsHost, string Code, StepDto[] Steps, bool StartEnabled, LobbyStateDto? State, string[][] Options, string[] Events, bool Relaunch,
-    string Counter, CardLayout Layout, CardDto[] Seats, bool SeatsClickable, NoticeDto? Notice, OptionRowDto? Save);
+    string Counter, CardLayout Layout, CardDto[] Seats, bool SeatsClickable, NoticeDto? Notice, OptionRowDto[] Pickers);
 
 internal sealed record HalfDto(ImgDto Figure, string Name, string Role, string Label, string Kind, bool Locked, int Dots, int Index, bool CanCycle, double Opacity);
 

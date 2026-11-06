@@ -24,13 +24,16 @@ internal static class OptionsModel
     /// this machine has).</summary>
     public static List<OptionValue> Values(GameProfile game, GameOption option, string? gameDir) => GameOptions.Offered(game, option, gameDir).ToList();
 
-    /// <summary>The option the hosting screen's save picker shows: the game's slot option while the host can still choose (before its game
-    /// starts) and the save has a slot to pick; null otherwise.</summary>
-    public static GameOption? SavePicker(GameProfile game, string? gameDir, SessionStep step) =>
-        OptionSources.SlotOption(game) is { } option && !SessionProgress.SelectionLocked(step)
-        && GameOptions.Offered(game, option, gameDir).Count() > option.Values.Count
-            ? option
-            : null;
+    /// <summary>The options the hosting screen offers while this machine's game has not started: the host's campaign and the game's slot
+    /// option (when the save has a slot to pick); a guest's character.</summary>
+    public static List<GameOption> SessionPickers(GameProfile game, string? gameDir, SessionStep step, bool isHost)
+    {
+        if (SessionProgress.SelectionLocked(step)) return [];
+        var source = isHost ? OptionSources.Campaigns : OptionSources.Characters;
+        var pickers = (game.Options ?? []).Where(option => option.Source == source).ToList();
+        if (isHost && OptionSources.SlotOption(game) is { } slot && GameOptions.Offered(game, slot, gameDir).Count() > slot.Values.Count) pickers.Add(slot);
+        return pickers;
+    }
 
     /// <summary>Saves the player's choice at once; it reaches the adapter ini when the session launches the game.</summary>
     public static void Save(string gameId, string optionKey, string value) =>

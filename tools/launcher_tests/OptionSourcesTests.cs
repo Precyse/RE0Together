@@ -95,21 +95,30 @@ public static class OptionSourcesTests
     private static void Picker(GameProfile profile, string game)
     {
         AppSettings.Update(settings => settings.WithOption(profile.Id, Slot, string.Empty));
-        Check.That(OptionsModel.SavePicker(profile, game, SessionStep.Lobby)?.Key == Slot, "forced load: the host picks the slot while it waits");
-        Check.That(OptionsModel.SavePicker(profile, game, SessionStep.StartingGame) == null && OptionsModel.SavePicker(profile, game, SessionStep.InGame) == null,
+        static List<string> Keys(IEnumerable<GameOption> options) => options.Select(option => option.Key).ToList();
+        Check.That(Keys(OptionsModel.SessionPickers(profile, game, SessionStep.Lobby, isHost: true)).SequenceEqual([Slot]), "forced load: the host picks the slot while it waits");
+        Check.That(OptionsModel.SessionPickers(profile, game, SessionStep.StartingGame, isHost: true).Count == 0 &&
+                   OptionsModel.SessionPickers(profile, game, SessionStep.InGame, isHost: true).Count == 0,
             "forced load: the pick is closed once the game starts");
-        Check.That(OptionsModel.SavePicker(profile, null, SessionStep.Lobby) == null, "forced load: no slots to pick, no picker");
-        Check.That(OptionsModel.SavePicker(profile with { Options = [] }, game, SessionStep.Lobby) == null, "forced load: a game without the option has no picker");
+        Check.That(OptionsModel.SessionPickers(profile, null, SessionStep.Lobby, isHost: true).Count == 0, "forced load: no slots to pick, no picker");
+        Check.That(OptionsModel.SessionPickers(profile with { Options = [] }, game, SessionStep.Lobby, isHost: true).Count == 0, "forced load: a game without the option has no picker");
+        var campaign = new GameOption("campaign", "Campaign", [new OptionValue("", "Own save")], Source: OptionSources.Campaigns);
+        var character = new GameOption("arisen", "Character", [new OptionValue("", "Own save")], Source: OptionSources.Characters);
+        var both = profile with { Options = [.. profile.Options!, campaign, character] };
+        Check.That(Keys(OptionsModel.SessionPickers(both, game, SessionStep.Lobby, isHost: true)).SequenceEqual(["campaign", Slot]),
+            "the host picks the campaign (and the slot) while it waits");
+        Check.That(Keys(OptionsModel.SessionPickers(both, game, SessionStep.Lobby, isHost: false)).SequenceEqual(["arisen"]),
+            "a guest picks the character it brings while it waits");
     }
 
     private static void HostingScreenRow(GameProfile profile, string game)
     {
         var hosting = HostingState(profile, game, SessionStep.Lobby, isHost: true);
-        Check.That(hosting.Save is { Key: Slot, Label: "Save", Value: "", Locked: false } && hosting.Save.Values.Select(value => value.Value).SequenceEqual(["", "0", "1"]),
+        Check.That(hosting.Pickers is [{ Key: Slot, Label: "Save", Value: "", Locked: false }] && hosting.Pickers[0].Values.Select(value => value.Value).SequenceEqual(["", "0", "1"]),
             "forced load: the hosting screen carries the picker with the host's slots and nothing picked");
-        Check.That(HostingState(profile, game, SessionStep.Lobby, isHost: false).Save == null, "forced load: a guest's hosting screen has no picker");
-        Check.That(HostingState(profile, game, SessionStep.StartingGame, isHost: true).Save == null, "forced load: the picker goes when the host's game starts");
-        Check.That(HostingState(profile with { Options = [] }, game, SessionStep.Lobby, isHost: true).Save == null, "forced load: a game without the option has no picker on its screen");
+        Check.That(HostingState(profile, game, SessionStep.Lobby, isHost: false).Pickers.Length == 0, "forced load: a guest's hosting screen has no slot picker");
+        Check.That(HostingState(profile, game, SessionStep.StartingGame, isHost: true).Pickers.Length == 0, "forced load: the picker goes when the host's game starts");
+        Check.That(HostingState(profile with { Options = [] }, game, SessionStep.Lobby, isHost: true).Pickers.Length == 0, "forced load: a game without the option has no picker on its screen");
     }
 
     private static SessionDto HostingState(GameProfile profile, string game, SessionStep step, bool isHost)

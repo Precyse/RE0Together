@@ -33,6 +33,7 @@ public sealed class SaveSyncCoordinator : IDisposable
     private readonly Func<IEnumerable<ulong>> _peers;
     private readonly Func<ulong> _hostId;
     private readonly (string From, string Into)? _ownFiles;  // a guest's own save folder and its session folder (GuestOwnFiles)
+    private readonly string? _ownSaveDir;  // the host's own save folder, sent when it plays no campaign
     private readonly long _startedMs = Environment.TickCount64;
     private long? _firstFrameMs;
     private long _lastFrameMs;
@@ -40,9 +41,10 @@ public sealed class SaveSyncCoordinator : IDisposable
 
     private SaveSyncCoordinator(
         GameProfile profile, string gameDir, SaveSender? sender, SaveReceiver? receiver, SaveWatcher? watcher,
-        Func<IEnumerable<ulong>> peers, Func<ulong> hostId, (string From, string Into)? ownFiles = null)
+        Func<IEnumerable<ulong>> peers, Func<ulong> hostId, (string From, string Into)? ownFiles = null, string? ownSaveDir = null)
     {
         _ownFiles = ownFiles;
+        _ownSaveDir = ownSaveDir;
         _profile = profile;
         _gameDir = gameDir;
         _sender = sender;
@@ -65,7 +67,8 @@ public sealed class SaveSyncCoordinator : IDisposable
         if (profile.SaveSync is not { } config) return null;
         if (session.IsHost)
         {
-            var source = saveSource ?? HostSaveDir(profile, config, steamAccountId)
+            var hostSaveDir = HostSaveDir(profile, config, steamAccountId);
+            var source = saveSource ?? hostSaveDir
                          ?? throw new InvalidOperationException($"No host save folder for {profile.Name} (local transport needs --save-source, the folder template needs a signed-in Steam user)");
             var sender = new SaveSender(config, source, transport);
             session.PeerJoined += sender.SendTo;
@@ -77,7 +80,8 @@ public sealed class SaveSyncCoordinator : IDisposable
             {
                 if (frame.Type == Msg.FileAck) sender.OnAck(peer, frame);
             };
-            return new SaveSyncCoordinator(profile, gameDir, sender, null, WatchSaves(config, source), () => session.PeerIds, () => session.HostId);
+            return new SaveSyncCoordinator(profile, gameDir, sender, null, WatchSaves(config, source), () => session.PeerIds, () => session.HostId,
+                ownSaveDir: hostSaveDir);
         }
         var guestDir = config.GuestSaveDir is { } template
             ? SavePaths.Expand(template) ?? throw new InvalidOperationException($"No guest save folder for {profile.Name} (the folder template needs a signed-in Steam user)")
@@ -109,6 +113,15 @@ public sealed class SaveSyncCoordinator : IDisposable
             return null;
         }
         return new SaveWatcher(saveDir, config.FilePattern);
+    }
+
+    /// <summary>Host: sends the set from <paramref name="sourceDir"/> (a campaign's world; null: the host's own save) to every peer again.</summary>
+    public void Retarget(string? sourceDir)
+    {
+        if (_sender == null || (sourceDir ?? _ownSaveDir) is not { } source) return;
+        _sender.Retarget(source);
+        foreach (var peer in _peers()) _sender.SendTo(peer);
+        Log.Info($"Save sync: now sending {source}");
     }
 
     public void Pump()

@@ -38,10 +38,11 @@ public static class CampaignStoreTests
             var offered = OptionSources.Values(game, CampaignOption, gameDir).Select(v => v.Value).ToList();
             Check.That(offered.SequenceEqual(["chaos", "fresh-start", OptionSources.NewCampaign, OptionSources.CopyCampaign]),
                 "the campaign option offers each campaign, then the two ways to make one");
-            Check.That(!OptionSources.Values(game, CharacterOption, gameDir).Any(), "no character before one was captured");
-            File.WriteAllText(CampaignStore.CharacterFile(game, gameDir, copied.Id), "profile");
-            Check.That(OptionSources.Values(game, CharacterOption, gameDir).Select(v => v.Label).SequenceEqual(["Chaos"]),
-                "a campaign whose character was captured is a character choice");
+            Check.That(OptionSources.Values(game, CharacterOption, gameDir).Select(v => v.Label).SequenceEqual(["Chaos (save once)", "Fresh Start (save once)"]),
+                "every campaign's character is listed, marked until it was captured");
+            File.WriteAllText(CampaignStore.CharacterFile(game, gameDir, copied.Id), "dd2p 1\ntdb 0A1B2C3D\nlevel 12 job 3 equip 0\nend\n");
+            Check.That(OptionSources.Values(game, CharacterOption, gameDir).First().Label == "Chaos / Lv 12",
+                "a captured character shows its level");
 
             var made = OptionSources.Choose(game, gameDir, CampaignOption, OptionSources.NewCampaign);
             Check.That(made == "campaign-1" && CampaignStore.List(game, gameDir).Any(c => c.Id == made), "picking New campaign makes one and chooses it");

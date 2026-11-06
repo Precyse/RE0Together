@@ -17,6 +17,7 @@ public static class OptionSources
     public const string CopyCampaign = "copy";
     private const string NewCampaignLabel = "New campaign";
     private const string CopyCampaignLabel = "New from own save";
+    public const string NotCapturedLabel = "(save once)";
     public const string SlotKey = "load_slot";
     public const string HashKey = "load_hash";
 
@@ -30,10 +31,16 @@ public static class OptionSources
         SaveSlots => SaveIndexFiles.ReadHost(profile, gameDir).Slots.Where(slot => slot.Used).Select(slot => new OptionValue(SlotValue(slot), slot.Label)),
         Campaigns => CampaignStore.List(profile, gameDir).Select(campaign => new OptionValue(campaign.Id, campaign.Name))
             .Concat([new OptionValue(NewCampaign, NewCampaignLabel), new OptionValue(CopyCampaign, CopyCampaignLabel)]),
-        Characters => CampaignStore.List(profile, gameDir).Where(campaign => File.Exists(CampaignStore.CharacterFile(profile, gameDir!, campaign.Id)))
-            .Select(campaign => new OptionValue(campaign.Id, campaign.Name)),
+        Characters => CampaignStore.List(profile, gameDir).Select(campaign => new OptionValue(campaign.Id, CharacterLabel(profile, gameDir!, campaign))),
         _ => [],
     };
+
+    /// <summary>A campaign's character as the Character list shows it: its name and level once the adapter captured it, else its name and
+    /// <see cref="NotCapturedLabel"/> (the character is carried only after its campaign was played and saved once).</summary>
+    public static string CharacterLabel(GameProfile profile, string gameDir, CampaignStore.Campaign campaign) =>
+        CampaignStore.CharacterLevel(CampaignStore.CharacterFile(profile, gameDir, campaign.Id)) is { } level
+            ? $"{campaign.Name} / Lv {level}"
+            : $"{campaign.Name} {NotCapturedLabel}";
 
     /// <summary>An option the player picks in the grids although its values come from this machine (campaign, character).</summary>
     public static bool IsChoice(GameOption option) => option.Source is Campaigns or Characters;
@@ -46,6 +53,17 @@ public static class OptionSources
         var name = CampaignStore.NextName(CampaignStore.List(profile, gameDir));
         var ownSave = value == CopyCampaign && profile.SaveSync?.HostSaveDir is { } template ? SavePaths.Expand(template) : null;
         return CampaignStore.Create(profile, gameDir, name, ownSave).Id;
+    }
+
+    /// <summary>The name of the character a guest picked when the adapter has not captured it yet (it could not be brought into the
+    /// host's world), or null when it picked its own save's or one that was captured.</summary>
+    public static string? UncapturedCharacter(GameProfile profile, string gameDir)
+    {
+        var option = profile.Options?.FirstOrDefault(candidate => candidate.Source == Characters);
+        if (option == null) return null;
+        var id = GameOptions.Current(profile, gameDir)[option.Key];
+        if (id.Length == 0 || File.Exists(CampaignStore.CharacterFile(profile, gameDir, id))) return null;
+        return CampaignStore.List(profile, gameDir).FirstOrDefault(campaign => campaign.Id == id)?.Name ?? id;
     }
 
     /// <summary>The world save folder of the campaign a host chose, or null when it plays its own save.</summary>

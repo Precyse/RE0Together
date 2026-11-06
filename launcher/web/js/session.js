@@ -1,4 +1,4 @@
-import { h, setText } from './dom.js';
+import { h, keyed, setText } from './dom.js';
 import { icon } from './icons.js';
 import { reel, rollDigits, swapText } from './motion.js';
 import { createNotice } from './notice.js';
@@ -11,7 +11,7 @@ const SCREEN_HOSTING = 'hosting';
 const COPY_ICON_PX = 20;
 const STATE_GLYPH_SIZE = 'large';
 const STATE_MARKS = { inGame: 'done', reconnecting: 'active', waitingForHost: 'active', gameClosed: 'failed' };
-const LABELS = { code: 'LOBBY CODE', save: 'SAVE', players: 'PLAYERS', start: 'START GAME', waiting: 'WAITING FOR HOST', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
+const LABELS = { code: 'LOBBY CODE', players: 'PLAYERS', start: 'START GAME', waiting: 'WAITING FOR HOST', mini: 'MINI MODE', relaunch: 'RELAUNCH', leave: 'Leave' };
 
 const makeOption = () => h('div', { class: 'session-option' }, h('span', { class: 'session-option-label' }), h('span'));
 
@@ -43,35 +43,46 @@ function createCode(ctx) {
   };
 }
 
-/** The host's save picker: a caption over a dropdown of the save's slots (the first is no forced load); hidden when the session has none. */
-function createSavePicker(ctx) {
-  let target = { gameId: null, key: null };
-  const dropdown = createDropdown({ label: LABELS.save, onSelect: (value) => ctx.send('option.set', { ...target, value }) });
-  const el = h('div', { class: 'session-save', hidden: true }, h('span', { class: 'caption', text: LABELS.save }), dropdown.el);
+/** One hosting picker (the host's campaign or save slot, a guest's character): a caption over a dropdown of its values. */
+function createPicker(ctx, row) {
+  let target = { gameId: null, key: row.key };
+  const caption = h('span', { class: 'caption' });
+  const dropdown = createDropdown({ label: row.label, onSelect: (value) => ctx.send('option.set', { ...target, value }) });
+  const el = h('div', { class: 'session-picker' }, caption, dropdown.el);
+  el.picker = {
+    update(next, gameId) {
+      target = { gameId, key: next.key };
+      setText(caption, next.label);
+      dropdown.set({ items: next.values, value: next.value, disabled: next.locked });
+    },
+  };
+  return el;
+}
+
+/** The hosting pickers, one row per option the session offers; none once this machine's game starts. */
+function createPickers(ctx) {
+  const el = h('div', { class: 'session-pickers' });
   return {
     el,
-    update(save, gameId) {
-      el.hidden = !save;
-      if (!save) return;
-      target = { gameId, key: save.key };
-      dropdown.set({ items: save.values, value: save.value, disabled: save.locked });
+    update(pickers, gameId) {
+      keyed(el, pickers, (row) => row.key, (row) => createPicker(ctx, row), (rowEl, row) => rowEl.picker.update(row, gameId));
     },
   };
 }
 
-/** Hosting: the step list, the host's save picker, START GAME (a guest sees a disabled Waiting for host in its place, RELAUNCH when its game stalled) and Leave. */
+/** Hosting: the step list, the pickers (host: campaign and save slot; guest: character), START GAME (a guest sees a disabled Waiting for host in its place, RELAUNCH when its game stalled) and Leave. */
 function createHostingBody(ctx) {
   const steps = createSteps('large');
   steps.el.classList.add('steps-tight');
-  const save = createSavePicker(ctx);
+  const pickers = createPickers(ctx);
   let relaunch = false;
   const primary = button(LABELS.start, 'btn-primary session-primary', () => ctx.send(relaunch ? 'session.relaunch' : 'session.start'));
-  const el = h('div', { class: 'session-body' }, steps.el, save.el, h('div', { class: 'session-buttons' }, primary, button(LABELS.leave, 'btn-ghost session-leave', () => ctx.send('session.leave'))));
+  const el = h('div', { class: 'session-body' }, steps.el, pickers.el, h('div', { class: 'session-buttons' }, primary, button(LABELS.leave, 'btn-ghost session-leave', () => ctx.send('session.leave'))));
   return {
     el,
     update(session, gameId) {
       steps.update(session.steps);
-      save.update(session.save, gameId);
+      pickers.update(session.pickers, gameId);
       relaunch = !session.isHost && session.relaunch;
       setText(primary, session.isHost ? LABELS.start : relaunch ? LABELS.relaunch : LABELS.waiting);
       primary.disabled = !session.startEnabled && !relaunch;
