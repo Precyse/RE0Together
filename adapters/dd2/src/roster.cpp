@@ -1,5 +1,7 @@
 #include "roster.h"
 
+#include <windows.h>
+
 #include <algorithm>
 #include <cstring>
 #include <map>
@@ -27,10 +29,19 @@ constexpr uint32_t kHolderUniqueId = 0x80;      // ContextHolder.UniqueIDContext
 constexpr uint32_t kContextUniqueId = 0x18;     // UniqueIDContext.UniqueID (Guid, then Int32 index)
 constexpr uint32_t kUniqueIdIndex = 0x10;       // UniqueID._Index inside the value
 constexpr uint64_t kSettleMs = 3000;
+constexpr int kResolveTries = 90;  // 3 s of steps before a component whose key never reads is dropped
+
+struct Pending {
+    void* component = nullptr;
+    bool monster = false;
+    int tries = 0;
+};
 
 std::mutex g_mutex;
 std::map<uintptr_t, roster::Member> g_own;  // by component; under g_mutex
-uint64_t g_changes = 0;                       // under g_mutex
+std::vector<Pending> g_pending;             // registered, key not read yet; under g_mutex
+uint64_t g_changes = 0;                     // under g_mutex
+uint32_t g_unreadable = 0;                  // game thread: components dropped since the last line
 
 uint64_t g_seenChanges = 0, g_changedAtMs = 0;
 std::vector<uint8_t> g_servedPeers;  // host: the peers that have the roster last sent
@@ -39,32 +50,63 @@ std::optional<wire_dd2::Roster> g_host;  // guest: the host's newest roster
 bool g_comparePending = false;           // guest: either roster changed since the last comparison
 std::optional<roster_rule::Comparison> g_lastComparison;
 
-// An enemy component's character and its UniqueID, by field reads and the character's ContextHolder.
-std::optional<roster::Member> memberOf(void* component, bool monster) {
-    void* chara = component ? refw::field<void*>(component, monster ? kMonsterChara : kEnemyChara) : nullptr;
-    void* holder = chara ? calls::objectResult(calls::kGetContext, chara) : nullptr;
-    void* context = holder ? refw::field<void*>(holder, kHolderUniqueId) : nullptr;
-    if (!context) return std::nullopt;
-    roster::Member member{{}, component, chara, monster};
-    const auto* value = static_cast<const uint8_t*>(context) + kContextUniqueId;
-    std::memcpy(member.key.rowId.data(), value, member.key.rowId.size());
-    std::memcpy(&member.key.index, value + kUniqueIdIndex, sizeof(member.key.index));
-    return member;
+// An enemy component's character and its UniqueID, by field reads and the character's ContextHolder; false while a link is
+// missing or a read faults (a component the engine has not finished, or one already gone). Game thread; no objects with
+// destructors here, for __try.
+bool readMember(void* component, bool monster, void** chara, roster_rule::Key* key) {
+    __try {
+        *chara = refw::field<void*>(component, monster ? kMonsterChara : kEnemyChara);
+        void* holder = *chara ? calls::objectResult(calls::kGetContext, *chara) : nullptr;
+        void* context = holder ? refw::field<void*>(holder, kHolderUniqueId) : nullptr;
+        if (!context) return false;
+        const auto* value = static_cast<const uint8_t*>(context) + kContextUniqueId;
+        std::memcpy(key->rowId.data(), value, key->rowId.size());
+        std::memcpy(&key->index, value + kUniqueIdIndex, sizeof(key->index));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
+// The hooks only note the component: it is read on the game thread once the engine has finished it (resolvePending).
 void added(void** argv, int argc, bool monster) {
     void* component = argc > kFirstParam ? argv[kFirstParam] : nullptr;
-    const auto member = memberOf(component, monster);
-    if (!member) return;
+    if (!component) return;
     std::lock_guard lock(g_mutex);
-    g_own[reinterpret_cast<uintptr_t>(component)] = *member;
-    ++g_changes;
+    g_pending.push_back({component, monster, 0});
 }
 
 void removed(void** argv, int argc) {
     if (argc <= kFirstParam) return;
+    void* component = argv[kFirstParam];
     std::lock_guard lock(g_mutex);
-    if (g_own.erase(reinterpret_cast<uintptr_t>(argv[kFirstParam]))) ++g_changes;
+    std::erase_if(g_pending, [component](const Pending& pending) { return pending.component == component; });
+    if (g_own.erase(reinterpret_cast<uintptr_t>(component))) ++g_changes;
+}
+
+// Game thread: reads the keys of the components registered since the last step; one that never reads is dropped after 3 s.
+void resolvePending() {
+    std::vector<Pending> pending;
+    {
+        std::lock_guard lock(g_mutex);
+        pending.swap(g_pending);
+    }
+    std::vector<Pending> retry;
+    std::vector<roster::Member> resolved;
+    for (Pending& each : pending) {
+        roster::Member member{{}, each.component, nullptr, each.monster};
+        if (readMember(each.component, each.monster, &member.character, &member.key)) {
+            resolved.push_back(member);
+        } else if (++each.tries < kResolveTries) {
+            retry.push_back(each);
+        } else {
+            ++g_unreadable;
+        }
+    }
+    std::lock_guard lock(g_mutex);
+    for (const roster::Member& member : resolved) g_own[reinterpret_cast<uintptr_t>(member.component)] = member;
+    if (!resolved.empty()) ++g_changes;
+    g_pending.insert(g_pending.end(), retry.begin(), retry.end());
 }
 
 int preRegisterEnemy(int argc, void** argv, REFrameworkTypeDefinitionHandle*, unsigned long long) {
@@ -132,6 +174,11 @@ bool install() {
 }
 
 void tick(uint64_t nowMs) {
+    resolvePending();
+    if (g_unreadable) {
+        logger::write("roster: %u registered enemies never gave a key, left out", g_unreadable);
+        g_unreadable = 0;
+    }
     uint64_t changes = 0;
     const std::vector<roster_rule::Key> keys = ownKeys(changes);
     const bool ownChanged = changes != g_seenChanges;
