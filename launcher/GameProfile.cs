@@ -55,8 +55,9 @@ public sealed record ConflictProfile(string Name, List<string> Paths, string Int
 
 /// <summary>Where a game keeps its campaigns (<see cref="CampaignStore"/>): their folder relative to the game folder, the world's save
 /// folder inside each, the character file the adapter writes beside it, whether DD2gether's campaigns are brought in, and the
-/// character file of the game's own save (relative to the game folder).</summary>
-public sealed record CampaignsProfile(string Dir, string SaveFolder, string CharacterFile, bool ImportDd2gether = false, string? OwnCharacter = null);
+/// character file of the game's own save and the file a capture launch answers in (both relative to the game folder).</summary>
+public sealed record CampaignsProfile(string Dir, string SaveFolder, string CharacterFile, bool ImportDd2gether = false, string? OwnCharacter = null,
+    string CaptureResult = "coop/capture.result");
 
 /// <summary>When a Rendezvous game also builds the bridge: the host's value of option Key equals Value (SR2: transport=steam).</summary>
 public sealed record BridgeCondition(string Key, string Value);

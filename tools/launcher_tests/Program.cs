@@ -34,6 +34,7 @@ public static class Program
         DependencyInstallerTests.Run();
         CampaignStoreTests.Run();
         ConflictArchiveTests.Run();
+        CharacterCaptureTests.Run();
         BuildInfoTests.Run();
         MemberGraceTests.Run();
         SessionLeaveTests.Run();

@@ -54,6 +54,9 @@ public sealed record AppStatus(AppState State, ulong LobbyId = 0, int? RttMs = n
     /// <summary>This machine pressed START GAME (host) or READY (guest) in the session.</summary>
     public bool StartRequested { get; init; }
 
+    /// <summary>The guest's capture launch reading its character (<see cref="CharacterCapture"/>), null when none ran.</summary>
+    public CaptureView? Capture { get; init; }
+
     /// <summary>How much of the host's save has arrived (guest), 0 to 100.</summary>
     public int SavePercent { get; init; }
 

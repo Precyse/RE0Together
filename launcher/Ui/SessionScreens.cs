@@ -85,8 +85,17 @@ internal static partial class SessionScreens
             var mark = i < at ? StepMark.Done : i > at ? StepMark.Pending : failed != null ? StepMark.Failed : StepMark.Active;
             rows.Add(JoinRow(steps[i], mark, s, hostName, nowMs));
         }
+        if (s.Capture is { } capture) rows.Insert(steps.IndexOf(JoinStep.Waiting), CaptureRow(capture, s, nowMs));
         return rows;
     }
+
+    /// <summary>The capture launch's row: reading (with its timer), read, or why not (READY tries again).</summary>
+    private static StepRow CaptureRow(CaptureView capture, AppStatus s, long nowMs) => capture.State switch
+    {
+        CaptureState.Running => new StepRow("Reading your character", StepMark.Active, SinceTimer(s.StepSinceMs, nowMs), Indeterminate: true),
+        CaptureState.Done => new StepRow("Character read", StepMark.Done),
+        _ => new StepRow($"Character not read: {capture.Reason}", StepMark.Failed),
+    };
 
     private static StepRow JoinRow(JoinStep step, StepMark mark, AppStatus s, string hostName, long nowMs)
     {

@@ -152,6 +152,7 @@ public sealed partial class App
             LaunchedAtMs = _launchedAtMs, Invite = _invite, SaveFile = _saveMeter.CurrentFile, SaveBytes = _saveMeter.ReceivedBytes,
             SaveTotal = _saveMeter.TotalBytes, LobbyOpenedAtMs = _lobbyOpenedAtMs, StepSinceMs = StepSince(progress.Step),
             SessionStartedUnix = _lastListing?.StartedUnix ?? 0, Listing = _lastListing, StartRequested = _startRequested,
+            Capture = _capture?.View,
         };
     }
 

@@ -17,7 +17,6 @@ public static class OptionSources
     public const string CopyCampaign = "copy";
     private const string NewCampaignLabel = "New campaign";
     private const string CopyCampaignLabel = "New from own save";
-    public const string NotCapturedLabel = "(save once)";
     public const string SlotKey = "load_slot";
     public const string HashKey = "load_hash";
 
@@ -35,12 +34,18 @@ public static class OptionSources
         _ => [],
     };
 
-    /// <summary>A campaign's character as the Character list shows it: its name and level once the adapter captured it, else its name and
-    /// <see cref="NotCapturedLabel"/> (the character is carried only after its campaign was played and saved once).</summary>
+    /// <summary>A campaign's character as the Character list shows it: its name, and its level once the adapter read it.</summary>
     public static string CharacterLabel(GameProfile profile, string gameDir, CampaignStore.Campaign campaign) =>
         CampaignStore.CharacterLevel(CampaignStore.CharacterFile(profile, gameDir, campaign.Id)) is { } level
             ? $"{campaign.Name} / Lv {level}"
-            : $"{campaign.Name} {NotCapturedLabel}";
+            : campaign.Name;
+
+    /// <summary>The adapter ini key of the character a guest brings, or null for a game without one.</summary>
+    public static string? CharacterOptionKey(GameProfile profile) => profile.Options?.FirstOrDefault(option => option.Source == Characters)?.Key;
+
+    /// <summary>The character a guest picked: a campaign id, or empty for the game's own save; null for a game without the option.</summary>
+    public static string? PickedCharacter(GameProfile profile, string gameDir) =>
+        CharacterOptionKey(profile) is { } key ? GameOptions.Current(profile, gameDir)[key] : null;
 
     /// <summary>A game whose guest picks the character it brings: its game starts only once it pressed READY.</summary>
     public static bool GuestPicksCharacter(GameProfile profile) => profile.Options?.Any(option => option.Source == Characters) == true;
@@ -58,20 +63,14 @@ public static class OptionSources
         return CampaignStore.Create(profile, gameDir, name, ownSave).Id;
     }
 
-    /// <summary>The name of the character a guest picked when the adapter has not captured it yet (it could not be brought into the
-    /// host's world), or null when it was captured: a campaign's, or the game's own save's (named by the option's first value).</summary>
-    public static string? UncapturedCharacter(GameProfile profile, string gameDir)
+    /// <summary>Whether the adapter has not read the character a guest picked yet (a capture launch reads it first,
+    /// <see cref="CharacterCapture"/>): a campaign's, or the game's own save's.</summary>
+    public static bool CharacterUnread(GameProfile profile, string gameDir) => PickedCharacter(profile, gameDir) switch
     {
-        var option = profile.Options?.FirstOrDefault(candidate => candidate.Source == Characters);
-        if (option == null) return null;
-        var id = GameOptions.Current(profile, gameDir)[option.Key];
-        if (id.Length == 0)
-        {
-            return profile.Campaigns?.OwnCharacter is { } own && !File.Exists(Path.Combine(gameDir, own)) ? option.Values[0].Label : null;
-        }
-        if (File.Exists(CampaignStore.CharacterFile(profile, gameDir, id))) return null;
-        return CampaignStore.List(profile, gameDir).FirstOrDefault(campaign => campaign.Id == id)?.Name ?? id;
-    }
+        null => false,
+        "" => profile.Campaigns?.OwnCharacter is { } own && !File.Exists(Path.Combine(gameDir, own)),
+        var id => !File.Exists(CampaignStore.CharacterFile(profile, gameDir, id)),
+    };
 
     /// <summary>The world save folder of the campaign a host chose, or null when it plays its own save.</summary>
     public static string? CampaignSaveDir(GameProfile profile, string gameDir)

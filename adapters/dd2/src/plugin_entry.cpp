@@ -99,7 +99,7 @@ extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFram
     if (puppets) modules |= wire_dd2::kModulePuppet;
     if (enemies) modules |= wire_dd2::kModuleEnemySync;
     const wire_dd2::GameHello hello{build_gate::kSupportedTimeDateStamp, refw::tdbHash(), namesHash(), wire_dd2::kProto, modules};
-    session::start(config.port, hello);
+    if (config.captureSlot < 0) session::start(config.port, hello);  // a capture launch is not the session's game
     const bool ticking = tick::install();
     logger::write("dd2coop: %s, modules 0x%X", ticking ? "on" : "tick unavailable, off", modules);
     return true;

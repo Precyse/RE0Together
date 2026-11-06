@@ -17,7 +17,7 @@
       "reframework/data/ch253_hook.log" ] } ],
   "campaigns": { "dir": "coop/campaigns", "saveFolder": "win64_save", "characterFile": "profile.dd2p", "importDd2gether": true,
     "ownCharacter": "coop/profile/profile.dd2p" },
-  "options": [ { "key": "campaign", "label": "Campaign", "source": "campaigns", "values": [ { "value": "", "label": "Own save" } ] },
-               { "key": "arisen", "label": "Character", "source": "characters", "values": [ { "value": "", "label": "Own save" } ] } ],
+  "options": [ { "key": "campaign", "label": "Campaign", "source": "campaigns", "values": [ { "value": "", "label": "Your save" } ] },
+               { "key": "arisen", "label": "Character", "source": "characters", "values": [ { "value": "", "label": "Your Arisen" } ] } ],
   "saveBackup": { "dir": "{steamuserdata}/{steamaccountid}/2054970/remote/win64_save", "into": "coop/archive/real", "keep": 10 },
   "crashFiles": ["coop/crash-*.dmp", "coop/hang-*.dmp", "coop/caught-*.dmp", "reframework_crash.dmp"] }

@@ -11,7 +11,7 @@ public static class AdapterSettings
     public const int MaxArchives = 20;
     public const int KeptArchiveDays = 30;
 
-    private const string CoopKey = "coop";
+    internal const string CoopKey = "coop";
 
     /// <summary>Sets coop=1 and one line per game option (the adapter reads the ini once, at its start).</summary>
     public static void EnableCoop(string gameDir, GameProfile profile, IReadOnlyDictionary<string, string> options)

@@ -39,6 +39,7 @@ public sealed partial class App
     private bool _launchPending;
     private bool _startHeld;
     private bool _startRequested;
+    private CharacterCapture? _capture;  // a guest's capture launch, kept until the session ends so its outcome stays on show
     private bool _hostStarted;
     private long? _launchedAtMs;
     private bool _bridgeWasReady;
@@ -439,17 +440,11 @@ public sealed partial class App
             Refuse(RefusalKind.SaveTimedOut);
             return false;
         }
-        if (_saveSync?.Ready == false || StartGateClosed()) return true;
+        if (_saveSync?.Ready == false || CharacterNotReady() || StartGateClosed()) return true;
         if (!SaveMatchesHost())
         {
             Log.Info("The save received from the host does not hold the slot the host loads, not launching the game");
             Refuse(RefusalKind.SaveDiffers);
-            return false;
-        }
-        if (_session?.IsHost == false && _gameDir != null && OptionSources.UncapturedCharacter(_profile!, _gameDir) is { } character)
-        {
-            Log.Info($"The character {character} was never saved with the mod, not launching the game");
-            Refuse(RefusalKind.CharacterNotSaved, character);
             return false;
         }
         _launchPending = false;
@@ -479,6 +474,23 @@ public sealed partial class App
         var hostStep = isHost ? SessionStep.None : HostStep();
         _hostStarted |= StartGate.HostStarted(hostStep);
         return !StartGate.Open(isHost, _startHeld, _startRequested, hostStep, _hostStarted, OptionSources.GuestPicksCharacter(_profile!));
+    }
+
+    /// <summary>A guest that pressed READY with a character the adapter has not read yet: the capture launch runs first
+    /// (<see cref="CharacterCapture"/>); a failure takes READY back so the player can press it again.</summary>
+    private bool CharacterNotReady()
+    {
+        if (_session?.IsHost != false || _gameDir == null || !_startRequested) return false;
+        if (_capture is { View.State: CaptureState.Running } running)
+        {
+            running.Pump(Environment.TickCount64);
+            if (running.View.State == CaptureState.Failed) _startRequested = false;
+            return true;
+        }
+        if (!OptionSources.CharacterUnread(_profile!, _gameDir)) return false;
+        _capture = CharacterCapture.Start(_profile!, _gameDir, OptionSources.PickedCharacter(_profile!, _gameDir)!, Environment.TickCount64);
+        if (_capture.View.State == CaptureState.Failed) _startRequested = false;
+        return true;
     }
 
     private SessionStep HostStep() =>
@@ -573,6 +585,7 @@ public sealed partial class App
         _launchPending = false;
         _startHeld = false;
         _startRequested = false;
+        _capture = null;
         _hostStarted = false;
         _hostStartedUnix = 0;
         _launchedAtMs = null;
