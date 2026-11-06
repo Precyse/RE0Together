@@ -56,13 +56,17 @@ public static class OptionSources
     }
 
     /// <summary>The name of the character a guest picked when the adapter has not captured it yet (it could not be brought into the
-    /// host's world), or null when it picked its own save's or one that was captured.</summary>
+    /// host's world), or null when it was captured: a campaign's, or the game's own save's (named by the option's first value).</summary>
     public static string? UncapturedCharacter(GameProfile profile, string gameDir)
     {
         var option = profile.Options?.FirstOrDefault(candidate => candidate.Source == Characters);
         if (option == null) return null;
         var id = GameOptions.Current(profile, gameDir)[option.Key];
-        if (id.Length == 0 || File.Exists(CampaignStore.CharacterFile(profile, gameDir, id))) return null;
+        if (id.Length == 0)
+        {
+            return profile.Campaigns?.OwnCharacter is { } own && !File.Exists(Path.Combine(gameDir, own)) ? option.Values[0].Label : null;
+        }
+        if (File.Exists(CampaignStore.CharacterFile(profile, gameDir, id))) return null;
         return CampaignStore.List(profile, gameDir).FirstOrDefault(campaign => campaign.Id == id)?.Name ?? id;
     }
 

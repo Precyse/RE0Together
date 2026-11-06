@@ -72,7 +72,6 @@ public static class Program
         SaveSyncTimeoutTests.Run();
         SavePathsTests.Run();
         SaveBackupTests.Run();
-        SaveOwnFilesTests.Run();
         AdapterSettingsTests.Run();
         LogForwarderTests.Run();
         CrashFilesTests.Run();

@@ -12,11 +12,10 @@ public sealed record AdapterFile(string Src, string Dst, bool Folder = false, st
 
 /// <summary>Save sync settings. Fixed files come from the Steam cloud folder (SteamRemoteFiles). A game that keeps its
 /// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host
-/// then sends whatever matches, announced first by a manifest. GuestOwnFiles are never sent: a guest copies its own (its
-/// system save, options and key binds) from its own save folder into the session folder before its game starts.</summary>
+/// then sends whatever matches, announced first by a manifest.</summary>
 public sealed record SaveSyncProfile(
     List<string> SteamRemoteFiles, string SessionDir,
-    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null, List<string>? GuestOwnFiles = null);
+    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
 
 /// <summary>A game whose players each keep their own save gets a copy of that save folder before and after every session
 /// (<see cref="SaveBackup"/>): Dir is the save folder template, Into the backup folder relative to the game folder.</summary>
@@ -44,13 +43,14 @@ public sealed record DependencySource(string Url, string Sha256, List<Dependency
 /// <summary>One zip entry (From) and where it goes, relative to the game folder (To).</summary>
 public sealed record DependencyFile(string From, string To);
 
-/// <summary>Where a game keeps its campaigns (<see cref="CampaignStore"/>): their folder relative to the game folder, the world's save
-/// folder inside each, the character file the adapter writes beside it, and whether DD2gether's campaigns are brought in.</summary>
 /// <summary>Another mod that must not run beside ours: its name, its paths relative to the game folder (files or folders, its
 /// data and saves included) and the folder, relative to the game folder, it is archived into (<see cref="ConflictArchive"/>).</summary>
 public sealed record ConflictProfile(string Name, List<string> Paths, string Into);
 
-public sealed record CampaignsProfile(string Dir, string SaveFolder, string CharacterFile, bool ImportDd2gether = false);
+/// <summary>Where a game keeps its campaigns (<see cref="CampaignStore"/>): their folder relative to the game folder, the world's save
+/// folder inside each, the character file the adapter writes beside it, whether DD2gether's campaigns are brought in, and the
+/// character file of the game's own save (relative to the game folder).</summary>
+public sealed record CampaignsProfile(string Dir, string SaveFolder, string CharacterFile, bool ImportDd2gether = false, string? OwnCharacter = null);
 
 /// <summary>When a Rendezvous game also builds the bridge: the host's value of option Key equals Value (SR2: transport=steam).</summary>
 public sealed record BridgeCondition(string Key, string Value);

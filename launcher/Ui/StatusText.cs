@@ -27,7 +27,7 @@ public static class StatusText
         RefusalKind.RejoinGaveUp => "Could not rejoin",
         RefusalKind.PortInUse => $"Port {refusal.Detail} in use",
         RefusalKind.LaunchFailed => "Game did not start",
-        RefusalKind.CharacterNotSaved => $"{refusal.Detail} not saved yet: host it once and save",
+        RefusalKind.CharacterNotSaved => $"{refusal.Detail} character not saved yet: play it once with the mod and save",
         _ => refusal.Kind.ToString(),
     };
 }
