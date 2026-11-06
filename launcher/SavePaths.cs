@@ -54,5 +54,8 @@ public static class SavePaths
         return account == 0 ? null : (uint)account;
     }
 
-    private static ulong? SteamId64() => SteamAccountId() is { } account ? SteamId64Base + account : null;
+    /// <summary>The SteamID64 of a Steam account id.</summary>
+    public static ulong SteamId64Of(uint accountId) => SteamId64Base + accountId;
+
+    private static ulong? SteamId64() => SteamAccountId() is { } account ? SteamId64Of(account) : null;
 }

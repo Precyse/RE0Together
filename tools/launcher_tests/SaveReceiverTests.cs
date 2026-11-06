@@ -12,13 +12,13 @@ public static class SaveReceiverTests
 
     private sealed class Rig : IDisposable
     {
-        public Rig(bool gameRunning)
+        public Rig(bool gameRunning, Action<string>? resignFile = null)
         {
             Root = Path.Combine(Path.GetTempPath(), "cf_receiver_" + Guid.NewGuid().ToString("N"));
             Session = Path.Combine(Root, "session");
             Staging = Path.Combine(Session, SaveReceiver.StagingFolder);
             Transport = new RecordingTransport();
-            Receiver = new SaveReceiver(new SaveSyncProfile([SaveName], "coop/session"), Session, Staging, Transport, () => Host, gameRunning);
+            Receiver = new SaveReceiver(new SaveSyncProfile([SaveName], "coop/session"), Session, Staging, Transport, () => Host, gameRunning, resignFile);
         }
 
         public string Root { get; }
@@ -45,6 +45,8 @@ public static class SaveReceiverTests
         RunningGameStagesTheFirstSet();
         LockedTempFileAcksFalse();
         LockedTargetAcksFalse();
+        ResignedBeforeItIsMoved();
+        UnresignableFileIsRefused();
     }
 
     private static void FirstSetGoesToSession()
@@ -90,5 +92,24 @@ public static class SaveReceiverTests
 
         rig.Deliver(2);
         Check.That(rig.Receiver.Complete && File.ReadAllBytes(target).SequenceEqual(Content), "the resend after the lock is gone completes the set");
+    }
+
+    private static void ResignedBeforeItIsMoved()
+    {
+        byte[] resigned = [9, 9, 9];
+        using var rig = new Rig(gameRunning: false, path => File.WriteAllBytes(path, resigned));
+        rig.Deliver(1);
+        Check.That(rig.Receiver.Complete && File.ReadAllBytes(Path.Combine(rig.Session, SaveName)).SequenceEqual(resigned),
+            "a re-signing profile: the session holds the re-signed bytes");
+        Check.That(rig.Acks().SequenceEqual([true]), "a re-signing profile: the re-signed file is acknowledged");
+    }
+
+    private static void UnresignableFileIsRefused()
+    {
+        using var rig = new Rig(gameRunning: false, _ => throw new InvalidDataException("not this account"));
+        rig.Deliver(1);
+        Check.That(!rig.Receiver.Complete && !File.Exists(Path.Combine(rig.Session, SaveName)), "a file that cannot be re-signed never reaches the session");
+        Check.That(rig.Acks().SequenceEqual([false]) && !File.Exists(Path.Combine(rig.Session, SaveName + SaveReceiver.TempSuffix)),
+            "a file that cannot be re-signed is refused with a negative ACK and no temp file is left");
     }
 }

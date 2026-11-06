@@ -55,6 +55,7 @@ The C# launcher: core, view models, the WebView2 host and the page. Index and "w
 | tools/launcher_tests/ScreensTests.cs, LobbyRowsTests.cs | unit tests of `Screens.For` (a guest in the lobby is on hosting, joining only for a refusal or a starting game) / `Between` and of `LobbyRowModels` (rows, filters, the action rules, the red mod build) | `ScreensTests.Run`, `LobbyRowsTests.Run` |
 | tools/launcher_tests/CrashFilesTests.cs | unit tests of crash reporting: destination path and names, `CrashQueue` (new after start, stable size, once, 64 MB cap), `CrashIncidents` | `CrashFilesTests.Run` |
 | tools/launcher_tests/LobbyListingTests.cs, LobbyDirectoryTests.cs | unit tests of the lobby data: `LobbyListing.Decode` from a dictionary (missing and malformed numbers), the `RosterCodec` round trip and malformed lines, listing equality, `LobbyDirectory.Select` | `LobbyListingTests.Run`, `LobbyDirectoryTests.Run` |
+| tools/launcher_tests/SaveResignTests.cs | unit tests of the Mandarin re-sign: checksum and cipher vectors taken from MandarinJuice's own code, the user id variants, a file re-signed for another account opens for it only (both flavors, several sizes), bad files refused (not DSSS, truncated, changed byte, unknown flavor, other seed), `ResignFile` leaves a refused file alone, the `resign` key validated at profile load (the receiver's side is in `SaveReceiverTests.cs`) | `SaveResignTests.Run` |
 | tools/launcher_tests/BlowfishTests.cs, SaveIndexTests.cs, OptionSourcesTests.cs, SaveFixture.cs | unit tests of the forced save load's launcher half | `BlowfishTests.Run`, `SaveIndexTests.Run`, `OptionSourcesTests.Run` |
 | Session.cs | slots, epochs, membership diffs, frame routing (a frame for a slot with no peer is dropped); `SlotOf(member)` (the session slot, null before the slot map has it); forwards the bridge's `OptionSet`; leaving on purpose: LEAVING from a guest drops it at once (`MemberGrace.Depart`), from the host or a KICK from it ends a guest's session (`EndedBy` = `HostLeft` / `Removed`), `Kick` removes a guest and keeps it out of the slots and the players (KICK again while it stays a lobby member), `AnnounceLeaving` | `ApplyMembership`, `Hold`, `Rebind`, `HostMissing`, `RttOf`, `IsSilent`, `Kick`, `IsKicked`, `AnnounceLeaving`, `EndedBy` |
 | FreshQueue.cs | pure newest-wins queue for a profile's `freshTypes` (unit tested) | `FreshQueue.Accepts`, `Enqueue`, `Drain` (an empty queue returns at once: every pump calls it), `ParseTypes`, `ForProfile` |
@@ -77,9 +78,9 @@ The C# launcher: core, view models, the WebView2 host and the page. Index and "w
 | PackFile.cs | reads one named entry of a Saints Row 2 version 4 `.vpp_pc` read-only (header 0x150/0x154, 0x800 alignment, directory, names, extensions) | `PackFile.ReadEntry` |
 | ScriptDelta.cs | the recipe `adapters/sr2/scripts.delta.json` (written by `tools/sr2/lua_delta.py`) | `ScriptDelta.Load`, `Find`, `Build`, `ScriptDeltaException` |
 | games/re0.json, games/sr2.json, games/ds2.json | per-game profiles: exe, adapter files, options and their values (re0 keys mirror adapters/re0/src/option_values.h); ds2 is not shipped |  |
-| GameProfile.cs | `games/<id>.json` loader, `adapterFiles` | `Load`, `ListIds`, `NativeSession`, `RendezvousSession`, `MissingRequirement`, `HasCharacterSelect`, ... |
+| GameProfile.cs | `games/<id>.json` loader, `adapterFiles`; `saveSync.resign` (`ResignProfile`: kind, seed, variant) is validated at load by `SaveResigner.Problem` | `Load`, `ListIds`, `NativeSession`, `RendezvousSession`, `MissingRequirement`, `HasCharacterSelect`, ... |
 | GameOptions.cs | the player's option values (settings choice if still offered, else the first value); the adapter ini's `role` | `Current`, `HostValues`, `OwnValues`, `ForAdapter`, `Encode`, `Decode`, ... |
-| SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate; the guest takes the host id from `session.HostId`; a host that picks another campaign while hosting sends that world to every peer again (`Retarget`) | `Create`, `Ready`, `TimedOut`, `EnableAdapter`, `CopyOwnFiles`, `Pump`, `SaveSyncTimeout` |
+| SaveSyncCoordinator.cs | save sync per session: host sender or guest receiver, launch gate; the guest takes the host id from `session.HostId`, and with a profile `saveSync.resign` hands the receiver the rewrite of a file from the host's SteamID64 (`session.HostId`) to its own (`ResignFor`; no signed-in Steam user refuses the session); a host that picks another campaign while hosting sends that world to every peer again (`Retarget`) | `Create`, `Ready`, `TimedOut`, `EnableAdapter`, `CopyOwnFiles`, `Pump`, `SaveSyncTimeout` |
 | LogForwarder.cs | guest log mirror to the host: new adapter-log bytes, one 32 KiB chunk every 2 s (LOG_APPEND 0x0050) until `Flush` lifts the pace and sends the rest at once | `Create`, `Pump`, `Flush`, `ExpiredPeerLogs`, `IsPeerLog` |
 | CrashSender.cs | guest crash files to the host: every second `Poll` reads the game process | `Create`, `Pump`, `Poll` |
 | CrashReceiver.cs | host: takes the guest's crash files (FILE_BEGIN / CHUNK / END, the `<stamp>/<file>` wire name checked by `CrashRules.TryParseWireName`, 64 MiB, sha256) | `Attach`, `OnFrame` |
@@ -97,10 +98,10 @@ The C# launcher: core, view models, the WebView2 host and the page. Index and "w
 | FriendLobbies.cs | friends running the launcher with a lobby in their rich presence (Steam, loop thread) and the pure `Select` (known games, one row per lobby, sorted by name, at most 4) | `Read`, `Select` |
 | SteamAvatars.cs | Steam avatars of the wanted users as RGBA (`AvatarImage`) | `Want`, `Pump`, `ResendAll`, `Loaded` |
 | SaveSender.cs | host: chooses the files for a new peer and queues them on a `FileStreamer` (paced FILE_BEGIN/CHUNK/END, resent until ACK ok) | `SendTo`, `SendChanged`, `OnAck`, `Pump` |
-| SavePaths.cs | save folder templates: `{documents}`, `{localappdata}`, `{steamid64}`, `{steamaccountid}` (Steam's ActiveUser registry value), `{steamuserdata}` (Steam's userdata folder) | `Expand`, `Folders`, `SteamAccountId` |
+| SavePaths.cs | save folder templates: `{documents}`, `{localappdata}`, `{steamid64}`, `{steamaccountid}` (Steam's ActiveUser registry value), `{steamuserdata}` (Steam's userdata folder) | `Expand`, `Folders`, `SteamAccountId`, `SteamId64Of` |
 | SaveBackup.cs | per-session copies of a game's own save folder (profile `saveBackup`: dir, into, keep): stamped before/after folders with a SHA-256 manifest, newest sessions kept, restore refused while the game runs or when a copy changed | `Take`, `Restore`, `List` |
 | SaveWatcher.cs | host: FileSystemWatcher on the save folder; reports a changed save once it has been quiet for 3 s (retry by touching it again) | `Touch`, `TakeSettled` |
-| SaveReceiver.cs | guest: temp file (`TempSuffix` .part), sha256 check, move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest | `OnFrame`, `Complete`, `PromoteStaged`, `MaxFileBytes`, `TempSuffix` |
+| SaveReceiver.cs | guest: temp file (`TempSuffix` .part), sha256 check, re-sign for this Steam account when the profile says so (a file that cannot be is refused like a failed hash), move into session dir (or the profile's `guestSaveDir`), FILE_ACK; expects the profile's list or the host's manifest | `OnFrame`, `Complete`, `PromoteStaged`, `MaxFileBytes`, `TempSuffix` |
 | FileMessages.cs | FILE_* payload builders/parsers (through `Framing.Reliable`); `IsWireName` and `MaxManifestNames` = what the manifest can carry | `Begin`, `Chunk`, `Manifest`, `TryParseBegin`, `TryParseManifest`, `IsWireName`, ... |
 | AdapterSettings.cs | `coop=` and the game's option keys in the adapter ini (one `SetKeys` writer; `WriteOptions` = the option keys alone, for a native-session game), session dir cleanup after copying its files | `EnableCoop(gameDir, profile, options)`, `WriteOptions`, `Reset`, `ExpiredArchives`, `ArchiveFolder`, `ArchiveRoot` |
 | NativeJoin.cs | rendezvous games (SR2): writes `<game>\coop\sr2_join.txt` | `Create`, `Pump`, `Rebind`, `Readable` |
@@ -112,6 +113,21 @@ The C# launcher: core, view models, the WebView2 host and the page. Index and "w
 | SteamLibrary.cs | game folder and installed build id from libraryfolders.vdf + appmanifest; a file that cannot be read is skipped (logged once), a parsed file is reused until its write time changes | `FindGameDir`, `SteamRoot`, `InstalledBuild(appId, gameDir)`, `ParseLibraryPaths`, `ParseManifest`, `ReadManifest` Custom Steam artwork: `CustomArtFiles`. |
 | RepoPaths.cs | repo root / games dir discovery |  |
 | Log.cs | timestamped console log; `Written` event feeds the GUI log pane; `Event` = a player-facing line (also an Info line) for `SubscribeEvents` listeners with a 50 line history | `Info`, `Event`, `FileOnly`, `Subscribe`, `SubscribeEvents`, `WriteToFile`, ... |
+
+## launcher/SaveResign/ (the Mandarin save re-sign, namespace CoopLauncher.SaveResign)
+
+Dragon's Dogma 2 (RE Engine "DSSS" files) encrypts each save for the Steam account that wrote it, so a guest's game cannot read the host's synced files until they are re-signed for the guest. Ported from MandarinJuice (MIT, `SaveResign/THIRD_PARTY.md`); the game's parameters are in the profile (`saveSync.resign`: `kind` `mandarin`, `seed`, `variant`), not in files. Used by `SaveSyncCoordinator.ResignFor` and `SaveReceiver`.
+
+| file | owns | key members |
+|---|---|---|
+| SaveResigner.cs | the entry point: the profile key's validation and the re-sign of bytes or of a file (decrypt for the old SteamID64, encrypt for the new one, same flavor) | `SaveResigner.Problem`, `Resign`, `ResignFile`, `MandarinKind` |
+| MandarinSaveFile.cs | the DSSS file: header (magic, flavor `Default` 0x10 or `Compressible` 0x18 = deflate before encrypting), the data, the 140-byte footer (salt, decrypted length, MurmurHash3 signature); one game mixes both flavors | `MandarinSaveFile.Decrypt`, `Encrypt`, `FlavorOf`, `IsMandarin`, `MandarinFlavor` |
+| MandarinCipher.cs | the data cipher: slice sizes from the seed, slice headers (wrapped keys, checksum, SplitMix stream layer), AES-128 stream over the data | `MandarinCipher.Decrypt`, `Encrypt` |
+| MandarinKeys.cs | the key wrap of a slice header as `BigInteger` arithmetic (replaces MandarinJuice's 2048-bit containers) | `MandarinKeys.PersonalSeed`, `Wrap`, `Unwrap` |
+| MandarinSliceChecksum.cs | the 64-bit checksum of a slice's data, one routine per length class | `MandarinSliceChecksum.Of` |
+| MandarinUserId.cs | the user id a game encrypts for, from a SteamID64 by the profile's variant (0 to 3; Dragon's Dogma 2 uses 1) | `MandarinUserId.FromSteamId64`, `IsSupported` |
+| Murmur3.cs | MurmurHash3 (32 bit) over words, the file signature | `Murmur3.Hash` |
+| THIRD_PARTY.md | source, version and licence text of the ported code | |
 
 ## launcher/Ui/ (pure view models the web snapshot uses, namespace CoopLauncher.Gui)
 

@@ -4,7 +4,9 @@ namespace CoopLauncher;
 /// Once the first full set has arrived, later files (the host saving mid-session) go to a staging folder instead, and
 /// <see cref="PromoteStaged"/> moves them into the session dir when the game is not running, so the guest's own saves
 /// are never replaced under a running game. A guest whose game already runs (it rejoined) stages the first set as well. A file
-/// that cannot be written (the game, antivirus or a sync tool holds it) fails only that transfer: the host is told and resends.</summary>
+/// that cannot be written (the game, antivirus or a sync tool holds it) fails only that transfer: the host is told and resends.
+/// A profile that re-signs its saves has every verified file rewritten for this machine's Steam account before it is moved; a file
+/// that cannot be re-signed is refused like one that fails its hash.</summary>
 public sealed class SaveReceiver
 {
     /// <summary>The largest file a guest takes; the host does not send a set that holds a bigger one.</summary>
@@ -26,12 +28,16 @@ public sealed class SaveReceiver
     private readonly ITransport _transport;
     private readonly Func<ulong> _hostId;
     private readonly bool _gameRunning;
+    private readonly Action<string>? _resignFile;
     private readonly Dictionary<uint, Incoming> _incoming = new();
     private readonly HashSet<string> _received = [];
     private List<string>? _expected;  // the host's manifest when the profile sends by pattern
     private bool _initialSetDone;
 
-    public SaveReceiver(SaveSyncProfile config, string sessionDir, string stagingDir, ITransport transport, Func<ulong> hostId, bool gameRunning)
+    /// <param name="resignFile">Rewrites a received file for this machine's Steam account (throws <see cref="InvalidDataException"/> when it
+    /// cannot); null when the game's saves are not tied to an account.</param>
+    public SaveReceiver(SaveSyncProfile config, string sessionDir, string stagingDir, ITransport transport, Func<ulong> hostId, bool gameRunning,
+        Action<string>? resignFile = null)
     {
         _config = config;
         _sessionDir = sessionDir;
@@ -39,6 +45,7 @@ public sealed class SaveReceiver
         _transport = transport;
         _hostId = hostId;
         _gameRunning = gameRunning;
+        _resignFile = resignFile;
         if (config.FilePattern == null) _expected = config.SteamRemoteFiles;
         UpdateComplete();
     }
@@ -140,7 +147,8 @@ public sealed class SaveReceiver
         if (!_incoming.TryGetValue(id, out var incoming)) return;
         incoming.Stream.Dispose();
         var begin = incoming.Begin;
-        var ok = new FileInfo(incoming.TempPath).Length == begin.Size && FileMessages.HashMatches(incoming.TempPath, begin.Hash);
+        var ok = new FileInfo(incoming.TempPath).Length == begin.Size && FileMessages.HashMatches(incoming.TempPath, begin.Hash)
+                 && Resigned(incoming);
         if (ok)
         {
             File.Move(incoming.TempPath, Path.Combine(incoming.FinalDir, begin.Name), overwrite: true);
@@ -156,6 +164,21 @@ public sealed class SaveReceiver
             Log.Info($"Save sync: {begin.Name} failed verification");
         }
         _transport.Send(sender, FileMessages.Ack(id, ok));
+    }
+
+    private bool Resigned(Incoming incoming)
+    {
+        if (_resignFile == null) return true;
+        try
+        {
+            _resignFile(incoming.TempPath);
+            return true;
+        }
+        catch (InvalidDataException e)
+        {
+            Log.Info($"Save sync: {incoming.Begin.Name} could not be re-signed for this Steam account ({e.Message})");
+            return false;
+        }
     }
 
     private void UpdateComplete()

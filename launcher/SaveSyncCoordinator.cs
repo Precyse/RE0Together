@@ -1,3 +1,5 @@
+using CoopLauncher.SaveResign;
+
 namespace CoopLauncher;
 
 /// <summary>When a guest gives up waiting for the host's save set: nothing from the host at all within
@@ -86,10 +88,22 @@ public sealed class SaveSyncCoordinator : IDisposable
             : config.SessionDir;
         var stagingDir = Path.Combine(gameDir, config.SessionDir, SaveReceiver.StagingFolder);
         var sessionDir = Path.Combine(gameDir, guestDir);
-        var receiver = new SaveReceiver(config, sessionDir, stagingDir, transport, () => session.HostId, GameLauncher.IsRunning(profile));
+        var receiver = new SaveReceiver(config, sessionDir, stagingDir, transport, () => session.HostId, GameLauncher.IsRunning(profile),
+            ResignFor(profile, config, steamAccountId, session));
         var coordinator = new SaveSyncCoordinator(profile, gameDir, null, receiver, null, () => [], () => session.HostId);
         session.FileFrameReceived += coordinator.OnFileFrame;
         return coordinator;
+    }
+
+    /// <summary>Guest: the rewrite of a received file from the host's Steam account (the session's host id) to this machine's, or null when
+    /// the profile does not re-sign. Throws <see cref="InvalidOperationException"/> when no Steam user is signed in.</summary>
+    private static Action<string>? ResignFor(GameProfile profile, SaveSyncProfile config, uint? steamAccountId, Session session)
+    {
+        if (config.Resign is not { } resign) return null;
+        var localSteamId = steamAccountId is { } account
+            ? SavePaths.SteamId64Of(account)
+            : throw new InvalidOperationException($"No Steam user for {profile.Name} (its saves are re-signed to the signed-in Steam user)");
+        return path => SaveResigner.ResignFile(path, resign, session.HostId, localSteamId);
     }
 
     /// <summary>The host's save folder from the profile's template, else the Steam cloud cache; null when neither is known here.</summary>

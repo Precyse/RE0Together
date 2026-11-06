@@ -69,6 +69,7 @@ public static class Program
         RunModInstallSuites();
         SaveSenderTests.Run();
         SaveReceiverTests.Run();
+        SaveResignTests.Run();
         SaveSyncTimeoutTests.Run();
         SavePathsTests.Run();
         SaveBackupTests.Run();
@@ -117,6 +118,7 @@ public static class Program
     {
         SaveSenderTests.Run();
         SaveReceiverTests.Run();
+        SaveResignTests.Run();
         LogForwarderTests.Run();
         CrashFilesTests.Run();
         ReportBundleTests.Run();

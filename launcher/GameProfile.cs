@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CoopLauncher.SaveResign;
 
 namespace CoopLauncher;
 
@@ -12,10 +13,15 @@ public sealed record AdapterFile(string Src, string Dst, bool Folder = false, st
 
 /// <summary>Save sync settings. Fixed files come from the Steam cloud folder (SteamRemoteFiles). A game that keeps its
 /// saves elsewhere names the folders as templates ({documents}, {steamid64}; see SavePaths) and a FilePattern: the host
-/// then sends whatever matches, announced first by a manifest.</summary>
+/// then sends whatever matches, announced first by a manifest. A game whose saves are encrypted for the Steam account that wrote
+/// them names how to re-sign them (Resign): a guest rewrites every received file for its own account.</summary>
 public sealed record SaveSyncProfile(
     List<string> SteamRemoteFiles, string SessionDir,
-    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null);
+    string? HostSaveDir = null, string? GuestSaveDir = null, string? FilePattern = null, ResignProfile? Resign = null);
+
+/// <summary>How a game's saves are re-signed: Kind names the scheme (<see cref="SaveResigner.MandarinKind"/>), Seed is the game's
+/// seed of that scheme (a decimal or 0x-hex 64-bit number) and Variant how the scheme's user id is derived from a SteamID64.</summary>
+public sealed record ResignProfile(string Kind, string Seed, uint Variant);
 
 /// <summary>A game whose players each keep their own save gets a copy of that save folder before and after every session
 /// (<see cref="SaveBackup"/>): Dir is the save folder template, Into the backup folder relative to the game folder.</summary>
@@ -154,6 +160,8 @@ public sealed record GameProfile(
                 if (required.Install is { } source && DependencyInstaller.Problem(source) is { } problem)
                     throw new InvalidDataException($"{required.Name}: {problem}");
             }
+            if (profile.SaveSync?.Resign is { } resign && SaveResigner.Problem(resign) is { } resignProblem)
+                throw new InvalidDataException(resignProblem);
         }
         catch (InvalidDataException e)
         {
