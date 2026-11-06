@@ -41,6 +41,12 @@ public static class SessionProgressTests
         Check.That(StartGate.Open(true, held: false, requested: false, SessionStep.None, latched: false), "a host with nothing held (command line, game running) is open");
         Check.That(!StartGate.Open(true, held: true, requested: false, SessionStep.None, latched: false), "a held host waits for START GAME");
         Check.That(StartGate.Open(true, held: true, requested: true, SessionStep.None, latched: false), "and starts once it asked");
+        Check.That(!StartGate.Open(false, held: true, requested: false, SessionStep.InGame, latched: true, guestConfirms: true),
+            "a guest that picks its character waits for its READY even once the host is in");
+        Check.That(!StartGate.Open(false, held: true, requested: true, SessionStep.Ready, latched: false, guestConfirms: true),
+            "and, ready, still waits for the host to start");
+        Check.That(StartGate.Open(false, held: true, requested: true, SessionStep.InGame, latched: false, guestConfirms: true),
+            "and starts once both are so");
         Check.That(!StartGate.Open(true, held: true, requested: false, SessionStep.InGame, latched: true), "the host's gate ignores what the host publishes");
         Check.That(StartGate.Open(false, held: false, requested: false, SessionStep.None, latched: false), "a guest with nothing held is open");
         Check.That(!StartGate.Open(false, held: true, requested: true, SessionStep.Ready, latched: false), "a held guest waits while the host is ready");

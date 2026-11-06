@@ -101,9 +101,10 @@ public sealed partial class App
     });
 
     /// <summary>The host's START GAME: opens the start gate, so the held launch goes ahead. Ignored for a guest and when nothing is held.</summary>
+    /// <summary>The host's START GAME, or a guest's READY (a game where the guest picks its character, <see cref="OptionSources.GuestPicksCharacter"/>).</summary>
     public void StartGame() => _commands.Enqueue(() =>
     {
-        if (_startHeld && _hostId == _transport!.LocalId) _startRequested = true;
+        if (_startHeld) _startRequested = true;
     });
 
     /// <summary>The host removes a guest from the session: it is told to leave and does not count among the lobby's players again.</summary>
@@ -477,7 +478,7 @@ public sealed partial class App
         var isHost = _hostId == _transport!.LocalId;
         var hostStep = isHost ? SessionStep.None : HostStep();
         _hostStarted |= StartGate.HostStarted(hostStep);
-        return !StartGate.Open(isHost, _startHeld, _startRequested, hostStep, _hostStarted);
+        return !StartGate.Open(isHost, _startHeld, _startRequested, hostStep, _hostStarted, OptionSources.GuestPicksCharacter(_profile!));
     }
 
     private SessionStep HostStep() =>

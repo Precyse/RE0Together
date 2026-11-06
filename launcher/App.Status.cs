@@ -151,7 +151,7 @@ public sealed partial class App
             Refusal = _refusal, Step = progress.Step, SavePercent = progress.Percent, Seats = view.Seats, HostOptions = view.HostOptions,
             LaunchedAtMs = _launchedAtMs, Invite = _invite, SaveFile = _saveMeter.CurrentFile, SaveBytes = _saveMeter.ReceivedBytes,
             SaveTotal = _saveMeter.TotalBytes, LobbyOpenedAtMs = _lobbyOpenedAtMs, StepSinceMs = StepSince(progress.Step),
-            SessionStartedUnix = _lastListing?.StartedUnix ?? 0, Listing = _lastListing,
+            SessionStartedUnix = _lastListing?.StartedUnix ?? 0, Listing = _lastListing, StartRequested = _startRequested,
         };
     }
 

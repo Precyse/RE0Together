@@ -42,6 +42,9 @@ public static class OptionSources
             ? $"{campaign.Name} / Lv {level}"
             : $"{campaign.Name} {NotCapturedLabel}";
 
+    /// <summary>A game whose guest picks the character it brings: its game starts only once it pressed READY.</summary>
+    public static bool GuestPicksCharacter(GameProfile profile) => profile.Options?.Any(option => option.Source == Characters) == true;
+
     /// <summary>An option the player picks in the grids although its values come from this machine (campaign, character).</summary>
     public static bool IsChoice(GameOption option) => option.Source is Campaigns or Characters;
 

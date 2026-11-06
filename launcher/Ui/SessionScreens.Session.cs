@@ -27,7 +27,7 @@ internal static partial class SessionScreens
         return new SessionModel(
             preGame, isHost, s.LobbyId != 0 ? s.LobbyId.ToString(CultureInfo.InvariantCulture) : string.Empty,
             !preGame ? [] : isHost ? HostingSteps(s, mod, nowMs) : JoiningSteps(s, g, s.Players.FirstOrDefault(player => player.IsHost)?.Name ?? string.Empty, nowMs),
-            preGame && isHost && StartEnabled(s, local!), state,
+            preGame && (isHost ? StartEnabled(s, local!) : ReadyEnabled(s, g)), state,
             preGame ? [] : HostOptions(s, g), preGame ? [] : events.TakeLast(RecentEvents).ToList(),
             preGame ? !isHost && LaunchStalled(s, c, nowMs) : state?.Kind == LobbyStateKind.GameClosed, preGame ? $"{s.Players.Count}/{seats.Count}" : string.Empty,
             seats, seats.Count <= TwoSeats ? CardLayout.Wide : CardLayout.Tall, SessionCards.NoticeFor(s, 0));
@@ -130,6 +130,10 @@ internal static partial class SessionScreens
             : new StepRow("Receiving save", StepMark.Pending));
         return rows;
     }
+
+    /// <summary>A guest that picks its character may press READY once its save arrived, until it did.</summary>
+    private static bool ReadyEnabled(AppStatus s, GameProfile g) =>
+        OptionSources.GuestPicksCharacter(g) && s.Step == SessionStep.Ready && !s.StartRequested;
 
     /// <summary>The host may start once its own step is Ready and nobody else is still joining.</summary>
     private static bool StartEnabled(AppStatus s, PlayerSlot local) =>

@@ -74,7 +74,7 @@ internal sealed partial class UiController
             case Cmd.SessionCancel when _screen == ScreenKind.Joining:
                 CancelSession();
                 return null;
-            case Cmd.SessionStart when CurrentSession() is { IsHost: true, StartEnabled: true }:
+            case Cmd.SessionStart when CurrentSession() is { StartEnabled: true }:
                 _app.StartGame();
                 return null;
             case Cmd.SessionLeave when !free:

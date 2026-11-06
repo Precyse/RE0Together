@@ -38,11 +38,12 @@ public static class SessionProgress
 public static class StartGate
 {
     /// <summary><paramref name="latched"/>: the host was seen starting earlier in this session, so a host that blinks does not
-    /// close the gate again.</summary>
-    public static bool Open(bool isHost, bool held, bool requested, SessionStep hostStep, bool latched)
+    /// close the gate again. <paramref name="guestConfirms"/>: a guest of a game where it picks a character starts only once it
+    /// pressed READY (<paramref name="requested"/>) as well.</summary>
+    public static bool Open(bool isHost, bool held, bool requested, SessionStep hostStep, bool latched, bool guestConfirms = false)
     {
         if (!held) return true;
-        return isHost ? requested : latched || HostStarted(hostStep);
+        return isHost ? requested : (requested || !guestConfirms) && (latched || HostStarted(hostStep));
     }
 
     public static bool HostStarted(SessionStep hostStep) => hostStep is SessionStep.StartingGame or SessionStep.InGame;
